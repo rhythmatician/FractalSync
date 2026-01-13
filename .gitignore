@@ -51,6 +51,7 @@ checkpoints/
 models/*.onnx
 models/*_metadata.json
 data/audio/*
+data/cache/
 *.pt
 *.pth
 
