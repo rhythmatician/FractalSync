@@ -18,35 +18,15 @@ from pydantic import BaseModel
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.audio_features import AudioFeatureExtractor
-from src.data_loader import AudioDataset
-from src.export_model import load_checkpoint_and_export
-from src.model import AudioToVisualModel
-from src.trainer import Trainer
-from src.visual_metrics import VisualMetrics
+
+from src.audio_features import AudioFeatureExtractor  # noqa: E402
+from src.data_loader import AudioDataset  # noqa: E402
+from src.export_model import load_checkpoint_and_export  # noqa: E402
+from src.model import AudioToVisualModel  # noqa: E402
+from src.trainer import Trainer  # noqa: E402
+from src.visual_metrics import VisualMetrics  # noqa: E402
 
 app = FastAPI(title="FractalSync Training API")
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Global state
-training_state = {
-    "status": "idle",  # idle, training, completed, error
-    "progress": 0,
-    "current_epoch": 0,
-    "total_epochs": 0,
-    "loss_history": [],
-    "error": None,
-}
-
-training_task: Optional[asyncio.Task] = None
 
 
 class TrainingRequest(BaseModel):
@@ -67,6 +47,28 @@ class TrainingStatus(BaseModel):
     error: Optional[str] = None
 
 
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global state
+training_state = TrainingStatus(
+    status="idle",  # idle, training, completed, error
+    progress=0,
+    current_epoch=0,
+    total_epochs=0,
+    loss_history=[],
+    error=None,
+)
+
+training_task: Optional[asyncio.Task] = None
+
+
 @app.get("/")
 async def root():
     return {"message": "FractalSync Training API"}
@@ -77,18 +79,18 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
     """Start a training job."""
     global training_state, training_task
 
-    if training_state["status"] == "training":
+    if training_state.status == "training":
         raise HTTPException(status_code=400, detail="Training already in progress")
 
     # Reset state
-    training_state = {
-        "status": "training",
-        "progress": 0,
-        "current_epoch": 0,
-        "total_epochs": request.epochs,
-        "loss_history": [],
-        "error": None,
-    }
+    training_state = TrainingStatus(
+        status="training",
+        progress=0,
+        current_epoch=0,
+        total_epochs=request.epochs,
+        loss_history=[],
+        error=None,
+    )
 
     # Start training in background
     training_task = asyncio.create_task(train_model_async(request))
@@ -142,8 +144,8 @@ async def train_model_async(request: TrainingRequest):
 
         # Training loop
         for epoch in range(request.epochs):
-            training_state["current_epoch"] = epoch + 1
-            training_state["progress"] = (epoch + 1) / request.epochs
+            training_state.current_epoch = epoch + 1
+            training_state.progress = (epoch + 1) / request.epochs
 
             avg_losses = trainer.train_epoch(dataloader, epoch)
 
@@ -151,7 +153,7 @@ async def train_model_async(request: TrainingRequest):
             for key, value in avg_losses.items():
                 trainer.history[key].append(value)
 
-            training_state["loss_history"].append({"epoch": epoch + 1, **avg_losses})
+            training_state.loss_history.append({"epoch": epoch + 1, **avg_losses})
 
             # Save checkpoint periodically
             if (epoch + 1) % 10 == 0:
@@ -171,19 +173,19 @@ async def train_model_async(request: TrainingRequest):
             str(latest_checkpoint), output_dir="models", input_dim=request.input_dim
         )
 
-        training_state["status"] = "completed"
-        training_state["progress"] = 1.0
+        training_state.status = "completed"
+        training_state.progress = 1.0
 
     except Exception as e:
-        training_state["status"] = "error"
-        training_state["error"] = str(e)
+        training_state.status = "error"
+        training_state.error = str(e)
         print(f"Training error: {e}")
 
 
 @app.get("/api/train/status", response_model=TrainingStatus)
 async def get_training_status():
     """Get current training status."""
-    return TrainingStatus(**training_state)
+    return training_state
 
 
 @app.get("/api/model/latest")
@@ -226,7 +228,7 @@ async def upload_model(file: UploadFile = File(...)):
     """Upload a trained model file."""
     models_dir = Path("models")
     models_dir.mkdir(exist_ok=True)
-
+    assert file.filename
     file_path = models_dir / file.filename
 
     with open(file_path, "wb") as f:
@@ -244,6 +246,7 @@ async def upload_audio_files(files: List[UploadFile] = File(...)):
 
     uploaded_files = []
     for file in files:
+        assert file.filename
         file_path = upload_dir / file.filename
         with open(file_path, "wb") as f:
             content = await file.read()
