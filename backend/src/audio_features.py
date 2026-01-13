@@ -193,7 +193,7 @@ class AudioFeatureExtractor:
         self.feature_std = np.std(all_features, axis=0)
 
 
-def load_audio_file(file_path: str, sr: int = 22050) -> Tuple[np.ndarray, int]:
+def load_audio_file(file_path: str, sr: int = 22050) -> Tuple[np.ndarray, int | float]:
     """
     Load audio file using librosa.
 
