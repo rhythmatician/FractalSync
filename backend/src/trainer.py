@@ -4,7 +4,7 @@ Training pipeline with correlation-based loss functions.
 
 import json
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -135,7 +135,7 @@ class Trainer:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Training history
-        self.history = {
+        self.history: Dict[str, List[float]] = {
             "loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
@@ -218,6 +218,19 @@ class Trainer:
         except Exception:
             pass
         # #endregion
+
+        def _to_tensor(batch: Any) -> torch.Tensor:
+            """Convert common batch shapes (Tensor, list/tuple/ndarray) to a torch.Tensor."""
+            if isinstance(batch, torch.Tensor):
+                return batch
+            if isinstance(batch, (list, tuple)):
+                return torch.stack(
+                    [
+                        b if isinstance(b, torch.Tensor) else torch.as_tensor(b)
+                        for b in batch
+                    ]
+                )
+            return torch.as_tensor(batch)
 
         try:
             for batch_idx, batch_item in enumerate(dataloader):
@@ -305,6 +318,8 @@ class Trainer:
                         pass
                     # #endregion
                     features = batch_item
+
+                features = _to_tensor(features)
 
                 features = features.to(self.device)
                 batch_size = features.shape[0]
@@ -542,6 +557,9 @@ class Trainer:
             "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
         ) as f:
             sample_item = tensor_dataset[0]
+            sample_tensor = (
+                sample_item[0] if isinstance(sample_item, tuple) else sample_item
+            )
             f.write(
                 json.dumps(
                     {
@@ -559,8 +577,8 @@ class Trainer:
                                 else "N/A"
                             ),
                             "shape": (
-                                list(sample_item.shape)
-                                if hasattr(sample_item, "shape")
+                                list(sample_tensor.shape)
+                                if hasattr(sample_tensor, "shape")
                                 else "N/A"
                             ),
                         },
