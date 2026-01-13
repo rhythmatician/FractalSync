@@ -15,6 +15,8 @@ from src.model import AudioToVisualModel
 from src.trainer import Trainer
 from src.visual_metrics import VisualMetrics
 
+import logging
+
 
 def main():
     parser = argparse.ArgumentParser(description="Train audio-to-visual model")
@@ -64,7 +66,7 @@ def main():
         os.makedirs(args.onnx_output_dir, exist_ok=True)
 
     # Initialize components
-    print("Initializing components...")
+    logging.info("Initializing components...")
     feature_extractor = AudioFeatureExtractor()
     visual_metrics = VisualMetrics()
 
@@ -73,7 +75,7 @@ def main():
 
     # Load checkpoint if provided
     if args.checkpoint:
-        print(f"Loading checkpoint from {args.checkpoint}...")
+        logging.info(f"Loading checkpoint from {args.checkpoint}...")
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(checkpoint["model_state_dict"])
         if "feature_mean" in checkpoint:
@@ -90,14 +92,14 @@ def main():
     )
 
     # Load dataset
-    print(f"Loading dataset from {args.data_dir}...")
+    logging.info(f"Loading dataset from {args.data_dir}...")
     dataset = AudioDataset(
         data_dir=args.data_dir,
         feature_extractor=feature_extractor,
         window_frames=args.window_frames,
     )
 
-    print(f"Found {len(dataset)} audio files")
+    logging.info(f"Found {len(dataset)} audio files")
 
     # Train
     trainer.train(
@@ -109,7 +111,7 @@ def main():
 
     # Export to ONNX
     if args.export_onnx:
-        print("Exporting to ONNX...")
+        logging.info("Exporting to ONNX...")
         latest_checkpoint = max(
             Path(args.save_dir).glob("checkpoint_epoch_*.pt"),
             key=lambda p: p.stat().st_mtime,
@@ -119,7 +121,7 @@ def main():
             output_dir=args.onnx_output_dir,
             input_dim=args.input_dim,
         )
-        print("ONNX export complete!")
+        logging.info("ONNX export complete!")
 
 
 if __name__ == "__main__":

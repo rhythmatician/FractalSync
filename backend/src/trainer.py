@@ -5,6 +5,7 @@ Training pipeline with correlation-based loss functions.
 import json
 import os
 from typing import Any, Dict, List, Optional
+import logging
 
 import numpy as np
 import torch
@@ -469,7 +470,7 @@ class Trainer:
                 previous_params = visual_params.detach()
 
                 if batch_idx % 10 == 0:
-                    print(
+                    logging.info(
                         f"Epoch {epoch}, Batch {batch_idx}, "
                         f"Loss: {total_batch_loss.item():.4f}"
                     )
@@ -530,11 +531,11 @@ class Trainer:
             save_dir: Directory to save checkpoints
         """
         # Load all features
-        print("Loading audio features...")
+        logging.info("Loading audio features...")
         all_features = dataset.load_all_features()
 
         # Compute normalization stats
-        print("Computing normalization statistics...")
+        logging.info("Computing normalization statistics...")
         self.feature_extractor.compute_normalization_stats(all_features)
 
         # Normalize features
@@ -622,7 +623,7 @@ class Trainer:
         # #endregion
 
         # Training loop
-        print(f"Starting training for {epochs} epochs...")
+        logging.info(f"Starting training for {epochs} epochs...")
         for epoch in range(epochs):
             avg_losses = self.train_epoch(dataloader, epoch)
 
@@ -631,7 +632,7 @@ class Trainer:
                 self.history[key].append(value)
 
             # Print progress
-            print(
+            logging.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
                 f'Timbre-Color: {avg_losses["timbre_color_loss"]:.4f}, '
@@ -642,7 +643,7 @@ class Trainer:
             if save_dir and (epoch + 1) % 10 == 0:
                 self.save_checkpoint(save_dir, epoch + 1)
 
-        print("Training complete!")
+        logging.info("Training complete!")
 
     def save_checkpoint(self, save_dir: str, epoch: int):
         """
@@ -671,4 +672,4 @@ class Trainer:
         with open(history_path, "w") as f:
             json.dump(self.history, f, indent=2)
 
-        print(f"Checkpoint saved to {checkpoint_path}")
+        logging.info(f"Checkpoint saved to {checkpoint_path}")

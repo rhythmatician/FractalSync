@@ -5,6 +5,7 @@ ONNX model export utilities.
 import json
 import os
 from typing import Any, Dict, Optional
+import logging
 
 import numpy as np
 import onnx
@@ -59,7 +60,7 @@ def export_to_onnx(
     onnx_model = onnx.load(output_path)
     onnx.checker.check_model(onnx_model)
 
-    print(f"Model exported to {output_path}")
+    logging.info(f"Model exported to {output_path}")
 
     # Save metadata
     metadata_path = output_path.replace(".onnx", "_metadata.json")
@@ -99,7 +100,7 @@ def export_to_onnx(
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)
 
-    print(f"Metadata saved to {metadata_path}")
+    logging.info(f"Metadata saved to {metadata_path}")
 
     return metadata_path
 

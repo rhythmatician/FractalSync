@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import List, Optional, Tuple
+import logging
 
 import numpy as np
 
@@ -120,9 +121,11 @@ class AudioDataset:
             try:
                 features = self._load_features(audio_file)
                 all_features.append(features)
-                print(f"Loaded features from {audio_file.name}: {features.shape}")
+                logging.info(
+                    f"Loaded features from {audio_file.name}: {features.shape}"
+                )
             except Exception as e:
-                print(f"Error loading {audio_file}: {e}")
+                logging.info(f"Error loading {audio_file}: {e}")
                 continue
 
         return all_features

@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 from typing import List, Optional
+import logging
 
 import torch
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
@@ -179,7 +180,7 @@ async def train_model_async(request: TrainingRequest):
     except Exception as e:
         training_state.status = "error"
         training_state.error = str(e)
-        print(f"Training error: {e}")
+        logging.info(f"Training error: {e}")
 
 
 @app.get("/api/train/status", response_model=TrainingStatus)
