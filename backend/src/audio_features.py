@@ -1,0 +1,225 @@
+"""
+Audio feature extraction using librosa.
+Extracts perceptual features from audio signals for ML training and inference.
+"""
+
+import numpy as np
+import librosa
+from typing import Tuple, Optional
+
+
+class AudioFeatureExtractor:
+    """Extracts audio features for mapping to visual parameters."""
+    
+    def __init__(
+        self,
+        sr: int = 22050,
+        hop_length: int = 512,
+        n_fft: int = 2048,
+        window_size: int = 2048
+    ):
+        """
+        Initialize feature extractor.
+        
+        Args:
+            sr: Sample rate
+            hop_length: Hop length for STFT
+            n_fft: FFT window size
+            window_size: Window size for feature computation
+        """
+        self.sr = sr
+        self.hop_length = hop_length
+        self.n_fft = n_fft
+        self.window_size = window_size
+        
+        # Feature normalization stats (will be computed during training)
+        self.feature_mean = None
+        self.feature_std = None
+    
+    def extract_features(self, audio: np.ndarray) -> np.ndarray:
+        """
+        Extract all audio features from audio signal.
+        
+        Args:
+            audio: Audio signal array
+            
+        Returns:
+            Feature matrix of shape (n_features, n_frames)
+        """
+        # Ensure audio is mono
+        if len(audio.shape) > 1:
+            audio = librosa.to_mono(audio)
+        
+        # Extract individual features
+        spectral_centroid = self._extract_spectral_centroid(audio)
+        spectral_flux = self._extract_spectral_flux(audio)
+        rms_energy = self._extract_rms_energy(audio)
+        zero_crossing_rate = self._extract_zero_crossing_rate(audio)
+        onsets = self._extract_onsets(audio)
+        spectral_rolloff = self._extract_spectral_rolloff(audio)
+        
+        # Stack features
+        features = np.stack([
+            spectral_centroid,
+            spectral_flux,
+            rms_energy,
+            zero_crossing_rate,
+            onsets,
+            spectral_rolloff
+        ], axis=0)
+        
+        return features
+    
+    def _extract_spectral_centroid(self, audio: np.ndarray) -> np.ndarray:
+        """Extract spectral centroid (brightness/timbre)."""
+        centroid = librosa.feature.spectral_centroid(
+            y=audio,
+            sr=self.sr,
+            hop_length=self.hop_length,
+            n_fft=self.n_fft
+        )[0]
+        # Normalize to [0, 1]
+        centroid = centroid / (self.sr / 2)
+        return centroid
+    
+    def _extract_spectral_flux(self, audio: np.ndarray) -> np.ndarray:
+        """Extract spectral flux (transient detection)."""
+        stft = librosa.stft(
+            audio,
+            hop_length=self.hop_length,
+            n_fft=self.n_fft
+        )
+        magnitude = np.abs(stft)
+        
+        # Compute flux as difference between consecutive frames
+        flux = np.sum(np.diff(magnitude, axis=1) ** 2, axis=0)
+        # Pad to match other features
+        flux = np.pad(flux, (0, 1), mode='edge')
+        
+        # Normalize
+        flux = flux / (np.max(flux) + 1e-8)
+        return flux
+    
+    def _extract_rms_energy(self, audio: np.ndarray) -> np.ndarray:
+        """Extract RMS energy (loudness)."""
+        rms = librosa.feature.rms(
+            y=audio,
+            hop_length=self.hop_length,
+            frame_length=self.n_fft
+        )[0]
+        # Normalize to [0, 1]
+        rms = rms / (np.max(rms) + 1e-8)
+        return rms
+    
+    def _extract_zero_crossing_rate(self, audio: np.ndarray) -> np.ndarray:
+        """Extract zero-crossing rate (noisiness/distortion)."""
+        zcr = librosa.feature.zero_crossing_rate(
+            audio,
+            hop_length=self.hop_length,
+            frame_length=self.n_fft
+        )[0]
+        return zcr
+    
+    def _extract_onsets(self, audio: np.ndarray) -> np.ndarray:
+        """Extract onset detection (hits/transients)."""
+        onset_frames = librosa.onset.onset_detect(
+            y=audio,
+            sr=self.sr,
+            hop_length=self.hop_length,
+            units='frames'
+        )
+        
+        # Create onset strength envelope
+        onset_strength = librosa.onset.onset_strength(
+            y=audio,
+            sr=self.sr,
+            hop_length=self.hop_length
+        )
+        
+        # Normalize
+        onset_strength = onset_strength / (np.max(onset_strength) + 1e-8)
+        return onset_strength
+    
+    def _extract_spectral_rolloff(self, audio: np.ndarray) -> np.ndarray:
+        """Extract spectral rolloff (tone vs noise)."""
+        rolloff = librosa.feature.spectral_rolloff(
+            y=audio,
+            sr=self.sr,
+            hop_length=self.hop_length,
+            n_fft=self.n_fft
+        )[0]
+        # Normalize to [0, 1]
+        rolloff = rolloff / (self.sr / 2)
+        return rolloff
+    
+    def extract_windowed_features(
+        self,
+        audio: np.ndarray,
+        window_frames: int = 10
+    ) -> np.ndarray:
+        """
+        Extract features and return windowed feature vectors.
+        
+        Args:
+            audio: Audio signal
+            window_frames: Number of frames to include in each window
+            
+        Returns:
+            Feature array of shape (n_windows, n_features * window_frames)
+        """
+        features = self.extract_features(audio)
+        n_features, n_frames = features.shape
+        
+        # Create sliding windows
+        windows = []
+        for i in range(n_frames - window_frames + 1):
+            window = features[:, i:i+window_frames].flatten()
+            windows.append(window)
+        
+        if len(windows) == 0:
+            # Pad if audio is too short
+            padded = np.pad(features, ((0, 0), (0, window_frames)), mode='edge')
+            windows = [padded.flatten()]
+        
+        return np.array(windows)
+    
+    def normalize_features(self, features: np.ndarray) -> np.ndarray:
+        """
+        Normalize features using stored statistics.
+        
+        Args:
+            features: Feature array
+            
+        Returns:
+            Normalized features
+        """
+        if self.feature_mean is None or self.feature_std is None:
+            return features
+        
+        return (features - self.feature_mean) / (self.feature_std + 1e-8)
+    
+    def compute_normalization_stats(self, feature_list: list[np.ndarray]):
+        """
+        Compute normalization statistics from a list of feature arrays.
+        
+        Args:
+            feature_list: List of feature arrays from different audio files
+        """
+        all_features = np.concatenate(feature_list, axis=0)
+        self.feature_mean = np.mean(all_features, axis=0)
+        self.feature_std = np.std(all_features, axis=0)
+
+
+def load_audio_file(file_path: str, sr: int = 22050) -> Tuple[np.ndarray, int]:
+    """
+    Load audio file using librosa.
+    
+    Args:
+        file_path: Path to audio file
+        sr: Target sample rate
+        
+    Returns:
+        Tuple of (audio_array, sample_rate)
+    """
+    audio, sample_rate = librosa.load(file_path, sr=sr)
+    return audio, sample_rate
