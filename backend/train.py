@@ -4,17 +4,16 @@ Main training script.
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import torch
 
-from src.model import AudioToVisualModel
-from src.trainer import Trainer
 from src.audio_features import AudioFeatureExtractor
-from src.visual_metrics import VisualMetrics
 from src.data_loader import AudioDataset
 from src.export_model import load_checkpoint_and_export
+from src.model import AudioToVisualModel
+from src.trainer import Trainer
+from src.visual_metrics import VisualMetrics
 
 
 def main():
