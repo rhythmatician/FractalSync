@@ -34,12 +34,6 @@ def main():
         "--window-frames", type=int, default=10, help="Number of frames per window"
     )
     parser.add_argument(
-        "--input-dim",
-        type=int,
-        default=60,
-        help="Input dimension (n_features * window_frames)",
-    )
-    parser.add_argument(
         "--save-dir",
         type=str,
         default="checkpoints",
@@ -71,7 +65,7 @@ def main():
     visual_metrics = VisualMetrics()
 
     # Create model
-    model = AudioToVisualModel(input_dim=args.input_dim)
+    model = AudioToVisualModel(window_frames=args.window_frames)
 
     # Load checkpoint if provided
     if args.checkpoint:

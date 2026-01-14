@@ -16,7 +16,7 @@ class AudioToVisualModel(nn.Module):
 
     def __init__(
         self,
-        input_dim: int = 60,  # 6 features * 10 frames
+        window_frames: int = 10,
         hidden_dims: list[int] = [128, 256, 128],
         output_dim: int = 7,
         dropout: float = 0.2,
@@ -25,19 +25,20 @@ class AudioToVisualModel(nn.Module):
         Initialize model.
 
         Args:
-            input_dim: Input feature dimension
+            window_frames: Number of time frames (input_dim = 6 * window_frames)
             hidden_dims: List of hidden layer dimensions
             output_dim: Output parameter dimension (default 7)
             dropout: Dropout rate
         """
         super().__init__()
 
-        self.input_dim = input_dim
+        self.window_frames = window_frames
+        self.input_dim = 6 * window_frames  # Assuming 6 features per frame
         self.output_dim = output_dim
 
         # Build encoder layers
         encoder_layers = []
-        prev_dim = input_dim
+        prev_dim = self.input_dim
 
         for hidden_dim in hidden_dims:
             encoder_layers.extend(

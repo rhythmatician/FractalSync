@@ -36,7 +36,6 @@ class TrainingRequest(BaseModel):
     batch_size: int = 32
     learning_rate: float = 1e-4
     window_frames: int = 10
-    input_dim: int = 60
 
 
 class TrainingStatus(BaseModel):
@@ -107,7 +106,7 @@ async def train_model_async(request: TrainingRequest):
         # Initialize components
         feature_extractor = AudioFeatureExtractor()
         visual_metrics = VisualMetrics()
-        model = AudioToVisualModel(input_dim=request.input_dim)
+        model = AudioToVisualModel(window_frames=request.window_frames)
 
         trainer = Trainer(
             model=model,
@@ -171,7 +170,9 @@ async def train_model_async(request: TrainingRequest):
             key=lambda p: p.stat().st_mtime,
         )
         load_checkpoint_and_export(
-            str(latest_checkpoint), output_dir="models", input_dim=request.input_dim
+            str(latest_checkpoint),
+            output_dir="models",
+            input_dim=request.window_frames * 6,  # Assuming 6 features per frame
         )
 
         training_state.status = "completed"
