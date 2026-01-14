@@ -62,3 +62,31 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - ML-learned mappings between audio features and visual parameters
 - Smooth morphing Julia sets rendered with WebGL
 - Training UI for model management and monitoring
+
+
+## Training parameters:
+
+**epochs** (e.g., 1, 5, 100)
+- Number of times the model sees the entire dataset during training.
+- Each epoch = one complete pass through all audio files.
+- More epochs → model learns more patterns, but risks overfitting if too many.
+- You're using 1 epoch for testing; typically 50-100+ for real training.
+
+**batch_size** (e.g., 32)
+- Number of audio feature samples processed together before updating model weights.
+- Your audio files are sliced into many feature frames; 32 frames are fed to the model at once.
+- Larger batches → faster training, more stable gradients, but higher memory usage.
+- Smaller batches → noisier gradients, slower, but can generalize better.
+- 32 is a common sweet spot; yours has ~162,464 samples (5,077 full batches + 1 partial of 30).
+
+**learning_rate** (e.g., 0.0001)
+- How aggressively the model adjusts weights after each batch.
+- Too high → training unstable, loss oscillates or explodes.
+- Too low → training very slow, may get stuck in local minima.
+- 0.0001 is conservative but safe; 0.001 would be faster but riskier.
+
+**window_frames** (e.g., 10)
+- Number of consecutive audio frames (time steps) flattened into one input vector.
+- Your extractor computes 6 features per frame (centroid, flux, rms, zcr, onset, rolloff).
+- 10 frames × 6 features = 60-dimensional input vector.
+- Larger windows → model sees more temporal context but input grows (5 frames → 30-dim, 20 frames → 120-dim).
