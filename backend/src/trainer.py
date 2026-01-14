@@ -39,7 +39,7 @@ class JSONFormatter(logging.Formatter):
 
 # Set up debug logger for structured logging
 logger = logging.getLogger("trainer_debug")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logger.propagate = False  # Don't propagate to root logger
 
 # Create file handler for debug log
