@@ -521,7 +521,7 @@ class Trainer:
             )
 
             # Save checkpoint
-            if save_dir and (epoch + 1) % 10 == 0:
+            if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
                 self.save_checkpoint(save_dir, epoch + 1)
 
         logger.info("Training complete!")
