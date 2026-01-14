@@ -115,7 +115,7 @@ class AudioFeatureExtractor:
 
     def _extract_onsets(self, audio: np.ndarray) -> np.ndarray:
         """Extract onset detection (hits/transients)."""
-        onset_frames = librosa.onset.onset_detect(
+        onset_frames = librosa.onset.onset_detect(  # FIXME: What's this here for?
             y=audio, sr=self.sr, hop_length=self.hop_length, units="frames"
         )
 

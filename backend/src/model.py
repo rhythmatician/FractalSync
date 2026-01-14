@@ -204,7 +204,7 @@ class TransformerAudioToVisualModel(nn.Module):
         Returns:
             Visual parameters of shape (batch_size, output_dim)
         """
-        batch_size = x.shape[0]
+        batch_size = x.shape[0]  # FIXME: What's this here for?
 
         # Project input
         x = self.input_proj(x)  # (batch, frames, d_model)
