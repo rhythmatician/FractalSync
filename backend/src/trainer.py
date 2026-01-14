@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 import logging
+import time
 
 import numpy as np
 import torch
@@ -16,6 +17,37 @@ from torch.utils.data import DataLoader, TensorDataset
 from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
+
+
+# Configure structured JSON logging
+class JSONFormatter(logging.Formatter):
+    """Custom formatter that outputs JSON with structured fields."""
+
+    def format(self, record):
+        """Format log record as JSON with metadata."""
+        log_obj = {
+            "sessionId": "debug-session",
+            "runId": "run2",
+            "hypothesisId": "C",
+            "location": f"{record.filename}:{record.lineno}",
+            "message": record.getMessage(),
+            "level": record.levelname,
+            "timestamp": int(time.time() * 1000),
+        }
+        return json.dumps(log_obj)
+
+
+# Set up debug logger for structured logging
+logger = logging.getLogger("trainer_debug")
+logger.setLevel(logging.DEBUG)
+
+# Create file handler for debug log
+if not logger.handlers:
+    _debug_handler = logging.FileHandler(
+        "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\trainer_debug.log"
+    )
+    _debug_handler.setFormatter(JSONFormatter())
+    logger.addHandler(_debug_handler)
 
 
 class CorrelationLoss(nn.Module):
@@ -156,34 +188,7 @@ class Trainer:
         Returns:
             Dictionary of average losses
         """
-        # #region agent log
-        import json
-        import time
-
-        try:
-            with open(
-                "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-            ) as f:
-                f.write(
-                    json.dumps(
-                        {
-                            "sessionId": "debug-session",
-                            "runId": "run2",
-                            "hypothesisId": "C",
-                            "location": "trainer.py:170",
-                            "message": "train_epoch called",
-                            "data": {
-                                "epoch": epoch,
-                                "dataloader_type": str(type(dataloader)),
-                            },
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
+        logger.debug(f"train_epoch called: epoch={epoch}")
 
         self.model.train()
 
@@ -197,28 +202,7 @@ class Trainer:
         n_batches = 0
         previous_params = None
 
-        # #region agent log
-        try:
-            with open(
-                "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-            ) as f:
-                f.write(
-                    json.dumps(
-                        {
-                            "sessionId": "debug-session",
-                            "runId": "run2",
-                            "hypothesisId": "C",
-                            "location": "trainer.py:195",
-                            "message": "About to iterate dataloader",
-                            "data": {"epoch": epoch},
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
+        logger.debug(f"About to iterate dataloader: epoch={epoch}")
 
         def _to_tensor(batch: Any) -> torch.Tensor:
             """Convert common batch shapes (Tensor, list/tuple/ndarray) to a torch.Tensor."""
@@ -235,38 +219,10 @@ class Trainer:
 
         try:
             for batch_idx, batch_item in enumerate(dataloader):
-                # #region agent log
-                try:
-                    with open(
-                        "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-                    ) as f:
-                        f.write(
-                            json.dumps(
-                                {
-                                    "sessionId": "debug-session",
-                                    "runId": "run2",
-                                    "hypothesisId": "C",
-                                    "location": "trainer.py:200",
-                                    "message": "Got batch from dataloader",
-                                    "data": {
-                                        "batch_idx": batch_idx,
-                                        "type": str(type(batch_item)),
-                                        "is_tuple": isinstance(batch_item, tuple),
-                                        "len": (
-                                            len(batch_item)
-                                            if isinstance(batch_item, (tuple, list))
-                                            else "N/A"
-                                        ),
-                                        "has_shape": hasattr(batch_item, "shape"),
-                                    },
-                                    "timestamp": int(time.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except Exception:
-                    pass
-                # #endregion
+                logger.debug(
+                    f"Got batch {batch_idx}: type={type(batch_item).__name__}, "
+                    f"is_tuple={isinstance(batch_item, tuple)}"
+                )
 
                 # Handle batch from TensorDataset (wraps in tuple/list with 1 element)
                 if isinstance(batch_item, (tuple, list)):
@@ -285,31 +241,9 @@ class Trainer:
                 features = features.to(self.device)
                 batch_size = features.shape[0]
 
-                # #region agent log
-                try:
-                    with open(
-                        "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-                    ) as f:
-                        f.write(
-                            json.dumps(
-                                {
-                                    "sessionId": "debug-session",
-                                    "runId": "run2",
-                                    "hypothesisId": "C",
-                                    "location": "trainer.py:230",
-                                    "message": "Features extracted successfully",
-                                    "data": {
-                                        "batch_size": batch_size,
-                                        "features_shape": list(features.shape),
-                                    },
-                                    "timestamp": int(time.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except Exception:
-                    pass
-                # #endregion
+                logger.debug(
+                    f"Features extracted: batch_size={batch_size}, shape={features.shape}"
+                )
 
                 # Forward pass
                 visual_params = self.model(features)
@@ -474,42 +408,16 @@ class Trainer:
                 previous_params = visual_params.detach()
 
                 if batch_idx % 10 == 0:
-                    logging.info(
+                    logger.info(
                         f"Epoch {epoch}, Batch {batch_idx}, "
                         f"Loss: {total_batch_loss.item():.4f}"
                     )
         except Exception as e:
-            # #region agent log
-            try:
-                with open(
-                    "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-                ) as f:
-                    f.write(
-                        json.dumps(
-                            {
-                                "sessionId": "debug-session",
-                                "runId": "run2",
-                                "hypothesisId": "C",
-                                "location": "trainer.py:330",
-                                "message": "ERROR in train_epoch loop",
-                                "data": {
-                                    "error": str(e),
-                                    "error_type": str(type(e).__name__),
-                                    "batch_idx": batch_idx,
-                                    "features_shape": (
-                                        list(features.shape)
-                                        if isinstance(features, torch.Tensor)
-                                        else str(type(features))
-                                    ),
-                                },
-                                "timestamp": int(time.time() * 1000),
-                            }
-                        )
-                        + "\n"
-                    )
-            except Exception:
-                pass
-            # #endregion
+            logger.error(
+                f"ERROR in train_epoch loop: error={str(e)}, "
+                f"error_type={str(type(e).__name__)}, batch_idx={batch_idx}, "
+                f"features_shape={list(features.shape) if isinstance(features, torch.Tensor) else str(type(features))}"
+            )
             raise
 
         # Average losses
@@ -541,11 +449,11 @@ class Trainer:
             save_dir: Directory to save checkpoints
         """
         # Load all features
-        logging.info("Loading audio features...")
+        logger.info("Loading audio features...")
         all_features = dataset.load_all_features()
 
         # Compute normalization stats
-        logging.info("Computing normalization statistics...")
+        logger.info("Computing normalization statistics...")
         self.feature_extractor.compute_normalization_stats(all_features)
 
         # Normalize features
@@ -561,79 +469,27 @@ class Trainer:
         # Create data loader
         tensor_dataset = TensorDataset(all_features_tensor)
 
-        # #region agent log
-        import json
-
-        with open(
-            "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-        ) as f:
-            sample_item = tensor_dataset[0]
-            sample_tensor = (
-                sample_item[0] if isinstance(sample_item, tuple) else sample_item
-            )
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "B",
-                        "location": "trainer.py:357",
-                        "message": "TensorDataset sample item",
-                        "data": {
-                            "type": str(type(sample_item)),
-                            "is_tuple": isinstance(sample_item, tuple),
-                            "len": (
-                                len(sample_item)
-                                if isinstance(sample_item, (tuple, list))
-                                else "N/A"
-                            ),
-                            "shape": (
-                                list(sample_tensor.shape)
-                                if hasattr(sample_tensor, "shape")
-                                else "N/A"
-                            ),
-                        },
-                        "timestamp": int(__import__("time").time() * 1000),
-                    }
-                )
-                + "\n"
-            )
-        # #endregion
+        sample_item = tensor_dataset[0]
+        sample_tensor = (
+            sample_item[0] if isinstance(sample_item, tuple) else sample_item
+        )
+        logger.debug(
+            f"TensorDataset sample: type={type(sample_item).__name__}, "
+            f"is_tuple={isinstance(sample_item, tuple)}, "
+            f"shape={sample_tensor.shape if hasattr(sample_tensor, 'shape') else 'N/A'}"
+        )
 
         dataloader = DataLoader(tensor_dataset, batch_size=batch_size, shuffle=True)
 
-        # #region agent log
-        with open(
-            "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log", "a"
-        ) as f:
-            # Test first batch
-            first_batch = next(iter(dataloader))
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "B",
-                        "location": "trainer.py:365",
-                        "message": "DataLoader first batch",
-                        "data": {
-                            "type": str(type(first_batch)),
-                            "is_tuple": isinstance(first_batch, tuple),
-                            "len": (
-                                len(first_batch)
-                                if isinstance(first_batch, (tuple, list))
-                                else "N/A"
-                            ),
-                        },
-                        "timestamp": int(__import__("time").time() * 1000),
-                    }
-                )
-                + "\n"
-            )
-        # #endregion
+        # Test first batch
+        first_batch = next(iter(dataloader))
+        logger.debug(
+            f"DataLoader first batch: type={type(first_batch).__name__}, "
+            f"is_tuple={isinstance(first_batch, tuple)}"
+        )
 
         # Training loop
-        logging.info(f"Starting training for {epochs} epochs...")
+        logger.info(f"Starting training for {epochs} epochs...")
         for epoch in range(epochs):
             avg_losses = self.train_epoch(dataloader, epoch)
 
@@ -642,7 +498,7 @@ class Trainer:
                 self.history[key].append(value)
 
             # Print progress
-            logging.info(
+            logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
                 f'Timbre-Color: {avg_losses["timbre_color_loss"]:.4f}, '
@@ -653,7 +509,7 @@ class Trainer:
             if save_dir and (epoch + 1) % 10 == 0:
                 self.save_checkpoint(save_dir, epoch + 1)
 
-        logging.info("Training complete!")
+        logger.info("Training complete!")
 
     def save_checkpoint(self, save_dir: str, epoch: int):
         """
@@ -682,4 +538,4 @@ class Trainer:
         with open(history_path, "w") as f:
             json.dump(self.history, f, indent=2)
 
-        logging.info(f"Checkpoint saved to {checkpoint_path}")
+        logger.info(f"Checkpoint saved to {checkpoint_path}")
