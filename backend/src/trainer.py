@@ -40,6 +40,7 @@ class JSONFormatter(logging.Formatter):
 # Set up debug logger for structured logging
 logger = logging.getLogger("trainer_debug")
 logger.setLevel(logging.DEBUG)
+logger.propagate = False  # Don't propagate to root logger
 
 # Create file handler for debug log
 if not logger.handlers:
@@ -47,7 +48,15 @@ if not logger.handlers:
         "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\trainer_debug.log"
     )
     _debug_handler.setFormatter(JSONFormatter())
+    _debug_handler.setLevel(logging.DEBUG)
     logger.addHandler(_debug_handler)
+
+    # Create console handler that only shows ERROR and above
+    _console_handler = logging.StreamHandler()
+    _console_handler.setLevel(logging.ERROR)
+    _console_formatter = logging.Formatter("%(levelname)s: %(message)s")
+    _console_handler.setFormatter(_console_formatter)
+    logger.addHandler(_console_handler)
 
 
 class CorrelationLoss(nn.Module):
