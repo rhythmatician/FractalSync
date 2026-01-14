@@ -155,8 +155,8 @@ async def train_model_async(request: TrainingRequest):
 
             training_state.loss_history.append({"epoch": epoch + 1, **avg_losses})
 
-            # Save checkpoint periodically
-            if (epoch + 1) % 10 == 0:
+            # Save checkpoint periodically (and always on last epoch)
+            if (epoch + 1) % 10 == 0 or (epoch + 1) == request.epochs:
                 save_dir = "checkpoints"
                 os.makedirs(save_dir, exist_ok=True)
                 trainer.save_checkpoint(save_dir, epoch + 1)
