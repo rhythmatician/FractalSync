@@ -7,7 +7,7 @@ import os
 from typing import Any, Dict, List, Optional
 import logging
 import time
-
+from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn as nn
@@ -227,7 +227,13 @@ class Trainer:
             return torch.as_tensor(batch)
 
         try:
-            for batch_idx, batch_item in enumerate(dataloader):
+            for batch_idx, batch_item in tqdm(
+                enumerate(dataloader),
+                total=len(dataloader),
+                position=1,
+                leave=False,
+                desc="  Batches",
+            ):
                 logger.debug(
                     f"Got batch {batch_idx}: type={type(batch_item).__name__}, "
                     f"is_tuple={isinstance(batch_item, tuple)}"
@@ -499,7 +505,7 @@ class Trainer:
 
         # Training loop
         logger.info(f"Starting training for {epochs} epochs...")
-        for epoch in range(epochs):
+        for epoch in tqdm(range(epochs), desc="Training Epochs", position=0):
             avg_losses = self.train_epoch(dataloader, epoch)
 
             # Update history
