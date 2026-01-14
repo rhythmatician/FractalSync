@@ -425,9 +425,25 @@ class Trainer:
                 )
 
                 # Smoothness loss
-                smoothness = torch.tensor(0.0, device=self.device, requires_grad=True)
                 if previous_params is not None:
-                    smoothness = self.smoothness_loss(visual_params, previous_params)
+                    # Handle partial batches by slicing previous_params to match current batch size
+                    current_batch_size = visual_params.size(0)
+                    prev_batch_size = previous_params.size(0)
+
+                    if current_batch_size != prev_batch_size:
+                        # Use only the first batch_size samples from previous_params
+                        # This handles the case where the current batch is smaller (partial batch)
+                        previous_params_slice = previous_params[:current_batch_size]
+                    else:
+                        previous_params_slice = previous_params
+
+                    smoothness = self.smoothness_loss(
+                        visual_params, previous_params_slice
+                    )
+                else:
+                    smoothness = torch.tensor(
+                        0.0, device=self.device, requires_grad=True
+                    )
 
                 # Total loss
                 total_batch_loss = (
