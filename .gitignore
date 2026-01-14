@@ -58,3 +58,5 @@ data/cache/
 # Logs
 *.log
 
+# Copilot's verbose markdown files
+/docs/copilot/*.md
