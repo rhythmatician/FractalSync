@@ -6,7 +6,6 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 import logging
-import time
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -21,20 +20,21 @@ from .visual_metrics import VisualMetrics
 
 # Configure structured JSON logging
 class JSONFormatter(logging.Formatter):
-    """Custom formatter that outputs JSON with structured fields."""
+    """Custom formatter that outputs standard log format with JSON details."""
 
     def format(self, record):
-        """Format log record as JSON with metadata."""
-        log_obj = {
-            "sessionId": "debug-session",
-            "runId": "run2",
-            "hypothesisId": "C",
+        """Format log record with timestamp/level prefix and JSON details."""
+        # Standard prefix: timestamp - level
+        timestamp = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
+        prefix = f"{timestamp} - {record.levelname} - "
+
+        # JSON details
+        details = {
             "location": f"{record.filename}:{record.lineno}",
             "message": record.getMessage(),
-            "level": record.levelname,
-            "timestamp": int(time.time() * 1000),
         }
-        return json.dumps(log_obj)
+
+        return prefix + json.dumps(details)
 
 
 # Set up debug logger for structured logging
