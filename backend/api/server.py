@@ -165,15 +165,19 @@ async def train_model_async(request: TrainingRequest):
             await asyncio.sleep(0)
 
         # Export to ONNX
-        latest_checkpoint = max(
-            Path("checkpoints").glob("checkpoint_epoch_*.pt"),
-            key=lambda p: p.stat().st_mtime,
-        )
-        load_checkpoint_and_export(
-            str(latest_checkpoint),
-            output_dir="models",
-            input_dim=request.window_frames * 6,  # Assuming 6 features per frame
-        )
+        checkpoint_files = list(Path("checkpoints").glob("checkpoint_epoch_*.pt"))
+        if checkpoint_files:
+            latest_checkpoint = max(
+                checkpoint_files,
+                key=lambda p: p.stat().st_mtime,
+            )
+            load_checkpoint_and_export(
+                str(latest_checkpoint),
+                output_dir="models",
+                input_dim=request.window_frames * 6,  # Assuming 6 features per frame
+            )
+        else:
+            logging.warning("No checkpoints found to export")
 
         training_state.status = "completed"
         training_state.progress = 1.0
