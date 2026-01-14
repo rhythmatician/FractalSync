@@ -268,56 +268,16 @@ class Trainer:
                     pass
                 # #endregion
 
-                # Handle both tuple and single tensor cases
-                if isinstance(batch_item, tuple):
-                    # #region agent log
-                    try:
-                        with open(
-                            "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log",
-                            "a",
-                        ) as f:
-                            f.write(
-                                json.dumps(
-                                    {
-                                        "sessionId": "debug-session",
-                                        "runId": "run2",
-                                        "hypothesisId": "C",
-                                        "location": "trainer.py:210",
-                                        "message": "Batch is tuple, unpacking",
-                                        "data": {"tuple_len": len(batch_item)},
-                                        "timestamp": int(time.time() * 1000),
-                                    }
-                                )
-                                + "\n"
-                            )
-                    except Exception:
-                        pass
-                    # #endregion
-                    features, _ = batch_item
+                # Handle batch from TensorDataset (wraps in tuple/list with 1 element)
+                if isinstance(batch_item, (tuple, list)):
+                    if len(batch_item) == 1:
+                        # Single tensor from TensorDataset
+                        features = batch_item[0]
+                    else:
+                        # Multiple tensors (features, label, etc.)
+                        features, _ = batch_item
                 else:
-                    # #region agent log
-                    try:
-                        with open(
-                            "c:\\Users\\JeffHall\\git\\FractalSync\\.cursor\\debug.log",
-                            "a",
-                        ) as f:
-                            f.write(
-                                json.dumps(
-                                    {
-                                        "sessionId": "debug-session",
-                                        "runId": "run2",
-                                        "hypothesisId": "C",
-                                        "location": "trainer.py:218",
-                                        "message": "Batch is not tuple, using directly",
-                                        "data": {"type": str(type(batch_item))},
-                                        "timestamp": int(time.time() * 1000),
-                                    }
-                                )
-                                + "\n"
-                            )
-                    except Exception:
-                        pass
-                    # #endregion
+                    # Already a tensor
                     features = batch_item
 
                 features = _to_tensor(features)
@@ -366,10 +326,13 @@ class Trainer:
                 # For simplicity, assume features are flattened: [centroid, flux, rms, zcr, onset, rolloff] * window_frames
                 n_features_per_frame = 6
                 window_frames = features.shape[1] // n_features_per_frame
+                actual_batch_size = features.shape[
+                    0
+                ]  # Use actual batch size, not the parameter batch_size
 
                 # Average features over window to get per-sample values
                 features_reshaped = features.view(
-                    batch_size, window_frames, n_features_per_frame
+                    actual_batch_size, window_frames, n_features_per_frame
                 )
                 avg_features = features_reshaped.mean(dim=1)  # (batch, n_features)
 
@@ -385,7 +348,7 @@ class Trainer:
                 edge_densities = []
 
                 prev_image = None
-                for i in range(batch_size):
+                for i in range(actual_batch_size):  # Use actual batch size
                     # Render Julia set
                     image = self.visual_metrics.render_julia_set(
                         seed_real=float(julia_real[i]),
@@ -401,22 +364,47 @@ class Trainer:
                     )
 
                     images.append(image)
-                    color_hues.append(visual_params[i, 2].item())
-                    temporal_changes.append(metrics["temporal_change"])
-                    edge_densities.append(metrics["edge_density"])
+                    color_hues.append(
+                        visual_params[i, 2]
+                    )  # Keep as tensor for gradient flow
+                    temporal_changes.append(
+                        torch.tensor(
+                            metrics["temporal_change"],
+                            device=self.device,
+                            dtype=torch.float32,
+                        )
+                    )
+                    edge_densities.append(
+                        torch.tensor(
+                            metrics["edge_density"],
+                            device=self.device,
+                            dtype=torch.float32,
+                        )
+                    )
 
                     prev_image = image
 
-                # Convert to tensors
-                color_hue_tensor = torch.tensor(
-                    color_hues, device=self.device, dtype=torch.float32
+                # Stack tensors
+                color_hue_tensor = torch.stack(color_hues)
+                temporal_change_tensor = torch.stack(temporal_changes)
+                edge_density_tensor = torch.stack(edge_densities)
+
+                # Align lengths in case some visual metrics lists are shorter than actual_batch_size
+                min_len = min(
+                    actual_batch_size,
+                    int(color_hue_tensor.shape[0]),
+                    int(temporal_change_tensor.shape[0]),
+                    int(edge_density_tensor.shape[0]),
                 )
-                temporal_change_tensor = torch.tensor(
-                    temporal_changes, device=self.device, dtype=torch.float32
-                )
-                edge_density_tensor = torch.tensor(
-                    edge_densities, device=self.device, dtype=torch.float32
-                )
+                if min_len < actual_batch_size:
+                    spectral_centroid = spectral_centroid[:min_len]
+                    spectral_flux = spectral_flux[:min_len]
+                    rms_energy = rms_energy[:min_len]
+                    zero_crossing_rate = zero_crossing_rate[:min_len]
+
+                    color_hue_tensor = color_hue_tensor[:min_len]
+                    temporal_change_tensor = temporal_change_tensor[:min_len]
+                    edge_density_tensor = edge_density_tensor[:min_len]
 
                 # Compute correlation losses
                 timbre_color_loss = self.correlation_loss(
@@ -437,7 +425,7 @@ class Trainer:
                 )
 
                 # Smoothness loss
-                smoothness = torch.tensor(0.0, device=self.device)
+                smoothness = torch.tensor(0.0, device=self.device, requires_grad=True)
                 if previous_params is not None:
                     smoothness = self.smoothness_loss(visual_params, previous_params)
 
@@ -491,6 +479,12 @@ class Trainer:
                                 "data": {
                                     "error": str(e),
                                     "error_type": str(type(e).__name__),
+                                    "batch_idx": batch_idx,
+                                    "features_shape": (
+                                        list(features.shape)
+                                        if isinstance(features, torch.Tensor)
+                                        else str(type(features))
+                                    ),
                                 },
                                 "timestamp": int(time.time() * 1000),
                             }
