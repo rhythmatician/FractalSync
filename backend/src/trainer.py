@@ -94,14 +94,15 @@ class CorrelationLoss(nn.Module):
 
 
 class SmoothnessLoss(nn.Module):
-    """Penalize rapid changes in visual parameters."""
+    """Penalize rapid changes in visual parameters (enforces |c_{t+1} - c_t| < ε for Julia parameters)."""
 
     def __init__(self, weight: float = 0.1):
         """
         Initialize smoothness loss.
 
         Args:
-            weight: Weight for smoothness penalty
+            weight: Weight for smoothness penalty. Enforces temporal continuity on Julia parameter c,
+                    color, zoom, and speed between consecutive frames.
         """
         super().__init__()
         self.weight = weight
@@ -110,7 +111,7 @@ class SmoothnessLoss(nn.Module):
         self, current_params: torch.Tensor, previous_params: torch.Tensor
     ) -> torch.Tensor:
         """
-        Compute smoothness loss.
+        Compute smoothness loss (temporal continuity constraint).
 
         Args:
             current_params: Current parameter values (batch_size, n_params)

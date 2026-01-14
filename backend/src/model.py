@@ -93,14 +93,15 @@ class AudioToVisualModel(nn.Module):
         params = self.decoder(encoded)
 
         # Apply activation functions to constrain outputs
-        # Julia seed: real and imag components (unbounded, but we'll clip in training)
+        # Julia seed: real and imag components constrained to |c| < 2 via tanh
         # Color: hue [0, 1], saturation [0, 1], brightness [0, 1]
         # Zoom: positive (use exp or sigmoid)
         # Speed: positive (use exp or sigmoid)
 
         # Split parameters
-        julia_real = params[:, 0]
-        julia_imag = params[:, 1]
+        # Julia parameter constraint: |c| < 2 for visually interesting sets
+        julia_real = 2.0 * torch.tanh(params[:, 0])
+        julia_imag = 2.0 * torch.tanh(params[:, 1])
         color_hue = torch.sigmoid(params[:, 2])
         color_sat = torch.sigmoid(params[:, 3])
         color_bright = torch.sigmoid(params[:, 4])
