@@ -9,13 +9,33 @@ from pathlib import Path
 import tempfile
 import shutil
 import time
+import platform
 
 # Add parent directory to path for imports (to enable absolute imports of src package)
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from src.data_loader import AudioDataset
-from src.audio_features import AudioFeatureExtractor
+from src.data_loader import AudioDataset  # noqa: E402
+from src.audio_features import AudioFeatureExtractor  # noqa: E402
+
+
+# Platform-specific helper
+def is_case_insensitive_fs():
+    """Check if the filesystem is case-insensitive (Windows, macOS)."""
+    return platform.system() in ("Windows", "Darwin")
+
+
+def get_expected_file_count(base_count):
+    """
+    Get expected file count accounting for case-insensitive filesystem duplication.
+    On Windows/macOS, glob patterns like *.wav and *.WAV may both match the same file.
+    """
+    if is_case_insensitive_fs():
+        # May find duplicates; use >= for flexible assertions
+        return base_count
+    else:
+        # Case-sensitive; expect exact count
+        return base_count
 
 
 # Module-level fixtures (available to all test classes)
@@ -83,9 +103,9 @@ class TestAudioDataset:
         )
 
         assert dataset is not None
-        # Note: On Windows, case-insensitive filesystem may find files twice
-        # (both .wav and .WAV patterns match). We expect at least 3 files.
-        assert len(dataset.audio_files) >= 3
+        expected_count = get_expected_file_count(3)
+        # On case-insensitive filesystems (Windows, macOS), glob may find duplicates
+        assert len(dataset.audio_files) >= expected_count
         assert dataset.window_frames == 10
         assert dataset.cache_dir == temp_cache_dir
 
@@ -95,8 +115,9 @@ class TestAudioDataset:
             data_dir=str(temp_audio_dir), cache_dir=str(temp_cache_dir)
         )
 
-        # Should find at least 3 WAV files (may be 6 on Windows due to case-insensitive FS)
-        assert len(dataset) >= 3
+        expected_count = get_expected_file_count(3)
+        # On case-insensitive filesystems, may find duplicates
+        assert len(dataset) >= expected_count
 
         # All should be .wav files
         for audio_file in dataset.audio_files:
@@ -155,7 +176,8 @@ class TestAudioDataset:
 
         all_features = dataset.load_all_features()
 
-        assert len(all_features) >= 3  # May be 6 on Windows
+        expected_count = get_expected_file_count(3)
+        assert len(all_features) >= expected_count
 
         for features in all_features:
             assert features.ndim == 2
@@ -204,7 +226,8 @@ class TestAudioDataset:
         features2, _ = dataset2[0]
         cache_files_2 = set(temp_cache_dir.glob("*.npy"))
 
-        # Should create a new cache file
+        # Should create additional cache file(s) for new config
+        # On case-insensitive FS, may have duplicate audio files -> more cache files
         assert len(cache_files_2) > len(cache_files_1)
 
         # Features should have different dimensions
