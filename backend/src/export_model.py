@@ -121,6 +121,7 @@ def load_checkpoint_and_export(
     model_kwargs: Optional[Dict[str, Any]] = None,
     output_dir: str = "models",
     window_frames: int = 10,
+    num_features_per_frame: Optional[int] = None,
 ):
     """
     Load checkpoint and export to ONNX.
@@ -130,7 +131,8 @@ def load_checkpoint_and_export(
         model_class: Model class to instantiate
         model_kwargs: Keyword arguments for model initialization
         output_dir: Directory to save ONNX model
-        window_frames: Number of audio frames (input_dim = 6 * window_frames)
+        window_frames: Number of audio frames
+        num_features_per_frame: Features per frame (6, 12, or 18). If None, inferred from checkpoint or defaults to 6.
     """
     if model_kwargs is None:
         model_kwargs = {}
@@ -138,8 +140,26 @@ def load_checkpoint_and_export(
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
+    # Determine num_features_per_frame
+    if num_features_per_frame is None:
+        # Try to infer from checkpoint metadata or feature stats
+        feature_mean = checkpoint.get("feature_mean")
+        if feature_mean is not None:
+            # Calculate from the length of feature stats
+            total_features = len(feature_mean)
+            num_features_per_frame = total_features // window_frames
+            logging.info(f"Inferred num_features_per_frame={num_features_per_frame} from checkpoint")
+        else:
+            # Default to base features
+            num_features_per_frame = 6
+            logging.info("Using default num_features_per_frame=6")
+
     # Create model
-    model = model_class(window_frames=window_frames, **model_kwargs)
+    model = model_class(
+        window_frames=window_frames,
+        num_features_per_frame=num_features_per_frame,
+        **model_kwargs
+    )
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
@@ -151,7 +171,7 @@ def load_checkpoint_and_export(
     os.makedirs(output_dir, exist_ok=True)
 
     # Calculate input dimension
-    input_dim = 6 * window_frames
+    input_dim = num_features_per_frame * window_frames
 
     # Export
     output_path = os.path.join(output_dir, "model.onnx")
@@ -164,6 +184,9 @@ def load_checkpoint_and_export(
         metadata={
             "epoch": checkpoint.get("epoch", 0),
             "checkpoint_path": checkpoint_path,
+            "window_frames": window_frames,
+            "num_features_per_frame": num_features_per_frame,
+            "input_dim": input_dim,
         },
     )
 
