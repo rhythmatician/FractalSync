@@ -157,6 +157,8 @@ cd backend
 python train.py --data-dir data/audio --epochs 100 --include-delta
 ```
 
+**Note**: The frontend currently only supports models trained with base features (6 per frame, 60-dimensional input). Models trained with velocity features require updating the frontend audio feature extractor to compute delta and delta-delta features. This will be implemented in a future update.
+
 ## Troubleshooting
 
 ### Why is onnxruntime-web pinned to 1.14.0?
