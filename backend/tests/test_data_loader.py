@@ -323,7 +323,7 @@ class TestAudioDataset:
         assert not cache_dir.exists()
         
         # Create dataset (should create cache dir)
-        dataset = AudioDataset(
+        AudioDataset(
             data_dir=str(audio_dir),
             cache_dir=str(cache_dir)
         )
