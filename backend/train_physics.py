@@ -24,16 +24,22 @@ from src.export_model import export_to_onnx
 
 def main():
     """Main training function."""
-    parser = argparse.ArgumentParser(description="Train physics-based audio-to-visual model")
+    parser = argparse.ArgumentParser(
+        description="Train physics-based audio-to-visual model"
+    )
     parser.add_argument(
         "--data-dir",
         type=str,
         default="data/audio",
         help="Directory containing audio files",
     )
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument(
+        "--epochs", type=int, default=100, help="Number of training epochs"
+    )
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument(
+        "--learning-rate", type=float, default=1e-4, help="Learning rate"
+    )
     parser.add_argument(
         "--window-frames", type=int, default=10, help="Number of frames in input window"
     )
@@ -190,7 +196,10 @@ def main():
         except Exception as e:
             print(f"Warning: Could not export to ONNX: {e}")
 
-    print("\nTraining history saved to:", os.path.join(args.save_dir, "training_history.json"))
+    print(
+        "\nTraining history saved to:",
+        os.path.join(args.save_dir, "training_history.json"),
+    )
     print("Final checkpoint saved to:", args.save_dir)
 
 

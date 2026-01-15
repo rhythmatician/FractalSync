@@ -44,9 +44,7 @@ logger.propagate = False  # Don't propagate to root logger
 
 # Create file handler for debug log
 if not logger.handlers:
-    _debug_handler = logging.FileHandler(
-        "trainer_debug.log"
-    )
+    _debug_handler = logging.FileHandler("trainer_debug.log")
     _debug_handler.setFormatter(JSONFormatter())
     _debug_handler.setLevel(logging.DEBUG)
     logger.addHandler(_debug_handler)

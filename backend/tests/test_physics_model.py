@@ -253,55 +253,65 @@ class TestPhysicsModel:
     def test_batch_size_mismatch_handling(self):
         """Test that integrate_velocity handles mismatched batch sizes (e.g., last batch)."""
         model = PhysicsAudioToVisualModel(window_frames=10, predict_velocity=True)
-        
+
         # Simulate a normal batch
         batch_size_normal = 32
         velocity_normal = torch.randn(batch_size_normal, 2)
         position_normal = torch.randn(batch_size_normal, 2)
         prev_velocity_normal = torch.randn(batch_size_normal, 2)
-        
+
         new_pos_1, new_vel_1 = model.integrate_velocity(
             velocity_normal, position_normal, prev_velocity_normal
         )
         assert new_pos_1.shape == (batch_size_normal, 2)
         assert new_vel_1.shape == (batch_size_normal, 2)
-        
+
         # Simulate a smaller last batch (the problematic case)
         batch_size_small = 12
         velocity_small = torch.randn(batch_size_small, 2)
         position_small = torch.randn(batch_size_small, 2)
         # Previous velocity still has the old batch size (32)
         prev_velocity_large = torch.randn(batch_size_normal, 2)
-        
+
         # This should NOT raise an error - prev_velocity should be trimmed
         new_pos_2, new_vel_2 = model.integrate_velocity(
             velocity_small, position_small, prev_velocity_large
         )
         assert new_pos_2.shape == (batch_size_small, 2)
         assert new_vel_2.shape == (batch_size_small, 2)
-        
+
         # Test case 3: Position batch size also mismatches (the real-world scenario)
         position_large = torch.randn(batch_size_normal, 2)
         velocity_small_2 = torch.randn(batch_size_small, 2)
         prev_velocity_large_2 = torch.randn(batch_size_normal, 2)
-        
+
         # This should handle both position and prev_velocity being larger
         new_pos_3, new_vel_3 = model.integrate_velocity(
             velocity_small_2, position_large, prev_velocity_large_2
         )
-        assert new_pos_3.shape == (batch_size_small, 2), f"Expected shape ({batch_size_small}, 2), got {new_pos_3.shape}"
-        assert new_vel_3.shape == (batch_size_small, 2), f"Expected shape ({batch_size_small}, 2), got {new_vel_3.shape}"
-        
+        assert new_pos_3.shape == (
+            batch_size_small,
+            2,
+        ), f"Expected shape ({batch_size_small}, 2), got {new_pos_3.shape}"
+        assert new_vel_3.shape == (
+            batch_size_small,
+            2,
+        ), f"Expected shape ({batch_size_small}, 2), got {new_vel_3.shape}"
+
         # Verify position constraint is applied correctly
         # Create positions that exceed magnitude 2
         large_positions = torch.ones(batch_size_small, 2) * 3.0  # Magnitude > 2
         velocity_test = torch.randn(batch_size_small, 2) * 0.1
-        
-        constrained_pos, _ = model.integrate_velocity(velocity_test, large_positions, None)
+
+        constrained_pos, _ = model.integrate_velocity(
+            velocity_test, large_positions, None
+        )
         magnitudes = torch.norm(constrained_pos, dim=1)
-        
+
         # All magnitudes should be <= 2.0 (with small tolerance for floating point)
-        assert torch.all(magnitudes <= 2.01), f"Max magnitude: {magnitudes.max().item()}"
+        assert torch.all(
+            magnitudes <= 2.01
+        ), f"Max magnitude: {magnitudes.max().item()}"
 
 
 if __name__ == "__main__":

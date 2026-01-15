@@ -29,7 +29,9 @@ class VelocityLoss(nn.Module):
         super().__init__()
         self.weight = weight
 
-    def forward(self, predicted_velocity: torch.Tensor, target_velocity: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, predicted_velocity: torch.Tensor, target_velocity: torch.Tensor
+    ) -> torch.Tensor:
         """
         Compute velocity prediction loss.
 
@@ -50,7 +52,9 @@ class AccelerationSmoothness(nn.Module):
         super().__init__()
         self.weight = weight
 
-    def forward(self, current_velocity: torch.Tensor, previous_velocity: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, current_velocity: torch.Tensor, previous_velocity: torch.Tensor
+    ) -> torch.Tensor:
         """
         Compute acceleration smoothness loss.
 
@@ -62,7 +66,7 @@ class AccelerationSmoothness(nn.Module):
             Smoothness loss on velocity changes
         """
         acceleration = current_velocity - previous_velocity
-        return self.weight * torch.mean(acceleration ** 2)
+        return self.weight * torch.mean(acceleration**2)
 
 
 class PhysicsTrainer:
@@ -114,8 +118,12 @@ class PhysicsTrainer:
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()
-        self.smoothness_loss = SmoothnessLoss(weight=correlation_weights.get("smoothness", 0.1))
-        self.velocity_loss = VelocityLoss(weight=correlation_weights.get("velocity_loss", 1.0))
+        self.smoothness_loss = SmoothnessLoss(
+            weight=correlation_weights.get("smoothness", 0.1)
+        )
+        self.velocity_loss = VelocityLoss(
+            weight=correlation_weights.get("velocity_loss", 1.0)
+        )
         self.acceleration_smoothness = AccelerationSmoothness(
             weight=correlation_weights.get("acceleration_smoothness", 0.05)
         )
@@ -149,8 +157,12 @@ class PhysicsTrainer:
         logger.info(f"Generating curriculum data: {n_samples} samples")
         positions, velocities = generate_curriculum_sequence(n_samples)
 
-        self.curriculum_positions = torch.tensor(positions, dtype=torch.float32, device=self.device)
-        self.curriculum_velocities = torch.tensor(velocities, dtype=torch.float32, device=self.device)
+        self.curriculum_positions = torch.tensor(
+            positions, dtype=torch.float32, device=self.device
+        )
+        self.curriculum_velocities = torch.tensor(
+            velocities, dtype=torch.float32, device=self.device
+        )
 
         logger.info(
             f"Curriculum data generated: positions shape={self.curriculum_positions.shape}, "
@@ -196,16 +208,23 @@ class PhysicsTrainer:
             self._generate_curriculum_data(total_samples)
 
         # Curriculum weight decays over epochs
-        current_curriculum_weight = self.curriculum_weight * (curriculum_decay ** epoch)
+        current_curriculum_weight = self.curriculum_weight * (curriculum_decay**epoch)
 
-        logger.debug(f"Starting epoch {epoch} with curriculum_weight={current_curriculum_weight:.4f}")
+        logger.debug(
+            f"Starting epoch {epoch} with curriculum_weight={current_curriculum_weight:.4f}"
+        )
 
         def _to_tensor(batch: Any) -> torch.Tensor:
             """Convert common batch shapes to torch.Tensor."""
             if isinstance(batch, torch.Tensor):
                 return batch
             if isinstance(batch, (list, tuple)):
-                return torch.stack([b if isinstance(b, torch.Tensor) else torch.as_tensor(b) for b in batch])
+                return torch.stack(
+                    [
+                        b if isinstance(b, torch.Tensor) else torch.as_tensor(b)
+                        for b in batch
+                    ]
+                )
             return torch.as_tensor(batch)
 
         try:
@@ -236,12 +255,18 @@ class PhysicsTrainer:
                 curriculum_pos_batch = None
                 curriculum_vel_batch = None
                 if self.use_curriculum and self.curriculum_positions is not None:
-                    end_idx = min(sample_idx + batch_size, len(self.curriculum_positions))
+                    end_idx = min(
+                        sample_idx + batch_size, len(self.curriculum_positions)
+                    )
                     actual_batch_size = end_idx - sample_idx
 
                     if actual_batch_size > 0:
-                        curriculum_pos_batch = self.curriculum_positions[sample_idx:end_idx]
-                        curriculum_vel_batch = self.curriculum_velocities[sample_idx:end_idx]
+                        curriculum_pos_batch = self.curriculum_positions[
+                            sample_idx:end_idx
+                        ]
+                        curriculum_vel_batch = self.curriculum_velocities[
+                            sample_idx:end_idx
+                        ]
 
                         # Trim features if curriculum batch is smaller
                         if actual_batch_size < batch_size:
@@ -255,7 +280,9 @@ class PhysicsTrainer:
                     if curriculum_pos_batch is not None:
                         current_positions = curriculum_pos_batch.clone()
                     else:
-                        current_positions = torch.zeros(batch_size, 2, device=self.device)
+                        current_positions = torch.zeros(
+                            batch_size, 2, device=self.device
+                        )
 
                 # Forward pass
                 output = self.model(features)
@@ -266,8 +293,10 @@ class PhysicsTrainer:
 
                 # Integrate velocity to get position
                 if hasattr(self.model, "integrate_velocity"):
-                    current_positions, integrated_velocity = self.model.integrate_velocity(
-                        predicted_velocity, current_positions, previous_velocity
+                    current_positions, integrated_velocity = (
+                        self.model.integrate_velocity(
+                            predicted_velocity, current_positions, previous_velocity
+                        )
                     )
                 else:
                     # Fallback: simple integration
@@ -275,7 +304,9 @@ class PhysicsTrainer:
                     current_positions = current_positions + predicted_velocity
 
                 # Update output with integrated positions
-                visual_params = torch.cat([current_positions, output[:, 4:]], dim=1)  # [c_real, c_imag, hue, sat, bright, zoom, speed]
+                visual_params = torch.cat(
+                    [current_positions, output[:, 4:]], dim=1
+                )  # [c_real, c_imag, hue, sat, bright, zoom, speed]
 
                 # Extract parameters for rendering
                 julia_real = current_positions[:, 0].detach().cpu().numpy()
@@ -285,7 +316,9 @@ class PhysicsTrainer:
                 # Extract audio features for correlation
                 n_features_per_frame = 6
                 window_frames = features.shape[1] // n_features_per_frame
-                features_reshaped = features.view(batch_size, window_frames, n_features_per_frame)
+                features_reshaped = features.view(
+                    batch_size, window_frames, n_features_per_frame
+                )
                 avg_features = features_reshaped.mean(dim=1)  # (batch, n_features)
 
                 spectral_centroid = avg_features[:, 0]
@@ -309,15 +342,25 @@ class PhysicsTrainer:
                         zoom=float(zoom[i]),
                     )
 
-                    metrics = self.visual_metrics.compute_all_metrics(image, prev_image=prev_image)
+                    metrics = self.visual_metrics.compute_all_metrics(
+                        image, prev_image=prev_image
+                    )
 
                     images.append(image)
                     color_hues.append(visual_params[i, 2])
                     temporal_changes.append(
-                        torch.tensor(metrics["temporal_change"], device=self.device, dtype=torch.float32)
+                        torch.tensor(
+                            metrics["temporal_change"],
+                            device=self.device,
+                            dtype=torch.float32,
+                        )
                     )
                     edge_densities.append(
-                        torch.tensor(metrics["edge_density"], device=self.device, dtype=torch.float32)
+                        torch.tensor(
+                            metrics["edge_density"],
+                            device=self.device,
+                            dtype=torch.float32,
+                        )
                     )
 
                     prev_image = image
@@ -328,21 +371,33 @@ class PhysicsTrainer:
                 edge_density_tensor = torch.stack(edge_densities)
 
                 # Compute correlation losses
-                timbre_color_loss = self.correlation_loss(spectral_centroid, color_hue_tensor)
-                transient_impact_loss = self.correlation_loss(spectral_flux, temporal_change_tensor)
-                silence_stillness_loss = self.correlation_loss(rms_energy, -temporal_change_tensor)
-                distortion_roughness_loss = self.correlation_loss(zero_crossing_rate, edge_density_tensor)
+                timbre_color_loss = self.correlation_loss(
+                    spectral_centroid, color_hue_tensor
+                )
+                transient_impact_loss = self.correlation_loss(
+                    spectral_flux, temporal_change_tensor
+                )
+                silence_stillness_loss = self.correlation_loss(
+                    rms_energy, -temporal_change_tensor
+                )
+                distortion_roughness_loss = self.correlation_loss(
+                    zero_crossing_rate, edge_density_tensor
+                )
 
                 # Velocity loss (curriculum learning)
                 if curriculum_vel_batch is not None and current_curriculum_weight > 0.0:
-                    velocity_loss_val = self.velocity_loss(predicted_velocity, curriculum_vel_batch)
+                    velocity_loss_val = self.velocity_loss(
+                        predicted_velocity, curriculum_vel_batch
+                    )
                 else:
                     velocity_loss_val = torch.zeros(1, device=self.device)
 
                 # Acceleration smoothness
                 if previous_velocity is not None:
                     # Handle size mismatch
-                    min_size = min(predicted_velocity.size(0), previous_velocity.size(0))
+                    min_size = min(
+                        predicted_velocity.size(0), previous_velocity.size(0)
+                    )
                     acceleration_smoothness_val = self.acceleration_smoothness(
                         predicted_velocity[:min_size], previous_velocity[:min_size]
                     )
@@ -355,9 +410,12 @@ class PhysicsTrainer:
                 # Total loss
                 total_batch_loss = (
                     self.correlation_weights["timbre_color"] * timbre_color_loss
-                    + self.correlation_weights["transient_impact"] * transient_impact_loss
-                    + self.correlation_weights["silence_stillness"] * silence_stillness_loss
-                    + self.correlation_weights["distortion_roughness"] * distortion_roughness_loss
+                    + self.correlation_weights["transient_impact"]
+                    * transient_impact_loss
+                    + self.correlation_weights["silence_stillness"]
+                    * silence_stillness_loss
+                    + self.correlation_weights["distortion_roughness"]
+                    * distortion_roughness_loss
                     + current_curriculum_weight * velocity_loss_val
                     + acceleration_smoothness_val
                     + smoothness
@@ -439,7 +497,9 @@ class PhysicsTrainer:
         self.feature_extractor.compute_normalization_stats(all_features)
 
         # Normalize features
-        normalized_features = [self.feature_extractor.normalize_features(f) for f in all_features]
+        normalized_features = [
+            self.feature_extractor.normalize_features(f) for f in all_features
+        ]
 
         # Create dataset
         all_features_tensor = torch.tensor(
@@ -448,11 +508,15 @@ class PhysicsTrainer:
 
         # Create data loader
         tensor_dataset = TensorDataset(all_features_tensor)
-        dataloader = DataLoader(tensor_dataset, batch_size=batch_size, shuffle=False)  # Don't shuffle for curriculum
+        dataloader = DataLoader(
+            tensor_dataset, batch_size=batch_size, shuffle=False
+        )  # Don't shuffle for curriculum
 
         # Training loop
         logger.info(f"Starting physics-based training for {epochs} epochs...")
-        logger.info(f"Curriculum learning: {self.use_curriculum}, decay: {curriculum_decay}")
+        logger.info(
+            f"Curriculum learning: {self.use_curriculum}, decay: {curriculum_decay}"
+        )
 
         for epoch in tqdm(range(epochs), desc="Training Epochs", position=0):
             avg_losses = self.train_epoch(dataloader, epoch, curriculum_decay)

@@ -82,7 +82,9 @@ class PhysicsAudioToVisualModel(nn.Module):
 
         # Other parameters decoder (color, zoom, speed)
         self.params_decoder = nn.Sequential(
-            nn.Linear(prev_dim, 64), nn.ReLU(), nn.Linear(64, 5)  # color (3) + zoom + speed
+            nn.Linear(prev_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 5),  # color (3) + zoom + speed
         )
 
         # Initialize weights
@@ -124,8 +126,12 @@ class PhysicsAudioToVisualModel(nn.Module):
         if audio_rms is None:
             # RMS is the 3rd feature (index 2) in each frame
             n_features_per_frame = 6
-            features_reshaped = x.view(batch_size, self.window_frames, n_features_per_frame)
-            audio_rms = features_reshaped[:, :, 2].mean(dim=1)  # Average RMS over window
+            features_reshaped = x.view(
+                batch_size, self.window_frames, n_features_per_frame
+            )
+            audio_rms = features_reshaped[:, :, 2].mean(
+                dim=1
+            )  # Average RMS over window
 
         # Encode features
         encoded = self.encoder(x)
@@ -135,11 +141,17 @@ class PhysicsAudioToVisualModel(nn.Module):
 
         # Modulate velocity magnitude by audio loudness
         # Higher RMS → faster movement
-        velocity_magnitude = torch.norm(velocity_raw, dim=1, keepdim=True)  # (batch_size, 1)
-        velocity_direction = velocity_raw / (velocity_magnitude + 1e-8)  # Normalized direction
+        velocity_magnitude = torch.norm(
+            velocity_raw, dim=1, keepdim=True
+        )  # (batch_size, 1)
+        velocity_direction = velocity_raw / (
+            velocity_magnitude + 1e-8
+        )  # Normalized direction
 
         # Scale magnitude by RMS and speed_scale
-        scaled_magnitude = velocity_magnitude * audio_rms.unsqueeze(1) * self.speed_scale
+        scaled_magnitude = (
+            velocity_magnitude * audio_rms.unsqueeze(1) * self.speed_scale
+        )
         velocity = velocity_direction * scaled_magnitude  # (batch_size, 2)
 
         # Predict other parameters
@@ -165,7 +177,9 @@ class PhysicsAudioToVisualModel(nn.Module):
                 # Constrain position to |c| < 2 (visually interesting Julia sets)
                 position_magnitude = torch.norm(self.current_position)
                 if position_magnitude > 2.0:
-                    self.current_position = self.current_position / position_magnitude * 2.0
+                    self.current_position = (
+                        self.current_position / position_magnitude * 2.0
+                    )
 
                 c_real = self.current_position[0]
                 c_imag = self.current_position[1]
@@ -197,7 +211,15 @@ class PhysicsAudioToVisualModel(nn.Module):
             julia_imag = 2.0 * torch.tanh(velocity_raw[:, 1])
 
             output = torch.stack(
-                [julia_real, julia_imag, color_hue, color_sat, color_bright, zoom, speed],
+                [
+                    julia_real,
+                    julia_imag,
+                    color_hue,
+                    color_sat,
+                    color_bright,
+                    zoom,
+                    speed,
+                ],
                 dim=1,
             )
 
@@ -242,7 +264,7 @@ class PhysicsAudioToVisualModel(nn.Module):
             if prev_velocity.size(0) != batch_size:
                 # Trim prev_velocity to match current batch size
                 prev_velocity = prev_velocity[:batch_size]
-            
+
             damped_velocity = prev_velocity * self.damping_factor + velocity * (
                 1.0 - self.damping_factor
             )
@@ -259,13 +281,15 @@ class PhysicsAudioToVisualModel(nn.Module):
         new_position = position + damped_velocity * dt
 
         # Constrain to |c| < 2 (avoid in-place operations for autograd)
-        position_magnitude = torch.norm(new_position, dim=1, keepdim=True)  # (batch_size, 1)
-        
+        position_magnitude = torch.norm(
+            new_position, dim=1, keepdim=True
+        )  # (batch_size, 1)
+
         # Scale down any positions that exceed magnitude 2
         scale_factor = torch.where(
             position_magnitude > 2.0,
             2.0 / position_magnitude,
-            torch.ones_like(position_magnitude)
+            torch.ones_like(position_magnitude),
         )
         new_position = new_position * scale_factor
 
