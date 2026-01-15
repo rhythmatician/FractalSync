@@ -235,9 +235,16 @@ class PhysicsAudioToVisualModel(nn.Module):
         if position is None:
             position = (0.0, 0.0)
 
-        self.current_position = torch.tensor(position, dtype=torch.float32)
-        self.current_velocity = torch.zeros(2, dtype=torch.float32)
+        # Create state tensors on the same device as the model parameters to avoid
+        # device mismatch when the model is moved to CUDA or another device.
+        try:
+            device = next(self.parameters()).device
+        except StopIteration:
+            # Fallback in the unlikely case the module has no parameters yet.
+            device = torch.device("cpu")
 
+        self.current_position = torch.tensor(position, dtype=torch.float32, device=device)
+        self.current_velocity = torch.zeros(2, dtype=torch.float32, device=device)
     def integrate_velocity(
         self,
         velocity: torch.Tensor,
