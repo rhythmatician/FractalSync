@@ -8,7 +8,11 @@ import torch.nn as nn
 # Import physics model
 from .physics_model import PhysicsAudioToVisualModel  # noqa: F401
 
-
+__all__ = [
+    "AudioToVisualModel",
+    "TransformerAudioToVisualModel",
+    "PhysicsAudioToVisualModel",
+]
 class AudioToVisualModel(nn.Module):
     """
     Neural network mapping audio features to visual parameters.
