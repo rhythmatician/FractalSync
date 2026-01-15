@@ -122,7 +122,29 @@ export class ModelInference {
     // Post-processing
     const postStartTime = performance.now();
 
-    // Apply post-processing based on model output
+    // ENHANCED: Use raw audio features to add dynamic variation for undertrained models
+    // Extract some key audio features from the input (assuming 6 features × window_frames)
+    const numFeatures = 6;
+    const windowFrames = features.length / numFeatures;
+    
+    // Average each feature type across the window
+    let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
+    for (let i = 0; i < windowFrames; i++) {
+      avgCentroid += features[i * numFeatures + 0];
+      avgFlux += features[i * numFeatures + 1];
+      avgRMS += features[i * numFeatures + 2];
+      avgZCR += features[i * numFeatures + 3];
+      avgOnset += features[i * numFeatures + 4];
+      avgRolloff += features[i * numFeatures + 5];
+    }
+    avgCentroid /= windowFrames;
+    avgFlux /= windowFrames;
+    avgRMS /= windowFrames;
+    avgZCR /= windowFrames;
+    avgOnset /= windowFrames;
+    avgRolloff /= windowFrames;
+
+    // Apply post-processing based on model output + audio features
     const visualParams: VisualParameters = {
       juliaReal: params[0],
       juliaImag: params[1],
@@ -133,19 +155,25 @@ export class ModelInference {
       speed: params[6]
     };
 
-    // Scale down undertrained model outputs and add variation
-    // Model with 1 epoch outputs extreme values - normalize to interesting ranges
-    visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
-    visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
+    // Julia parameters: Mix model output with audio features for dynamics
+    // Use spectral centroid and flux to influence julia params
+    const centroidInfluence = (avgCentroid - 0.5) * 0.4; // Range: -0.2 to +0.2
+    const fluxInfluence = (avgFlux - 0.5) * 0.4;
+    visualParams.juliaReal = Math.max(-0.8, Math.min(0.8, params[0] * 0.2 + centroidInfluence));
+    visualParams.juliaImag = Math.max(-0.8, Math.min(0.8, params[1] * 0.2 + fluxInfluence));
     
-    // Color: enforce minimum saturation
-    visualParams.colorHue = visualParams.colorHue % 1.0;
-    visualParams.colorSat = Math.max(0.5, Math.min(1, visualParams.colorSat * 0.8 + 0.5));
-    visualParams.colorBright = Math.max(0.6, Math.min(0.9, visualParams.colorBright * 0.5 + 0.5));
+    // Color: Map RMS (loudness) to hue cycling, onset to saturation
+    visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0; // Cycle hue with loudness
+    visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)); // Boost sat on onsets
+    visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)); // Brightness from loudness
     
-    // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
-    visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
-    visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
+    // Zoom: Use rolloff and RMS for dynamic zooming
+    const zoomBase = 1.2 + avgRolloff * 0.8; // 1.2 to 2.0
+    const zoomVariation = avgRMS * 0.5; // 0 to 0.5
+    visualParams.zoom = Math.max(0.8, Math.min(2.5, zoomBase + zoomVariation));
+    
+    // Speed: Increase with flux and onset energy
+    visualParams.speed = Math.max(0.3, Math.min(1.2, 0.5 + avgFlux * 0.3 + avgOnset * 0.4));
 
     const postTime = performance.now() - postStartTime;
     const totalTime = performance.now() - totalStartTime;
@@ -165,6 +193,17 @@ export class ModelInference {
       inferenceTime: inferTime,
       postProcessingTime: postTime
     };
+
+    // Debug log every 60 frames (~1 second at 60fps)
+    if (this.inferenceTimings.length % 60 === 0) {
+      console.log('[ModelInference] Visual params:', {
+        julia: [visualParams.juliaReal.toFixed(3), visualParams.juliaImag.toFixed(3)],
+        color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
+        zoom: visualParams.zoom.toFixed(3),
+        speed: visualParams.speed.toFixed(3),
+        audioAvg: { avgRMS: avgRMS.toFixed(3), avgFlux: avgFlux.toFixed(3), avgOnset: avgOnset.toFixed(3) }
+      });
+    }
 
     return visualParams;
   }
