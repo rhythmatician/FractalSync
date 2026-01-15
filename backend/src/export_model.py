@@ -45,19 +45,22 @@ def export_to_onnx(
         dummy_input = torch.zeros(*input_shape)
 
     try:
+        # Use legacy export API for better compatibility
         torch.onnx.export(
             model,
             (dummy_input,),
             output_path,
+            export_params=True,
             input_names=["audio_features"],
             output_names=["visual_parameters"],
             dynamic_axes={
                 "audio_features": {0: "batch_size"},
                 "visual_parameters": {0: "batch_size"},
             },
-            opset_version=13,
+            opset_version=11,
             do_constant_folding=True,
             verbose=False,
+            dynamo=False,  # Disable dynamo to use legacy export
         )
     except Exception as e:
         raise RuntimeError(f"ONNX export failed: {e}") from e
