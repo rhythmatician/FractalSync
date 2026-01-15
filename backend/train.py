@@ -34,6 +34,16 @@ def main():
         "--window-frames", type=int, default=10, help="Number of frames per window"
     )
     parser.add_argument(
+        "--include-delta",
+        action="store_true",
+        help="Include velocity (first-order derivative) features",
+    )
+    parser.add_argument(
+        "--include-delta-delta",
+        action="store_true",
+        help="Include acceleration (second-order derivative) features",
+    )
+    parser.add_argument(
         "--save-dir",
         type=str,
         default="checkpoints",
@@ -61,11 +71,21 @@ def main():
 
     # Initialize components
     logging.info("Initializing components...")
-    feature_extractor = AudioFeatureExtractor()
+    feature_extractor = AudioFeatureExtractor(
+        include_delta=args.include_delta,
+        include_delta_delta=args.include_delta_delta,
+    )
     visual_metrics = VisualMetrics()
 
+    # Get number of features per frame
+    num_features_per_frame = feature_extractor.get_num_features()
+    logging.info(f"Using {num_features_per_frame} features per frame")
+
     # Create model
-    model = AudioToVisualModel(window_frames=args.window_frames)
+    model = AudioToVisualModel(
+        window_frames=args.window_frames,
+        num_features_per_frame=num_features_per_frame,
+    )
 
     # Load checkpoint if provided
     if args.checkpoint:

@@ -27,17 +27,22 @@ These instructions make AI agents immediately productive in this repo.
   - Preferred: `python api/server.py`
   - Alternative: `python -m api.server` (ensure CWD is `backend/`).
 - Training via API:
-  - `POST /api/train/start` JSON body: `{ "data_dir": "data/audio", "epochs": 1, "batch_size": 32, "learning_rate": 0.0001, "window_frames": 10, "input_dim": 60 }`
+  - `POST /api/train/start` JSON body: `{ "data_dir": "data/audio", "epochs": 1, "batch_size": 32, "learning_rate": 0.0001, "window_frames": 10, "include_delta": false, "include_delta_delta": false }`
   - Check status: `GET /api/train/status`
 - CLI training:
   - `cd backend`
   - `python train.py --data-dir data/audio --epochs 100`
+  - With velocity features: `python train.py --data-dir data/audio --epochs 100 --include-delta`
 - Frontend:
   - `cd frontend && npm install && npm run dev`
   - Open `http://localhost:3000`
 
 ## Project Conventions
 - Audio features are flattened windows: `[centroid, flux, rms, zcr, onset, rolloff] × window_frames` → `input_dim = 6 * window_frames`.
+- **Velocity features**: Optional delta (first-order derivative) and delta-delta (second-order derivative) features can be enabled:
+  - Base only: 6 features per frame → `input_dim = 6 * window_frames`
+  - With delta: 12 features per frame → `input_dim = 12 * window_frames`
+  - With delta-delta: 18 features per frame → `input_dim = 18 * window_frames`
 - Feature caching: `.npy` files keyed by path + mtime + extractor config; auto-invalidates on config change.
 - Tensors in trainer:
   - Handle DataLoader batches that return tuples/lists; extract the single tensor element to avoid extra dims.
@@ -61,7 +66,9 @@ These instructions make AI agents immediately productive in this repo.
 ## Examples
 - Start server then train:
   - Server: `cd backend && python api/server.py`
-  - Train: `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":1,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"input_dim":60}'`
+  - Train: `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":1,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":false,"include_delta_delta":false}'`
   - Status: `curl http://localhost:8000/api/train/status`
+- Train with velocity features:
+  - `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":100,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":true,"include_delta_delta":false}'`
 
 If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.

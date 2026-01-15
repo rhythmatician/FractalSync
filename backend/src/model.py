@@ -26,6 +26,7 @@ class AudioToVisualModel(nn.Module):
     def __init__(
         self,
         window_frames: int = 10,
+        num_features_per_frame: int = 6,
         hidden_dims: list[int] = [128, 256, 128],
         output_dim: int = 7,
         dropout: float = 0.2,
@@ -34,7 +35,8 @@ class AudioToVisualModel(nn.Module):
         Initialize model.
 
         Args:
-            window_frames: Number of time frames (input_dim = 6 * window_frames)
+            window_frames: Number of time frames
+            num_features_per_frame: Features per frame (6 base, 12 with delta, 18 with delta-delta)
             hidden_dims: List of hidden layer dimensions
             output_dim: Output parameter dimension (default 7)
             dropout: Dropout rate
@@ -42,7 +44,8 @@ class AudioToVisualModel(nn.Module):
         super().__init__()
 
         self.window_frames = window_frames
-        self.input_dim = 6 * window_frames  # Assuming 6 features per frame
+        self.num_features_per_frame = num_features_per_frame
+        self.input_dim = num_features_per_frame * window_frames
         self.output_dim = output_dim
 
         # Build encoder layers
@@ -217,7 +220,14 @@ class TransformerAudioToVisualModel(nn.Module):
         Returns:
             Visual parameters of shape (batch_size, output_dim)
         """
-        batch_size = x.shape[0]  # FIXME: What's this here for?
+        # Validate input shape (skip during tracing to avoid warnings)
+        if not torch.jit.is_tracing():
+            if len(x.shape) != 3:
+                raise ValueError(f"Expected 3D input (batch_size, num_frames, input_dim), got shape {x.shape}")
+            if x.shape[1] != self.num_frames:
+                raise ValueError(f"Expected {self.num_frames} frames, got {x.shape[1]}")
+            if x.shape[2] != self.input_dim:
+                raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[2]}")
 
         # Project input
         x = self.input_proj(x)  # (batch, frames, d_model)

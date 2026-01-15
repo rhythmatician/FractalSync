@@ -271,8 +271,8 @@ class Trainer:
                 # Extract audio features for correlation
                 # Features shape: (batch, n_features * window_frames)
                 # We need to extract individual features
-                # For simplicity, assume features are flattened: [centroid, flux, rms, zcr, onset, rolloff] * window_frames
-                n_features_per_frame = 6
+                # Get number of features per frame from extractor config
+                n_features_per_frame = self.feature_extractor.get_num_features()
                 window_frames = features.shape[1] // n_features_per_frame
                 actual_batch_size = features.shape[
                     0
@@ -284,6 +284,9 @@ class Trainer:
                 )
                 avg_features = features_reshaped.mean(dim=1)  # (batch, n_features)
 
+                # Extract base features (first 6 dimensions) for correlation analysis
+                # Note: Correlation losses are computed on base features regardless of whether
+                # delta features are included, as they represent the fundamental audio properties
                 spectral_centroid = avg_features[:, 0]
                 spectral_flux = avg_features[:, 1]
                 rms_energy = avg_features[:, 2]
