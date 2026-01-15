@@ -120,11 +120,12 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - Use: `python train.py --data-dir data/audio --include-delta --epochs 100`
 
 **include_delta_delta** (optional, flag)
-- Include acceleration (second-order derivative) features in addition to base and delta features.
+- Include acceleration (second-order derivative) features in addition to base and/or delta features.
 - Adds 6 more features per frame representing the acceleration of audio features.
-- Requires `--include-delta` to be enabled.
-- 10 frames × 18 features (6 base + 6 delta + 6 delta-delta) = 180-dimensional input vector.
-- Use: `python train.py --data-dir data/audio --include-delta --include-delta-delta --epochs 100`
+- Can be used with or without `--include-delta`:
+  - With `--include-delta`: 10 frames × 18 features (6 base + 6 delta + 6 delta-delta) = 180-dimensional input vector.
+  - Without `--include-delta`: 10 frames × 12 features (6 base + 6 delta-delta) = 120-dimensional input vector (delta is computed internally but not concatenated).
+- Example (with both): `python train.py --data-dir data/audio --include-delta --include-delta-delta --epochs 100`
 
 ## Advanced Features
 
