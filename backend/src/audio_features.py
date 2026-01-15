@@ -96,13 +96,15 @@ class AudioFeatureExtractor:
         # Add delta features if requested
         features_list = [base_features]
         
-        if self.include_delta:
+        delta_features = None
+        if self.include_delta or self.include_delta_delta:
             delta_features = self._compute_delta(base_features)
-            features_list.append(delta_features)
+            if self.include_delta:
+                features_list.append(delta_features)
         
         if self.include_delta_delta:
-            if not self.include_delta:
-                # Need delta first
+            if delta_features is None:
+                # Shouldn't happen due to logic above, but defensive
                 delta_features = self._compute_delta(base_features)
             delta_delta_features = self._compute_delta(delta_features)
             features_list.append(delta_delta_features)

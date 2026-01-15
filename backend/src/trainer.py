@@ -284,7 +284,9 @@ class Trainer:
                 )
                 avg_features = features_reshaped.mean(dim=1)  # (batch, n_features)
 
-                # Extract base features (first 6 dimensions)
+                # Extract base features (first 6 dimensions) for correlation analysis
+                # Note: Correlation losses are computed on base features regardless of whether
+                # delta features are included, as they represent the fundamental audio properties
                 spectral_centroid = avg_features[:, 0]
                 spectral_flux = avg_features[:, 1]
                 rms_energy = avg_features[:, 2]
