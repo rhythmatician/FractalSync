@@ -50,7 +50,7 @@ class MandelbrotOrbit:
             real[-1] = self.points[0, 0]
             imag[-1] = self.points[0, 1]
 
-        return np.stack([real, imag], axis=1)
+        return np.stack([real, imag], axis=1).astype(np.float32)
 
     def compute_velocities(self, n_samples: int, time_step: float = 1.0) -> np.ndarray:
         """
@@ -66,7 +66,7 @@ class MandelbrotOrbit:
         positions = self.sample(n_samples)
 
         # Compute finite differences
-        velocities = np.zeros_like(positions)
+        velocities = np.zeros_like(positions, dtype=np.float32)
         if n_samples > 1:
             velocities[:-1] = (positions[1:] - positions[:-1]) / time_step
             if self.closed:
