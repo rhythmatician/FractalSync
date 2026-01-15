@@ -125,7 +125,14 @@ export class ModelInference {
     // ENHANCED: Use raw audio features to add dynamic variation for undertrained models
     // Extract some key audio features from the input (assuming 6 features × window_frames)
     const numFeatures = 6;
-    const windowFrames = features.length / numFeatures;
+    const windowFrames = Math.floor(features.length / numFeatures);
+
+    if (features.length % numFeatures !== 0) {
+      console.warn(
+        `[modelInference] features.length (${features.length}) is not a multiple of numFeatures (${numFeatures}). ` +
+          `Using ${windowFrames} full frames.`
+      );
+    }
     
     // Average each feature type across the window
     let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
