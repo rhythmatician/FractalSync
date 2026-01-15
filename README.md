@@ -73,6 +73,10 @@ python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
 
 See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed documentation.
 
+Optional: Enable velocity-based smoothing for more natural transitions:
+```bash
+python train.py --data-dir data/audio --epochs 100 --use-velocity-loss
+```
 The trained model will be exported to ONNX format and can be used by the frontend.
 
 ## Features
@@ -83,6 +87,7 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - Training UI for model management and monitoring
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
+- **Velocity-based prediction** for physics-inspired smooth parameter transitions (optional)
 
 
 ## Training parameters:
@@ -112,6 +117,7 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - 10 frames × 6 features = 60-dimensional input vector.
 - Larger windows → model sees more temporal context but input grows (5 frames → 30-dim, 20 frames → 120-dim).
 
+<<<<<<< HEAD
 **include_delta** (optional, flag)
 - Include velocity (first-order derivative) features in addition to base features.
 - Adds 6 more features per frame representing the rate of change of audio features.
@@ -159,6 +165,12 @@ python train.py --data-dir data/audio --epochs 100 --include-delta
 ```
 
 **Note**: The frontend currently only supports models trained with base features (6 per frame, 60-dimensional input). Models trained with velocity features require updating the frontend audio feature extractor to compute delta and delta-delta features. This will be implemented in a future update.
+
+**use_velocity_loss** (boolean, default: false)
+- Enables velocity-based loss that penalizes rapid changes in parameter velocity (jerk).
+- Creates smoother, more natural-looking transitions by enforcing momentum-like behavior.
+- Adds a small computational cost but produces more physically plausible animations.
+- Recommended for final training runs when visual quality is important.
 
 ## Troubleshooting
 
