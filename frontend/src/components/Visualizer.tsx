@@ -18,6 +18,7 @@ export function Visualizer() {
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [inferenceFailures, setInferenceFailures] = useState(0);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -199,7 +200,7 @@ export function Visualizer() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ margin: '0 0 10px 0' }}>FractalSync - Julia Set Music Visualizer</h1>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={toggleVisualization}
                 disabled={!isModelLoaded}
@@ -216,6 +217,48 @@ export function Visualizer() {
               >
                 {isVisualizing ? '■ Stop' : '▶ Start'} Visualization
               </button>
+
+              <label style={{
+                padding: '8px 16px',
+                background: '#444',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}>
+                {audioFile ? `📁 ${audioFile.name}` : '🎵 Choose Audio File'}
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setAudioFile(file);
+                      if (isVisualizing) {
+                        setIsVisualizing(false);
+                        setTimeout(() => setIsVisualizing(true), 100);
+                      }
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              {audioFile && (
+                <button
+                  onClick={() => setAudioFile(null)}
+                  style={{
+                    padding: '8px 12px',
+                    background: '#ff4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '3px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  Use Microphone
+                </button>
+              )}
               
               {!isModelLoaded && (
                 <span style={{ color: '#ffff00' }}>⏳ Loading model...</span>
@@ -283,7 +326,7 @@ export function Visualizer() {
       />
 
       {isVisualizing && (
-        <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} />
+        <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} audioFile={audioFile} />
       )}
     </div>
   );

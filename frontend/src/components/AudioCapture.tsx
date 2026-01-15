@@ -8,9 +8,10 @@ import { AudioFeatureExtractor } from '../lib/audioFeatures';
 interface AudioCaptureProps {
   onFeatures: (features: number[]) => void;
   enabled: boolean;
+  audioFile?: File | null;
 }
 
-export function AudioCapture({ onFeatures, enabled }: AudioCaptureProps) {
+export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCaptureProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -18,10 +19,15 @@ export function AudioCapture({ onFeatures, enabled }: AudioCaptureProps) {
   const featureExtractorRef = useRef<AudioFeatureExtractor | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (enabled && !isCapturing) {
-      startCapture();
+      if (audioFile) {
+        startFilePlayback();
+      } else {
+        startCapture();
+      }
     } else if (!enabled && isCapturing) {
       stopCapture();
     }
@@ -29,7 +35,70 @@ export function AudioCapture({ onFeatures, enabled }: AudioCaptureProps) {
     return () => {
       stopCapture();
     };
-  }, [enabled]);
+  }, [enabled, audioFile]);
+
+  const startFilePlayback = async () => {
+    if (!audioFile) return;
+
+    try {
+      // Create audio context
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+
+      // Create analyser node with proper settings
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      analyserRef.current = analyser;
+
+      // Create audio element
+      const audio = new Audio();
+      audio.loop = true; // Loop for continuous testing
+      audio.crossOrigin = "anonymous"; // Enable CORS for file access
+      audioElementRef.current = audio;
+      
+      // Load file
+      const url = URL.createObjectURL(audioFile);
+      audio.src = url;
+
+      // Wait for audio to be ready
+      await new Promise<void>((resolve, reject) => {
+        audio.addEventListener('canplaythrough', () => resolve(), { once: true });
+        audio.addEventListener('error', reject, { once: true });
+      });
+
+      // Connect audio element to analyser
+      const source = audioContext.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(audioContext.destination); // Connect to speakers
+
+      // Create feature extractor
+      const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
+      featureExtractorRef.current = featureExtractor;
+
+      // Start playback
+      await audio.play();
+
+      setIsCapturing(true);
+      setError(null);
+
+      // Start feature extraction loop
+      const extractLoop = () => {
+        if (!featureExtractorRef.current) return;
+
+        const features = featureExtractorRef.current.extractWindowedFeatures(10);
+        onFeatures(features);
+
+        animationFrameRef.current = requestAnimationFrame(extractLoop);
+      };
+
+      extractLoop();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load audio file';
+      setError(errorMessage);
+      setIsCapturing(false);
+    }
+  };
 
   const startCapture = async () => {
     try {
@@ -79,6 +148,13 @@ export function AudioCapture({ onFeatures, enabled }: AudioCaptureProps) {
     if (animationFrameRef.current !== null) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
+    }
+
+    // Stop audio element
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.src = '';
+      audioElementRef.current = null;
     }
 
     // Stop audio stream
