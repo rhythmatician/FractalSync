@@ -249,8 +249,9 @@ class PhysicsAudioToVisualModel(nn.Module):
         # Constrain to |c| < 2
         position_magnitude = torch.norm(new_position, dim=1, keepdim=True)
         mask = position_magnitude > 2.0
-        new_position[mask.squeeze()] = (
-            new_position[mask.squeeze()] / position_magnitude[mask] * 2.0
+        mask_squeezed = mask.squeeze()
+        new_position[mask_squeezed] = (
+            new_position[mask_squeezed] / position_magnitude[mask] * 2.0
         )
 
         return new_position, damped_velocity

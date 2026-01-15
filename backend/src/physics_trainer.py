@@ -335,21 +335,23 @@ class PhysicsTrainer:
                 distortion_roughness_loss = self.correlation_loss(zero_crossing_rate, edge_density_tensor)
 
                 # Velocity loss (curriculum learning)
-                velocity_loss_val = torch.tensor(0.0, device=self.device, requires_grad=True)
                 if curriculum_vel_batch is not None and current_curriculum_weight > 0.0:
                     velocity_loss_val = self.velocity_loss(predicted_velocity, curriculum_vel_batch)
+                else:
+                    velocity_loss_val = torch.zeros(1, device=self.device)
 
                 # Acceleration smoothness
-                acceleration_smoothness_val = torch.tensor(0.0, device=self.device, requires_grad=True)
                 if previous_velocity is not None:
                     # Handle size mismatch
                     min_size = min(predicted_velocity.size(0), previous_velocity.size(0))
                     acceleration_smoothness_val = self.acceleration_smoothness(
                         predicted_velocity[:min_size], previous_velocity[:min_size]
                     )
+                else:
+                    acceleration_smoothness_val = torch.zeros(1, device=self.device)
 
-                # Parameter smoothness
-                smoothness = torch.tensor(0.0, device=self.device, requires_grad=True)
+                # Parameter smoothness (placeholder for future use)
+                smoothness = torch.zeros(1, device=self.device)
 
                 # Total loss
                 total_batch_loss = (
