@@ -466,14 +466,14 @@ class Trainer:
                 n_batches += 1
                 
                 # Update previous state for next iteration
+                # Store the slice used for comparison so we can compute velocity
+                if previous_params is not None:
+                    current_velocity = visual_params - previous_params_slice
+                    previous_velocity = current_velocity.detach()
+                else:
+                    previous_velocity = None
+                    
                 previous_params = visual_params.detach()
-                if self.use_velocity_loss and previous_params is not None:
-                    # Compute current velocity for next iteration
-                    if len(list(locals().keys())) > 0 and 'previous_params_slice' in locals():
-                        current_velocity = visual_params - previous_params_slice
-                        previous_velocity = current_velocity.detach()
-                    else:
-                        previous_velocity = None
 
                 if batch_idx % 10 == 0:
                     logger.info(
