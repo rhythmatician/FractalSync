@@ -5,12 +5,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "node -e \"require('fs').cpSync('node_modules/onnxruntime-web/dist', 'public', {filter: f => f.endsWith('.wasm'), recursive: true})\""
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "onnxruntime-web": "^1.16.0"
+    "onnxruntime-web": "1.14.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

@@ -52,16 +52,24 @@ export class ModelInference {
    * Load ONNX model and metadata.
    */
   async loadModel(modelPath: string, metadataPath?: string): Promise<void> {
-    // Serve WASM files from public folder as static assets
-    ort.env.wasm.wasmPaths = window.location.origin + '/';
-    ort.env.wasm.numThreads = 4;
+    // Configure ONNX Runtime to use WASM files from public folder
+    ort.env.wasm.wasmPaths = '/';
+    ort.env.wasm.numThreads = 1; // Start with single thread for compatibility
+    
+    // Disable WebGPU/JSEP to avoid .mjs loading issues
+    ort.env.wasm.simd = true;
     ort.env.wasm.proxy = false;
-
-    // Initialize ONNX Runtime session with explicit WASM EP.
-    const providers: ort.InferenceSession.SessionOptions['executionProviders'] = ['wasm'];
-    this.session = await ort.InferenceSession.create(modelPath, {
-      executionProviders: providers
-    });
+    
+    try {
+      // Create session with WASM backend only (no WebGPU/JSEP)
+      this.session = await ort.InferenceSession.create(modelPath, {
+        executionProviders: ['wasm']
+      });
+      console.log('Model loaded successfully with WASM backend');
+    } catch (error) {
+      console.error('Failed to load model:', error);
+      throw error;
+    }
 
     // Load metadata if provided
     if (metadataPath) {
