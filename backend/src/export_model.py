@@ -5,7 +5,7 @@ ONNX model export utilities.
 import json
 import os
 import logging
-import importlib.util
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -36,23 +36,18 @@ def export_to_onnx(
     """
     model.eval()
 
-    # Create dummy input
+    # Validate shape and create a deterministic dummy input for tracing
+    if len(input_shape) == 0:
+        raise ValueError("input_shape must not be empty")
     if len(input_shape) == 1:
-        dummy_input = torch.randn(1, *input_shape)
+        dummy_input = torch.zeros(1, *input_shape)
     else:
-        dummy_input = torch.randn(*input_shape)
+        dummy_input = torch.zeros(*input_shape)
 
-    # Guard for onnxscript availability (PyTorch ONNX exporter dependency)
-    if importlib.util.find_spec("onnxscript") is None:
-        raise RuntimeError(
-            "ONNX export requires 'onnxscript'. Install it (pip install onnxscript) or pin torch<2.5."
-        )
-
-    # Export to ONNX (skip heavy validation; rely on torch.onnx.export)
     try:
         torch.onnx.export(
             model,
-            dummy_input,
+            (dummy_input,),
             output_path,
             input_names=["audio_features"],
             output_names=["visual_parameters"],
@@ -60,8 +55,8 @@ def export_to_onnx(
                 "audio_features": {0: "batch_size"},
                 "visual_parameters": {0: "batch_size"},
             },
-            opset_version=11,
-            do_constant_folding=False,
+            opset_version=13,
+            do_constant_folding=True,
             verbose=False,
         )
     except Exception as e:
@@ -75,7 +70,7 @@ def export_to_onnx(
         logging.warning(f"Could not fully validate ONNX model: {e}")
 
     # Save metadata
-    metadata_path = output_path.replace(".onnx", "_metadata.json")
+    metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
     metadata_dict = {
         "input_shape": (
             list(input_shape) if len(input_shape) > 1 else [1, input_shape[0]]

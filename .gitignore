@@ -60,3 +60,8 @@ data/cache/
 
 # Copilot's verbose markdown files
 /docs/copilot/*.md
+
+# ONNX model files
+*.onnx
+*.onnx_metadata.json
+

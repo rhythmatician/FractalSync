@@ -7,3 +7,11 @@ yarn-error.log*
 dist/
 dist-ssr/
 *.local
+
+# ONNX Runtime WASM binaries and assets
+public/*.mjs
+public/*.wasm
+public/onnxruntime-web/*
+src/assets/onnxruntime-web/*
+src/assets/onnxruntime/*.wasm
+src/assets/onnxruntime/*.mjs

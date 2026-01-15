@@ -87,11 +87,11 @@ export function Visualizer() {
               await model.loadModel(modelUrl, metadataUrl);
             } else {
               // Fallback: try local model path
-              await model.loadModel('/models/model.onnx', '/models/model_metadata.json');
+              await model.loadModel('/models/model.onnx', '/models/model.onnx_metadata.json');
             }
           } catch (e) {
             console.warn('Failed to load model from API, trying local:', e);
-            await model.loadModel('/models/model.onnx', '/models/model_metadata.json');
+            await model.loadModel('/models/model.onnx', '/models/model.onnx_metadata.json');
           }
           
           modelRef.current = model;
