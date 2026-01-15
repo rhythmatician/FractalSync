@@ -19,7 +19,7 @@ from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
 from .mandelbrot_orbits import generate_curriculum_sequence
-from .trainer import CorrelationLoss, SmoothnessLoss, JSONFormatter, logger
+from .trainer import CorrelationLoss, SmoothnessLoss, logger
 
 
 class VelocityLoss(nn.Module):
