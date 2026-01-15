@@ -5,6 +5,15 @@ PyTorch model architecture for mapping audio features to visual parameters.
 import torch
 import torch.nn as nn
 
+# Import physics model
+from .physics_model import PhysicsAudioToVisualModel  # noqa: F401
+
+__all__ = [
+    "AudioToVisualModel",
+    "TransformerAudioToVisualModel",
+    "PhysicsAudioToVisualModel",
+]
+
 
 class AudioToVisualModel(nn.Module):
     """
@@ -85,7 +94,9 @@ class AudioToVisualModel(nn.Module):
         # Validate input shape (skip during tracing to avoid warnings)
         if not torch.jit.is_tracing():
             if x.shape[1] != self.input_dim:
-                raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[1]}")
+                raise ValueError(
+                    f"Expected input dim {self.input_dim}, got {x.shape[1]}"
+                )
 
         # Encode features
         encoded = self.encoder(x)
