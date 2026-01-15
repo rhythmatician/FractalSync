@@ -324,6 +324,60 @@ class TestEndToEndPipeline(unittest.TestCase):
             else:
                 raise
 
+    def test_partial_batch_handling_with_velocity_loss(self):
+        """Test that trainer handles partial batches correctly with velocity loss enabled."""
+        from src.audio_features import AudioFeatureExtractor
+        from src.model import AudioToVisualModel
+        from src.trainer import Trainer
+        from src.visual_metrics import VisualMetrics
+        from torch.utils.data import DataLoader, TensorDataset
+
+        # Create a small dataset where last batch will be partial
+        n_samples = 162
+        input_dim = 60
+        batch_size = 32
+
+        # Create synthetic feature data
+        features = torch.randn(n_samples, input_dim)
+        dataset = TensorDataset(features)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
+        # Initialize dependencies
+        feature_extractor = AudioFeatureExtractor(sr=22050)
+        visual_metrics = VisualMetrics()
+
+        # Initialize model and trainer WITH velocity loss
+        model = AudioToVisualModel(window_frames=10)
+        trainer = Trainer(
+            model=model,
+            feature_extractor=feature_extractor,
+            visual_metrics=visual_metrics,
+            learning_rate=0.0001,
+            use_velocity_loss=True,
+        )
+
+        # Try to train for one epoch with velocity loss
+        try:
+            epoch_losses = trainer.train_epoch(dataloader, epoch=1)
+
+            # Verify we got a valid loss dictionary
+            self.assertIsInstance(epoch_losses, dict)
+            self.assertIn("loss", epoch_losses)
+            self.assertIn("velocity_loss", epoch_losses)
+            self.assertIsInstance(epoch_losses["loss"], float)
+            self.assertIsInstance(epoch_losses["velocity_loss"], float)
+
+            # Test passes if we reach here without exception
+            self.assertTrue(True, "Partial batch with velocity loss handled successfully")
+
+        except RuntimeError as e:
+            if "size of tensor" in str(e):
+                self.fail(
+                    f"Partial batch with velocity loss caused tensor size mismatch: {e}"
+                )
+            else:
+                raise
+
 
 if __name__ == "__main__":
     unittest.main()

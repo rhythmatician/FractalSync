@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
+from .velocity_predictor import VelocityLoss
 
 
 # Configure structured JSON logging
@@ -138,6 +139,7 @@ class Trainer:
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         correlation_weights: Optional[Dict[str, float]] = None,
+        use_velocity_loss: bool = False,
     ):
         """
         Initialize trainer.
@@ -149,11 +151,13 @@ class Trainer:
             device: Device to train on
             learning_rate: Learning rate
             correlation_weights: Weights for different correlation losses
+            use_velocity_loss: Whether to use velocity-based loss (jerk penalty)
         """
         self.model = model.to(device)
         self.feature_extractor = feature_extractor
         self.visual_metrics = visual_metrics
         self.device = device
+        self.use_velocity_loss = use_velocity_loss
 
         # Default correlation weights
         if correlation_weights is None:
@@ -163,6 +167,7 @@ class Trainer:
                 "silence_stillness": 1.0,
                 "distortion_roughness": 1.0,
                 "smoothness": 0.1,
+                "velocity": 0.05,  # Weight for velocity loss
             }
         self.correlation_weights = correlation_weights
 
@@ -171,6 +176,14 @@ class Trainer:
         self.smoothness_loss = SmoothnessLoss(
             weight=correlation_weights.get("smoothness", 0.1)
         )
+        
+        # Optional velocity loss
+        if use_velocity_loss:
+            self.velocity_loss = VelocityLoss(
+                weight=correlation_weights.get("velocity", 0.05)
+            )
+        else:
+            self.velocity_loss = None
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -184,6 +197,10 @@ class Trainer:
             "distortion_roughness_loss": [],
             "smoothness_loss": [],
         }
+        
+        # Add velocity loss to history if enabled
+        if use_velocity_loss:
+            self.history["velocity_loss"] = []
 
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Dict[str, float]:
         """
@@ -206,9 +223,11 @@ class Trainer:
         total_silence_stillness = 0.0
         total_distortion_roughness = 0.0
         total_smoothness = 0.0
+        total_velocity = 0.0
 
         n_batches = 0
         previous_params = None
+        previous_velocity = None
 
         logger.debug(f"About to iterate dataloader: epoch={epoch}")
 
@@ -385,14 +404,34 @@ class Trainer:
                         # Use only the first batch_size samples from previous_params
                         # This handles the case where the current batch is smaller (partial batch)
                         previous_params_slice = previous_params[:current_batch_size]
+                        if previous_velocity is not None:
+                            previous_velocity_slice = previous_velocity[:current_batch_size]
+                        else:
+                            previous_velocity_slice = None
                     else:
                         previous_params_slice = previous_params
+                        previous_velocity_slice = previous_velocity
 
                     smoothness = self.smoothness_loss(
                         visual_params, previous_params_slice
                     )
+                    
+                    # Velocity loss (optional jerk penalty)
+                    if self.use_velocity_loss and self.velocity_loss is not None:
+                        velocity_loss_value = self.velocity_loss(
+                            visual_params, 
+                            previous_params_slice,
+                            previous_velocity_slice,
+                        )
+                    else:
+                        velocity_loss_value = torch.tensor(
+                            0.0, device=self.device, requires_grad=True
+                        )
                 else:
                     smoothness = torch.tensor(
+                        0.0, device=self.device, requires_grad=True
+                    )
+                    velocity_loss_value = torch.tensor(
                         0.0, device=self.device, requires_grad=True
                     )
 
@@ -406,6 +445,7 @@ class Trainer:
                     + self.correlation_weights["distortion_roughness"]
                     * distortion_roughness_loss
                     + smoothness
+                    + velocity_loss_value
                 )
 
                 # Backward pass
@@ -420,9 +460,20 @@ class Trainer:
                 total_silence_stillness += silence_stillness_loss.item()
                 total_distortion_roughness += distortion_roughness_loss.item()
                 total_smoothness += smoothness.item()
+                if self.use_velocity_loss:
+                    total_velocity += velocity_loss_value.item()
 
                 n_batches += 1
+                
+                # Update previous state for next iteration
                 previous_params = visual_params.detach()
+                if self.use_velocity_loss and previous_params is not None:
+                    # Compute current velocity for next iteration
+                    if len(list(locals().keys())) > 0 and 'previous_params_slice' in locals():
+                        current_velocity = visual_params - previous_params_slice
+                        previous_velocity = current_velocity.detach()
+                    else:
+                        previous_velocity = None
 
                 if batch_idx % 10 == 0:
                     logger.info(
@@ -446,6 +497,10 @@ class Trainer:
             "distortion_roughness_loss": total_distortion_roughness / n_batches,
             "smoothness_loss": total_smoothness / n_batches,
         }
+        
+        # Add velocity loss if enabled
+        if self.use_velocity_loss:
+            avg_losses["velocity_loss"] = total_velocity / n_batches
 
         return avg_losses
 
