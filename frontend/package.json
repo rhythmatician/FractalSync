@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "postinstall": "node -e \"require('fs').cpSync('node_modules/onnxruntime-web/dist', 'public', {filter: f => f.endsWith('.wasm'), recursive: true})\""
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
