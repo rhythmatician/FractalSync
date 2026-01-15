@@ -44,6 +44,11 @@ def main():
         help="Include acceleration (second-order derivative) features",
     )
     parser.add_argument(
+        "--use-velocity-loss",
+        action="store_true",
+        help="Enable velocity-based loss for smoother transitions",
+    )
+    parser.add_argument(
         "--save-dir",
         type=str,
         default="checkpoints",
@@ -103,6 +108,7 @@ def main():
         feature_extractor=feature_extractor,
         visual_metrics=visual_metrics,
         learning_rate=args.learning_rate,
+        use_velocity_loss=args.use_velocity_loss,
     )
 
     # Load dataset

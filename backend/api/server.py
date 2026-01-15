@@ -38,6 +38,7 @@ class TrainingRequest(BaseModel):
     window_frames: int = 10
     include_delta: bool = False
     include_delta_delta: bool = False
+    use_velocity_loss: bool = False
 
 
 class TrainingStatus(BaseModel):
@@ -111,10 +112,10 @@ async def train_model_async(request: TrainingRequest):
             include_delta_delta=request.include_delta_delta,
         )
         visual_metrics = VisualMetrics()
-        
+
         # Get number of features per frame
         num_features_per_frame = feature_extractor.get_num_features()
-        
+
         model = AudioToVisualModel(
             window_frames=request.window_frames,
             num_features_per_frame=num_features_per_frame,
@@ -125,6 +126,7 @@ async def train_model_async(request: TrainingRequest):
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
             learning_rate=request.learning_rate,
+            use_velocity_loss=request.use_velocity_loss,
         )
 
         # Load dataset
