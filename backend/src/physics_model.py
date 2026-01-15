@@ -240,7 +240,7 @@ class PhysicsAudioToVisualModel(nn.Module):
             # Handle batch size mismatch (last batch may be smaller)
             batch_size = velocity.size(0)
             if prev_velocity.size(0) != batch_size:
-                # Trim or pad prev_velocity to match current batch size
+                # Trim prev_velocity to match current batch size
                 prev_velocity = prev_velocity[:batch_size]
             
             damped_velocity = prev_velocity * self.damping_factor + velocity * (
@@ -248,6 +248,12 @@ class PhysicsAudioToVisualModel(nn.Module):
             )
         else:
             damped_velocity = velocity
+
+        # Ensure position matches velocity batch size
+        batch_size = velocity.size(0)
+        if position.size(0) != batch_size:
+            # Trim or expand position to match velocity batch size
+            position = position[:batch_size]
 
         # Integrate position
         new_position = position + damped_velocity * dt
