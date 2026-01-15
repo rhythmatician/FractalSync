@@ -144,7 +144,7 @@ export function Visualizer() {
         setInferenceFailures(0);
         
         // Debug: log parameters
-        console.log('Model output params:', params);
+        console.debug('Model output params:', params);
         
         // Update renderer
         rendererRef.current.updateParameters(params);
