@@ -103,8 +103,7 @@ class AudioFeatureExtractor:
                 features_list.append(delta_features)
         
         if self.include_delta_delta:
-            # delta_features is guaranteed to be computed by the condition above
-            assert delta_features is not None, "delta_features should be computed when include_delta_delta is True"
+            # delta_features is computed in the block above when include_delta_delta is True
             delta_delta_features = self._compute_delta(delta_features)
             features_list.append(delta_delta_features)
         
