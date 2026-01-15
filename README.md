@@ -112,6 +112,51 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - 10 frames × 6 features = 60-dimensional input vector.
 - Larger windows → model sees more temporal context but input grows (5 frames → 30-dim, 20 frames → 120-dim).
 
+**include_delta** (optional, flag)
+- Include velocity (first-order derivative) features in addition to base features.
+- Adds 6 more features per frame representing the rate of change of audio features.
+- Helps the model learn patterns related to how quickly audio properties are changing.
+- 10 frames × 12 features (6 base + 6 delta) = 120-dimensional input vector.
+- Use: `python train.py --data-dir data/audio --include-delta --epochs 100`
+
+**include_delta_delta** (optional, flag)
+- Include acceleration (second-order derivative) features in addition to base and delta features.
+- Adds 6 more features per frame representing the acceleration of audio features.
+- Requires `--include-delta` to be enabled.
+- 10 frames × 18 features (6 base + 6 delta + 6 delta-delta) = 180-dimensional input vector.
+- Use: `python train.py --data-dir data/audio --include-delta --include-delta-delta --epochs 100`
+
+## Advanced Features
+
+### Velocity-Based Prediction
+
+The model supports **velocity-based features** (delta and delta-delta features) that capture the rate of change in audio properties. This can help the model learn more dynamic and responsive visual patterns:
+
+- **Base features**: Spectral centroid, spectral flux, RMS energy, zero-crossing rate, onset strength, spectral rolloff
+- **Delta features** (velocity): First-order derivatives showing how fast each feature is changing
+- **Delta-delta features** (acceleration): Second-order derivatives showing how the rate of change is accelerating
+
+Training with velocity features via API:
+```bash
+curl -X POST http://localhost:8000/api/train/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data_dir": "data/audio",
+    "epochs": 100,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "window_frames": 10,
+    "include_delta": true,
+    "include_delta_delta": false
+  }'
+```
+
+Training with velocity features via CLI:
+```bash
+cd backend
+python train.py --data-dir data/audio --epochs 100 --include-delta
+```
+
 ## Troubleshooting
 
 ### Why is onnxruntime-web pinned to 1.14.0?
