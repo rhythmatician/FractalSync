@@ -45,6 +45,8 @@ npm run dev
 
 ## Training
 
+### Standard Model Training
+
 To train a new model:
 
 1. Place audio files in `backend/data/audio/` (or specify path)
@@ -54,6 +56,23 @@ cd backend
 python train.py --data-dir data/audio --epochs 100
 ```
 
+### Physics-Based Model Training (NEW)
+
+To train with physics-based velocity prediction and curriculum learning:
+
+```bash
+cd backend
+python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
+```
+
+**Physics Model Features:**
+- Predicts velocity instead of position for Julia parameter `c`
+- Speed is modulated by audio loudness (RMS energy)
+- Uses preset Mandelbrot orbits for curriculum learning
+- More physically interpretable and temporally consistent
+
+See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed documentation.
+
 The trained model will be exported to ONNX format and can be used by the frontend.
 
 ## Features
@@ -62,6 +81,8 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - ML-learned mappings between audio features and visual parameters
 - Smooth morphing Julia sets rendered with WebGL
 - Training UI for model management and monitoring
+- **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
+- **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
 
 
 ## Training parameters:
