@@ -173,16 +173,17 @@ def main():
 
         try:
             model.eval()
-            dummy_input = torch.randn(1, model.input_dim)
             export_to_onnx(
                 model=model,
-                dummy_input=dummy_input,
+                input_shape=(1, model.input_dim),
                 output_path=onnx_path,
-                input_names=["audio_features"],
-                output_names=["visual_params"],
-                dynamic_axes={
-                    "audio_features": {0: "batch_size"},
-                    "visual_params": {0: "batch_size"},
+                feature_mean=feature_extractor.feature_mean,
+                feature_std=feature_extractor.feature_std,
+                metadata={
+                    "model_type": "physics",
+                    "output_dim": model.output_dim,
+                    "damping_factor": args.damping_factor,
+                    "speed_scale": args.speed_scale,
                 },
             )
             print(f"Model exported to: {onnx_path}")
