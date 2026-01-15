@@ -304,9 +304,10 @@ class TestPhysicsModel:
         ), f"Expected shape ({batch_size_small}, 2), got {new_vel_3.shape}"
 
         # Validate physics computation: new_vel should be damped combination
-        # new_velocity = damping * (velocity + prev_velocity) / 2
+        # new_velocity = prev_velocity * damping + velocity * (1 - damping)
         expected_vel = (
-            model.damping_factor * (velocity_small_2 + prev_velocity_trimmed) / 2
+            prev_velocity_trimmed * model.damping_factor
+            + velocity_small_2 * (1.0 - model.damping_factor)
         )
         assert torch.allclose(
             new_vel_3, expected_vel, atol=1e-5
