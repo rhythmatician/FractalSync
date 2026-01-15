@@ -201,8 +201,8 @@ export class ModelInference {
       postProcessingTime: postTime
     };
 
-    // Debug log every 60 frames (~1 second at 60fps)
-    if (this.inferenceTimings.length % 60 === 0) {
+    // Debug log every 60 frames (~1 second at 60fps), but skip first frame
+    if (this.inferenceTimings.length > 0 && this.inferenceTimings.length % 60 === 0) {
       console.log('[ModelInference] Visual params:', {
         julia: [visualParams.juliaReal.toFixed(3), visualParams.juliaImag.toFixed(3)],
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
