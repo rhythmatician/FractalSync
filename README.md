@@ -90,3 +90,13 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - Your extractor computes 6 features per frame (centroid, flux, rms, zcr, onset, rolloff).
 - 10 frames × 6 features = 60-dimensional input vector.
 - Larger windows → model sees more temporal context but input grows (5 frames → 30-dim, 20 frames → 120-dim).
+
+## Troubleshooting
+
+### Why is onnxruntime-web pinned to 1.14.0?
+
+Version 1.16+ introduced dynamic ES module imports for different execution providers (JSEP, WebGPU), which conflicts with Vite's handling of files in the `public/` folder. When ONNX Runtime tries to dynamically import `.mjs` files, Vite intercepts them as source code rather than serving them as static assets, causing 404 errors.
+
+**Solution**: Pin to 1.14.0, which uses a simpler WASM-only backend without dynamic imports.
+
+**Alternative**: If you need 1.16+ features, configure Vite's `optimizeDeps` and `publicDir` to properly handle the `.mjs` files, or use a bundled version of onnxruntime-web.

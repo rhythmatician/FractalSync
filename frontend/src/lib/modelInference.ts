@@ -52,15 +52,11 @@ export class ModelInference {
    * Load ONNX model and metadata.
    */
   async loadModel(modelPath: string, metadataPath?: string): Promise<void> {
-    // Serve WASM files from public folder as static assets
-    ort.env.wasm.wasmPaths = window.location.origin + '/';
-    ort.env.wasm.numThreads = 4;
-    ort.env.wasm.proxy = false;
-
-    // Initialize ONNX Runtime session with explicit WASM EP.
-    const providers: ort.InferenceSession.SessionOptions['executionProviders'] = ['wasm'];
+    // Simple WASM backend configuration
+    ort.env.wasm.wasmPaths = '/';
+    
     this.session = await ort.InferenceSession.create(modelPath, {
-      executionProviders: providers
+      executionProviders: ['wasm']
     });
 
     // Load metadata if provided

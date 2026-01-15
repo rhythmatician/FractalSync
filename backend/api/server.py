@@ -174,7 +174,7 @@ async def train_model_async(request: TrainingRequest):
             load_checkpoint_and_export(
                 str(latest_checkpoint),
                 output_dir="models",
-                input_dim=request.window_frames * 6,  # Assuming 6 features per frame
+                window_frames=request.window_frames,
             )
         else:
             logging.warning("No checkpoints found to export")

@@ -82,9 +82,10 @@ class AudioToVisualModel(nn.Module):
         Returns:
             Visual parameters of shape (batch_size, output_dim)
         """
-        # Validate input shape
-        if x.shape[1] != self.input_dim:
-            raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[1]}")
+        # Validate input shape (skip during tracing to avoid warnings)
+        if not torch.jit.is_tracing():
+            if x.shape[1] != self.input_dim:
+                raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[1]}")
 
         # Encode features
         encoded = self.encoder(x)

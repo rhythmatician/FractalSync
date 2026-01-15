@@ -113,7 +113,7 @@ def main():
         load_checkpoint_and_export(
             str(latest_checkpoint),
             output_dir=args.onnx_output_dir,
-            input_dim=args.input_dim,
+            window_frames=args.window_frames,
         )
         logging.info("ONNX export complete!")
 
