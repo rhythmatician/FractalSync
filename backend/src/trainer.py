@@ -139,7 +139,6 @@ class Trainer:
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         correlation_weights: Optional[Dict[str, float]] = None,
-        use_velocity_loss: bool = False,
     ):
         """
         Initialize trainer.
@@ -151,13 +150,11 @@ class Trainer:
             device: Device to train on
             learning_rate: Learning rate
             correlation_weights: Weights for different correlation losses
-            use_velocity_loss: Whether to use velocity-based loss (jerk penalty)
         """
         self.model = model.to(device)
         self.feature_extractor = feature_extractor
         self.visual_metrics = visual_metrics
         self.device = device
-        self.use_velocity_loss = use_velocity_loss
 
         # Default correlation weights
         if correlation_weights is None:
@@ -177,13 +174,10 @@ class Trainer:
             weight=correlation_weights.get("smoothness", 0.1)
         )
         
-        # Optional velocity loss
-        if use_velocity_loss:
-            self.velocity_loss = VelocityLoss(
-                weight=correlation_weights.get("velocity", 0.05)
-            )
-        else:
-            self.velocity_loss = None
+        # Velocity loss (always enabled for smooth transitions)
+        self.velocity_loss = VelocityLoss(
+            weight=correlation_weights.get("velocity", 0.05)
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -196,11 +190,8 @@ class Trainer:
             "silence_stillness_loss": [],
             "distortion_roughness_loss": [],
             "smoothness_loss": [],
+            "velocity_loss": [],
         }
-        
-        # Add velocity loss to history if enabled
-        if use_velocity_loss:
-            self.history["velocity_loss"] = []
 
     def train_epoch(self, dataloader: DataLoader, epoch: int) -> Dict[str, float]:
         """
@@ -416,17 +407,12 @@ class Trainer:
                         visual_params, previous_params_slice
                     )
                     
-                    # Velocity loss (optional jerk penalty)
-                    if self.use_velocity_loss and self.velocity_loss is not None:
-                        velocity_loss_value = self.velocity_loss(
-                            visual_params, 
-                            previous_params_slice,
-                            previous_velocity_slice,
-                        )
-                    else:
-                        velocity_loss_value = torch.tensor(
-                            0.0, device=self.device, requires_grad=True
-                        )
+                    # Velocity loss (jerk penalty for smooth transitions)
+                    velocity_loss_value = self.velocity_loss(
+                        visual_params, 
+                        previous_params_slice,
+                        previous_velocity_slice,
+                    )
                 else:
                     smoothness = torch.tensor(
                         0.0, device=self.device, requires_grad=True
@@ -460,8 +446,7 @@ class Trainer:
                 total_silence_stillness += silence_stillness_loss.item()
                 total_distortion_roughness += distortion_roughness_loss.item()
                 total_smoothness += smoothness.item()
-                if self.use_velocity_loss:
-                    total_velocity += velocity_loss_value.item()
+                total_velocity += velocity_loss_value.item()
 
                 n_batches += 1
                 
@@ -496,11 +481,8 @@ class Trainer:
             "silence_stillness_loss": total_silence_stillness / n_batches,
             "distortion_roughness_loss": total_distortion_roughness / n_batches,
             "smoothness_loss": total_smoothness / n_batches,
+            "velocity_loss": total_velocity / n_batches,
         }
-        
-        # Add velocity loss if enabled
-        if self.use_velocity_loss:
-            avg_losses["velocity_loss"] = total_velocity / n_batches
 
         return avg_losses
 

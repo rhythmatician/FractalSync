@@ -28,14 +28,15 @@ These instructions make AI agents immediately productive in this repo.
   - Preferred: `python api/server.py`
   - Alternative: `python -m api.server` (ensure CWD is `backend/`).
 - Training via API:
-  - `POST /api/train/start` JSON body: `{ "data_dir": "data/audio", "epochs": 1, "batch_size": 32, "learning_rate": 0.0001, "window_frames": 10, "include_delta": false, "include_delta_delta": false, "use_velocity_loss": false }`
-  - Optional: set `"include_delta"`/`"include_delta_delta"` to enable derivative features; set `"use_velocity_loss": true` for smoother transitions (jerk penalty)
+  - `POST /api/train/start` JSON body: `{ "data_dir": "data/audio", "epochs": 1, "batch_size": 32, "learning_rate": 0.0001, "window_frames": 10, "include_delta": false, "include_delta_delta": false }`
+  - Optional: set `"include_delta"`/`"include_delta_delta"` to enable derivative features
+  - Velocity-based smoothing is always enabled for natural parameter transitions
   - Check status: `GET /api/train/status`
 - CLI training:
   - `cd backend`
   - `python train.py --data-dir data/audio --epochs 100`
   - With velocity features: `python train.py --data-dir data/audio --epochs 100 --include-delta`
-  - Optional: add `--use-velocity-loss` for velocity-based smoothing
+  - Velocity-based smoothing is always enabled
 - Frontend:
   - `cd frontend && npm install && npm run dev`
   - Open `http://localhost:3000`
@@ -51,7 +52,7 @@ These instructions make AI agents immediately productive in this repo.
   - Handle DataLoader batches that return tuples/lists; extract the single tensor element to avoid extra dims.
   - Keep model outputs (`visual_params`) as tensors (do not `.item()`); stack metric lists and align lengths with batch.
 - Velocity-based prediction:
-  - Optional feature (`use_velocity_loss=True`) adds jerk penalty for smoother parameter transitions
+  - Always enabled; adds jerk penalty for smoother parameter transitions
   - Tracks velocity state across batches; handles partial batches correctly
   - Uses `VelocityLoss` from `velocity_predictor.py` to penalize rapid velocity changes
 - Error handling:

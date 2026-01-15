@@ -79,12 +79,19 @@ python train.py --data-dir data/audio --epochs 100 --use-velocity-loss
 ```
 The trained model will be exported to ONNX format and can be used by the frontend.
 
+**Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
+
 ## Features
 
 - Real-time audio analysis from microphone input
 - ML-learned mappings between audio features and visual parameters
 - Smooth morphing Julia sets rendered with WebGL
 - Training UI for model management and monitoring
+<<<<<<< HEAD
+=======
+- **Velocity-based prediction** for physics-inspired smooth parameter transitions
+<<<<<<< HEAD
+>>>>>>> 0a44394 (Make velocity-based smoothing always enabled (remove optional flag))
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
 - **Velocity-based prediction** for physics-inspired smooth parameter transitions (optional)
@@ -117,7 +124,6 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - 10 frames × 6 features = 60-dimensional input vector.
 - Larger windows → model sees more temporal context but input grows (5 frames → 30-dim, 20 frames → 120-dim).
 
-<<<<<<< HEAD
 **include_delta** (optional, flag)
 - Include velocity (first-order derivative) features in addition to base features.
 - Adds 6 more features per frame representing the rate of change of audio features.
@@ -166,11 +172,11 @@ python train.py --data-dir data/audio --epochs 100 --include-delta
 
 **Note**: The frontend currently only supports models trained with base features (6 per frame, 60-dimensional input). Models trained with velocity features require updating the frontend audio feature extractor to compute delta and delta-delta features. This will be implemented in a future update.
 
-**use_velocity_loss** (boolean, default: false)
-- Enables velocity-based loss that penalizes rapid changes in parameter velocity (jerk).
+**Velocity-based smoothing** (always enabled)
+- Uses velocity-based loss that penalizes rapid changes in parameter velocity (jerk).
 - Creates smoother, more natural-looking transitions by enforcing momentum-like behavior.
-- Adds a small computational cost but produces more physically plausible animations.
-- Recommended for final training runs when visual quality is important.
+- Produces more physically plausible animations with smooth acceleration/deceleration.
+- Loss weight can be adjusted via `correlation_weights['velocity']` (default: 0.05).
 
 ## Troubleshooting
 

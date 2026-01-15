@@ -309,7 +309,9 @@ class TestEndToEndPipeline(unittest.TestCase):
             # Verify we got a valid loss dictionary
             self.assertIsInstance(epoch_losses, dict)
             self.assertIn("loss", epoch_losses)
+            self.assertIn("velocity_loss", epoch_losses)
             self.assertIsInstance(epoch_losses["loss"], float)
+            self.assertIsInstance(epoch_losses["velocity_loss"], float)
 
             # Test passes if we reach here without exception
             self.assertTrue(True, "Partial batch handled successfully")
@@ -325,7 +327,7 @@ class TestEndToEndPipeline(unittest.TestCase):
                 raise
 
     def test_partial_batch_handling_with_velocity_loss(self):
-        """Test that trainer handles partial batches correctly with velocity loss enabled."""
+        """Test that trainer handles partial batches correctly with velocity loss."""
         from src.audio_features import AudioFeatureExtractor
         from src.model import AudioToVisualModel
         from src.trainer import Trainer
@@ -346,14 +348,13 @@ class TestEndToEndPipeline(unittest.TestCase):
         feature_extractor = AudioFeatureExtractor(sr=22050)
         visual_metrics = VisualMetrics()
 
-        # Initialize model and trainer WITH velocity loss
+        # Initialize model and trainer (velocity loss always enabled)
         model = AudioToVisualModel(window_frames=10)
         trainer = Trainer(
             model=model,
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
             learning_rate=0.0001,
-            use_velocity_loss=True,
         )
 
         # Try to train for one epoch with velocity loss
