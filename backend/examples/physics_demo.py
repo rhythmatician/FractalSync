@@ -135,7 +135,7 @@ def main():
     cardioid, samples, velocities = demo_preset_orbits()
 
     # Demo 2: Curriculum sequence
-    positions, velocities = demo_curriculum_sequence()
+    demo_curriculum_sequence()
 
     # Demo 3: Physics integration
     demo_physics_integration()
