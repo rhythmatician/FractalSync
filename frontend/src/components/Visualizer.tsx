@@ -142,6 +142,9 @@ export function Visualizer() {
         // Reset failure counter on success
         setInferenceFailures(0);
         
+        // Debug: log parameters
+        console.log('Model output params:', params);
+        
         // Update renderer
         rendererRef.current.updateParameters(params);
       } else {
