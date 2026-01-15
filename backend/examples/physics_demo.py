@@ -136,7 +136,7 @@ def main():
     print("=" * 60)
 
     # Demo 1: Preset orbits
-    cardioid, samples, velocities = demo_preset_orbits()
+    demo_preset_orbits()
 
     # Demo 2: Curriculum sequence
     demo_curriculum_sequence()
