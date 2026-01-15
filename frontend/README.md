@@ -20,10 +20,24 @@ Open http://localhost:3000
 ## Architecture
 
 - `src/components/` - React components (AudioCapture, Visualizer, TrainingPanel)
-- `src/lib/modelInference.ts` - ONNX model loading and inference
+- `src/lib/modelInference.ts` - ONNX model loading and inference with **audio-driven post-processing**
 - `src/lib/audioFeatures.ts` - Browser-based audio feature extraction
 - `src/lib/juliaRenderer.ts` - WebGL Julia set renderer
 - `public/` - Static assets including ONNX WASM files (auto-copied from node_modules)
+
+## Audio-Reactive Dynamics
+
+Even with an undertrained model, the visualizer creates dynamic fractals by:
+- **Extracting audio features** from the input: spectral centroid, flux, RMS (loudness), zero-crossing rate, onset strength, and spectral rolloff
+- **Mixing model outputs with audio features**:
+  - Julia parameters influenced by spectral centroid and flux
+  - Color hue cycles with loudness (RMS)
+  - Saturation boosts on transients (onset strength)
+  - Brightness tracks loudness
+  - Zoom varies with spectral rolloff and RMS
+  - Animation speed increases with flux and onsets
+
+This ensures the fractal responds to music in real-time, even before the model is fully trained.
 
 ## Notes
 

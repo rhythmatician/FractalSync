@@ -20,6 +20,7 @@ export class JuliaRenderer {
   private targetParams: VisualParameters;
   private animationFrameId: number | null = null;
   private time: number = 0;
+  private frameCount: number = 0;
 
   // Uniform locations
   private uJuliaSeedLocation: WebGLUniformLocation | null = null;
@@ -83,7 +84,8 @@ export class JuliaRenderer {
       
       void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
-        uv *= u_zoom;
+        // Higher zoom = more zoomed OUT (see more of the fractal)
+        uv *= 2.5 / u_zoom;  // Invert zoom so 1.0 = reasonable view
         
         vec2 c = u_juliaSeed;
         vec2 z = uv;
@@ -172,7 +174,7 @@ export class JuliaRenderer {
     const gl = this.gl;
     const canvas = this.canvas;
     
-    // Set canvas size to match display size
+    // Set canvas size to match display size with device pixel ratio
     const displayWidth = canvas.clientWidth;
     const displayHeight = canvas.clientHeight;
     
@@ -220,6 +222,12 @@ export class JuliaRenderer {
     );
     gl.uniform1f(this.uTimeLocation!, this.time);
     gl.uniform2f(this.uResolutionLocation!, this.canvas.width, this.canvas.height);
+    
+    // Debug log every 100 frames for deterministic logging
+    this.frameCount++;
+    if (this.frameCount % 100 === 0) {
+      console.log('🎨 Rendering with:', this.currentParams, 'canvas:', this.canvas.width, 'x', this.canvas.height);
+    }
     
     // Draw
     gl.drawArrays(gl.TRIANGLES, 0, 6);
