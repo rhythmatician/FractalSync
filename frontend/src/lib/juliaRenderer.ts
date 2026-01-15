@@ -20,6 +20,7 @@ export class JuliaRenderer {
   private targetParams: VisualParameters;
   private animationFrameId: number | null = null;
   private time: number = 0;
+  private frameCount: number = 0;
 
   // Uniform locations
   private uJuliaSeedLocation: WebGLUniformLocation | null = null;
@@ -177,18 +178,14 @@ export class JuliaRenderer {
     const displayWidth = canvas.clientWidth;
     const displayHeight = canvas.clientHeight;
     
-    console.log('🔧 Canvas resize:', { displayWidth, displayHeight, clientW: canvas.clientWidth, clientH: canvas.clientHeight });
-    
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
       canvas.width = displayWidth;
       canvas.height = displayHeight;
       gl.viewport(0, 0, displayWidth, displayHeight);
-      console.log('✅ Canvas resized to:', canvas.width, 'x', canvas.height);
     }
   }
 
   updateParameters(params: VisualParameters): void {
-    console.log('📊 Updating renderer with params:', params);
     this.targetParams = { ...params };
   }
 
@@ -226,8 +223,9 @@ export class JuliaRenderer {
     gl.uniform1f(this.uTimeLocation!, this.time);
     gl.uniform2f(this.uResolutionLocation!, this.canvas.width, this.canvas.height);
     
-    // Debug log occasionally
-    if (Math.random() < 0.01) {
+    // Debug log every 100 frames for deterministic logging
+    this.frameCount++;
+    if (this.frameCount % 100 === 0) {
       console.log('🎨 Rendering with:', this.currentParams, 'canvas:', this.canvas.width, 'x', this.canvas.height);
     }
     
