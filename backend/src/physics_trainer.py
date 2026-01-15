@@ -379,7 +379,8 @@ class PhysicsTrainer:
                 total_smoothness += smoothness.item()
 
                 n_batches += 1
-                # Detach state tensors to avoid backpropagating through previous batches
+                # Detach state tensors (velocity and position) so gradients do not backpropagate
+                # through the integrated history of previous batches in the curriculum sequence.
                 previous_velocity = integrated_velocity.detach()
                 current_positions = current_positions.detach()
 

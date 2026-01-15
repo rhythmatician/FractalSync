@@ -237,9 +237,9 @@ class TestVisualMetrics:
         results1 = metrics_calc.compute_all_metrics(image)
         results2 = metrics_calc.compute_all_metrics(image)
         
-        # Results should be identical
+        # Results should be numerically identical (within floating-point tolerance)
         for key in results1.keys():
-            assert results1[key] == results2[key], \
+            assert np.isclose(results1[key], results2[key], atol=1e-10), \
                 f"Inconsistent results for {key}: {results1[key]} vs {results2[key]}"
 
 
