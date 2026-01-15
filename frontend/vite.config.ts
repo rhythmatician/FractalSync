@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { copyFileSync, existsSync } from 'fs'
-import { join } from 'path'
 
 // Auto-copy ONNX Runtime WASM files on startup
 const wasmSource = 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm';
