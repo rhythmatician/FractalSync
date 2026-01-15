@@ -36,6 +36,8 @@ class TrainingRequest(BaseModel):
     batch_size: int = 32
     learning_rate: float = 1e-4
     window_frames: int = 10
+    include_delta: bool = False
+    include_delta_delta: bool = False
 
 
 class TrainingStatus(BaseModel):
@@ -104,9 +106,19 @@ async def train_model_async(request: TrainingRequest):
 
     try:
         # Initialize components
-        feature_extractor = AudioFeatureExtractor()
+        feature_extractor = AudioFeatureExtractor(
+            include_delta=request.include_delta,
+            include_delta_delta=request.include_delta_delta,
+        )
         visual_metrics = VisualMetrics()
-        model = AudioToVisualModel(window_frames=request.window_frames)
+        
+        # Get number of features per frame
+        num_features_per_frame = feature_extractor.get_num_features()
+        
+        model = AudioToVisualModel(
+            window_frames=request.window_frames,
+            num_features_per_frame=num_features_per_frame,
+        )
 
         trainer = Trainer(
             model=model,

@@ -18,6 +18,8 @@ class AudioFeatureExtractor:
         hop_length: int = 512,
         n_fft: int = 2048,
         window_size: int = 2048,
+        include_delta: bool = False,
+        include_delta_delta: bool = False,
     ):
         """
         Initialize feature extractor.
@@ -27,15 +29,33 @@ class AudioFeatureExtractor:
             hop_length: Hop length for STFT
             n_fft: FFT window size
             window_size: Window size for feature computation
+            include_delta: Include velocity (first-order derivatives)
+            include_delta_delta: Include acceleration (second-order derivatives)
         """
         self.sr = sr
         self.hop_length = hop_length
         self.n_fft = n_fft
         self.window_size = window_size
+        self.include_delta = include_delta
+        self.include_delta_delta = include_delta_delta
 
         # Feature normalization stats (will be computed during training)
         self.feature_mean = None
         self.feature_std = None
+
+    def get_num_features(self) -> int:
+        """
+        Get total number of features per frame.
+
+        Returns:
+            Number of features (6 base + optional deltas)
+        """
+        base_features = 6
+        if self.include_delta:
+            base_features += 6  # Add delta features
+        if self.include_delta_delta:
+            base_features += 6  # Add delta-delta features
+        return base_features
 
     def extract_features(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -46,6 +66,7 @@ class AudioFeatureExtractor:
 
         Returns:
             Feature matrix of shape (n_features, n_frames)
+            n_features = 6 (base) + 6 (delta) + 6 (delta-delta) depending on config
         """
         # Ensure audio is mono
         if len(audio.shape) > 1:
@@ -59,8 +80,8 @@ class AudioFeatureExtractor:
         onsets = self._extract_onsets(audio)
         spectral_rolloff = self._extract_spectral_rolloff(audio)
 
-        # Stack features
-        features = np.stack(
+        # Stack base features
+        base_features = np.stack(
             [
                 spectral_centroid,
                 spectral_flux,
@@ -71,6 +92,23 @@ class AudioFeatureExtractor:
             ],
             axis=0,
         )
+
+        # Add delta features if requested
+        features_list = [base_features]
+        
+        if self.include_delta:
+            delta_features = self._compute_delta(base_features)
+            features_list.append(delta_features)
+        
+        if self.include_delta_delta:
+            if not self.include_delta:
+                # Need delta first
+                delta_features = self._compute_delta(base_features)
+            delta_delta_features = self._compute_delta(delta_features)
+            features_list.append(delta_delta_features)
+        
+        # Stack all features
+        features = np.concatenate(features_list, axis=0)
 
         return features
 
@@ -115,10 +153,6 @@ class AudioFeatureExtractor:
 
     def _extract_onsets(self, audio: np.ndarray) -> np.ndarray:
         """Extract onset detection (hits/transients)."""
-        onset_frames = librosa.onset.onset_detect(  # FIXME: What's this here for?
-            y=audio, sr=self.sr, hop_length=self.hop_length, units="frames"
-        )
-
         # Create onset strength envelope
         onset_strength = librosa.onset.onset_strength(
             y=audio, sr=self.sr, hop_length=self.hop_length
@@ -136,6 +170,21 @@ class AudioFeatureExtractor:
         # Normalize to [0, 1]
         rolloff = rolloff / (self.sr / 2)
         return rolloff
+
+    def _compute_delta(self, features: np.ndarray) -> np.ndarray:
+        """
+        Compute first-order derivatives (velocity) of features.
+
+        Args:
+            features: Feature matrix of shape (n_features, n_frames)
+
+        Returns:
+            Delta features of same shape
+        """
+        # Compute deltas using librosa's delta function
+        # This computes a local estimate of the derivative
+        delta = librosa.feature.delta(features, width=9, order=1, axis=1)
+        return delta
 
     def extract_windowed_features(
         self, audio: np.ndarray, window_frames: int = 10
