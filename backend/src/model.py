@@ -5,6 +5,9 @@ PyTorch model architecture for mapping audio features to visual parameters.
 import torch
 import torch.nn as nn
 
+# Import physics model
+from .physics_model import PhysicsAudioToVisualModel  # noqa: F401
+
 
 class AudioToVisualModel(nn.Module):
     """
