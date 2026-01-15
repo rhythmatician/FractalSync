@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
-from .mandelbrot_orbits import generate_curriculum_sequence, get_preset_orbit
+from .mandelbrot_orbits import generate_curriculum_sequence
 from .trainer import CorrelationLoss, SmoothnessLoss, JSONFormatter, logger
 
 
