@@ -12,7 +12,9 @@ from typing import List, Tuple, Dict
 class MandelbrotOrbit:
     """Defines a trajectory through complex parameter space based on Mandelbrot geometry."""
 
-    def __init__(self, name: str, points: List[Tuple[float, float]], closed: bool = True):
+    def __init__(
+        self, name: str, points: List[Tuple[float, float]], closed: bool = True
+    ):
         """
         Initialize an orbit.
 
@@ -50,7 +52,7 @@ class MandelbrotOrbit:
             real[-1] = self.points[0, 0]
             imag[-1] = self.points[0, 1]
 
-        return np.stack([real, imag], axis=1)
+        return np.stack([real, imag], axis=1).astype(np.float32)
 
     def compute_velocities(self, n_samples: int, time_step: float = 1.0) -> np.ndarray:
         """
@@ -66,7 +68,7 @@ class MandelbrotOrbit:
         positions = self.sample(n_samples)
 
         # Compute finite differences
-        velocities = np.zeros_like(positions)
+        velocities = np.zeros_like(positions, dtype=np.float32)
         if n_samples > 1:
             velocities[:-1] = (positions[1:] - positions[:-1]) / time_step
             if self.closed:
@@ -305,7 +307,10 @@ def generate_random_mandelbrot_points(
 
     # Define sampling bounds based on region
     bounds = {
-        "cardioid": ((-0.75, 0.5), (-0.75, 0.75)),  # (real_min, real_max), (imag_min, imag_max)
+        "cardioid": (
+            (-0.75, 0.5),
+            (-0.75, 0.75),
+        ),  # (real_min, real_max), (imag_min, imag_max)
         "bulb": ((-1.5, -0.5), (-0.5, 0.5)),
         "all": ((-2.0, 0.5), (-1.25, 1.25)),
     }

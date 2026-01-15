@@ -48,7 +48,9 @@ def demo_preset_orbits():
     # Compute velocities
     velocities = cardioid.compute_velocities(n_samples=100)
     print(f"  Computed {len(velocities)} velocity vectors")
-    print(f"  Average velocity magnitude: {np.mean(np.linalg.norm(velocities, axis=1)):.4f}")
+    print(
+        f"  Average velocity magnitude: {np.mean(np.linalg.norm(velocities, axis=1)):.4f}"
+    )
 
     return cardioid, samples, velocities
 
@@ -123,7 +125,9 @@ def demo_physics_integration():
 
     print(f"\nFinal position: [{positions[-1, 0]:.4f}, {positions[-1, 1]:.4f}]")
     print(f"Final velocity magnitude: {np.linalg.norm(velocities[-1]):.4f}")
-    print(f"Position stayed within bounds: {np.all(np.linalg.norm(positions, axis=1) <= 2.01)}")
+    print(
+        f"Position stayed within bounds: {np.all(np.linalg.norm(positions, axis=1) <= 2.01)}"
+    )
 
 
 def main():
@@ -135,7 +139,7 @@ def main():
     cardioid, samples, velocities = demo_preset_orbits()
 
     # Demo 2: Curriculum sequence
-    positions, velocities = demo_curriculum_sequence()
+    demo_curriculum_sequence()
 
     # Demo 3: Physics integration
     demo_physics_integration()
@@ -144,7 +148,9 @@ def main():
     print("Demo complete!")
     print("=" * 60)
     print("\nNext steps:")
-    print("1. Train a physics model: python train_physics.py --data-dir data/audio --use-curriculum")
+    print(
+        "1. Train a physics model: python train_physics.py --data-dir data/audio --use-curriculum"
+    )
     print("2. Compare with standard model: python train.py --data-dir data/audio")
     print("3. Read documentation: backend/docs/PHYSICS_MODEL.md")
 

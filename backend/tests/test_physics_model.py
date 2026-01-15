@@ -5,15 +5,20 @@ Tests for physics-based model and Mandelbrot orbits.
 import pytest
 import numpy as np
 import torch
+import sys
+from pathlib import Path
 
-from backend.src.mandelbrot_orbits import (
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from mandelbrot_orbits import (
     MandelbrotOrbit,
     get_preset_orbit,
     list_preset_names,
     generate_curriculum_sequence,
     is_in_mandelbrot_set,
 )
-from backend.src.physics_model import PhysicsAudioToVisualModel
+from physics_model import PhysicsAudioToVisualModel
 
 
 class TestMandelbrotOrbits:
@@ -244,6 +249,110 @@ class TestPhysicsModel:
 
         assert "v_real" not in ranges_direct
         assert "julia_real" in ranges_direct
+
+    def test_batch_size_mismatch_handling(self):
+        """Test that integrate_velocity handles mismatched batch sizes (e.g., last batch)."""
+        model = PhysicsAudioToVisualModel(window_frames=10, predict_velocity=True)
+
+        # Simulate a normal batch
+        batch_size_normal = 32
+        velocity_normal = torch.randn(batch_size_normal, 2)
+        position_normal = torch.randn(batch_size_normal, 2)
+        prev_velocity_normal = torch.randn(batch_size_normal, 2)
+
+        new_pos_1, new_vel_1 = model.integrate_velocity(
+            velocity_normal, position_normal, prev_velocity_normal
+        )
+        assert new_pos_1.shape == (batch_size_normal, 2)
+        assert new_vel_1.shape == (batch_size_normal, 2)
+
+        # Simulate a smaller last batch (the problematic case)
+        batch_size_small = 12
+        velocity_small = torch.randn(batch_size_small, 2)
+        position_small = torch.randn(batch_size_small, 2)
+        # Previous velocity still has the old batch size (32)
+        prev_velocity_large = torch.randn(batch_size_normal, 2)
+
+        # This should NOT raise an error - prev_velocity should be trimmed
+        new_pos_2, new_vel_2 = model.integrate_velocity(
+            velocity_small, position_small, prev_velocity_large
+        )
+        assert new_pos_2.shape == (batch_size_small, 2)
+        assert new_vel_2.shape == (batch_size_small, 2)
+
+        # Test case 3: Position batch size also mismatches (the real-world scenario)
+        # Use specific values to verify physics computation
+        position_large = torch.randn(batch_size_normal, 2)
+        velocity_small_2 = torch.randn(batch_size_small, 2)
+        prev_velocity_large_2 = torch.randn(batch_size_normal, 2)
+
+        # Store the trimmed inputs for validation
+        position_trimmed = position_large[:batch_size_small]
+        prev_velocity_trimmed = prev_velocity_large_2[:batch_size_small]
+
+        # This should handle both position and prev_velocity being larger
+        new_pos_3, new_vel_3 = model.integrate_velocity(
+            velocity_small_2, position_large, prev_velocity_large_2
+        )
+        assert new_pos_3.shape == (
+            batch_size_small,
+            2,
+        ), f"Expected shape ({batch_size_small}, 2), got {new_pos_3.shape}"
+        assert new_vel_3.shape == (
+            batch_size_small,
+            2,
+        ), f"Expected shape ({batch_size_small}, 2), got {new_vel_3.shape}"
+
+        # Validate physics computation: new_vel should be damped combination
+        # new_velocity = damping * (velocity + prev_velocity) / 2
+        expected_vel = (
+            model.damping_factor * (velocity_small_2 + prev_velocity_trimmed) / 2
+        )
+        assert torch.allclose(
+            new_vel_3, expected_vel, atol=1e-5
+        ), "Velocity damping not computed correctly for trimmed batch"
+
+        # Validate position integration (before constraint)
+        # new_pos = old_pos + new_vel * dt, then constrained
+        dt = 1.0
+        expected_pos_unconstrained = position_trimmed + new_vel_3 * dt
+
+        # Check if constraint was applied (magnitude clamped to <= 2.0)
+        expected_magnitudes = torch.norm(expected_pos_unconstrained, dim=1)
+        actual_magnitudes = torch.norm(new_pos_3, dim=1)
+
+        # If any expected magnitude > 2, it should be clamped in actual
+        for i in range(batch_size_small):
+            if expected_magnitudes[i] > 2.0:
+                assert (
+                    actual_magnitudes[i] <= 2.01
+                ), f"Position {i} not constrained properly"
+                # Direction should be preserved
+                expected_dir = expected_pos_unconstrained[i] / expected_magnitudes[i]
+                actual_dir = new_pos_3[i] / actual_magnitudes[i]
+                assert torch.allclose(
+                    expected_dir, actual_dir, atol=1e-4
+                ), f"Direction changed for position {i}"
+            else:
+                # No constraint applied, should match exactly
+                assert torch.allclose(
+                    new_pos_3[i], expected_pos_unconstrained[i], atol=1e-5
+                ), f"Position {i} changed unnecessarily"
+
+        # Verify position constraint is applied correctly
+        # Create positions that exceed magnitude 2
+        large_positions = torch.ones(batch_size_small, 2) * 3.0  # Magnitude > 2
+        velocity_test = torch.randn(batch_size_small, 2) * 0.1
+
+        constrained_pos, _ = model.integrate_velocity(
+            velocity_test, large_positions, None
+        )
+        magnitudes = torch.norm(constrained_pos, dim=1)
+
+        # All magnitudes should be <= 2.0 (with small tolerance for floating point)
+        assert torch.all(
+            magnitudes <= 2.01
+        ), f"Max magnitude: {magnitudes.max().item()}"
 
 
 if __name__ == "__main__":

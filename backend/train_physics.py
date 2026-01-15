@@ -24,16 +24,22 @@ from src.export_model import export_to_onnx
 
 def main():
     """Main training function."""
-    parser = argparse.ArgumentParser(description="Train physics-based audio-to-visual model")
+    parser = argparse.ArgumentParser(
+        description="Train physics-based audio-to-visual model"
+    )
     parser.add_argument(
         "--data-dir",
         type=str,
         default="data/audio",
         help="Directory containing audio files",
     )
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument(
+        "--epochs", type=int, default=100, help="Number of training epochs"
+    )
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument(
+        "--learning-rate", type=float, default=1e-4, help="Learning rate"
+    )
     parser.add_argument(
         "--window-frames", type=int, default=10, help="Number of frames in input window"
     )
@@ -173,23 +179,27 @@ def main():
 
         try:
             model.eval()
-            dummy_input = torch.randn(1, model.input_dim)
             export_to_onnx(
                 model=model,
-                dummy_input=dummy_input,
+                input_shape=(1, model.input_dim),
                 output_path=onnx_path,
-                input_names=["audio_features"],
-                output_names=["visual_params"],
-                dynamic_axes={
-                    "audio_features": {0: "batch_size"},
-                    "visual_params": {0: "batch_size"},
+                feature_mean=feature_extractor.feature_mean,
+                feature_std=feature_extractor.feature_std,
+                metadata={
+                    "model_type": "physics",
+                    "output_dim": model.output_dim,
+                    "damping_factor": args.damping_factor,
+                    "speed_scale": args.speed_scale,
                 },
             )
             print(f"Model exported to: {onnx_path}")
         except Exception as e:
             print(f"Warning: Could not export to ONNX: {e}")
 
-    print("\nTraining history saved to:", os.path.join(args.save_dir, "training_history.json"))
+    print(
+        "\nTraining history saved to:",
+        os.path.join(args.save_dir, "training_history.json"),
+    )
     print("Final checkpoint saved to:", args.save_dir)
 
 
