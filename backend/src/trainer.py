@@ -45,7 +45,7 @@ logger.propagate = False  # Don't propagate to root logger
 # Create file handler for debug log
 if not logger.handlers:
     _debug_handler = logging.FileHandler(
-        "c:\\Users\\JeffHall\\git\\FractalSync\\backend\\trainer_debug.log"
+        "trainer_debug.log"
     )
     _debug_handler.setFormatter(JSONFormatter())
     _debug_handler.setLevel(logging.DEBUG)
