@@ -237,6 +237,12 @@ class PhysicsAudioToVisualModel(nn.Module):
         """
         # Apply damping if previous velocity provided
         if prev_velocity is not None:
+            # Handle batch size mismatch (last batch may be smaller)
+            batch_size = velocity.size(0)
+            if prev_velocity.size(0) != batch_size:
+                # Trim or pad prev_velocity to match current batch size
+                prev_velocity = prev_velocity[:batch_size]
+            
             damped_velocity = prev_velocity * self.damping_factor + velocity * (
                 1.0 - self.damping_factor
             )
@@ -246,13 +252,16 @@ class PhysicsAudioToVisualModel(nn.Module):
         # Integrate position
         new_position = position + damped_velocity * dt
 
-        # Constrain to |c| < 2
-        position_magnitude = torch.norm(new_position, dim=1, keepdim=True)
-        mask = position_magnitude > 2.0
-        mask_squeezed = mask.squeeze()
-        new_position[mask_squeezed] = (
-            new_position[mask_squeezed] / position_magnitude[mask] * 2.0
+        # Constrain to |c| < 2 (avoid in-place operations for autograd)
+        position_magnitude = torch.norm(new_position, dim=1, keepdim=True)  # (batch_size, 1)
+        
+        # Scale down any positions that exceed magnitude 2
+        scale_factor = torch.where(
+            position_magnitude > 2.0,
+            2.0 / position_magnitude,
+            torch.ones_like(position_magnitude)
         )
+        new_position = new_position * scale_factor
 
         return new_position, damped_velocity
 

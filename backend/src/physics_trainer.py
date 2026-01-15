@@ -380,7 +380,9 @@ class PhysicsTrainer:
                 total_smoothness += smoothness.item()
 
                 n_batches += 1
+                # Detach state tensors to avoid backpropagating through previous batches
                 previous_velocity = integrated_velocity.detach()
+                current_positions = current_positions.detach()
 
                 if batch_idx % 10 == 0:
                     logger.info(
