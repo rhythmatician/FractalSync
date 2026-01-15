@@ -5,15 +5,20 @@ Tests for physics-based model and Mandelbrot orbits.
 import pytest
 import numpy as np
 import torch
+import sys
+from pathlib import Path
 
-from backend.src.mandelbrot_orbits import (
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from mandelbrot_orbits import (
     MandelbrotOrbit,
     get_preset_orbit,
     list_preset_names,
     generate_curriculum_sequence,
     is_in_mandelbrot_set,
 )
-from backend.src.physics_model import PhysicsAudioToVisualModel
+from physics_model import PhysicsAudioToVisualModel
 
 
 class TestMandelbrotOrbits:
