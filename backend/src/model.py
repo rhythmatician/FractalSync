@@ -220,6 +220,15 @@ class TransformerAudioToVisualModel(nn.Module):
         Returns:
             Visual parameters of shape (batch_size, output_dim)
         """
+        # Validate input shape (skip during tracing to avoid warnings)
+        if not torch.jit.is_tracing():
+            if len(x.shape) != 3:
+                raise ValueError(f"Expected 3D input (batch_size, num_frames, input_dim), got shape {x.shape}")
+            if x.shape[1] != self.num_frames:
+                raise ValueError(f"Expected {self.num_frames} frames, got {x.shape[1]}")
+            if x.shape[2] != self.input_dim:
+                raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[2]}")
+
         # Project input
         x = self.input_proj(x)  # (batch, frames, d_model)
 
