@@ -70,7 +70,7 @@ def main():
     # Load checkpoint if provided
     if args.checkpoint:
         logging.info(f"Loading checkpoint from {args.checkpoint}...")
-        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+        checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
         if "feature_mean" in checkpoint:
             feature_extractor.feature_mean = checkpoint["feature_mean"]
