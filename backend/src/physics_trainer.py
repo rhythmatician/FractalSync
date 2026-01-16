@@ -416,8 +416,8 @@ class PhysicsTrainer:
                     if self.julia_renderer is not None:
                         try:
                             image = self.julia_renderer.render(
-                                c_real=float(julia_real[i]),
-                                c_imag=float(julia_imag[i]),
+                                seed_real=float(julia_real[i]),
+                                seed_imag=float(julia_imag[i]),
                                 max_iter=self.julia_max_iter,
                             )
                         except Exception as e:
