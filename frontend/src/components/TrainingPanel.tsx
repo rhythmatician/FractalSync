@@ -208,10 +208,7 @@ export function TrainingPanel() {
       </div>
 
       <div style={{ marginBottom: '20px' }}>
-        <h3>
-          GPU Rendering Optimizations 
-          <span style={{ fontSize: '14px', color: '#888', marginLeft: '10px' }}>(commit 75c1a43)</span>
-        </h3>
+        <h3>GPU Rendering Optimizations</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>

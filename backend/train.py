@@ -230,7 +230,11 @@ def main():
     # Export to ONNX by default
     print("\nExporting model to ONNX format...")
     os.makedirs(args.save_dir, exist_ok=True)
-    onnx_model_filename = "model.onnx"  # FIXME: Use dynamic naming to avoid overwriting
+    
+    # Use dynamic naming based on configuration to avoid overwriting
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    onnx_model_filename = f"model_physics_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
     try:

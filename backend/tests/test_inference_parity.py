@@ -46,7 +46,9 @@ def trained_model():
 
     # Reconstruct model
     # Infer input dim from checkpoint if available
-    input_dim = checkpoint.get("input_dim", 60)  # Default 60 (6 features × 10 frames)
+    # Default: 60 = 6 base features (centroid, flux, rms, zcr, onset, rolloff) × 10 frames
+    DEFAULT_INPUT_DIM = 60
+    input_dim = checkpoint.get("input_dim", DEFAULT_INPUT_DIM)
 
     model = PhysicsAudioToVisualModel(
         window_frames=10,

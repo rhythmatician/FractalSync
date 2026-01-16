@@ -281,7 +281,9 @@ class TestEndToEndPipeline(unittest.TestCase):
         # Create a small dataset where last batch will be partial
         # 162 samples with batch_size=32 gives: 5 full batches + 1 batch of 2
         n_samples = 162
-        input_dim = 60
+        # Default: 60 = 6 base features × 10 frames
+        DEFAULT_INPUT_DIM = 60
+        input_dim = DEFAULT_INPUT_DIM
         batch_size = 32
 
         # Create synthetic feature data
@@ -336,7 +338,9 @@ class TestEndToEndPipeline(unittest.TestCase):
 
         # Create a small dataset where last batch will be partial
         n_samples = 162
-        input_dim = 60
+        # Default: 60 = 6 base features × 10 frames
+        DEFAULT_INPUT_DIM = 60
+        input_dim = DEFAULT_INPUT_DIM
         batch_size = 32
 
         # Create synthetic feature data

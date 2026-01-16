@@ -203,18 +203,18 @@ class GPUJuliaRenderer:
 
     def __del__(self):
         """Cleanup OpenGL resources."""
-        if hasattr(self, "fbo") and self.fbo:
-            self.fbo.release()
-        if hasattr(self, "texture") and self.texture:
-            self.texture.release()
-        if hasattr(self, "vao") and self.vao:
-            self.vao.release()
-        if hasattr(self, "program") and self.program:
-            self.program.release()
-        if hasattr(self, "ctx") and self.ctx:
-            self.ctx.release()
-        if hasattr(self, "glfw_window"):
-            import glfw
-
-            glfw.destroy_window(self.glfw_window)
-            glfw.terminate()
+        try:
+            # Release moderngl resources
+            for attr in ["fbo", "texture", "vao", "program", "ctx"]:
+                resource = getattr(self, attr, None)
+                if resource is not None:
+                    resource.release()
+            
+            # Cleanup GLFW window
+            if hasattr(self, "glfw_window"):
+                import glfw
+                glfw.destroy_window(self.glfw_window)
+                glfw.terminate()
+        except Exception:
+            # Silently ignore cleanup errors during destruction
+            pass
