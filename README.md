@@ -56,6 +56,10 @@ cd backend
 python train.py --data-dir data/audio --epochs 100
 ```
 
+The trained model will be exported to ONNX format and can be used by the frontend.
+
+**Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
+
 ### Physics-Based Model Training (NEW)
 
 To train with physics-based velocity prediction and curriculum learning:
@@ -73,28 +77,15 @@ python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
 
 See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed documentation.
 
-Optional: Enable velocity-based smoothing for more natural transitions:
-```bash
-python train.py --data-dir data/audio --epochs 100 --use-velocity-loss
-```
-The trained model will be exported to ONNX format and can be used by the frontend.
-
-**Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
-
 ## Features
 
 - Real-time audio analysis from microphone input
 - ML-learned mappings between audio features and visual parameters
 - Smooth morphing Julia sets rendered with WebGL
 - Training UI for model management and monitoring
-<<<<<<< HEAD
-=======
 - **Velocity-based prediction** for physics-inspired smooth parameter transitions
-<<<<<<< HEAD
->>>>>>> 0a44394 (Make velocity-based smoothing always enabled (remove optional flag))
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
-- **Velocity-based prediction** for physics-inspired smooth parameter transitions (optional)
 
 
 ## Training parameters:

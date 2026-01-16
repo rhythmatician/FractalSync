@@ -53,7 +53,7 @@ def export_to_onnx(
             export_params=True,
             input_names=["audio_features"],
             output_names=["visual_parameters"],
-            dynamic_shapes={
+            dynamic_axes={
                 "audio_features": {0: "batch_size"},
                 "visual_parameters": {0: "batch_size"},
             },
