@@ -20,8 +20,7 @@ import sys
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.model import AudioToVisualModel  # noqa: E402
-
+from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
 
 TEST_CHECKPOINT_DIR = Path(__file__).parent.parent / "checkpoints"
 TEST_MODELS_DIR = Path(__file__).parent / "fixtures" / "models"
@@ -49,7 +48,7 @@ def trained_model():
     # Infer input dim from checkpoint if available
     input_dim = checkpoint.get("input_dim", 60)  # Default 60 (6 features × 10 frames)
 
-    model = AudioToVisualModel(
+    model = PhysicsAudioToVisualModel(
         window_frames=10,
         num_features_per_frame=6,  # 6 base features
     )

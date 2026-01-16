@@ -7,6 +7,7 @@ using preset Mandelbrot orbits.
 
 import json
 import os
+import logging
 from typing import Any, Dict, List, Optional
 from tqdm import tqdm
 import numpy as np
@@ -19,7 +20,72 @@ from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
 from .mandelbrot_orbits import generate_curriculum_sequence
-from .trainer import CorrelationLoss, SmoothnessLoss, logger
+
+logger = logging.getLogger(__name__)
+
+
+class CorrelationLoss(nn.Module):
+    """
+    Negative correlation loss encourages positive correlation between two signals.
+    Returns -1 × correlation, so minimizing this maximizes positive correlation.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        """
+        Compute negative correlation loss.
+
+        Args:
+            x: First signal (batch_size,)
+            y: Second signal (batch_size,)
+
+        Returns:
+            Negative correlation coefficient
+        """
+        # Ensure tensors are 1D
+        x = x.flatten()
+        y = y.flatten()
+
+        # Center the signals
+        x_centered = x - torch.mean(x)
+        y_centered = y - torch.mean(y)
+
+        # Compute correlation
+        numerator = torch.sum(x_centered * y_centered)
+        denominator = torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2))
+
+        # Avoid division by zero
+        correlation = numerator / (denominator + 1e-8)
+
+        # Return negative correlation (so minimizing maximizes correlation)
+        return -correlation
+
+
+class SmoothnessLoss(nn.Module):
+    """
+    Penalize large differences between consecutive outputs.
+    Encourages smooth temporal transitions.
+    """
+
+    def __init__(self, weight: float = 0.1):
+        super().__init__()
+        self.weight = weight
+
+    def forward(self, current: torch.Tensor, previous: torch.Tensor) -> torch.Tensor:
+        """
+        Compute smoothness loss.
+
+        Args:
+            current: Current output parameters (batch_size, output_dim)
+            previous: Previous output parameters (batch_size, output_dim)
+
+        Returns:
+            Mean squared difference between current and previous
+        """
+        diff = current - previous
+        return self.weight * torch.mean(diff**2)
 
 
 class VelocityLoss(nn.Module):
@@ -82,6 +148,10 @@ class PhysicsTrainer:
         use_curriculum: bool = True,
         curriculum_weight: float = 1.0,
         correlation_weights: Optional[Dict[str, float]] = None,
+        julia_renderer: Optional[Any] = None,
+        julia_resolution: int = 128,
+        julia_max_iter: int = 100,
+        num_workers: int = 0,
     ):
         """
         Initialize physics trainer.
@@ -95,6 +165,10 @@ class PhysicsTrainer:
             use_curriculum: Whether to use curriculum learning with preset orbits
             curriculum_weight: Weight for curriculum loss (decreases over training)
             correlation_weights: Weights for different correlation losses
+            julia_renderer: Optional GPU renderer for Julia sets (commit 75c1a43)
+            julia_resolution: Julia set resolution (commit 75c1a43)
+            julia_max_iter: Julia set max iterations (commit 75c1a43)
+            num_workers: DataLoader num_workers for parallel loading (commit 75c1a43)
         """
         self.model = model.to(device)
         self.feature_extractor = feature_extractor
@@ -102,6 +176,10 @@ class PhysicsTrainer:
         self.device = device
         self.use_curriculum = use_curriculum
         self.curriculum_weight = curriculum_weight
+        self.julia_renderer = julia_renderer
+        self.julia_resolution = julia_resolution
+        self.julia_max_iter = julia_max_iter
+        self.num_workers = num_workers
 
         # Default correlation weights
         if correlation_weights is None:
@@ -334,13 +412,35 @@ class PhysicsTrainer:
 
                 prev_image = None
                 for i in range(batch_size):
-                    image = self.visual_metrics.render_julia_set(
-                        seed_real=float(julia_real[i]),
-                        seed_imag=float(julia_imag[i]),
-                        width=128,
-                        height=128,
-                        zoom=float(zoom[i]),
-                    )
+                    # Use GPU renderer if available, else CPU
+                    if self.julia_renderer is not None:
+                        try:
+                            image = self.julia_renderer.render(
+                                c_real=float(julia_real[i]),
+                                c_imag=float(julia_imag[i]),
+                                max_iter=self.julia_max_iter,
+                            )
+                        except Exception as e:
+                            # Fallback to CPU rendering on GPU error
+                            logger.warning(f"GPU rendering failed, using CPU: {e}")
+                            image = self.visual_metrics.render_julia_set(
+                                seed_real=float(julia_real[i]),
+                                seed_imag=float(julia_imag[i]),
+                                width=self.julia_resolution,
+                                height=self.julia_resolution,
+                                zoom=float(zoom[i]),
+                                max_iter=self.julia_max_iter,
+                            )
+                    else:
+                        # CPU rendering
+                        image = self.visual_metrics.render_julia_set(
+                            seed_real=float(julia_real[i]),
+                            seed_imag=float(julia_imag[i]),
+                            width=self.julia_resolution,
+                            height=self.julia_resolution,
+                            zoom=float(zoom[i]),
+                            max_iter=self.julia_max_iter,
+                        )
 
                     metrics = self.visual_metrics.compute_all_metrics(
                         image, prev_image=prev_image
@@ -509,7 +609,10 @@ class PhysicsTrainer:
         # Create data loader
         tensor_dataset = TensorDataset(all_features_tensor)
         dataloader = DataLoader(
-            tensor_dataset, batch_size=batch_size, shuffle=False
+            tensor_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
         )  # Don't shuffle for curriculum
 
         # Training loop

@@ -181,8 +181,9 @@ class PhysicsAudioToVisualModel(nn.Module):
                         self.current_position / position_magnitude * 2.0
                     )
 
-                c_real = self.current_position[0]
-                c_imag = self.current_position[1]
+                # Expand to batch dimension to match other tensors
+                c_real = self.current_position[0].unsqueeze(0)
+                c_imag = self.current_position[1].unsqueeze(0)
             else:
                 # Training mode: use batch positions (can be provided externally or initialized)
                 # For now, just constrain velocity and return zeros for position

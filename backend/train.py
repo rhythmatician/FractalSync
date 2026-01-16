@@ -1,25 +1,40 @@
 """
-Main training script.
+Training script for physics-based model with curriculum learning.
+
+Usage:
+    python train.py --data-dir data/audio --epochs 100 --use-curriculum
 """
 
 import argparse
 import os
-from pathlib import Path
+import sys
 
 import torch
 
-from src.audio_features import AudioFeatureExtractor
-from src.data_loader import AudioDataset
-from src.export_model import load_checkpoint_and_export
-from src.model import AudioToVisualModel
-from src.trainer import Trainer
-from src.visual_metrics import VisualMetrics
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import logging
+from src.audio_features import AudioFeatureExtractor  # noqa: E402
+from src.data_loader import AudioDataset  # noqa: E402
+from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
+from src.physics_trainer import PhysicsTrainer  # noqa: E402
+from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.export_model import export_to_onnx  # noqa: E402
+
+# GPU rendering optimization imports
+try:
+    from src.julia_gpu import GPUJuliaRenderer
+
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train audio-to-visual model")
+    """Main training function."""
+    parser = argparse.ArgumentParser(
+        description="Train physics-based audio-to-visual model"
+    )
     parser.add_argument(
         "--data-dir",
         type=str,
@@ -34,46 +49,66 @@ def main():
         "--learning-rate", type=float, default=1e-4, help="Learning rate"
     )
     parser.add_argument(
-        "--window-frames", type=int, default=10, help="Number of frames per window"
+        "--window-frames", type=int, default=10, help="Number of frames in input window"
     )
     parser.add_argument(
-        "--include-delta",
+        "--use-curriculum",
         action="store_true",
-        help="Include velocity (first-order derivative) features",
+        help="Use curriculum learning with Mandelbrot orbits",
     )
     parser.add_argument(
-        "--include-delta-delta",
-        action="store_true",
-        help="Include acceleration (second-order derivative) features",
+        "--curriculum-weight",
+        type=float,
+        default=1.0,
+        help="Initial weight for curriculum loss",
+    )
+    parser.add_argument(
+        "--curriculum-decay",
+        type=float,
+        default=0.95,
+        help="Decay factor for curriculum weight per epoch",
+    )
+    parser.add_argument(
+        "--damping-factor",
+        type=float,
+        default=0.95,
+        help="Velocity damping factor (0-1)",
+    )
+    parser.add_argument(
+        "--speed-scale",
+        type=float,
+        default=0.1,
+        help="Scaling factor for velocity magnitude",
     )
     parser.add_argument(
         "--save-dir",
         type=str,
         default="checkpoints",
-        help="Directory to save checkpoints",
+        help="Directory to save model checkpoints",
     )
     parser.add_argument(
-        "--export-onnx", action="store_true", help="Export to ONNX after training"
-    )
-    parser.add_argument(
-        "--onnx-output-dir",
+        "--device",
         type=str,
-        default="models",
-        help="Directory to save ONNX model",
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Device to train on (cuda/cpu)",
     )
     parser.add_argument(
-        "--checkpoint", type=str, default=None, help="Path to checkpoint to resume from"
+        "--export-onnx",
+        action="store_true",
+        help="Export final model to ONNX format",
     )
+
+    # GPU rendering optimizations (commit 75c1a43)
     parser.add_argument(
         "--no-gpu-rendering",
         action="store_true",
-        help="Disable GPU-accelerated Julia rendering (use original CPU rendering)",
+        help="Disable GPU-accelerated Julia set rendering (use CPU instead)",
     )
     parser.add_argument(
         "--julia-resolution",
         type=int,
         default=64,
-        help="Julia set rendering resolution (default: 64, original: 128)",
+        help="Julia set image resolution (default: 64x64, original: 128x128)",
     )
     parser.add_argument(
         "--julia-max-iter",
@@ -85,106 +120,149 @@ def main():
         "--num-workers",
         type=int,
         default=4,
-        help="Number of data loader workers (default: 4, set to 0 to disable)",
+        help="Number of DataLoader workers for parallel data loading (default: 4, original: 0)",
     )
 
     args = parser.parse_args()
 
-    # Create directories
-    os.makedirs(args.save_dir, exist_ok=True)
-    if args.export_onnx:
-        os.makedirs(args.onnx_output_dir, exist_ok=True)
+    print("=" * 60)
+    print("Physics-Based Model Training")
+    print("=" * 60)
+    print(f"Data directory: {args.data_dir}")
+    print(f"Epochs: {args.epochs}")
+    print(f"Batch size: {args.batch_size}")
+    print(f"Learning rate: {args.learning_rate}")
+    print(f"Window frames: {args.window_frames}")
+    print(f"Use curriculum: {args.use_curriculum}")
+    if args.use_curriculum:
+        print(f"  Curriculum weight: {args.curriculum_weight}")
+        print(f"  Curriculum decay: {args.curriculum_decay}")
+    print(f"Damping factor: {args.damping_factor}")
+    print(f"Speed scale: {args.speed_scale}")
+    print(f"Device: {args.device}")
+    print("Optimizations:")
+    print(f"  GPU rendering: {not args.no_gpu_rendering and GPU_AVAILABLE}")
+    print(f"  Julia resolution: {args.julia_resolution}x{args.julia_resolution}")
+    print(f"  Julia max iterations: {args.julia_max_iter}")
+    print(f"  DataLoader workers: {args.num_workers}")
+    print("=" * 60)
 
     # Initialize components
-    logging.info("Initializing components...")
+    print("\n[1/7] Initializing feature extractor...")
     feature_extractor = AudioFeatureExtractor(
-        include_delta=args.include_delta,
-        include_delta_delta=args.include_delta_delta,
+        sr=22050,
+        hop_length=512,
+        n_fft=2048,
     )
+
+    print("[2/7] Loading audio dataset...")
+    dataset = AudioDataset(
+        data_dir=args.data_dir,
+        feature_extractor=feature_extractor,
+        window_frames=args.window_frames,
+        cache_dir="data/cache",
+    )
+
+    print(f"Found {len(dataset)} audio files")
+
+    print("[3/7] Initializing visual metrics...")
     visual_metrics = VisualMetrics()
 
-    # Get number of features per frame
-    num_features_per_frame = feature_extractor.get_num_features()
-    logging.info(f"Using {num_features_per_frame} features per frame")
+    print("[4/7] Initializing GPU renderer (if enabled)...")
+    julia_renderer = None
+    if not args.no_gpu_rendering and GPU_AVAILABLE:
+        try:
+            julia_renderer = GPUJuliaRenderer(
+                width=args.julia_resolution,
+                height=args.julia_resolution,
+            )
+            print(
+                f"  GPU renderer initialized: {args.julia_resolution}x{args.julia_resolution}, {args.julia_max_iter} iterations"
+            )
+        except Exception as e:
+            print(f"  Warning: GPU renderer failed to initialize: {e}")
+            print("  Falling back to CPU rendering")
+            julia_renderer = None
+    else:
+        print(
+            f"  GPU rendering disabled, using CPU: {args.julia_resolution}x{args.julia_resolution}, {args.julia_max_iter} iterations"
+        )
 
-    # Create model
-    model = AudioToVisualModel(
+    print("[5/7] Creating physics-based model...")
+    model = PhysicsAudioToVisualModel(
         window_frames=args.window_frames,
-        num_features_per_frame=num_features_per_frame,
+        hidden_dims=[128, 256, 128],
+        output_dim=9,  # 2 velocity + 2 position + 5 other params
+        dropout=0.2,
+        predict_velocity=True,
+        damping_factor=args.damping_factor,
+        speed_scale=args.speed_scale,
     )
 
-    # Load checkpoint if provided
-    if args.checkpoint:
-        logging.info(f"Loading checkpoint from {args.checkpoint}...")
-        checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if "feature_mean" in checkpoint:
-            feature_extractor.feature_mean = checkpoint["feature_mean"]
-        if "feature_std" in checkpoint:
-            feature_extractor.feature_std = checkpoint["feature_std"]
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    print(f"Input dimension: {model.input_dim}")
+    print(f"Output dimension: {model.output_dim}")
 
-    # Create Julia renderer (GPU or original CPU)
-    julia_renderer = None
-    if not args.no_gpu_rendering:
-        from src.julia_gpu import GPUJuliaRenderer
-
-        julia_renderer = GPUJuliaRenderer(
-            width=args.julia_resolution,
-            height=args.julia_resolution,
-        )
-        logging.info(
-            f"Using GPU Julia renderer: {args.julia_resolution}x{args.julia_resolution}, "
-            f"max_iter={args.julia_max_iter}"
-        )
-    else:
-        logging.info(
-            f"Using original CPU rendering: {args.julia_resolution}x{args.julia_resolution}, "
-            f"max_iter={args.julia_max_iter}"
-        )
-
-    # Create trainer
-    trainer = Trainer(
+    print("[6/7] Initializing physics trainer...")
+    trainer = PhysicsTrainer(
         model=model,
         feature_extractor=feature_extractor,
         visual_metrics=visual_metrics,
+        device=args.device,
         learning_rate=args.learning_rate,
+        use_curriculum=args.use_curriculum,
+        curriculum_weight=args.curriculum_weight,
         julia_renderer=julia_renderer,
         julia_resolution=args.julia_resolution,
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
     )
 
-    # Load dataset
-    logging.info(f"Loading dataset from {args.data_dir}...")
-    dataset = AudioDataset(
-        data_dir=args.data_dir,
-        feature_extractor=feature_extractor,
-        window_frames=args.window_frames,
-    )
+    print("[7/7] Starting training...")
+    print("=" * 60)
 
-    logging.info(f"Found {len(dataset)} audio files")
-
-    # Train
     trainer.train(
         dataset=dataset,
         epochs=args.epochs,
         batch_size=args.batch_size,
         save_dir=args.save_dir,
+        curriculum_decay=args.curriculum_decay,
     )
 
-    # Export to ONNX
+    print("\n" + "=" * 60)
+    print("Training complete!")
+    print("=" * 60)
+
+    # Export to ONNX if requested
     if args.export_onnx:
-        logging.info("Exporting to ONNX...")
-        latest_checkpoint = max(
-            Path(args.save_dir).glob("checkpoint_epoch_*.pt"),
-            key=lambda p: p.stat().st_mtime,
-        )
-        load_checkpoint_and_export(
-            str(latest_checkpoint),
-            output_dir=args.onnx_output_dir,
-            window_frames=args.window_frames,
-        )
-        logging.info("ONNX export complete!")
+        print("\nExporting model to ONNX format...")
+        os.makedirs(args.save_dir, exist_ok=True)
+        onnx_path = os.path.join(args.save_dir, "model.onnx")
+
+        try:
+            model.eval()
+            export_to_onnx(
+                model=model,
+                input_shape=(1, model.input_dim),
+                output_path=onnx_path,
+                feature_mean=feature_extractor.feature_mean,
+                feature_std=feature_extractor.feature_std,
+                metadata={
+                    "model_type": "physics",
+                    "output_dim": model.output_dim,
+                    "damping_factor": args.damping_factor,
+                    "speed_scale": args.speed_scale,
+                },
+            )
+            print(f"Model exported to: {onnx_path}")
+        except Exception as e:
+            print(f"Warning: Could not export to ONNX: {e}")
+
+    print(
+        "\nTraining history saved to:",
+        os.path.join(args.save_dir, "training_history.json"),
+    )
+    print("Final checkpoint saved to:", args.save_dir)
 
 
 if __name__ == "__main__":

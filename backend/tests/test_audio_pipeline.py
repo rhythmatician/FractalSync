@@ -216,7 +216,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         self.assertEqual(
             features.shape[1],
             60,
-            "Features must be 60-dimensional for AudioToVisualModel",
+            "Features must be 60-dimensional for PhysicsAudioToVisualModel",
         )
 
         # Convert to tensor (as trainer would do)
@@ -273,8 +273,8 @@ class TestEndToEndPipeline(unittest.TestCase):
         the prior batch (size 32) was used in smoothness_loss.
         """
         from src.audio_features import AudioFeatureExtractor
-        from src.model import AudioToVisualModel
-        from src.trainer import Trainer
+        from src.model import PhysicsAudioToVisualModel
+        from src.physics_trainer import PhysicsTrainer
         from src.visual_metrics import VisualMetrics
         from torch.utils.data import DataLoader, TensorDataset
 
@@ -294,8 +294,8 @@ class TestEndToEndPipeline(unittest.TestCase):
         visual_metrics = VisualMetrics()
 
         # Initialize model and trainer
-        model = AudioToVisualModel(window_frames=10)
-        trainer = Trainer(
+        model = PhysicsAudioToVisualModel(window_frames=10)
+        trainer = PhysicsTrainer(
             model=model,
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
@@ -329,8 +329,8 @@ class TestEndToEndPipeline(unittest.TestCase):
     def test_partial_batch_handling_with_velocity_loss(self):
         """Test that trainer handles partial batches correctly with velocity loss."""
         from src.audio_features import AudioFeatureExtractor
-        from src.model import AudioToVisualModel
-        from src.trainer import Trainer
+        from src.model import PhysicsAudioToVisualModel
+        from src.physics_trainer import PhysicsTrainer
         from src.visual_metrics import VisualMetrics
         from torch.utils.data import DataLoader, TensorDataset
 
@@ -349,8 +349,8 @@ class TestEndToEndPipeline(unittest.TestCase):
         visual_metrics = VisualMetrics()
 
         # Initialize model and trainer (velocity loss always enabled)
-        model = AudioToVisualModel(window_frames=10)
-        trainer = Trainer(
+        model = PhysicsAudioToVisualModel(window_frames=10)
+        trainer = PhysicsTrainer(
             model=model,
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
@@ -369,7 +369,9 @@ class TestEndToEndPipeline(unittest.TestCase):
             self.assertIsInstance(epoch_losses["velocity_loss"], float)
 
             # Test passes if we reach here without exception
-            self.assertTrue(True, "Partial batch with velocity loss handled successfully")
+            self.assertTrue(
+                True, "Partial batch with velocity loss handled successfully"
+            )
 
         except RuntimeError as e:
             if "size of tensor" in str(e):

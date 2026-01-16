@@ -28,6 +28,11 @@ interface TrainingRequest {
   learning_rate: number;
   window_frames: number;
   input_dim: number;
+  // GPU rendering optimizations (commit 75c1a43)
+  no_gpu_rendering?: boolean;
+  julia_resolution?: number;
+  julia_max_iter?: number;
+  num_workers?: number;
 }
 
 export function TrainingPanel() {
@@ -40,7 +45,12 @@ export function TrainingPanel() {
     batch_size: 32,
     learning_rate: 1e-4,
     window_frames: 10,
-    input_dim: 60
+    input_dim: 60,
+    // GPU rendering optimizations (commit 75c1a43) - enabled by default
+    no_gpu_rendering: false,
+    julia_resolution: 64,
+    julia_max_iter: 50,
+    num_workers: 4,
   });
 
   useEffect(() => {
@@ -194,6 +204,62 @@ export function TrainingPanel() {
               style={{ width: '100%', padding: '5px' }}
             />
           </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <h3>
+          GPU Rendering Optimizations 
+          <span style={{ fontSize: '14px', color: '#888', marginLeft: '10px' }}>(commit 75c1a43)</span>
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!trainingConfig.no_gpu_rendering}
+                onChange={(e) => setTrainingConfig({ ...trainingConfig, no_gpu_rendering: !e.target.checked })}
+                style={{ marginRight: '8px' }}
+              />
+              Enable GPU-accelerated Julia rendering
+            </label>
+          </div>
+          <div>
+            <label>Julia Resolution:</label>
+            <input
+              type="number"
+              value={trainingConfig.julia_resolution}
+              onChange={(e) => setTrainingConfig({ ...trainingConfig, julia_resolution: parseInt(e.target.value) })}
+              style={{ width: '100%', padding: '5px' }}
+            />
+            <small style={{ color: '#888' }}>Default: 64 (original: 128)</small>
+          </div>
+          <div>
+            <label>Julia Max Iterations:</label>
+            <input
+              type="number"
+              value={trainingConfig.julia_max_iter}
+              onChange={(e) => setTrainingConfig({ ...trainingConfig, julia_max_iter: parseInt(e.target.value) })}
+              style={{ width: '100%', padding: '5px' }}
+            />
+            <small style={{ color: '#888' }}>Default: 50 (original: 100)</small>
+          </div>
+          <div>
+            <label>DataLoader Workers:</label>
+            <input
+              type="number"
+              value={trainingConfig.num_workers}
+              onChange={(e) => setTrainingConfig({ ...trainingConfig, num_workers: parseInt(e.target.value) })}
+              style={{ width: '100%', padding: '5px' }}
+            />
+            <small style={{ color: '#888' }}>Default: 4 (original: 0)</small>
+          </div>
+        </div>
+        <div style={{ padding: '10px', background: '#2a2a2a', borderRadius: '5px' }}>
+          <p style={{ margin: 0, fontSize: '14px', color: '#aaa' }}>
+            <strong>Expected speedup:</strong> 3-5x faster training with GPU rendering + parallel data loading.
+            Disable optimizations to match pre-75c1a43 behavior (slower but higher quality).
+          </p>
         </div>
       </div>
 
