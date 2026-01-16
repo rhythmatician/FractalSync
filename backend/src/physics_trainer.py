@@ -165,13 +165,17 @@ class BoundaryProximityLoss(nn.Module):
         z_imag = torch.zeros_like(c_imag)
         iterations = torch.zeros_like(c_real)
 
-        # Track which points are still active (not yet escaped)
+        # Track which points are still active (not yet escaped or cycled)
         active = torch.ones_like(c_real, dtype=torch.bool)
+
+        # For cycle detection: track previous z values
+        z_real_prev = torch.zeros_like(c_real)
+        z_imag_prev = torch.zeros_like(c_imag)
 
         for i in range(self.max_iters):
             # Only compute for active points
             if not active.any():
-                break  # Early exit: all points have escaped
+                break  # Early exit: all points have escaped or cycled
 
             # z^2 + c
             z_real_new = z_real * z_real - z_imag * z_imag + c_real
@@ -180,6 +184,23 @@ class BoundaryProximityLoss(nn.Module):
             # Check escape condition |z| > 2
             magnitude_sq = z_real_new * z_real_new + z_imag_new * z_imag_new
             escaped = magnitude_sq > 4.0
+
+            # Check for cycles: if z hasn't changed much, we're in a cycle
+            # (This catches period-1, period-2, and most other periodic orbits)
+            if i > 0:
+                delta_real = torch.abs(z_real_new - z_real_prev)
+                delta_imag = torch.abs(z_imag_new - z_imag_prev)
+                in_cycle = (delta_real < 1e-6) & (delta_imag < 1e-6) & active
+
+                # Points in cycles are in the Mandelbrot set (never escape)
+                iterations = torch.where(
+                    in_cycle,
+                    torch.tensor(
+                        self.max_iters, dtype=torch.float32, device=c_real.device
+                    ),
+                    iterations,
+                )
+                active = active & ~in_cycle
 
             # Update iterations for points that just escaped
             just_escaped = escaped & active
@@ -191,6 +212,10 @@ class BoundaryProximityLoss(nn.Module):
 
             # Mark escaped points as inactive
             active = active & ~escaped
+
+            # Store current z for cycle detection next iteration
+            z_real_prev = z_real_new
+            z_imag_prev = z_imag_new
 
             z_real = z_real_new
             z_imag = z_imag_new
