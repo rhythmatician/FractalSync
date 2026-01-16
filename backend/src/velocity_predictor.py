@@ -69,8 +69,7 @@ class VelocityPredictor:
         if not is_batched:
             current_params = current_params[np.newaxis, :]
             
-        batch_size = current_params.shape[0]
-        
+
         # Initialize on first call
         if self.previous_params is None:
             self.previous_params = current_params.copy()

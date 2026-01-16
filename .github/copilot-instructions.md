@@ -13,7 +13,7 @@ These instructions make AI agents immediately productive in this repo.
   - `backend/src/audio_features.py`: Librosa feature extraction and sliding-window flattening; 6 features × `window_frames` → input dim.
   - `backend/src/data_loader.py`: Audio dataset discovery + persistent `.npy` feature cache (`data/cache`).
   - `backend/src/model.py`: `AudioToVisualModel` MLP; default expects 60-dim (6 × 10) input.
-  - `backend/src/trainer.py`: Training loop with correlation + smoothness losses; DataLoader batching; optional velocity-based loss.
+  - `backend/src/trainer.py`: Training loop with correlation + smoothness losses; DataLoader batching; always-on velocity-based loss (jerk penalty).
   - `backend/src/velocity_predictor.py`: Velocity-based smoothing and prediction for natural parameter transitions; includes `VelocityLoss` for jerk penalty.
   - `backend/train.py`: CLI to run training without API.
 - Frontend core:

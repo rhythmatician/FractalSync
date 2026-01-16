@@ -107,7 +107,7 @@ class TestVelocityPredictor(unittest.TestCase):
         params2 = np.ones(7) * 100  # Huge jump
 
         self.predictor.update(params1)
-        result = self.predictor.update(params2)
+        self.predictor.update(params2)
 
         velocity = self.predictor.get_velocity()
 
@@ -213,9 +213,8 @@ class TestVelocityLoss(unittest.TestCase):
         t1 = torch.ones(4, 7)
         t2 = torch.ones(4, 7) * 2
 
-        # Compute velocities
+        # Compute velocity
         v1 = t1 - t0  # velocity = 1
-        v2 = t2 - t1  # velocity = 1 (constant)
 
         result = loss(t2, t1, v1)
 
