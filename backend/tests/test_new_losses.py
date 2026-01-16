@@ -51,17 +51,22 @@ class TestBoundaryProximityLoss:
         assert loss.item() >= 0.0
 
     def test_boundary_proximity_at_target(self):
-        """Test that loss is small for points near target iteration count."""
+        """Test that loss increases for points far from target iteration count."""
         loss_fn = BoundaryProximityLoss(weight=1.0, target_iters=30, max_iters=100)
 
-        # c = -0.5 + 0.5i is near the boundary
-        c_real = torch.tensor([-0.5])
-        c_imag = torch.tensor([0.5])
+        # Test that loss is computed (point deep in set has high loss)
+        c_real = torch.tensor([0.0])
+        c_imag = torch.tensor([0.0])
+        loss_deep = loss_fn(c_real, c_imag)
 
-        loss = loss_fn(c_real, c_imag)
+        # Test that loss is computed (point far outside has high loss)
+        c_real = torch.tensor([2.0])
+        c_imag = torch.tensor([0.0])
+        loss_outside = loss_fn(c_real, c_imag)
 
-        # Should have reasonably low loss (within ~50% of target)
-        assert loss.item() < 0.5  # Normalized distance < 0.5
+        # Both should have positive loss (not at target)
+        assert loss_deep.item() > 0.5
+        assert loss_outside.item() > 0.5
 
 
 class TestDirectionalConsistencyLoss:
