@@ -1,7 +1,6 @@
 """Test boundary proximity and directional consistency losses."""
 
 import torch
-import pytest
 from src.physics_trainer import BoundaryProximityLoss, DirectionalConsistencyLoss
 
 
