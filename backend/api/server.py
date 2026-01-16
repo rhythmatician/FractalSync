@@ -23,9 +23,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.audio_features import AudioFeatureExtractor  # noqa: E402
 from src.data_loader import AudioDataset  # noqa: E402
 from src.export_model import load_checkpoint_and_export  # noqa: E402
-from src.model import AudioToVisualModel  # noqa: E402
-from src.trainer import Trainer  # noqa: E402
+from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
+from src.physics_trainer import PhysicsTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
+
+# GPU rendering optimization imports
+try:
+    from src.julia_gpu import GPUJuliaRenderer
+
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
 
 app = FastAPI(title="FractalSync Training API")
 
@@ -36,8 +44,15 @@ class TrainingRequest(BaseModel):
     batch_size: int = 32
     learning_rate: float = 1e-4
     window_frames: int = 10
-    include_delta: bool = False
-    include_delta_delta: bool = False
+    use_curriculum: bool = True
+    curriculum_weight: float = 1.0
+    curriculum_decay: float = 0.95
+    damping_factor: float = 0.95
+    speed_scale: float = 0.1
+    use_gpu_rendering: bool = True
+    julia_resolution: int = 64
+    julia_max_iter: int = 50
+    num_workers: int = 4
 
 
 class TrainingStatus(BaseModel):
@@ -106,27 +121,41 @@ async def train_model_async(request: TrainingRequest):
 
     try:
         # Initialize components
-        feature_extractor = AudioFeatureExtractor(
-            include_delta=request.include_delta,
-            include_delta_delta=request.include_delta_delta,
-        )
+        feature_extractor = AudioFeatureExtractor()
         visual_metrics = VisualMetrics()
 
-        # Get number of features per frame
-        num_features_per_frame = feature_extractor.get_num_features()
+        # Initialize GPU renderer if requested and available
+        julia_renderer = None
+        if request.use_gpu_rendering and GPU_AVAILABLE:
+            try:
+                julia_renderer = GPUJuliaRenderer(
+                    width=request.julia_resolution,
+                    height=request.julia_resolution,
+                )
+                logging.info("GPU renderer initialized successfully")
+            except Exception as e:
+                logging.warning(f"Failed to initialize GPU renderer: {e}")
 
-        model = AudioToVisualModel(
+        # Initialize physics model
+        model = PhysicsAudioToVisualModel(
             window_frames=request.window_frames,
-            num_features_per_frame=num_features_per_frame,
+            damping_factor=request.damping_factor,
+            speed_scale=request.speed_scale,
         )
 
-        trainer = Trainer(
+        # Initialize physics trainer
+        trainer = PhysicsTrainer(
             model=model,
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
             learning_rate=request.learning_rate,
+            use_curriculum=request.use_curriculum,
+            curriculum_weight=request.curriculum_weight,
+            julia_renderer=julia_renderer,
+            julia_resolution=request.julia_resolution,
+            julia_max_iter=request.julia_max_iter,
+            num_workers=request.num_workers,
         )
-        # Note: velocity loss is always enabled in trainer for smooth transitions
 
         # Load dataset
         dataset = AudioDataset(
@@ -152,30 +181,38 @@ async def train_model_async(request: TrainingRequest):
 
         tensor_dataset = TensorDataset(all_features_tensor)
         dataloader = DataLoader(
-            tensor_dataset, batch_size=request.batch_size, shuffle=True
+            tensor_dataset,
+            batch_size=request.batch_size,
+            shuffle=True,
+            num_workers=(
+                request.num_workers if not request.use_gpu_rendering else 0
+            ),  # GPU rendering conflicts with workers
         )
 
         # Training loop
         for epoch in range(request.epochs):
+            avg_losses = trainer.train_epoch(
+                dataloader,
+                epoch,
+                curriculum_decay=request.curriculum_decay,
+            )
+
+            # Update state
             training_state.current_epoch = epoch + 1
             training_state.progress = (epoch + 1) / request.epochs
-
-            avg_losses = trainer.train_epoch(dataloader, epoch)
+            training_state.loss_history.append({"epoch": epoch + 1, **avg_losses})
 
             # Update history
             for key, value in avg_losses.items():
                 trainer.history[key].append(value)
 
-            training_state.loss_history.append({"epoch": epoch + 1, **avg_losses})
-
-            # Save checkpoint periodically (and always on last epoch)
+            # Save checkpoint periodically
             if (epoch + 1) % 10 == 0 or (epoch + 1) == request.epochs:
                 save_dir = "checkpoints"
                 os.makedirs(save_dir, exist_ok=True)
                 trainer.save_checkpoint(save_dir, epoch + 1)
 
-            # Yield control to event loop
-            await asyncio.sleep(0)
+            await asyncio.sleep(0)  # Yield to event loop
 
         # Export to ONNX
         checkpoint_files = list(Path("checkpoints").glob("checkpoint_epoch_*.pt"))
