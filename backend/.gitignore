@@ -29,3 +29,6 @@ ENV/
 # Byte-compiled / optimized / DLL files
 data/audio/*
 data/cache/*
+
+# Test output
+tests/fixtures/*.json
