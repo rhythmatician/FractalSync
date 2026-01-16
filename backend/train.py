@@ -21,7 +21,10 @@ import logging
 def main():
     parser = argparse.ArgumentParser(description="Train audio-to-visual model")
     parser.add_argument(
-        "--data-dir", type=str, required=True, help="Directory containing audio files"
+        "--data-dir",
+        type=str,
+        default="data/audio",
+        help="Directory containing audio files",
     )
     parser.add_argument(
         "--epochs", type=int, default=100, help="Number of training epochs"
@@ -44,6 +47,7 @@ def main():
         help="Include acceleration (second-order derivative) features",
     )
     parser.add_argument(
+        "--save-dir",
         type=str,
         default="checkpoints",
         help="Directory to save checkpoints",
@@ -59,6 +63,29 @@ def main():
     )
     parser.add_argument(
         "--checkpoint", type=str, default=None, help="Path to checkpoint to resume from"
+    )
+    parser.add_argument(
+        "--no-gpu-rendering",
+        action="store_true",
+        help="Disable GPU-accelerated Julia rendering (use original CPU rendering)",
+    )
+    parser.add_argument(
+        "--julia-resolution",
+        type=int,
+        default=64,
+        help="Julia set rendering resolution (default: 64, original: 128)",
+    )
+    parser.add_argument(
+        "--julia-max-iter",
+        type=int,
+        default=50,
+        help="Julia set max iterations (default: 50, original: 100)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="Number of data loader workers (default: 4, set to 0 to disable)",
     )
 
     args = parser.parse_args()
@@ -96,12 +123,35 @@ def main():
         if "feature_std" in checkpoint:
             feature_extractor.feature_std = checkpoint["feature_std"]
 
+    # Create Julia renderer (GPU or original CPU)
+    julia_renderer = None
+    if not args.no_gpu_rendering:
+        from src.julia_gpu import GPUJuliaRenderer
+
+        julia_renderer = GPUJuliaRenderer(
+            width=args.julia_resolution,
+            height=args.julia_resolution,
+        )
+        logging.info(
+            f"Using GPU Julia renderer: {args.julia_resolution}x{args.julia_resolution}, "
+            f"max_iter={args.julia_max_iter}"
+        )
+    else:
+        logging.info(
+            f"Using original CPU rendering: {args.julia_resolution}x{args.julia_resolution}, "
+            f"max_iter={args.julia_max_iter}"
+        )
+
     # Create trainer
     trainer = Trainer(
         model=model,
         feature_extractor=feature_extractor,
         visual_metrics=visual_metrics,
         learning_rate=args.learning_rate,
+        julia_renderer=julia_renderer,
+        julia_resolution=args.julia_resolution,
+        julia_max_iter=args.julia_max_iter,
+        num_workers=args.num_workers,
     )
 
     # Load dataset
