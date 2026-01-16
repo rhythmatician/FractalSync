@@ -50,7 +50,6 @@ def trained_model():
 
     model = PhysicsAudioToVisualModel(
         window_frames=10,
-        num_features_per_frame=6,  # 6 base features
     )
 
     model.load_state_dict(checkpoint["model_state_dict"])

@@ -273,7 +273,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         the prior batch (size 32) was used in smoothness_loss.
         """
         from src.audio_features import AudioFeatureExtractor
-        from src.model import PhysicsAudioToVisualModel
+        from src.physics_model import PhysicsAudioToVisualModel
         from src.physics_trainer import PhysicsTrainer
         from src.visual_metrics import VisualMetrics
         from torch.utils.data import DataLoader, TensorDataset
@@ -329,7 +329,7 @@ class TestEndToEndPipeline(unittest.TestCase):
     def test_partial_batch_handling_with_velocity_loss(self):
         """Test that trainer handles partial batches correctly with velocity loss."""
         from src.audio_features import AudioFeatureExtractor
-        from src.model import PhysicsAudioToVisualModel
+        from src.physics_model import PhysicsAudioToVisualModel
         from src.physics_trainer import PhysicsTrainer
         from src.visual_metrics import VisualMetrics
         from torch.utils.data import DataLoader, TensorDataset
