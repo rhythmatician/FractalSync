@@ -44,6 +44,7 @@ def main():
         help="Include acceleration (second-order derivative) features",
     )
     parser.add_argument(
+        "--save-dir",
         type=str,
         default="checkpoints",
         help="Directory to save checkpoints",

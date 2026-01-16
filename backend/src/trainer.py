@@ -17,6 +17,7 @@ from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
 from .velocity_predictor import VelocityLoss
+from .julia_gpu import GPUJuliaRenderer
 
 
 # Configure structured JSON logging
@@ -139,6 +140,7 @@ class Trainer:
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         correlation_weights: Optional[Dict[str, float]] = None,
+        julia_renderer: Optional[GPUJuliaRenderer] = None,
     ):
         """
         Initialize trainer.
@@ -150,11 +152,13 @@ class Trainer:
             device: Device to train on
             learning_rate: Learning rate
             correlation_weights: Weights for different correlation losses
+            julia_renderer: GPU Julia renderer (auto-initialized if None)
         """
         self.model = model.to(device)
         self.feature_extractor = feature_extractor
         self.visual_metrics = visual_metrics
         self.device = device
+        self.julia_renderer = julia_renderer or GPUJuliaRenderer(width=64, height=64)
 
         # Default correlation weights
         if correlation_weights is None:
@@ -173,7 +177,7 @@ class Trainer:
         self.smoothness_loss = SmoothnessLoss(
             weight=correlation_weights.get("smoothness", 0.1)
         )
-        
+
         # Velocity loss (always enabled for smooth transitions)
         self.velocity_loss = VelocityLoss(
             weight=correlation_weights.get("velocity", 0.05)
@@ -310,13 +314,12 @@ class Trainer:
 
                 prev_image = None
                 for i in range(actual_batch_size):  # Use actual batch size
-                    # Render Julia set
-                    image = self.visual_metrics.render_julia_set(
+                    # Render Julia set (GPU-accelerated, 64x64 for speed)
+                    image = self.julia_renderer.render(
                         seed_real=float(julia_real[i]),
                         seed_imag=float(julia_imag[i]),
-                        width=128,  # Small for training speed
-                        height=128,
                         zoom=float(zoom[i]),
+                        max_iter=50,
                     )
 
                     # Compute metrics
@@ -396,7 +399,9 @@ class Trainer:
                         # This handles the case where the current batch is smaller (partial batch)
                         previous_params_slice = previous_params[:current_batch_size]
                         if previous_velocity is not None:
-                            previous_velocity_slice = previous_velocity[:current_batch_size]
+                            previous_velocity_slice = previous_velocity[
+                                :current_batch_size
+                            ]
                         else:
                             previous_velocity_slice = None
                     else:
@@ -406,10 +411,10 @@ class Trainer:
                     smoothness = self.smoothness_loss(
                         visual_params, previous_params_slice
                     )
-                    
+
                     # Velocity loss (jerk penalty for smooth transitions)
                     velocity_loss_value = self.velocity_loss(
-                        visual_params, 
+                        visual_params,
                         previous_params_slice,
                         previous_velocity_slice,
                     )
@@ -449,7 +454,7 @@ class Trainer:
                 total_velocity += velocity_loss_value.item()
 
                 n_batches += 1
-                
+
                 # Update previous state for next iteration
                 # Store the slice used for comparison so we can compute velocity
                 if previous_params is not None:
@@ -457,7 +462,7 @@ class Trainer:
                     previous_velocity = current_velocity.detach()
                 else:
                     previous_velocity = None
-                    
+
                 previous_params = visual_params.detach()
 
                 if batch_idx % 10 == 0:
@@ -533,7 +538,9 @@ class Trainer:
             f"shape={sample_tensor.shape if hasattr(sample_tensor, 'shape') else 'N/A'}"
         )
 
-        dataloader = DataLoader(tensor_dataset, batch_size=batch_size, shuffle=True)
+        dataloader = DataLoader(
+            tensor_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+        )
 
         # Test first batch
         first_batch = next(iter(dataloader))
