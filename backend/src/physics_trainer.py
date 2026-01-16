@@ -135,6 +135,142 @@ class AccelerationSmoothness(nn.Module):
         return self.weight * torch.mean(acceleration**2)
 
 
+class BoundaryProximityLoss(nn.Module):
+    """Reward Julia parameter c being near Mandelbrot set boundary."""
+
+    def __init__(
+        self, weight: float = 0.1, target_iters: int = 30, max_iters: int = 100
+    ):
+        super().__init__()
+        self.weight = weight
+        self.target_iters = (
+            target_iters  # Optimal iterations for interesting Julia sets
+        )
+        self.max_iters = max_iters
+
+    def mandelbrot_escape_time(
+        self, c_real: torch.Tensor, c_imag: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute Mandelbrot escape time for each c value.
+
+        Args:
+            c_real: Real part of c (batch_size,)
+            c_imag: Imaginary part of c (batch_size,)
+
+        Returns:
+            Number of iterations before escape (batch_size,)
+        """
+        z_real = torch.zeros_like(c_real)
+        z_imag = torch.zeros_like(c_imag)
+        iterations = torch.zeros_like(c_real)
+
+        # Track which points are still active (not yet escaped)
+        active = torch.ones_like(c_real, dtype=torch.bool)
+
+        for i in range(self.max_iters):
+            # Only compute for active points
+            if not active.any():
+                break  # Early exit: all points have escaped
+
+            # z^2 + c
+            z_real_new = z_real * z_real - z_imag * z_imag + c_real
+            z_imag_new = 2 * z_real * z_imag + c_imag
+
+            # Check escape condition |z| > 2
+            magnitude_sq = z_real_new * z_real_new + z_imag_new * z_imag_new
+            escaped = magnitude_sq > 4.0
+
+            # Update iterations for points that just escaped
+            just_escaped = escaped & active
+            iterations = torch.where(
+                just_escaped,
+                torch.tensor(i + 1, dtype=torch.float32, device=c_real.device),
+                iterations,
+            )
+
+            # Mark escaped points as inactive
+            active = active & ~escaped
+
+            z_real = z_real_new
+            z_imag = z_imag_new
+
+        # Points that never escaped get max_iters
+        never_escaped = iterations == 0
+        iterations = torch.where(
+            never_escaped,
+            torch.tensor(self.max_iters, dtype=torch.float32, device=c_real.device),
+            iterations,
+        )
+
+        return iterations
+
+    def forward(self, c_real: torch.Tensor, c_imag: torch.Tensor) -> torch.Tensor:
+        """
+        Compute boundary proximity loss.
+
+        Rewards c values that are near the Mandelbrot boundary (escape in 10-50 iterations).
+        Penalizes c values deep inside the set (>50 iters) or far outside (<10 iters).
+
+        Args:
+            c_real: Real part of Julia parameter (batch_size,)
+            c_imag: Imaginary part of Julia parameter (batch_size,)
+
+        Returns:
+            Loss value (lower is better, 0 = at target boundary)
+        """
+        escape_iters = self.mandelbrot_escape_time(c_real, c_imag)
+
+        # Distance from target iteration count
+        distance = torch.abs(escape_iters - self.target_iters)
+
+        # Normalize by target_iters so loss is scale-invariant
+        normalized_distance = distance / self.target_iters
+
+        return self.weight * torch.mean(normalized_distance)
+
+
+class DirectionalConsistencyLoss(nn.Module):
+    """Penalize velocity direction flipping (oscillation)."""
+
+    def __init__(self, weight: float = 0.1):
+        super().__init__()
+        self.weight = weight
+
+    def forward(
+        self, current_velocity: torch.Tensor, previous_velocity: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute directional consistency loss.
+
+        Penalizes when velocity direction changes (dot product < 0).
+        Encourages smooth exploration rather than back-and-forth oscillation.
+
+        Args:
+            current_velocity: Current velocity (batch_size, 2)
+            previous_velocity: Previous velocity (batch_size, 2)
+
+        Returns:
+            Loss value (0 = same direction, higher = opposite directions)
+        """
+        # Normalize velocities to unit vectors
+        current_norm = current_velocity / (
+            torch.norm(current_velocity, dim=1, keepdim=True) + 1e-8
+        )
+        previous_norm = previous_velocity / (
+            torch.norm(previous_velocity, dim=1, keepdim=True) + 1e-8
+        )
+
+        # Compute dot product (1 = same direction, -1 = opposite)
+        dot_product = torch.sum(current_norm * previous_norm, dim=1)
+
+        # Penalize negative dot products (direction flips)
+        # ReLU ensures we only penalize flips, not consistent motion
+        direction_flip_penalty = torch.relu(-dot_product)
+
+        return self.weight * torch.mean(direction_flip_penalty)
+
+
 class PhysicsTrainer:
     """Trainer for physics-based models with curriculum learning."""
 
@@ -191,6 +327,8 @@ class PhysicsTrainer:
                 "smoothness": 0.1,
                 "acceleration_smoothness": 0.05,
                 "velocity_loss": 1.0,
+                "boundary_proximity": 0.2,
+                "directional_consistency": 0.15,
             }
         self.correlation_weights = correlation_weights
 
@@ -205,6 +343,14 @@ class PhysicsTrainer:
         self.acceleration_smoothness = AccelerationSmoothness(
             weight=correlation_weights.get("acceleration_smoothness", 0.05)
         )
+        self.boundary_proximity_loss = BoundaryProximityLoss(
+            weight=correlation_weights.get("boundary_proximity", 0.2),
+            target_iters=30,
+            max_iters=100,
+        )
+        self.directional_consistency_loss = DirectionalConsistencyLoss(
+            weight=correlation_weights.get("directional_consistency", 0.15)
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -218,6 +364,8 @@ class PhysicsTrainer:
             "loss": [],
             "velocity_loss": [],
             "acceleration_smoothness": [],
+            "boundary_proximity_loss": [],
+            "directional_consistency_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
             "silence_stillness_loss": [],
@@ -268,6 +416,8 @@ class PhysicsTrainer:
         total_loss = 0.0
         total_velocity_loss = 0.0
         total_acceleration_smoothness = 0.0
+        total_boundary_proximity = 0.0
+        total_directional_consistency = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
         total_silence_stillness = 0.0
@@ -501,8 +651,19 @@ class PhysicsTrainer:
                     acceleration_smoothness_val = self.acceleration_smoothness(
                         predicted_velocity[:min_size], previous_velocity[:min_size]
                     )
+
+                    # Directional consistency (penalize oscillation)
+                    directional_consistency_val = self.directional_consistency_loss(
+                        predicted_velocity[:min_size], previous_velocity[:min_size]
+                    )
                 else:
                     acceleration_smoothness_val = torch.zeros(1, device=self.device)
+                    directional_consistency_val = torch.zeros(1, device=self.device)
+
+                # Boundary proximity (reward c near Mandelbrot boundary)
+                boundary_proximity_val = self.boundary_proximity_loss(
+                    current_positions[:, 0], current_positions[:, 1]
+                )
 
                 # Parameter smoothness (placeholder for future use)
                 smoothness = torch.zeros(1, device=self.device)
@@ -518,6 +679,8 @@ class PhysicsTrainer:
                     * distortion_roughness_loss
                     + current_curriculum_weight * velocity_loss_val
                     + acceleration_smoothness_val
+                    + directional_consistency_val
+                    + boundary_proximity_val
                     + smoothness
                 )
 
@@ -530,6 +693,8 @@ class PhysicsTrainer:
                 total_loss += total_batch_loss.item()
                 total_velocity_loss += velocity_loss_val.item()
                 total_acceleration_smoothness += acceleration_smoothness_val.item()
+                total_boundary_proximity += boundary_proximity_val.item()
+                total_directional_consistency += directional_consistency_val.item()
                 total_timbre_color += timbre_color_loss.item()
                 total_transient_impact += transient_impact_loss.item()
                 total_silence_stillness += silence_stillness_loss.item()
@@ -561,6 +726,8 @@ class PhysicsTrainer:
             "loss": total_loss / n_batches,
             "velocity_loss": total_velocity_loss / n_batches,
             "acceleration_smoothness": total_acceleration_smoothness / n_batches,
+            "boundary_proximity_loss": total_boundary_proximity / n_batches,
+            "directional_consistency_loss": total_directional_consistency / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
             "silence_stillness_loss": total_silence_stillness / n_batches,

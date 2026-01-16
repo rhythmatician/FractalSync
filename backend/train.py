@@ -92,12 +92,6 @@ def main():
         default="cuda" if torch.cuda.is_available() else "cpu",
         help="Device to train on (cuda/cpu)",
     )
-    parser.add_argument(
-        "--export-onnx",
-        action="store_true",
-        help="Export final model to ONNX format",
-    )
-
     # GPU rendering optimizations (commit 75c1a43)
     parser.add_argument(
         "--no-gpu-rendering",
@@ -233,30 +227,30 @@ def main():
     print("Training complete!")
     print("=" * 60)
 
-    # Export to ONNX if requested
-    if args.export_onnx:
-        print("\nExporting model to ONNX format...")
-        os.makedirs(args.save_dir, exist_ok=True)
-        onnx_path = os.path.join(args.save_dir, "model.onnx")
+    # Export to ONNX by default
+    print("\nExporting model to ONNX format...")
+    os.makedirs(args.save_dir, exist_ok=True)
+    onnx_model_filename = "model.onnx"  # FIXME: Use dynamic naming to avoid overwriting
+    onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
-        try:
-            model.eval()
-            export_to_onnx(
-                model=model,
-                input_shape=(1, model.input_dim),
-                output_path=onnx_path,
-                feature_mean=feature_extractor.feature_mean,
-                feature_std=feature_extractor.feature_std,
-                metadata={
-                    "model_type": "physics",
-                    "output_dim": model.output_dim,
-                    "damping_factor": args.damping_factor,
-                    "speed_scale": args.speed_scale,
-                },
-            )
-            print(f"Model exported to: {onnx_path}")
-        except Exception as e:
-            print(f"Warning: Could not export to ONNX: {e}")
+    try:
+        model.eval()
+        export_to_onnx(
+            model=model,
+            input_shape=(1, model.input_dim),
+            output_path=onnx_path,
+            feature_mean=feature_extractor.feature_mean,
+            feature_std=feature_extractor.feature_std,
+            metadata={
+                "model_type": "physics",
+                "output_dim": model.output_dim,
+                "damping_factor": args.damping_factor,
+                "speed_scale": args.speed_scale,
+            },
+        )
+        print(f"Model exported to: {onnx_path}")
+    except Exception as e:
+        print(f"Warning: Could not export to ONNX: {e}")
 
     print(
         "\nTraining history saved to:",

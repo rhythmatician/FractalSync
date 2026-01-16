@@ -92,7 +92,7 @@ Training pipeline with curriculum learning support.
 
 **Loss Function:**
 ```
-Total Loss = 
+Total Loss =
     timbre_color_loss +
     transient_impact_loss +
     silence_stillness_loss +
@@ -143,8 +143,7 @@ python train_physics.py \
     --curriculum-weight 2.0 \
     --curriculum-decay 0.9 \
     --damping-factor 0.95 \
-    --speed-scale 0.1 \
-    --export-onnx
+    --speed-scale 0.1
 
 # Train without curriculum (pure correlation learning)
 python train_physics.py \
@@ -172,7 +171,6 @@ python train_physics.py \
 - `--speed-scale`: Velocity magnitude scaling (default: 0.1)
 - `--save-dir`: Checkpoint directory (default: models/physics)
 - `--device`: Training device (cuda/cpu)
-- `--export-onnx`: Export final model to ONNX
 
 ## Physics Formulation
 
