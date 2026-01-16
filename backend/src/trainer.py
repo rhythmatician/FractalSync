@@ -141,6 +141,9 @@ class Trainer:
         learning_rate: float = 1e-4,
         correlation_weights: Optional[Dict[str, float]] = None,
         julia_renderer: Optional[GPUJuliaRenderer] = None,
+        julia_resolution: int = 64,
+        julia_max_iter: int = 50,
+        num_workers: int = 4,
     ):
         """
         Initialize trainer.
@@ -152,13 +155,19 @@ class Trainer:
             device: Device to train on
             learning_rate: Learning rate
             correlation_weights: Weights for different correlation losses
-            julia_renderer: GPU Julia renderer (auto-initialized if None)
+            julia_renderer: GPU Julia renderer (None to use original CPU rendering)
+            julia_resolution: Resolution for Julia set rendering
+            julia_max_iter: Max iterations for Julia set rendering
+            num_workers: Number of DataLoader workers for parallel loading
         """
         self.model = model.to(device)
         self.feature_extractor = feature_extractor
         self.visual_metrics = visual_metrics
         self.device = device
-        self.julia_renderer = julia_renderer or GPUJuliaRenderer(width=64, height=64)
+        self.julia_renderer = julia_renderer
+        self.julia_resolution = julia_resolution
+        self.julia_max_iter = julia_max_iter
+        self.num_workers = num_workers
 
         # Default correlation weights
         if correlation_weights is None:
@@ -314,13 +323,24 @@ class Trainer:
 
                 prev_image = None
                 for i in range(actual_batch_size):  # Use actual batch size
-                    # Render Julia set (GPU-accelerated, 64x64 for speed)
-                    image = self.julia_renderer.render(
-                        seed_real=float(julia_real[i]),
-                        seed_imag=float(julia_imag[i]),
-                        zoom=float(zoom[i]),
-                        max_iter=50,
-                    )
+                    # Render Julia set (GPU if enabled, otherwise original CPU)
+                    if self.julia_renderer:
+                        image = self.julia_renderer.render(
+                            seed_real=float(julia_real[i]),
+                            seed_imag=float(julia_imag[i]),
+                            zoom=float(zoom[i]),
+                            max_iter=self.julia_max_iter,
+                        )
+                    else:
+                        # Original CPU rendering via visual_metrics
+                        image = self.visual_metrics.render_julia_set(
+                            seed_real=float(julia_real[i]),
+                            seed_imag=float(julia_imag[i]),
+                            width=self.julia_resolution,
+                            height=self.julia_resolution,
+                            zoom=float(zoom[i]),
+                            max_iter=self.julia_max_iter,
+                        )
 
                     # Compute metrics
                     metrics = self.visual_metrics.compute_all_metrics(
@@ -539,7 +559,10 @@ class Trainer:
         )
 
         dataloader = DataLoader(
-            tensor_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+            tensor_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
         )
 
         # Test first batch
