@@ -69,6 +69,7 @@ class AudioDataset:
                     seen_paths.add(normalized_path)
 
             for path in self.data_dir.glob(f"*{ext.upper()}"):
+                normalized_path = path.resolve()
                 if normalized_path not in seen_paths:
                     audio_files.append(path)
                     seen_paths.add(normalized_path)
