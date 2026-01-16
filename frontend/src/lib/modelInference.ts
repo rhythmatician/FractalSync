@@ -37,6 +37,9 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
+  // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
+  private useAudioReactivePostProcessing: boolean = true;
+  
   // Performance tracking
   private inferenceTimings: number[] = [];
   private maxTimingHistory: number = 100;
@@ -47,6 +50,16 @@ export class ModelInference {
     inferenceTime: 0,
     postProcessingTime: 0
   };
+
+  /**
+   * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
+   * When enabled, mixes model outputs with raw audio features for dynamic visuals.
+   * When disabled, uses only model outputs with basic normalization.
+   */
+  setAudioReactivePostProcessing(enabled: boolean): void {
+    this.useAudioReactivePostProcessing = enabled;
+    console.log(`[ModelInference] Audio-reactive post-processing ${enabled ? 'enabled' : 'disabled'}`);
+  }
 
   /**
    * Load ONNX model and metadata.
@@ -122,36 +135,7 @@ export class ModelInference {
     // Post-processing
     const postStartTime = performance.now();
 
-    // ENHANCED: Use raw audio features to add dynamic variation for undertrained models
-    // Extract some key audio features from the input (assuming 6 features × window_frames)
-    const numFeatures = 6;
-    const windowFrames = Math.floor(features.length / numFeatures);
-
-    if (features.length % numFeatures !== 0) {
-      console.warn(
-        `[modelInference] features.length (${features.length}) is not a multiple of numFeatures (${numFeatures}). ` +
-          `Using ${windowFrames} full frames.`
-      );
-    }
-    
-    // Average each feature type across the window
-    let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
-    for (let i = 0; i < windowFrames; i++) {
-      avgCentroid += features[i * numFeatures + 0];
-      avgFlux += features[i * numFeatures + 1];
-      avgRMS += features[i * numFeatures + 2];
-      avgZCR += features[i * numFeatures + 3];
-      avgOnset += features[i * numFeatures + 4];
-      avgRolloff += features[i * numFeatures + 5];
-    }
-    avgCentroid /= windowFrames;
-    avgFlux /= windowFrames;
-    avgRMS /= windowFrames;
-    avgZCR /= windowFrames;
-    avgOnset /= windowFrames;
-    avgRolloff /= windowFrames;
-
-    // Apply post-processing based on model output + audio features
+    // Apply post-processing based on model output
     const visualParams: VisualParameters = {
       juliaReal: params[0],
       juliaImag: params[1],
@@ -162,25 +146,71 @@ export class ModelInference {
       speed: params[6]
     };
 
-    // Julia parameters: Mix model output with audio features for dynamics
-    // Use spectral centroid and flux to influence julia params
-    const centroidInfluence = (avgCentroid - 0.5) * 0.4; // Range: -0.2 to +0.2
-    const fluxInfluence = (avgFlux - 0.5) * 0.4;
-    visualParams.juliaReal = Math.max(-0.8, Math.min(0.8, params[0] * 0.2 + centroidInfluence));
-    visualParams.juliaImag = Math.max(-0.8, Math.min(0.8, params[1] * 0.2 + fluxInfluence));
-    
-    // Color: Map RMS (loudness) to hue cycling, onset to saturation
-    visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0; // Cycle hue with loudness
-    visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)); // Boost sat on onsets
-    visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)); // Brightness from loudness
-    
-    // Zoom: Use rolloff and RMS for dynamic zooming
-    const zoomBase = 1.2 + avgRolloff * 0.8; // 1.2 to 2.0
-    const zoomVariation = avgRMS * 0.5; // 0 to 0.5
-    visualParams.zoom = Math.max(0.8, Math.min(2.5, zoomBase + zoomVariation));
-    
-    // Speed: Increase with flux and onset energy
-    visualParams.speed = Math.max(0.3, Math.min(1.2, 0.5 + avgFlux * 0.3 + avgOnset * 0.4));
+    if (this.useAudioReactivePostProcessing) {
+      // AUDIO-REACTIVE POST-PROCESSING (MR #8 / commit 75c1a43)
+      // Use raw audio features to add dynamic variation for undertrained models
+      // Extract some key audio features from the input (assuming 6 features × window_frames)
+      const numFeatures = 6;
+      const windowFrames = Math.floor(features.length / numFeatures);
+
+      if (features.length % numFeatures !== 0) {
+        console.warn(
+          `[modelInference] features.length (${features.length}) is not a multiple of numFeatures (${numFeatures}). ` +
+            `Using ${windowFrames} full frames.`
+        );
+      }
+      
+      // Average each feature type across the window
+      let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
+      for (let i = 0; i < windowFrames; i++) {
+        avgCentroid += features[i * numFeatures + 0];
+        avgFlux += features[i * numFeatures + 1];
+        avgRMS += features[i * numFeatures + 2];
+        avgZCR += features[i * numFeatures + 3];
+        avgOnset += features[i * numFeatures + 4];
+        avgRolloff += features[i * numFeatures + 5];
+      }
+      avgCentroid /= windowFrames;
+      avgFlux /= windowFrames;
+      avgRMS /= windowFrames;
+      avgZCR /= windowFrames;
+      avgOnset /= windowFrames;
+      avgRolloff /= windowFrames;
+
+      // Julia parameters: Mix model output with audio features for dynamics
+      // Use spectral centroid and flux to influence julia params
+      const centroidInfluence = (avgCentroid - 0.5) * 0.4; // Range: -0.2 to +0.2
+      const fluxInfluence = (avgFlux - 0.5) * 0.4;
+      visualParams.juliaReal = Math.max(-0.8, Math.min(0.8, params[0] * 0.2 + centroidInfluence));
+      visualParams.juliaImag = Math.max(-0.8, Math.min(0.8, params[1] * 0.2 + fluxInfluence));
+      
+      // Color: Map RMS (loudness) to hue cycling, onset to saturation
+      visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0; // Cycle hue with loudness
+      visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)); // Boost sat on onsets
+      visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)); // Brightness from loudness
+      
+      // Zoom: Use rolloff and RMS for dynamic zooming
+      const zoomBase = 1.2 + avgRolloff * 0.8; // 1.2 to 2.0
+      const zoomVariation = avgRMS * 0.5; // 0 to 0.5
+      visualParams.zoom = Math.max(0.8, Math.min(2.5, zoomBase + zoomVariation));
+      
+      // Speed: Increase with flux and onset energy
+      visualParams.speed = Math.max(0.3, Math.min(1.2, 0.5 + avgFlux * 0.3 + avgOnset * 0.4));
+    } else {
+      // ORIGINAL POST-PROCESSING (pre-MR #8)
+      // Scale down undertrained model outputs and add variation
+      visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
+      visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
+      
+      // Color: enforce minimum saturation
+      visualParams.colorHue = visualParams.colorHue % 1.0;
+      visualParams.colorSat = Math.max(0.5, Math.min(1, visualParams.colorSat * 0.8 + 0.5));
+      visualParams.colorBright = Math.max(0.6, Math.min(0.9, visualParams.colorBright * 0.5 + 0.5));
+      
+      // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
+      visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
+      visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
+    }
 
     const postTime = performance.now() - postStartTime;
     const totalTime = performance.now() - totalStartTime;

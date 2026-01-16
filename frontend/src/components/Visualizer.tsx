@@ -19,6 +19,7 @@ export function Visualizer() {
   const [showMetrics, setShowMetrics] = useState(false);
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(true);
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -291,6 +292,29 @@ export function Visualizer() {
             }}
           >
             {showMetrics ? 'Hide' : 'Show'} Metrics
+          </button>
+          
+          <button
+            onClick={() => {
+              const newState = !audioReactiveEnabled;
+              setAudioReactiveEnabled(newState);
+              if (modelRef.current) {
+                modelRef.current.setAudioReactivePostProcessing(newState);
+              }
+            }}
+            style={{
+              padding: '5px 10px',
+              background: audioReactiveEnabled ? '#4CAF50' : '#666',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginLeft: '10px'
+            }}
+            title="Toggle audio-reactive post-processing (MR #8 / commit 75c1a43)"
+          >
+            Audio-Reactive: {audioReactiveEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
 
