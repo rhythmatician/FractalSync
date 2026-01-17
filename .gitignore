@@ -28,3 +28,4 @@ data/cache/
 *.onnx
 *.onnx_metadata.json
 
+julia_over_time.png
