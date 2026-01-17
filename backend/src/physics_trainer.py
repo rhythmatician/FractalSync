@@ -308,9 +308,9 @@ class DirectionalConsistencyLoss(nn.Module):
 
 
 class AudioDrivenMomentumLoss(nn.Module):
-    """Encourage velocity magnitude to respond to audio energy (loudness/activity)."""
+    """ENFORCE: Loud audio = large movement, silence = stillness."""
 
-    def __init__(self, weight: float = 0.1):
+    def __init__(self, weight: float = 5.0):
         super().__init__()
         self.weight = weight
 
@@ -320,28 +320,29 @@ class AudioDrivenMomentumLoss(nn.Module):
         """
         Compute audio-driven momentum loss.
 
-        During silence (low audio energy), velocity can decay to zero.
-        During loud/active parts (high energy), velocity should be high.
-        Penalizes misalignment between velocity and audio energy.
+        CRITICAL: This is the PRIMARY driver of motion.
+        - High energy → MUST have high velocity
+        - Low energy → velocity should approach zero
 
         Args:
             velocity_magnitude: Magnitude of velocity vectors (batch_size,)
             audio_energy: Audio energy proxy (e.g., RMS energy) (batch_size,)
 
         Returns:
-            Loss value encouraging velocity to follow audio dynamics
+            Loss heavily penalizing velocity that doesn't match audio energy
         """
-        # Normalize each to [0, 1] independently to handle different scales
-        vel_min, vel_max = velocity_magnitude.min(), velocity_magnitude.max()
-        vel_range = vel_max - vel_min + 1e-8
-        vel_normalized = (velocity_magnitude - vel_min) / vel_range
-
+        # Normalize energy to [0, 1]
         energy_min, energy_max = audio_energy.min(), audio_energy.max()
         energy_range = energy_max - energy_min + 1e-8
         energy_normalized = (audio_energy - energy_min) / energy_range
 
-        # Penalize difference between normalized velocity and audio energy
-        mismatch = torch.abs(vel_normalized - energy_normalized)
+        # Target velocity should scale with energy
+        # Loud audio (energy=1) should produce velocity around 0.5 (large movement)
+        # Quiet audio (energy=0) should produce velocity near 0
+        target_velocity = energy_normalized * 0.5
+
+        # Heavily penalize mismatch - this MUST be satisfied
+        mismatch = (velocity_magnitude - target_velocity) ** 2
 
         return self.weight * torch.mean(mismatch)
 
@@ -434,14 +435,14 @@ class PhysicsTrainer:
             "transient_impact": 1.0,
             "silence_stillness": 1.0,
             "distortion_roughness": 1.0,
-            "smoothness": 0.1,
-            "acceleration_smoothness": 0.05,
-            "velocity_loss": 1.0,
-            "boundary_proximity": 0.05,
-            "directional_consistency": 0.15,
-            "audio_driven_momentum": 0.1,
-            "energy_velocity_floor": 0.1,
-            "exploration_variance": 1.0,
+            "smoothness": 0.01,  # Minimal - only prevents wild frame-to-frame jumps
+            "acceleration_smoothness": 0.01,  # Minimal - only prevents jerk
+            "velocity_loss": 0.5,  # Moderate - teach velocity prediction
+            "boundary_proximity": 0.05,  # Weak - exploration > boundary adherence
+            "directional_consistency": 0.02,  # Very weak - allow direction changes
+            "audio_driven_momentum": 10.0,  # DOMINANT - loud = move, quiet = still
+            "energy_velocity_floor": 0.0,  # Disabled - audio_momentum handles this
+            "exploration_variance": 5.0,  # Strong - force spatial spread
         }
         if correlation_weights is None:
             correlation_weights = default_correlation_weights
@@ -597,6 +598,7 @@ class PhysicsTrainer:
                 position=1,
                 leave=False,
                 desc="  Batches",
+                dynamic_ncols=True,
             ):
                 logger.debug(
                     f"Got batch {batch_idx}: type={type(batch_item).__name__}, "
@@ -956,7 +958,9 @@ class PhysicsTrainer:
             f"Curriculum learning: {self.use_curriculum}, decay: {curriculum_decay}"
         )
 
-        for epoch in tqdm(range(epochs), desc="Training Epochs", position=0):
+        for epoch in tqdm(
+            range(epochs), desc="Training Epochs", position=0, dynamic_ncols=True
+        ):
             avg_losses = self.train_epoch(dataloader, epoch, curriculum_decay)
 
             # Update history
