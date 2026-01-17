@@ -260,6 +260,10 @@ def main():
                 "output_dim": model.output_dim,
                 "damping_factor": args.damping_factor,
                 "speed_scale": args.speed_scale,
+                "epoch": args.epochs,
+                "window_frames": args.window_frames,
+                "num_features_per_frame": 6,
+                "input_dim": model.input_dim,
             },
         )
         print(f"Model exported to: {onnx_path}")

@@ -1,5 +1,6 @@
 """Utility functions for managing trained models."""
 
+import json
 import shutil
 from pathlib import Path
 from typing import Optional, Tuple
@@ -120,6 +121,18 @@ if __name__ == "__main__":
         model_path, metadata_path = result
         print(f"Latest model: {model_path}")
         print(f"Metadata: {metadata_path}")
+
+        # Display epoch info if available
+        if metadata_path:
+            try:
+                with open(metadata_path, "r") as f:
+                    metadata = json.load(f)
+                    if "epoch" in metadata:
+                        print(f"  → Trained for {metadata['epoch']} epoch(s)")
+                    if "window_frames" in metadata:
+                        print(f"  → Window frames: {metadata['window_frames']}")
+            except Exception:
+                pass
 
         print(f"\nCopying to frontend ({frontend_dir})...")
         if copy_latest_to_frontend(checkpoint_dir, frontend_dir):
