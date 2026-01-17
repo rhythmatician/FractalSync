@@ -8,6 +8,8 @@ Usage:
 import argparse
 import os
 import sys
+import subprocess
+from datetime import datetime
 
 import torch
 
@@ -241,9 +243,21 @@ def main():
     os.makedirs(args.save_dir, exist_ok=True)
 
     # Use dynamic naming based on configuration to avoid overwriting
-    from datetime import datetime
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    iso_timestamp = datetime.now().isoformat()
+
+    # Get git commit hash
+    git_hash = "unknown"
+    try:
+        git_hash = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception as e:
+        print(f"Warning: Could not get git hash: {e}")
+
     onnx_model_filename = f"model_physics_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
@@ -264,6 +278,8 @@ def main():
                 "window_frames": args.window_frames,
                 "num_features_per_frame": 6,
                 "input_dim": model.input_dim,
+                "timestamp": iso_timestamp,
+                "git_hash": git_hash,
             },
         )
         print(f"Model exported to: {onnx_path}")

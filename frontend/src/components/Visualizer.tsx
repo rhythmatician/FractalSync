@@ -376,6 +376,14 @@ export function Visualizer() {
               {modelMetadata.window_frames && <span> | Window: {modelMetadata.window_frames}</span>}
               {modelMetadata.input_dim && <span> | Input: {modelMetadata.input_dim}</span>}
               {modelMetadata.output_dim && <span> | Output: {modelMetadata.output_dim}</span>}
+              {modelMetadata.timestamp && (
+                <span> | {new Date(modelMetadata.timestamp).toLocaleString()}</span>
+              )}
+              {modelMetadata.git_hash && (
+                <span style={{ marginLeft: '10px', color: '#88ff88' }}>
+                  #{modelMetadata.git_hash.substring(0, 8)}
+                </span>
+              )}
             </div>
             <button
               onClick={() => setShowModelInfo(false)}

@@ -131,6 +131,11 @@ if __name__ == "__main__":
                         print(f"  → Trained for {metadata['epoch']} epoch(s)")
                     if "window_frames" in metadata:
                         print(f"  → Window frames: {metadata['window_frames']}")
+                    if "timestamp" in metadata:
+                        print(f"  → Timestamp: {metadata['timestamp']}")
+                    if "git_hash" in metadata:
+                        git_short = metadata["git_hash"][:8]
+                        print(f"  → Git commit: {git_short}")
             except Exception:
                 pass
 

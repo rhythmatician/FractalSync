@@ -21,6 +21,11 @@ export interface ModelMetadata {
   parameter_ranges: Record<string, [number, number]>;
   feature_mean?: number[];
   feature_std?: number[];
+  epoch?: number;
+  window_frames?: number;
+  input_dim?: number;
+  timestamp?: string;
+  git_hash?: string;
 }
 
 export interface PerformanceMetrics {
