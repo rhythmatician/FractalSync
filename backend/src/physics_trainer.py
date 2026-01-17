@@ -515,25 +515,34 @@ class PhysicsTrainer:
                     acceleration_smoothness_val = torch.zeros(1, device=self.device)
 
                 # Boundary crossing loss (reward crossing in sync with transitions)
-                # Save previous positions for next iteration
-                prev_positions = (
-                    current_positions.clone().detach()
-                    if batch_idx > 0
-                    else current_positions
-                )
-                
-                # Initialize storage for previous positions if first batch
-                if not hasattr(self, "_prev_positions"):
-                    self._prev_positions = current_positions.clone().detach()
-                
-                boundary_crossing_loss_val = self.boundary_crossing_loss(
-                    current_positions,
-                    self._prev_positions[:batch_size] if self._prev_positions.size(0) >= batch_size else self._prev_positions,
-                    transition_scores_tensor,
-                )
-                
-                # Update previous positions for next batch
-                self._prev_positions = current_positions.clone().detach()
+                # Use positions from previous batch (across batches, not within batch)
+                if not hasattr(self, "_prev_batch_positions") or batch_idx == 0:
+                    # First batch of epoch: no previous positions
+                    self._prev_batch_positions = current_positions.clone().detach()
+                    boundary_crossing_loss_val = torch.zeros(1, device=self.device)
+                else:
+                    # Use previous batch's final positions
+                    # Handle batch size mismatch (last batch may be smaller)
+                    prev_batch_size = self._prev_batch_positions.size(0)
+                    curr_batch_size = current_positions.size(0)
+                    
+                    if prev_batch_size >= curr_batch_size:
+                        # Use last N positions from previous batch
+                        prev_positions_for_loss = self._prev_batch_positions[-curr_batch_size:]
+                    else:
+                        # Previous batch was smaller - pad with itself
+                        prev_positions_for_loss = self._prev_batch_positions
+                        # Only compute loss for the overlapping portion
+                        curr_batch_size = prev_batch_size
+                    
+                    boundary_crossing_loss_val = self.boundary_crossing_loss(
+                        current_positions[:curr_batch_size],
+                        prev_positions_for_loss,
+                        transition_scores_tensor[:curr_batch_size],
+                    )
+                    
+                    # Update previous positions for next batch
+                    self._prev_batch_positions = current_positions.clone().detach()
 
                 # Parameter smoothness (placeholder for future use)
                 smoothness = torch.zeros(1, device=self.device)

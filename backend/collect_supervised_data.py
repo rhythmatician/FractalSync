@@ -244,7 +244,7 @@ class SupervisedDataCollector:
             help_texts = [
                 "Controls:",
                 "  Mouse: Move c parameter",
-                "  SPACE: Play/Pause",
+                "  SPACE: Play/Pause frames",
                 "  R: Toggle recording",
                 "  S: Save data",
                 "  H: Toggle help",
@@ -397,11 +397,13 @@ class SupervisedDataCollector:
         print("✓ Ready to collect data!")
         print("\nControls:")
         print("  Mouse: Move c parameter")
-        print("  SPACE: Play/Pause audio playback")
+        print("  SPACE: Play/Pause frame advancement")
         print("  R: Toggle recording")
         print("  S: Save collected data")
         print("  H: Toggle help overlay")
-        print("  Q/ESC: Quit\n")
+        print("  Q/ESC: Quit")
+        print("\nNote: Frame advancement simulates audio playback timing.")
+        print("For actual audio playback, use a media player alongside this tool.\n")
 
         # Create window
         window_name = "FractalSync Data Collection"

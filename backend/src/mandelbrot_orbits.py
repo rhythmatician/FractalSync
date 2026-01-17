@@ -321,13 +321,15 @@ def compute_boundary_distance(
         z = z * z + c
 
     # Did not escape - inside the set
-    # Distance to boundary is inverse of final magnitude
+    # Points deep inside have small magnitude, points near boundary are close to threshold
     final_magnitude = abs(z)
-    if final_magnitude >= threshold:
-        return 0.0  # Near boundary
-    else:
-        # Inside set - distance proportional to how bounded it is
+    if final_magnitude < threshold:
+        # Inside set - distance proportional to how far from threshold
+        # Closer to threshold = closer to boundary = lower distance value
         return 1.0 - (final_magnitude / threshold)
+    else:
+        # At or slightly beyond threshold (boundary region)
+        return 0.0
 
 
 def detect_boundary_crossing(
@@ -379,6 +381,9 @@ def compute_crossing_score(
     Higher scores indicate the point is near the boundary, which is
     desirable for interesting Julia set visualizations.
 
+    The scoring function peaks at mid-range distances, rewarding points
+    that are transitioning between inside and outside the set.
+
     Args:
         c_real: Real part of c
         c_imag: Imaginary part of c
@@ -391,7 +396,11 @@ def compute_crossing_score(
 
     # Convert distance to score (inverse relationship)
     # We want high scores for points near the boundary
-    score = 1.0 - abs(distance - 0.5) * 2.0  # Peak at distance=0.5
+    # Optimal distance is around 0.5 (mid-range between inside and outside)
+    OPTIMAL_DISTANCE = 0.5
+    DISTANCE_SCALE = 2.0
+    
+    score = 1.0 - abs(distance - OPTIMAL_DISTANCE) * DISTANCE_SCALE
     score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
 
     return score
