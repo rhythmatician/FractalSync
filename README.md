@@ -70,8 +70,27 @@ python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
 - Speed is modulated by audio loudness (RMS energy)
 - Uses preset Mandelbrot orbits for curriculum learning
 - More physically interpretable and temporally consistent
+- **Boundary-crossing reward**: Rewards crossing Mandelbrot boundary in sync with musical transitions
 
-See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed documentation.
+See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) and [backend/docs/BOUNDARY_CROSSING.md](backend/docs/BOUNDARY_CROSSING.md) for detailed documentation.
+
+### Supervised Data Collection (NEW)
+
+Collect manual trajectory data for supervised learning:
+
+```bash
+cd backend
+python collect_supervised_data.py path/to/audio.mp3 --output-dir data/supervised
+```
+
+**Features:**
+- Interactive Julia set visualization
+- Mouse control of `c` parameter
+- Real-time musical transition indicators
+- Records trajectory with boundary crossing events
+- Saves data in JSON format for training
+
+See [backend/docs/BOUNDARY_CROSSING.md](backend/docs/BOUNDARY_CROSSING.md) for usage details.
 
 The trained model will be exported to ONNX format and can be used by the frontend.
 
@@ -83,6 +102,8 @@ The trained model will be exported to ONNX format and can be used by the fronten
 - Training UI for model management and monitoring
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
+- **NEW**: Boundary-crossing reward system synchronized with musical transitions
+- **NEW**: Supervised data collection tool for manual trajectory recording
 
 
 ## Training parameters:
