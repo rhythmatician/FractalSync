@@ -17,17 +17,21 @@ Controls:
 import json
 import os
 import sys
-from pathlib import Path
-from datetime import datetime
-from typing import List, Tuple
 import threading
 import time
+from datetime import datetime
+from pathlib import Path
+from typing import List, Tuple
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import librosa
+import matplotlib.pyplot as plt
+import numpy as np
 import sounddevice as sd
+from matplotlib.animation import FuncAnimation
+
+# Disable Matplotlib's default "s" keybinding (save figure) so our custom save
+# shortcut writes JSON instead of popping the file dialog.
+plt.rcParams["keymap.save"] = []
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -72,7 +76,8 @@ class MandelbrotRecorder:
         self.feature_extractor = AudioFeatureExtractor(
             sr=sr, hop_length=hop_length, n_fft=n_fft
         )
-        self.features = self.feature_extractor.extract_features(self.y)
+        # extract_features returns (n_features, n_frames), so transpose to (n_frames, n_features)
+        self.features = self.feature_extractor.extract_features(self.y).T
         self.n_frames = self.features.shape[0]
         print(f"Extracted {self.n_frames} frames")
 
@@ -96,9 +101,57 @@ class MandelbrotRecorder:
         # UI state
         self.fig = None
         self.ax = None
+        self.ax_julia = None
         self.mandelbrot_image = None
+        self.julia_image = None
         self.cursor_marker = None
         self.text_info = None
+        self.julia_renderer = None
+        # Default cursor position (center of view) so we can record even before movement
+        self._last_xdata = (self.xmin + self.xmax) / 2
+        self._last_ydata = (self.ymin + self.ymax) / 2
+
+        # Try to initialize GPU renderer
+        try:
+            from src.julia_gpu import GPUJuliaRenderer
+
+            self.julia_renderer = GPUJuliaRenderer(width=256, height=256)
+            print("✓ GPU Julia renderer initialized")
+        except Exception as e:
+            print(f"⚠ GPU Julia renderer unavailable ({e}), will use CPU rendering")
+
+    def julia_set_cpu(
+        self,
+        c_real: float,
+        c_imag: float,
+        width: int = 256,
+        height: int = 256,
+        max_iter: int = 100,
+    ) -> np.ndarray:
+        """Render Julia set on CPU."""
+        # Standard Julia view
+        xmin, xmax = -2.0, 2.0
+        ymin, ymax = -2.0, 2.0
+
+        x = np.linspace(xmin, xmax, width)
+        y = np.linspace(ymin, ymax, height)
+        X, Y = np.meshgrid(x, y)
+        Z = X + 1j * Y
+
+        M = np.zeros_like(Z, dtype=int)
+        c = c_real + 1j * c_imag
+
+        for i in range(max_iter):
+            mask = np.abs(Z) <= 2
+            Z[mask] = Z[mask] ** 2 + c
+            M[mask] = i
+
+        return M
+
+    def render_julia(self, c_real: float, c_imag: float) -> np.ndarray:
+        """Render Julia set using CPU (GPU unreliable on Windows)."""
+        # Always use CPU for reliability
+        return self.julia_set_cpu(c_real, c_imag)
 
     def mandelbrot(
         self,
@@ -127,21 +180,11 @@ class MandelbrotRecorder:
         return M
 
     def pixel_to_complex(self, x_pixel: float, y_pixel: float) -> Tuple[float, float]:
-        """Convert matplotlib pixel coordinates to complex plane."""
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-
-        c_real = xlim[0] + (
-            x_pixel - self.ax.get_position().x0 * self.fig.get_figwidth()
-        ) / (self.ax.get_position().width * self.fig.get_figwidth()) * (
-            xlim[1] - xlim[0]
-        )
-
-        c_imag = ylim[0] + (
-            1.0
-            - (y_pixel - self.ax.get_position().y0 * self.fig.get_figheight())
-            / (self.ax.get_position().height * self.fig.get_figheight())
-        ) * (ylim[1] - ylim[0])
+        """Convert matplotlib pixel coordinates to complex plane (simplified)."""
+        # event.xdata and event.ydata are already in data coordinates!
+        # Just use them directly
+        c_real = float(x_pixel)
+        c_imag = float(y_pixel)
 
         return c_real, c_imag
 
@@ -175,6 +218,16 @@ class MandelbrotRecorder:
             verticalalignment="top",
             bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
         )
+
+        # Render and display Julia set
+        if self.ax_julia is not None:
+            julia_data = self.render_julia(c_real, c_imag)
+            if self.julia_image is None:
+                self.julia_image = self.ax_julia.imshow(
+                    julia_data, cmap="hot", origin="lower"
+                )
+            else:
+                self.julia_image.set_data(julia_data)
 
         self.fig.canvas.draw_idle()
 
@@ -273,23 +326,18 @@ class MandelbrotRecorder:
     def update_animation(self, frame_num):
         """Update for animation loop."""
         if self.recording and self.current_frame_idx < self.n_frames:
-            # Get current cursor position from last event
-            if hasattr(self, "_last_xdata") and hasattr(self, "_last_ydata"):
-                c_real, c_imag = self.pixel_to_complex(
-                    self._last_xdata, self._last_ydata
-                )
+            # Use the last known cursor position (initialized to center)
+            c_real, c_imag = self.pixel_to_complex(self._last_xdata, self._last_ydata)
 
-                # Record this frame
-                self.recorded_frames.append(
-                    {
-                        "frame_idx": self.current_frame_idx,
-                        "audio_features": self.features[
-                            self.current_frame_idx
-                        ].tolist(),
-                        "c_real": float(c_real),
-                        "c_imag": float(c_imag),
-                    }
-                )
+            # Record this frame
+            self.recorded_frames.append(
+                {
+                    "frame_idx": self.current_frame_idx,
+                    "audio_features": self.features[self.current_frame_idx].tolist(),
+                    "c_real": float(c_real),
+                    "c_imag": float(c_imag),
+                }
+            )
 
             self.current_frame_idx += self.frame_interval
             if self.current_frame_idx >= self.n_frames:
@@ -335,13 +383,13 @@ class MandelbrotRecorder:
 
     def run(self):
         """Run interactive explorer."""
-        self.fig, self.ax = plt.subplots(figsize=(12, 9))
+        self.fig, (self.ax, self.ax_julia) = plt.subplots(1, 2, figsize=(16, 7))
 
         # Initial Mandelbrot render
         mandel = self.mandelbrot(self.xmin, self.xmax, self.ymin, self.ymax)
         self.mandelbrot_image = self.ax.imshow(
             mandel,
-            extent=[self.xmin, self.xmax, self.ymin, self.ymax],
+            extent=(self.xmin, self.xmax, self.ymin, self.ymax),
             cmap="hot",
             origin="lower",
             interpolation="bilinear",
@@ -352,6 +400,15 @@ class MandelbrotRecorder:
         self.ax.set_title(
             "Mandelbrot Set Explorer - Draw your musical journey!\nSPACE: Record/Pause | R: Reset | S: Save | Q: Quit"
         )
+
+        # Julia set subplot
+        self.ax_julia.set_xlabel("Real")
+        self.ax_julia.set_ylabel("Imaginary")
+        self.ax_julia.set_title("Julia Set Preview (c = cursor position)")
+
+        # Initial Julia set (at origin)
+        julia_init = self.render_julia(0.0, 0.0)
+        self.julia_image = self.ax_julia.imshow(julia_init, cmap="hot", origin="lower")
 
         # Connect events
         self.fig.canvas.mpl_connect("motion_notify_event", self.on_move)
@@ -367,7 +424,8 @@ class MandelbrotRecorder:
         self.fig.canvas.mpl_connect("motion_notify_event", store_cursor)
 
         # Animation loop to sync with audio frames
-        ani = FuncAnimation(
+        # Keep a reference so the animation is not garbage-collected
+        self.ani = FuncAnimation(
             self.fig,
             self.update_animation,
             frames=self.n_frames // self.frame_interval,
