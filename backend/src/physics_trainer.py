@@ -368,7 +368,7 @@ class EnergyScaledVelocityFloorLoss(nn.Module):
 class ExplorationVarianceLoss(nn.Module):
     """Encourage positional variance to avoid stagnation in one region."""
 
-    def __init__(self, weight: float = 0.05, target_variance: float = 0.02):
+    def __init__(self, weight: float = 0.05, target_variance: float = 0.1):
         super().__init__()
         self.weight = weight
         self.target_variance = target_variance
@@ -440,7 +440,7 @@ class PhysicsTrainer:
                 "directional_consistency": 0.15,
                 "audio_driven_momentum": 0.1,
                 "energy_velocity_floor": 0.1,
-                "exploration_variance": 0.15,
+                "exploration_variance": 0.5,
             }
         self.correlation_weights = correlation_weights
 

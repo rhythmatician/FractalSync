@@ -48,7 +48,7 @@ def main():
     )
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument(
-        "--learning-rate", type=float, default=1e-4, help="Learning rate"
+        "--learning-rate", type=float, default=5e-4, help="Learning rate"
     )
     parser.add_argument(
         "--window-frames", type=int, default=10, help="Number of frames in input window"
