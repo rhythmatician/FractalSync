@@ -32,3 +32,7 @@ data/cache/*
 
 # Test output
 tests/fixtures/*.json
+
+# curriculum visualization files
+curriculum_viz/curriculum_visualization.png
+curriculum_viz/curriculum.gif
