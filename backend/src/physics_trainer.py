@@ -296,6 +296,45 @@ class DirectionalConsistencyLoss(nn.Module):
         return self.weight * torch.mean(direction_flip_penalty)
 
 
+class AudioDrivenMomentumLoss(nn.Module):
+    """Encourage velocity magnitude to respond to audio energy (loudness/activity)."""
+
+    def __init__(self, weight: float = 0.1):
+        super().__init__()
+        self.weight = weight
+
+    def forward(
+        self, velocity_magnitude: torch.Tensor, audio_energy: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute audio-driven momentum loss.
+
+        During silence (low audio energy), velocity can decay to zero.
+        During loud/active parts (high energy), velocity should be high.
+        Penalizes misalignment between velocity and audio energy.
+
+        Args:
+            velocity_magnitude: Magnitude of velocity vectors (batch_size,)
+            audio_energy: Audio energy proxy (e.g., RMS energy) (batch_size,)
+
+        Returns:
+            Loss value encouraging velocity to follow audio dynamics
+        """
+        # Normalize each to [0, 1] independently to handle different scales
+        vel_min, vel_max = velocity_magnitude.min(), velocity_magnitude.max()
+        vel_range = vel_max - vel_min + 1e-8
+        vel_normalized = (velocity_magnitude - vel_min) / vel_range
+
+        energy_min, energy_max = audio_energy.min(), audio_energy.max()
+        energy_range = energy_max - energy_min + 1e-8
+        energy_normalized = (audio_energy - energy_min) / energy_range
+
+        # Penalize difference between normalized velocity and audio energy
+        mismatch = torch.abs(vel_normalized - energy_normalized)
+
+        return self.weight * torch.mean(mismatch)
+
+
 class PhysicsTrainer:
     """Trainer for physics-based models with curriculum learning."""
 
@@ -354,6 +393,7 @@ class PhysicsTrainer:
                 "velocity_loss": 1.0,
                 "boundary_proximity": 0.2,
                 "directional_consistency": 0.15,
+                "audio_driven_momentum": 0.1,
             }
         self.correlation_weights = correlation_weights
 
@@ -376,6 +416,9 @@ class PhysicsTrainer:
         self.directional_consistency_loss = DirectionalConsistencyLoss(
             weight=correlation_weights.get("directional_consistency", 0.15)
         )
+        self.audio_driven_momentum_loss = AudioDrivenMomentumLoss(
+            weight=correlation_weights.get("audio_driven_momentum", 0.1)
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -391,6 +434,7 @@ class PhysicsTrainer:
             "acceleration_smoothness": [],
             "boundary_proximity_loss": [],
             "directional_consistency_loss": [],
+            "audio_driven_momentum_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
             "silence_stillness_loss": [],
@@ -448,6 +492,7 @@ class PhysicsTrainer:
         total_silence_stillness = 0.0
         total_distortion_roughness = 0.0
         total_smoothness = 0.0
+        total_audio_driven_momentum = 0.0
 
         n_batches = 0
 
@@ -690,6 +735,14 @@ class PhysicsTrainer:
                     current_positions[:, 0], current_positions[:, 1]
                 )
 
+                # Audio-driven momentum (encourage velocity to match audio energy)
+                velocity_magnitude = torch.sqrt(
+                    predicted_velocity[:, 0] ** 2 + predicted_velocity[:, 1] ** 2
+                )
+                audio_driven_momentum_val = self.audio_driven_momentum_loss(
+                    velocity_magnitude, rms_energy[:batch_size]
+                )
+
                 # Parameter smoothness (placeholder for future use)
                 smoothness = torch.zeros(1, device=self.device)
 
@@ -706,6 +759,7 @@ class PhysicsTrainer:
                     + acceleration_smoothness_val
                     + directional_consistency_val
                     + boundary_proximity_val
+                    + audio_driven_momentum_val
                     + smoothness
                 )
 
@@ -720,6 +774,7 @@ class PhysicsTrainer:
                 total_acceleration_smoothness += acceleration_smoothness_val.item()
                 total_boundary_proximity += boundary_proximity_val.item()
                 total_directional_consistency += directional_consistency_val.item()
+                total_audio_driven_momentum += audio_driven_momentum_val.item()
                 total_timbre_color += timbre_color_loss.item()
                 total_transient_impact += transient_impact_loss.item()
                 total_silence_stillness += silence_stillness_loss.item()
@@ -753,6 +808,7 @@ class PhysicsTrainer:
             "acceleration_smoothness": total_acceleration_smoothness / n_batches,
             "boundary_proximity_loss": total_boundary_proximity / n_batches,
             "directional_consistency_loss": total_directional_consistency / n_batches,
+            "audio_driven_momentum_loss": total_audio_driven_momentum / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
             "silence_stillness_loss": total_silence_stillness / n_batches,

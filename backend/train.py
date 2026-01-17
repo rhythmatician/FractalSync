@@ -214,6 +214,15 @@ def main():
 
     print("[7/7] Starting training...")
     print("=" * 60)
+    print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
+    print("Estimated time per epoch: ~30-60 seconds (depends on audio length)")
+    print(f"Total estimated time: {args.epochs * 45 / 3600:.1f} hours\n")
+    print("Loss breakdown:")
+    print("  - Boundary proximity: Rewards c near Mandelbrot boundary")
+    print("  - Directional consistency: Penalizes velocity oscillation")
+    print("  - Curriculum learning: Teaches Mandelbrot orbits (decays over time)")
+    print("  - Correlation losses: Audio-visual feature mapping")
+    print("=" * 60)
 
     trainer.train(
         dataset=dataset,
