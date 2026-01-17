@@ -308,9 +308,9 @@ class DirectionalConsistencyLoss(nn.Module):
 
 
 class AudioDrivenMomentumLoss(nn.Module):
-    """ENFORCE: Loud audio = large movement, silence = stillness."""
+    """MODULATE: Audio energy amplifies/dampens exploration, never stops it."""
 
-    def __init__(self, weight: float = 5.0):
+    def __init__(self, weight: float = 2.0):
         super().__init__()
         self.weight = weight
 
@@ -320,31 +320,32 @@ class AudioDrivenMomentumLoss(nn.Module):
         """
         Compute audio-driven momentum loss.
 
-        CRITICAL: This is the PRIMARY driver of motion.
-        - High energy → MUST have high velocity
-        - Low energy → velocity should approach zero
+        Audio energy MODULATES exploration:
+        - High energy: expect higher velocity (amplify exploration)
+        - Low energy: expect lower velocity (dampen exploration)
+        - But exploration is ALWAYS primary driver via exploration_variance_loss
 
         Args:
             velocity_magnitude: Magnitude of velocity vectors (batch_size,)
             audio_energy: Audio energy proxy (e.g., RMS energy) (batch_size,)
 
         Returns:
-            Loss heavily penalizing velocity that doesn't match audio energy
+            Loss encouraging velocity to correlate with (but not be controlled by) audio
         """
-        # Normalize energy to [0, 1]
+        # Normalize both to [0, 1]
         energy_min, energy_max = audio_energy.min(), audio_energy.max()
         energy_range = energy_max - energy_min + 1e-8
         energy_normalized = (audio_energy - energy_min) / energy_range
 
-        # Target velocity should scale with energy
-        # Loud audio (energy=1) should produce velocity around 0.5 (large movement)
-        # Quiet audio (energy=0) should produce velocity near 0
-        target_velocity = energy_normalized * 0.5
+        vel_min, vel_max = velocity_magnitude.min(), velocity_magnitude.max()
+        vel_range = vel_max - vel_min + 1e-8
+        vel_normalized = (velocity_magnitude - vel_min) / vel_range
 
-        # Heavily penalize mismatch - this MUST be satisfied
-        mismatch = (velocity_magnitude - target_velocity) ** 2
+        # Soft correlation: penalize when they diverge, but don't enforce a hard target
+        # This is a gentle nudge toward audio-responsive movement, not a hard constraint
+        divergence = torch.abs(vel_normalized - energy_normalized)
 
-        return self.weight * torch.mean(mismatch)
+        return self.weight * torch.mean(divergence)
 
 
 class EnergyScaledVelocityFloorLoss(nn.Module):
@@ -440,9 +441,9 @@ class PhysicsTrainer:
             "velocity_loss": 0.5,  # Moderate - teach velocity prediction
             "boundary_proximity": 0.05,  # Weak - exploration > boundary adherence
             "directional_consistency": 0.02,  # Very weak - allow direction changes
-            "audio_driven_momentum": 10.0,  # DOMINANT - loud = move, quiet = still
-            "energy_velocity_floor": 0.0,  # Disabled - audio_momentum handles this
-            "exploration_variance": 5.0,  # Strong - force spatial spread
+            "audio_driven_momentum": 2.0,  # MODULATION only - gentle audio correlation
+            "energy_velocity_floor": 0.0,  # Disabled - exploration is always on
+            "exploration_variance": 20.0,  # DOMINANT - force constant spatial search
         }
         if correlation_weights is None:
             correlation_weights = default_correlation_weights
