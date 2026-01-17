@@ -239,9 +239,10 @@ def main():
     # Export to ONNX by default
     print("\nExporting model to ONNX format...")
     os.makedirs(args.save_dir, exist_ok=True)
-    
+
     # Use dynamic naming based on configuration to avoid overwriting
     from datetime import datetime
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     onnx_model_filename = f"model_physics_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
@@ -270,6 +271,22 @@ def main():
         os.path.join(args.save_dir, "training_history.json"),
     )
     print("Final checkpoint saved to:", args.save_dir)
+
+    # Automatically sync latest model to frontend
+    print("\n" + "=" * 60)
+    print("Syncing latest model to frontend...")
+    print("=" * 60)
+    try:
+        from model_utils import copy_latest_to_frontend
+
+        if copy_latest_to_frontend(args.save_dir):
+            print("\n✓ Frontend is now running the latest trained model!")
+        else:
+            print("\n⚠ Training complete, but frontend sync failed.")
+            print("  Run manually: python model_utils.py")
+    except Exception as e:
+        print(f"\n⚠ Could not sync to frontend: {e}")
+        print("  Run manually: python model_utils.py")
 
 
 if __name__ == "__main__":
