@@ -15,10 +15,14 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-from .audio_features import AudioFeatureExtractor
+from .audio_features import AudioFeatureExtractor, detect_musical_transitions, compute_transition_score
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
-from .mandelbrot_orbits import generate_curriculum_sequence
+from .mandelbrot_orbits import (
+    generate_curriculum_sequence,
+    detect_boundary_crossing,
+    compute_crossing_score,
+)
 from .trainer import CorrelationLoss, SmoothnessLoss, logger
 
 
@@ -69,6 +73,83 @@ class AccelerationSmoothness(nn.Module):
         return self.weight * torch.mean(acceleration**2)
 
 
+class BoundaryCrossingLoss(nn.Module):
+    """
+    Reward boundary crossing synchronized with musical transitions.
+
+    This loss function rewards the model when the Julia parameter c
+    crosses the Mandelbrot set boundary during musical transitions
+    (hits, structural changes, dynamics shifts).
+    """
+
+    def __init__(self, weight: float = 1.0, sync_window: int = 3):
+        """
+        Initialize boundary crossing loss.
+
+        Args:
+            weight: Weight for boundary crossing reward
+            sync_window: Number of frames to consider for synchronization
+        """
+        super().__init__()
+        self.weight = weight
+        self.sync_window = sync_window
+
+    def forward(
+        self,
+        current_positions: torch.Tensor,
+        previous_positions: torch.Tensor,
+        transition_scores: torch.Tensor,
+        crossing_scores: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Compute boundary crossing reward loss.
+
+        Args:
+            current_positions: Current c positions (batch_size, 2) [real, imag]
+            previous_positions: Previous c positions (batch_size, 2)
+            transition_scores: Musical transition scores (batch_size,) [0-1]
+            crossing_scores: Optional precomputed crossing scores (batch_size,)
+
+        Returns:
+            Negative reward (to be minimized) - higher crossing scores = lower loss
+        """
+        batch_size = current_positions.size(0)
+
+        # Compute crossing scores if not provided
+        if crossing_scores is None:
+            crossing_scores_list = []
+            for i in range(batch_size):
+                prev_real = previous_positions[i, 0].item()
+                prev_imag = previous_positions[i, 1].item()
+                curr_real = current_positions[i, 0].item()
+                curr_imag = current_positions[i, 1].item()
+
+                # Check if boundary was crossed
+                crossed = detect_boundary_crossing(
+                    prev_real, prev_imag, curr_real, curr_imag
+                )
+
+                # Get crossing score (how interesting is this position)
+                score = compute_crossing_score(curr_real, curr_imag)
+
+                # Combine crossing detection with score
+                final_score = score if crossed else 0.0
+                crossing_scores_list.append(final_score)
+
+            crossing_scores = torch.tensor(
+                crossing_scores_list, device=current_positions.device, dtype=torch.float32
+            )
+
+        # Synchronization reward: crossing score * transition score
+        # High when both boundary crossing and musical transition occur
+        sync_reward = crossing_scores * transition_scores
+
+        # Return negative reward (we minimize loss, but want to maximize reward)
+        loss = -self.weight * torch.mean(sync_reward)
+
+        return loss
+
+
 class PhysicsTrainer:
     """Trainer for physics-based models with curriculum learning."""
 
@@ -113,6 +194,7 @@ class PhysicsTrainer:
                 "smoothness": 0.1,
                 "acceleration_smoothness": 0.05,
                 "velocity_loss": 1.0,
+                "boundary_crossing": 0.5,
             }
         self.correlation_weights = correlation_weights
 
@@ -127,6 +209,9 @@ class PhysicsTrainer:
         self.acceleration_smoothness = AccelerationSmoothness(
             weight=correlation_weights.get("acceleration_smoothness", 0.05)
         )
+        self.boundary_crossing_loss = BoundaryCrossingLoss(
+            weight=correlation_weights.get("boundary_crossing", 0.5)
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -140,6 +225,7 @@ class PhysicsTrainer:
             "loss": [],
             "velocity_loss": [],
             "acceleration_smoothness": [],
+            "boundary_crossing_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
             "silence_stillness_loss": [],
@@ -190,6 +276,7 @@ class PhysicsTrainer:
         total_loss = 0.0
         total_velocity_loss = 0.0
         total_acceleration_smoothness = 0.0
+        total_boundary_crossing = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
         total_silence_stillness = 0.0
@@ -325,6 +412,29 @@ class PhysicsTrainer:
                 spectral_flux = avg_features[:, 1]
                 rms_energy = avg_features[:, 2]
                 zero_crossing_rate = avg_features[:, 3]
+                onset_strength = avg_features[:, 4]
+
+                # Compute transition scores for boundary crossing reward
+                transition_scores = []
+                for i in range(batch_size):
+                    # Compute RMS change for this frame
+                    rms_change = 0.0
+                    if i > 0:
+                        rms_change = abs(
+                            rms_energy[i].item() - rms_energy[i - 1].item()
+                        )
+
+                    # Compute transition score
+                    score = compute_transition_score(
+                        spectral_flux[i].item(),
+                        onset_strength[i].item(),
+                        rms_change,
+                    )
+                    transition_scores.append(score)
+
+                transition_scores_tensor = torch.tensor(
+                    transition_scores, device=self.device, dtype=torch.float32
+                )
 
                 # Render Julia sets for visual metrics
                 images = []
@@ -404,6 +514,27 @@ class PhysicsTrainer:
                 else:
                     acceleration_smoothness_val = torch.zeros(1, device=self.device)
 
+                # Boundary crossing loss (reward crossing in sync with transitions)
+                # Save previous positions for next iteration
+                prev_positions = (
+                    current_positions.clone().detach()
+                    if batch_idx > 0
+                    else current_positions
+                )
+                
+                # Initialize storage for previous positions if first batch
+                if not hasattr(self, "_prev_positions"):
+                    self._prev_positions = current_positions.clone().detach()
+                
+                boundary_crossing_loss_val = self.boundary_crossing_loss(
+                    current_positions,
+                    self._prev_positions[:batch_size] if self._prev_positions.size(0) >= batch_size else self._prev_positions,
+                    transition_scores_tensor,
+                )
+                
+                # Update previous positions for next batch
+                self._prev_positions = current_positions.clone().detach()
+
                 # Parameter smoothness (placeholder for future use)
                 smoothness = torch.zeros(1, device=self.device)
 
@@ -418,6 +549,7 @@ class PhysicsTrainer:
                     * distortion_roughness_loss
                     + current_curriculum_weight * velocity_loss_val
                     + acceleration_smoothness_val
+                    + boundary_crossing_loss_val
                     + smoothness
                 )
 
@@ -430,6 +562,7 @@ class PhysicsTrainer:
                 total_loss += total_batch_loss.item()
                 total_velocity_loss += velocity_loss_val.item()
                 total_acceleration_smoothness += acceleration_smoothness_val.item()
+                total_boundary_crossing += boundary_crossing_loss_val.item()
                 total_timbre_color += timbre_color_loss.item()
                 total_transient_impact += transient_impact_loss.item()
                 total_silence_stillness += silence_stillness_loss.item()
@@ -461,6 +594,7 @@ class PhysicsTrainer:
             "loss": total_loss / n_batches,
             "velocity_loss": total_velocity_loss / n_batches,
             "acceleration_smoothness": total_acceleration_smoothness / n_batches,
+            "boundary_crossing_loss": total_boundary_crossing / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
             "silence_stillness_loss": total_silence_stillness / n_batches,

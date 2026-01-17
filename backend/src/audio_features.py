@@ -255,3 +255,78 @@ def load_audio_file(file_path: str, sr: int = 22050) -> Tuple[np.ndarray, int | 
     """
     audio, sample_rate = librosa.load(file_path, sr=sr)
     return audio, sample_rate
+
+
+def detect_musical_transitions(
+    spectral_flux: np.ndarray,
+    onset_strength: np.ndarray,
+    rms_energy: np.ndarray,
+    flux_threshold: float = 0.7,
+    onset_threshold: float = 0.7,
+    energy_change_threshold: float = 0.3,
+) -> np.ndarray:
+    """
+    Detect musical transitions (structural changes, hits, dynamics shifts).
+
+    Combines multiple audio features to detect significant musical events
+    that should be synchronized with visual boundary crossings.
+
+    Args:
+        spectral_flux: Spectral flux values (n_frames,)
+        onset_strength: Onset strength envelope (n_frames,)
+        rms_energy: RMS energy values (n_frames,)
+        flux_threshold: Threshold for flux spikes (0-1)
+        onset_threshold: Threshold for onset detection (0-1)
+        energy_change_threshold: Threshold for energy changes (0-1)
+
+    Returns:
+        Binary transition array (n_frames,) where 1 = transition detected
+    """
+    n_frames = len(spectral_flux)
+    transitions = np.zeros(n_frames, dtype=np.float32)
+
+    # Detect flux spikes (sudden spectral changes)
+    flux_spikes = spectral_flux > flux_threshold
+
+    # Detect onsets (percussive hits)
+    onset_detections = onset_strength > onset_threshold
+
+    # Detect energy changes (dynamics shifts)
+    energy_changes = np.zeros(n_frames, dtype=bool)
+    if n_frames > 1:
+        energy_diff = np.abs(np.diff(rms_energy))
+        energy_changes[1:] = energy_diff > energy_change_threshold
+
+    # Combine all transition indicators
+    transitions = (flux_spikes | onset_detections | energy_changes).astype(np.float32)
+
+    return transitions
+
+
+def compute_transition_score(
+    spectral_flux: float,
+    onset_strength: float,
+    rms_change: float,
+    weights: Tuple[float, float, float] = (0.4, 0.4, 0.2),
+) -> float:
+    """
+    Compute a continuous transition score for a single frame.
+
+    Args:
+        spectral_flux: Spectral flux value (0-1)
+        onset_strength: Onset strength value (0-1)
+        rms_change: RMS energy change from previous frame (0-1)
+        weights: Weights for (flux, onset, energy) components
+
+    Returns:
+        Transition score [0, 1] where higher = stronger transition
+    """
+    flux_weight, onset_weight, energy_weight = weights
+
+    score = (
+        flux_weight * spectral_flux
+        + onset_weight * onset_strength
+        + energy_weight * rms_change
+    )
+
+    return min(1.0, max(0.0, score))

@@ -289,6 +289,114 @@ def is_in_mandelbrot_set(c_real: float, c_imag: float, max_iter: int = 100) -> b
     return True
 
 
+def compute_boundary_distance(
+    c_real: float, c_imag: float, max_iter: int = 100, threshold: float = 2.0
+) -> float:
+    """
+    Compute approximate distance to Mandelbrot set boundary.
+
+    Uses the escape time algorithm to estimate distance. Points that
+    escape quickly are far from the boundary, points that never escape
+    are inside, and points near the boundary take intermediate iterations.
+
+    Args:
+        c_real: Real part of c
+        c_imag: Imaginary part of c
+        max_iter: Maximum iterations to test
+        threshold: Escape threshold (typically 2.0)
+
+    Returns:
+        Normalized distance [0, 1] where 0 = on boundary, 1 = far from boundary
+    """
+    c = complex(c_real, c_imag)
+    z = 0 + 0j
+
+    for i in range(max_iter):
+        if abs(z) > threshold:
+            # Escaped - compute normalized distance
+            # Points that escape early are far from boundary
+            escape_speed = 1.0 - (i / max_iter)
+            return escape_speed
+
+        z = z * z + c
+
+    # Did not escape - inside the set
+    # Distance to boundary is inverse of final magnitude
+    final_magnitude = abs(z)
+    if final_magnitude >= threshold:
+        return 0.0  # Near boundary
+    else:
+        # Inside set - distance proportional to how bounded it is
+        return 1.0 - (final_magnitude / threshold)
+
+
+def detect_boundary_crossing(
+    prev_real: float,
+    prev_imag: float,
+    curr_real: float,
+    curr_imag: float,
+    max_iter: int = 100,
+    crossing_threshold: float = 0.3,
+) -> bool:
+    """
+    Detect if trajectory crossed the Mandelbrot set boundary.
+
+    A crossing occurs when one point is inside/near the set and
+    the next point is outside, or vice versa.
+
+    Args:
+        prev_real: Previous real coordinate
+        prev_imag: Previous imaginary coordinate
+        curr_real: Current real coordinate
+        curr_imag: Current imaginary coordinate
+        max_iter: Maximum iterations for boundary check
+        crossing_threshold: Threshold for considering a point "near" boundary
+
+    Returns:
+        True if boundary was crossed
+    """
+    prev_dist = compute_boundary_distance(prev_real, prev_imag, max_iter)
+    curr_dist = compute_boundary_distance(curr_real, curr_imag, max_iter)
+
+    # Check if we crossed from inside to outside or vice versa
+    # A crossing happens when both distances are small (near boundary)
+    # or when the sign of (distance - threshold) changes
+    prev_inside = prev_dist > (1.0 - crossing_threshold)
+    curr_inside = curr_dist > (1.0 - crossing_threshold)
+
+    # Crossing detected if one is inside and one is outside
+    crossed = prev_inside != curr_inside
+
+    return crossed
+
+
+def compute_crossing_score(
+    c_real: float, c_imag: float, max_iter: int = 100
+) -> float:
+    """
+    Compute a score for how close a point is to the Mandelbrot boundary.
+
+    Higher scores indicate the point is near the boundary, which is
+    desirable for interesting Julia set visualizations.
+
+    Args:
+        c_real: Real part of c
+        c_imag: Imaginary part of c
+        max_iter: Maximum iterations
+
+    Returns:
+        Crossing score [0, 1] where 1 = on boundary, 0 = far from boundary
+    """
+    distance = compute_boundary_distance(c_real, c_imag, max_iter)
+
+    # Convert distance to score (inverse relationship)
+    # We want high scores for points near the boundary
+    score = 1.0 - abs(distance - 0.5) * 2.0  # Peak at distance=0.5
+    score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
+
+    return score
+
+
 def generate_random_mandelbrot_points(
     n_points: int, region: str = "cardioid", max_attempts: int = 10
 ) -> np.ndarray:
