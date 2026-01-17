@@ -181,41 +181,27 @@ export class ModelInference {
       avgZCR /= windowFrames;
       avgOnset /= windowFrames;
       avgRolloff /= windowFrames;
-
-      // Julia parameters: Mix model output with audio features for dynamics
-      // Use spectral centroid and flux to influence julia params
-      const centroidInfluence = (avgCentroid - 0.5) * 0.4; // Range: -0.2 to +0.2
-      const fluxInfluence = (avgFlux - 0.5) * 0.4;
-      visualParams.juliaReal = Math.max(-0.8, Math.min(0.8, params[0] * 0.2 + centroidInfluence));
-      visualParams.juliaImag = Math.max(-0.8, Math.min(0.8, params[1] * 0.2 + fluxInfluence));
       
       // Color: Map RMS (loudness) to hue cycling, onset to saturation
       visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0; // Cycle hue with loudness
       visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)); // Boost sat on onsets
       visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)); // Brightness from loudness
-      
-      // Zoom: Use rolloff and RMS for dynamic zooming
-      const zoomBase = 1.2 + avgRolloff * 0.8; // 1.2 to 2.0
-      const zoomVariation = avgRMS * 0.5; // 0 to 0.5
-      visualParams.zoom = Math.max(0.8, Math.min(2.5, zoomBase + zoomVariation));
-      
-      // Speed: Increase with flux and onset energy
-      visualParams.speed = Math.max(0.3, Math.min(1.2, 0.5 + avgFlux * 0.3 + avgOnset * 0.4));
     } else {
-      // ORIGINAL POST-PROCESSING (pre-MR #8)
-      // Scale down undertrained model outputs and add variation
-      visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
-      visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
       
       // Color: enforce minimum saturation
       visualParams.colorHue = visualParams.colorHue % 1.0;
       visualParams.colorSat = Math.max(0.5, Math.min(1, visualParams.colorSat * 0.8 + 0.5));
       visualParams.colorBright = Math.max(0.6, Math.min(0.9, visualParams.colorBright * 0.5 + 0.5));
       
-      // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
-      visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
-      visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
     }
+    // ORIGINAL POST-PROCESSING (pre-MR #8)
+    // Scale down undertrained model outputs and add variation
+    visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
+    visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
+
+    // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
+    visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
+    visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
 
     const postTime = performance.now() - postStartTime;
     const totalTime = performance.now() - totalStartTime;
