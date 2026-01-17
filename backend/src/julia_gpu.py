@@ -32,7 +32,7 @@ class GPUJuliaRenderer:
             # Try to create headless context
             try:
                 # Headless context (no window required)
-                self.ctx = moderngl.create_standalone_context()
+                self.ctx = moderngl.create_context(standalone=True)
                 logger.info(
                     f"ModernGL initialized (headless): {self.ctx.info['GL_VENDOR']}"
                 )
@@ -209,10 +209,11 @@ class GPUJuliaRenderer:
                 resource = getattr(self, attr, None)
                 if resource is not None:
                     resource.release()
-            
+
             # Cleanup GLFW window
             if hasattr(self, "glfw_window"):
                 import glfw
+
                 glfw.destroy_window(self.glfw_window)
                 glfw.terminate()
         except Exception:

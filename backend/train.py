@@ -71,6 +71,12 @@ def main():
         help="Decay factor for curriculum weight per epoch",
     )
     parser.add_argument(
+        "--exploration-variance-weight",
+        type=float,
+        default=1.0,
+        help="Weight for exploration variance loss to encourage spread",
+    )
+    parser.add_argument(
         "--damping-factor",
         type=float,
         default=0.95,
@@ -133,6 +139,7 @@ def main():
     if args.use_curriculum:
         print(f"  Curriculum weight: {args.curriculum_weight}")
         print(f"  Curriculum decay: {args.curriculum_decay}")
+    print(f"Exploration variance weight: {args.exploration_variance_weight}")
     print(f"Damping factor: {args.damping_factor}")
     print(f"Speed scale: {args.speed_scale}")
     print(f"Device: {args.device}")
@@ -208,6 +215,7 @@ def main():
         learning_rate=args.learning_rate,
         use_curriculum=args.use_curriculum,
         curriculum_weight=args.curriculum_weight,
+        correlation_weights={"exploration_variance": args.exploration_variance_weight},
         julia_renderer=julia_renderer,
         julia_resolution=args.julia_resolution,
         julia_max_iter=args.julia_max_iter,

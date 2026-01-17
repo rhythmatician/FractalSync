@@ -428,22 +428,26 @@ class PhysicsTrainer:
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
 
-        # Default correlation weights
+        # Default correlation weights with optional overrides
+        default_correlation_weights = {
+            "timbre_color": 1.0,
+            "transient_impact": 1.0,
+            "silence_stillness": 1.0,
+            "distortion_roughness": 1.0,
+            "smoothness": 0.1,
+            "acceleration_smoothness": 0.05,
+            "velocity_loss": 1.0,
+            "boundary_proximity": 0.05,
+            "directional_consistency": 0.15,
+            "audio_driven_momentum": 0.1,
+            "energy_velocity_floor": 0.1,
+            "exploration_variance": 1.0,
+        }
         if correlation_weights is None:
-            correlation_weights = {
-                "timbre_color": 1.0,
-                "transient_impact": 1.0,
-                "silence_stillness": 1.0,
-                "distortion_roughness": 1.0,
-                "smoothness": 0.1,
-                "acceleration_smoothness": 0.05,
-                "velocity_loss": 1.0,
-                "boundary_proximity": 0.05,
-                "directional_consistency": 0.15,
-                "audio_driven_momentum": 0.1,
-                "energy_velocity_floor": 0.1,
-                "exploration_variance": 1.0,
-            }
+            correlation_weights = default_correlation_weights
+        else:
+            merged_weights = {**default_correlation_weights, **correlation_weights}
+            correlation_weights = merged_weights
         self.correlation_weights = correlation_weights
 
         # Loss functions
