@@ -251,7 +251,7 @@ async def get_latest_model():
     models_dir = Path("checkpoints")
     if not models_dir.exists():
         models_dir = Path("models")  # Fallback to legacy location
-    
+
     onnx_files = list(models_dir.glob("*.onnx"))
 
     if not onnx_files:
@@ -273,7 +273,7 @@ async def get_model_metadata():
     models_dir = Path("checkpoints")
     if not models_dir.exists():
         models_dir = Path("models")  # Fallback to legacy location
-    
+
     metadata_files = list(models_dir.glob("*_metadata.json"))
 
     if not metadata_files:
