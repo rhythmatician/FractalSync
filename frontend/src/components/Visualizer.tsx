@@ -90,12 +90,21 @@ export function Visualizer() {
               
               await model.loadModel(modelUrl, metadataUrl);
             } else {
-              // Fallback: try local model path
-              await model.loadModel('/models/model.onnx', '/models/model.onnx_metadata.json');
+              // Fallback: try local model path with cache busting
+              const cacheBuster = `?t=${Date.now()}`;
+              await model.loadModel(
+                `/models/model.onnx${cacheBuster}`,
+                `/models/model.onnx_metadata.json${cacheBuster}`
+              );
             }
           } catch (e) {
             console.warn('Failed to load model from API, trying local:', e);
-            await model.loadModel('/models/model.onnx', '/models/model.onnx_metadata.json');
+            // Fallback to local with cache busting
+            const cacheBuster = `?t=${Date.now()}`;
+            await model.loadModel(
+              `/models/model.onnx${cacheBuster}`,
+              `/models/model.onnx_metadata.json${cacheBuster}`
+            );
           }
           
           modelRef.current = model;

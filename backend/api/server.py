@@ -247,7 +247,11 @@ async def get_training_status():
 @app.get("/api/model/latest")
 async def get_latest_model():
     """Download the latest ONNX model."""
-    models_dir = Path("models")
+    # Prioritize checkpoints (latest trained models)
+    models_dir = Path("checkpoints")
+    if not models_dir.exists():
+        models_dir = Path("models")  # Fallback to legacy location
+    
     onnx_files = list(models_dir.glob("*.onnx"))
 
     if not onnx_files:
@@ -265,7 +269,11 @@ async def get_latest_model():
 @app.get("/api/model/metadata")
 async def get_model_metadata():
     """Get metadata for the latest model."""
-    models_dir = Path("models")
+    # Prioritize checkpoints (latest trained models)
+    models_dir = Path("checkpoints")
+    if not models_dir.exists():
+        models_dir = Path("models")  # Fallback to legacy location
+    
     metadata_files = list(models_dir.glob("*_metadata.json"))
 
     if not metadata_files:
