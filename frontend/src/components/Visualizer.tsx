@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
-import { ModelInference, PerformanceMetrics } from '../lib/modelInference';
+import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 
 export function Visualizer() {
@@ -16,7 +16,9 @@ export function Visualizer() {
   const [isVisualizing, setIsVisualizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
+  const [modelMetadata, setModelMetadata] = useState<ModelMetadata | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [showModelInfo, setShowModelInfo] = useState(true);
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(true);
@@ -99,6 +101,7 @@ export function Visualizer() {
           modelRef.current = model;
           setIsModelLoaded(true);
           setError(null);
+          setModelMetadata(model.getMetadata());
           console.log('✓ Model loaded successfully');
           return;
         } catch (err) {
@@ -293,6 +296,23 @@ export function Visualizer() {
           >
             {showMetrics ? 'Hide' : 'Show'} Metrics
           </button>
+
+          <button
+            onClick={() => setShowModelInfo(!showModelInfo)}
+            style={{
+              padding: '5px 10px',
+              background: '#444',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginLeft: '5px'
+            }}
+            title="Show model information"
+          >
+            {showModelInfo ? 'Hide' : 'Show'} Model
+          </button>
           
           <button
             onClick={() => {
@@ -334,6 +354,43 @@ export function Visualizer() {
             {metrics.averageInferenceTime > 16 && (
               <div style={{ color: '#ff4444' }}>⚠️ Average inference exceeds 16ms frame budget (60 FPS)</div>
             )}
+          </div>
+        )}
+
+        {showModelInfo && modelMetadata && (
+          <div style={{
+            marginTop: '10px',
+            padding: '10px',
+            background: '#1a3a1a',
+            border: '1px solid #44ff44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            color: '#44ff44',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <strong>📦 Model Loaded:</strong>
+              {modelMetadata.epoch && <span> Epoch {modelMetadata.epoch}</span>}
+              {modelMetadata.window_frames && <span> | Window: {modelMetadata.window_frames}</span>}
+              {modelMetadata.input_dim && <span> | Input: {modelMetadata.input_dim}</span>}
+              {modelMetadata.output_dim && <span> | Output: {modelMetadata.output_dim}</span>}
+            </div>
+            <button
+              onClick={() => setShowModelInfo(false)}
+              style={{
+                background: 'transparent',
+                color: '#44ff44',
+                border: '1px solid #44ff44',
+                borderRadius: '3px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+                fontSize: '11px'
+              }}
+            >
+              ✕
+            </button>
           </div>
         )}
       </div>
