@@ -291,7 +291,7 @@ def main():
         os.path.join(args.save_dir, "training_history.json"),
     )
     print("Final checkpoint saved to:", args.save_dir)
-    print("\n✓ Training complete! Model available via API at /api/model/latest")
+    print("\n[OK] Training complete! Model available via API at /api/model/latest")
 
 
 if __name__ == "__main__":
