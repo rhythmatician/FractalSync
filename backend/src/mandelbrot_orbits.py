@@ -343,6 +343,39 @@ class MandelbrotGeometry:
             boundary_offset = radius * complex(math.cos(theta), math.sin(theta))
             return center + s * boundary_offset
 
+    @staticmethod
+    def lobe_tangent_at_angle(
+        lobe: int, theta: float, s: float = 1.0, sub_lobe: int = 0
+    ) -> complex:
+        """
+        Compute the tangent (derivative with respect to theta) at a given angle.
+        Returns d/dtheta of lobe_point_at_angle (NOT multiplied by angular_velocity).
+
+        Args:
+            lobe: Period number (1=main cardioid, 2=period-2 bulb, etc.)
+            theta: Angular parameter (radians)
+            s: Radius scaling factor
+            sub_lobe: Sub-lobe index
+
+        Returns:
+            Complex tangent vector d/dtheta
+        """
+        import cmath
+        import math
+
+        if lobe == 1:
+            # Cardioid: c(theta) = 0.5*exp(i*theta) - 0.25*exp(2*i*theta)
+            # Derivative: c'(theta) = 0.5*i*exp(i*theta) - 0.5*i*exp(2*i*theta)
+            # With scaling s: d/dtheta[s*c(theta)] = s * c'(theta)
+            term1 = 0.5j * cmath.exp(1j * theta)
+            term2 = 0.5j * cmath.exp(2j * theta)
+            return s * (term1 - term2)
+        else:
+            # Circular bulb: point(theta) = center + s*radius*exp(i*theta)
+            # Derivative: point'(theta) = s*radius*i*exp(i*theta)
+            radius = MandelbrotGeometry.period_n_bulb_radius(lobe, sub_lobe)
+            return s * radius * 1j * cmath.exp(1j * theta)
+
 
 class MandelbrotOrbit:
     """Defines a trajectory through complex parameter space based on Mandelbrot geometry."""
@@ -355,6 +388,7 @@ class MandelbrotOrbit:
         n_points: int = 50,
         s_range: Tuple[float, float] = (1.02, 1.02),
         angular_velocity: float = 1.0,
+        theta0: float = 0.0,
     ):
         """
         Initialize an orbit around a specific Mandelbrot lobe.
@@ -363,9 +397,10 @@ class MandelbrotOrbit:
             name: Orbit name/identifier
             lobe: Period number (1=main cardioid, 2=period-2 bulb, etc.)
             sub_lobe: Sub-lobe index for periods with multiple bulbs
-            n_points: Number of points to sample around the orbit
+            n_points: Number of points to sample around the orbit (for visualization)
             s_range: (s_min, s_max) for radius scaling variations
             angular_velocity: Radians per second (positive=ccw, negative=cw)
+            theta0: Initial theta offset (radians)
         """
         self.name = name
         self.lobe = lobe
@@ -373,12 +408,16 @@ class MandelbrotOrbit:
         self.n_points = n_points
         self.s_range = s_range
         self.angular_velocity = angular_velocity
+        self.theta0 = theta0
 
-        # Generate points dynamically
+        # For constant s orbits, use the average
+        self.s = (s_range[0] + s_range[1]) / 2.0
+
+        # Generate points dynamically (for visualization/backward compatibility)
         self.points = self._generate_points()
 
     def _generate_points(self) -> np.ndarray:
-        """Generate orbit points using mathematical geometry."""
+        """Generate orbit points using mathematical geometry (for visualization)."""
         angles = np.linspace(0, 2 * np.pi, self.n_points, endpoint=False)
         s_values = np.linspace(self.s_range[0], self.s_range[1], self.n_points)
 
@@ -391,54 +430,91 @@ class MandelbrotOrbit:
 
         return np.array(points, dtype=np.float32)
 
-    def sample(self, n_samples: int) -> np.ndarray:
+    def sample(self, n_samples: int, t0: float = 0.0, dt: float = 1/60) -> np.ndarray:
         """
-        Sample points along the orbit.
+        Sample points along the orbit using time-based parameterization.
 
         Args:
             n_samples: Number of samples to generate
+            t0: Starting time (seconds)
+            dt: Time step between samples (seconds)
 
         Returns:
             Array of shape (n_samples, 2) with [real, imag] coordinates
         """
-        if len(self.points) == 0:
-            return np.zeros((n_samples, 2), dtype=np.float32)
+        # Compute times and corresponding angles
+        times = t0 + np.arange(n_samples) * dt
+        thetas = self.theta0 + self.angular_velocity * times
 
-        # Create interpolation parameter
-        t = np.linspace(0, len(self.points) - 1, n_samples)
+        # Sample positions at these angles
+        positions = np.zeros((n_samples, 2), dtype=np.float32)
+        for i, theta in enumerate(thetas):
+            c = MandelbrotGeometry.lobe_point_at_angle(
+                self.lobe, float(theta), self.s, self.sub_lobe
+            )
+            positions[i, 0] = c.real
+            positions[i, 1] = c.imag
 
-        # Interpolate along orbit
-        real = np.interp(t, np.arange(len(self.points)), self.points[:, 0])
-        imag = np.interp(t, np.arange(len(self.points)), self.points[:, 1])
+        return positions
 
-        # Close the loop: ensure first and last match
-        real[-1] = self.points[0, 0]
-        imag[-1] = self.points[0, 1]
-
-        return np.stack([real, imag], axis=1).astype(np.float32)
-
-    def compute_velocities(self, n_samples: int, time_step: float = 1.0) -> np.ndarray:
+    def compute_velocities(self, n_samples: int, t0: float = 0.0, dt: float = 1/60, time_step: float = None) -> np.ndarray:
         """
-        Compute velocities along the orbit.
+        Compute velocities along the orbit using analytic derivatives.
 
         Args:
             n_samples: Number of samples
-            time_step: Time step between samples
+            t0: Starting time (seconds)
+            dt: Time step between samples (seconds)
+            time_step: Deprecated parameter for backward compatibility (maps to dt)
 
         Returns:
             Array of shape (n_samples, 2) with [v_real, v_imag] velocities
         """
-        positions = self.sample(n_samples)
+        # Backward compatibility: if time_step is provided, use it as dt
+        if time_step is not None:
+            dt = time_step
 
-        # Compute finite differences
-        velocities = np.zeros_like(positions, dtype=np.float32)
-        if n_samples > 1:
-            # Forward differences for all but last
-            velocities[:-1] = (positions[1:] - positions[:-1]) / time_step
-            # Wrap around for closed orbits
-            velocities[-1] = (positions[0] - positions[-1]) / time_step
+        # Compute times and corresponding angles
+        times = t0 + np.arange(n_samples) * dt
+        thetas = self.theta0 + self.angular_velocity * times
+
+        # Compute velocities analytically: v = omega * d/dtheta[lobe_point_at_angle]
+        velocities = np.zeros((n_samples, 2), dtype=np.float32)
+        for i, theta in enumerate(thetas):
+            tangent = MandelbrotGeometry.lobe_tangent_at_angle(
+                self.lobe, float(theta), self.s, self.sub_lobe
+            )
+            v = self.angular_velocity * tangent
+            velocities[i, 0] = v.real
+            velocities[i, 1] = v.imag
 
         return velocities
+
+    def generate_loop_points(self, n_points: int = None) -> np.ndarray:
+        """
+        Generate a static closed loop of points (for visualization/debugging).
+
+        Args:
+            n_points: Number of points (defaults to self.n_points)
+
+        Returns:
+            Array of shape (n_points, 2) with [real, imag] coordinates
+        """
+        if n_points is None:
+            n_points = self.n_points
+
+        angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
+        s_values = np.linspace(self.s_range[0], self.s_range[1], n_points)
+
+        points = np.zeros((n_points, 2), dtype=np.float32)
+        for i, (angle, s) in enumerate(zip(angles, s_values)):
+            c = MandelbrotGeometry.lobe_point_at_angle(
+                self.lobe, float(angle), float(s), self.sub_lobe
+            )
+            points[i, 0] = c.real
+            points[i, 1] = c.imag
+
+        return points
 
 
 def generate_dynamic_curriculum_orbits() -> Dict[str, MandelbrotOrbit]:
@@ -575,7 +651,7 @@ def list_preset_names() -> List[str]:
 
 
 def generate_curriculum_sequence(
-    n_samples: int = 1000, use_curriculum: bool = True
+    n_samples: int = 1000, use_curriculum: bool = True, dt: float = 1/60
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Generate a curriculum learning sequence of positions and velocities.
@@ -588,6 +664,7 @@ def generate_curriculum_sequence(
     Args:
         n_samples: Total number of samples to generate
         use_curriculum: If True, order by difficulty; if False, sample uniformly
+        dt: Time step for sampling (seconds)
 
     Returns:
         Tuple of (positions, velocities) arrays of shape (n_samples, 2)
@@ -643,8 +720,9 @@ def generate_curriculum_sequence(
         n = samples_per_orbit + (1 if i < remainder else 0)
 
         if n > 0:
-            positions = orbit.sample(n)
-            velocities = orbit.compute_velocities(n)
+            # Use time-based sampling with analytic velocities
+            positions = orbit.sample(n, t0=0.0, dt=dt)
+            velocities = orbit.compute_velocities(n, t0=0.0, dt=dt)
 
             all_positions.append(positions)
             all_velocities.append(velocities)

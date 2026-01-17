@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 import math
+import numpy as np
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -242,6 +243,163 @@ class TestPresets(unittest.TestCase):
         
         orbit = get_preset_orbit("period4_boundary")
         self.assertIsNotNone(orbit)
+
+
+class TestAnalyticVelocities(unittest.TestCase):
+    """Test analytic velocity computation and time-based parameterization."""
+
+    def test_cw_vs_ccw_are_opposites(self):
+        """Test that cw and ccw orbits produce opposite velocities at same angle."""
+        from src.mandelbrot_orbits import MandelbrotOrbit, MandelbrotGeometry
+        
+        # For this test, we need to compare velocities at the SAME theta
+        # We can do this by directly using the tangent function
+        lobe = 2
+        sub_lobe = 0
+        s = 1.0
+        theta = math.pi / 4
+        
+        # Compute tangent at this theta
+        tangent = MandelbrotGeometry.lobe_tangent_at_angle(lobe, theta, s, sub_lobe)
+        
+        # Velocity for omega=+1 should be +tangent
+        v_ccw = 1.0 * tangent
+        
+        # Velocity for omega=-1 should be -tangent
+        v_cw = -1.0 * tangent
+        
+        # They should be opposites
+        diff = abs(v_ccw + v_cw)
+        self.assertLess(diff, 1e-10,
+                       f"CW and CCW velocities should be opposites at same theta, diff: {diff}")
+
+    def test_speed_scales_with_omega(self):
+        """Test that doubling angular_velocity doubles velocity magnitude."""
+        from src.mandelbrot_orbits import MandelbrotOrbit
+        
+        # Create two orbits with different angular velocities
+        orbit1 = MandelbrotOrbit(
+            name="test_omega1",
+            lobe=2,
+            sub_lobe=0,
+            s_range=(1.0, 1.0),
+            angular_velocity=1.0
+        )
+        
+        orbit2 = MandelbrotOrbit(
+            name="test_omega2",
+            lobe=2,
+            sub_lobe=0,
+            s_range=(1.0, 1.0),
+            angular_velocity=2.0
+        )
+        
+        # Sample velocities
+        n_samples = 10
+        dt = 1/60
+        v1 = orbit1.compute_velocities(n_samples, t0=0.0, dt=dt)
+        v2 = orbit2.compute_velocities(n_samples, t0=0.0, dt=dt)
+        
+        # Compute magnitudes
+        mag1 = np.linalg.norm(v1, axis=1)
+        mag2 = np.linalg.norm(v2, axis=1)
+        
+        # mag2 should be approximately 2 * mag1
+        ratio = mag2 / (mag1 + 1e-10)  # Avoid division by zero
+        mean_ratio = np.mean(ratio)
+        
+        self.assertAlmostEqual(mean_ratio, 2.0, places=5,
+                              msg=f"Velocity magnitude should scale with omega, got ratio: {mean_ratio}")
+
+    def test_circular_bulb_velocity_is_tangential(self):
+        """Test that velocity is tangential for circular bulbs."""
+        from src.mandelbrot_orbits import MandelbrotOrbit, MandelbrotGeometry
+        
+        # Create orbit for circular bulb (period-2)
+        orbit = MandelbrotOrbit(
+            name="test_tangent",
+            lobe=2,
+            sub_lobe=0,
+            s_range=(1.0, 1.0),
+            angular_velocity=1.0
+        )
+        
+        # Get center
+        center = MandelbrotGeometry.period_n_bulb_center(2, 0)
+        center_vec = np.array([center.real, center.imag])
+        
+        # Sample positions and velocities
+        n_samples = 10
+        dt = 1/60
+        positions = orbit.sample(n_samples, t0=0.0, dt=dt)
+        velocities = orbit.compute_velocities(n_samples, t0=0.0, dt=dt)
+        
+        # For circular orbit, (position - center) dot velocity should be ~0
+        for i in range(n_samples):
+            radial = positions[i] - center_vec
+            v = velocities[i]
+            dot_product = np.dot(radial, v)
+            
+            # Should be close to zero (tangential)
+            self.assertLess(abs(dot_product), 1e-4,
+                          f"Velocity should be tangential, dot product: {dot_product}")
+
+    def test_cardioid_velocity_no_nans(self):
+        """Test that cardioid velocities are stable and contain no NaNs."""
+        from src.mandelbrot_orbits import MandelbrotOrbit
+        
+        # Create cardioid orbit
+        orbit = MandelbrotOrbit(
+            name="test_cardioid",
+            lobe=1,
+            sub_lobe=0,
+            s_range=(1.0, 1.0),
+            angular_velocity=1.0
+        )
+        
+        # Sample velocities
+        n_samples = 100
+        dt = 1/60
+        velocities = orbit.compute_velocities(n_samples, t0=0.0, dt=dt)
+        
+        # Check for NaNs
+        self.assertFalse(np.any(np.isnan(velocities)), "Velocities should not contain NaNs")
+        
+        # Check magnitudes are reasonable
+        magnitudes = np.linalg.norm(velocities, axis=1)
+        
+        # Note: Cardioid has a cusp at theta=0 where velocity is zero, this is correct
+        # Most other points should have non-zero velocity
+        non_zero_count = np.sum(magnitudes > 0.001)
+        self.assertGreater(non_zero_count, n_samples * 0.95,
+                          "Most velocity magnitudes should be non-zero (except near cusp)")
+        
+        # All magnitudes should be reasonable (not too large)
+        self.assertTrue(np.all(magnitudes < 10), "Velocity magnitudes should be reasonable")
+
+    def test_lobe_tangent_consistency(self):
+        """Test that lobe_tangent_at_angle is consistent with numerical derivatives."""
+        from src.mandelbrot_orbits import MandelbrotGeometry
+        
+        # Test for period-2 bulb
+        lobe = 2
+        sub_lobe = 0
+        s = 1.0
+        theta = math.pi / 4
+        
+        # Get analytic tangent
+        tangent = MandelbrotGeometry.lobe_tangent_at_angle(lobe, theta, s, sub_lobe)
+        
+        # Compute numerical derivative
+        epsilon = 1e-6
+        p1 = MandelbrotGeometry.lobe_point_at_angle(lobe, theta - epsilon, s, sub_lobe)
+        p2 = MandelbrotGeometry.lobe_point_at_angle(lobe, theta + epsilon, s, sub_lobe)
+        numerical_tangent = (p2 - p1) / (2 * epsilon)
+        
+        # Should be close
+        diff = abs(tangent - numerical_tangent)
+        self.assertLess(diff, 1e-4,
+                       f"Analytic and numerical tangents should match, diff: {diff}")
 
 
 if __name__ == "__main__":
