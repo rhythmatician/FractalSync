@@ -29,3 +29,10 @@ ENV/
 # Byte-compiled / optimized / DLL files
 data/audio/*
 data/cache/*
+
+# Test output
+tests/fixtures/*.json
+
+# curriculum visualization files
+curriculum_viz/curriculum_visualization.png
+curriculum_viz/curriculum.gif

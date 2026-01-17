@@ -9,16 +9,16 @@ import sys
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mandelbrot_orbits import (
+from src.mandelbrot_orbits import (  # noqa: E402
     MandelbrotOrbit,
     get_preset_orbit,
     list_preset_names,
     generate_curriculum_sequence,
     is_in_mandelbrot_set,
 )
-from physics_model import PhysicsAudioToVisualModel
+from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
 
 
 class TestMandelbrotOrbits:

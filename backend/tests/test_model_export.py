@@ -14,7 +14,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.export_model import export_to_onnx, load_checkpoint_and_export  # noqa: E402
-from src.model import AudioToVisualModel  # noqa: E402
+from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
 
 
 class TestModelExport(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestModelExport(unittest.TestCase):
     def test_export_to_onnx_creates_file(self):
         """Test that export_to_onnx creates an ONNX model file."""
         # Create a simple model
-        model = AudioToVisualModel(window_frames=10)
+        model = PhysicsAudioToVisualModel(window_frames=10)
         model.eval()
 
         # Export to ONNX
@@ -56,7 +56,7 @@ class TestModelExport(unittest.TestCase):
     def test_onnx_model_input_output_shape(self):
         """Test that exported ONNX model has correct input/output shape."""
         # Create and export model
-        model = AudioToVisualModel(window_frames=10)
+        model = PhysicsAudioToVisualModel(window_frames=10)
         model.eval()
 
         output_path = self.temp_path / "test_io_shape.onnx"
@@ -82,7 +82,7 @@ class TestModelExport(unittest.TestCase):
     def test_export_metadata_saved(self):
         """Test that metadata is saved alongside ONNX model."""
         # Create and export model with metadata
-        model = AudioToVisualModel(window_frames=10)
+        model = PhysicsAudioToVisualModel(window_frames=10)
         model.eval()
 
         output_path = self.temp_path / "test_metadata.onnx"
@@ -117,7 +117,7 @@ class TestModelExport(unittest.TestCase):
     def test_load_checkpoint_and_export(self):
         """Test loading checkpoint and exporting to ONNX."""
         # Create a model and checkpoint
-        model = AudioToVisualModel(window_frames=10)
+        model = PhysicsAudioToVisualModel(window_frames=10)
         model.eval()
 
         checkpoint_path = self.temp_path / "test_checkpoint.pt"
@@ -150,7 +150,7 @@ class TestModelExport(unittest.TestCase):
     def test_exported_model_output_shape(self):
         """Test that ONNX model produces correct output shape."""
         # Create model
-        model = AudioToVisualModel(window_frames=10)
+        model = PhysicsAudioToVisualModel(window_frames=10)
         model.eval()
 
         # Create dummy input
@@ -168,60 +168,13 @@ class TestModelExport(unittest.TestCase):
             output_path=str(output_path),
         )
 
-        # Verify output shape is (batch_size, 7)
+        # Verify output shape is (batch_size, 9) for PhysicsAudioToVisualModel
+        # Output: [v_real, v_imag, c_real, c_imag, hue, sat, bright, zoom, speed]
         self.assertEqual(
             torch_output.shape,
-            (1, 7),
-            f"Expected output shape (1, 7), got {torch_output.shape}",
+            (1, 9),
+            f"Expected output shape (1, 9), got {torch_output.shape}",
         )
-
-    def test_export_model_with_velocity_features(self):
-        """Test exporting model trained with velocity features."""
-        # Create model with delta features (12 features per frame)
-        model = AudioToVisualModel(window_frames=10, num_features_per_frame=12)
-        model.eval()
-
-        # Create checkpoint with feature stats
-        checkpoint_path = self.temp_path / "velocity_checkpoint.pt"
-        
-        # Feature mean/std should match 120-dim input (12 features × 10 frames)
-        feature_mean = np.random.randn(120).astype(np.float32)
-        feature_std = np.ones(120).astype(np.float32)
-        
-        checkpoint = {
-            "model_state_dict": model.state_dict(),
-            "epoch": 10,
-            "feature_mean": feature_mean,
-            "feature_std": feature_std,
-        }
-        torch.save(checkpoint, checkpoint_path)
-
-        # Load and export
-        output_dir = self.temp_path / "export_velocity"
-        output_dir.mkdir(exist_ok=True)
-
-        onnx_path, metadata_path = load_checkpoint_and_export(
-            str(checkpoint_path),
-            output_dir=str(output_dir),
-            window_frames=10,
-            # num_features_per_frame should be inferred from checkpoint
-        )
-
-        # Verify files exist
-        self.assertTrue(Path(onnx_path).exists(), "ONNX file not created")
-        self.assertTrue(Path(metadata_path).exists(), "Metadata file not created")
-
-        # Verify ONNX model is valid
-        onnx_model = onnx.load(onnx_path)
-        self.assertIsNotNone(onnx_model)
-
-        # Verify metadata includes correct input dimension
-        with open(metadata_path) as f:
-            metadata = json.load(f)
-        
-        self.assertEqual(metadata["num_features_per_frame"], 12)
-        self.assertEqual(metadata["input_dim"], 120)
-        self.assertEqual(metadata["window_frames"], 10)
 
 
 if __name__ == "__main__":

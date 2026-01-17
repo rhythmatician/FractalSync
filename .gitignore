@@ -28,3 +28,5 @@ data/cache/
 *.onnx
 *.onnx_metadata.json
 
+julia_over_time.png
+backend/data/supervised/TOOL - Stinkfist (Audio)_20260116_222545.json

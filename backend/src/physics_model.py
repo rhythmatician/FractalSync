@@ -181,8 +181,9 @@ class PhysicsAudioToVisualModel(nn.Module):
                         self.current_position / position_magnitude * 2.0
                     )
 
-                c_real = self.current_position[0]
-                c_imag = self.current_position[1]
+                # Expand to batch dimension to match other tensors
+                c_real = self.current_position[0].unsqueeze(0)
+                c_imag = self.current_position[1].unsqueeze(0)
             else:
                 # Training mode: use batch positions (can be provided externally or initialized)
                 # For now, just constrain velocity and return zeros for position
@@ -243,8 +244,11 @@ class PhysicsAudioToVisualModel(nn.Module):
             # Fallback in the unlikely case the module has no parameters yet.
             device = torch.device("cpu")
 
-        self.current_position = torch.tensor(position, dtype=torch.float32, device=device)
+        self.current_position = torch.tensor(
+            position, dtype=torch.float32, device=device
+        )
         self.current_velocity = torch.zeros(2, dtype=torch.float32, device=device)
+
     def integrate_velocity(
         self,
         velocity: torch.Tensor,
@@ -264,25 +268,23 @@ class PhysicsAudioToVisualModel(nn.Module):
         Returns:
             Tuple of (new_position, new_velocity) both (batch_size, 2)
         """
+        # Get batch size from velocity (the authoritative batch size)
+        batch_size = velocity.size(0)
+
+        # Trim position and prev_velocity to match velocity batch size
+        # (handles last batch being smaller than previous batches)
+        position = position[:batch_size]
+
         # Apply damping if previous velocity provided
         if prev_velocity is not None:
-            # Handle batch size mismatch (last batch may be smaller)
-            batch_size = velocity.size(0)
-            if prev_velocity.size(0) != batch_size:
-                # Trim prev_velocity to match current batch size
-                prev_velocity = prev_velocity[:batch_size]
+            # Trim prev_velocity to match current batch size
+            prev_velocity = prev_velocity[:batch_size]
 
             damped_velocity = prev_velocity * self.damping_factor + velocity * (
                 1.0 - self.damping_factor
             )
         else:
             damped_velocity = velocity
-
-        # Ensure position matches velocity batch size
-        batch_size = velocity.size(0)
-        if position.size(0) != batch_size:
-            # Trim or expand position to match velocity batch size
-            position = position[:batch_size]
 
         # Integrate position
         new_position = position + damped_velocity * dt

@@ -57,11 +57,22 @@ class AudioDataset:
             raise ValueError(f"No audio files found in {data_dir}")
 
     def _find_audio_files(self) -> List[Path]:
-        """Find all audio files in data directory."""
+        """Find all audio files in data directory (non-recursive)."""
         audio_files: List[Path] = []
+        seen_paths = set()
+
         for ext in self.supported_formats:
-            audio_files.extend(self.data_dir.rglob(f"*{ext}"))
-            audio_files.extend(self.data_dir.rglob(f"*{ext.upper()}"))
+            for path in self.data_dir.glob(f"*{ext}"):
+                normalized_path = path.resolve()
+                if normalized_path not in seen_paths:
+                    audio_files.append(path)
+                    seen_paths.add(normalized_path)
+
+            for path in self.data_dir.glob(f"*{ext.upper()}"):
+                normalized_path = path.resolve()
+                if normalized_path not in seen_paths:
+                    audio_files.append(path)
+                    seen_paths.add(normalized_path)
 
         if self.max_files:
             audio_files = audio_files[: self.max_files]
