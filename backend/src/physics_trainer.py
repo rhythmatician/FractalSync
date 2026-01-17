@@ -263,7 +263,10 @@ class DirectionalConsistencyLoss(nn.Module):
         self.weight = weight
 
     def forward(
-        self, current_velocity: torch.Tensor, previous_velocity: torch.Tensor
+        self,
+        current_velocity: torch.Tensor,
+        previous_velocity: torch.Tensor,
+        energy: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Compute directional consistency loss.
@@ -292,6 +295,12 @@ class DirectionalConsistencyLoss(nn.Module):
         # Penalize negative dot products (direction flips)
         # ReLU ensures we only penalize flips, not consistent motion
         direction_flip_penalty = torch.relu(-dot_product)
+
+        # Weight penalty by energy so high-energy audio discourages flips more
+        if energy is not None:
+            energy_min, energy_max = energy.min(), energy.max()
+            energy_norm = (energy - energy_min) / (energy_max - energy_min + 1e-8)
+            direction_flip_penalty = direction_flip_penalty * energy_norm
 
         return self.weight * torch.mean(direction_flip_penalty)
 
@@ -333,6 +342,42 @@ class AudioDrivenMomentumLoss(nn.Module):
         mismatch = torch.abs(vel_normalized - energy_normalized)
 
         return self.weight * torch.mean(mismatch)
+
+
+class EnergyScaledVelocityFloorLoss(nn.Module):
+    """Enforce a minimum velocity that scales with audio energy."""
+
+    def __init__(self, weight: float = 0.1, v_min: float = 0.05):
+        super().__init__()
+        self.weight = weight
+        self.v_min = v_min
+
+    def forward(
+        self, velocity_magnitude: torch.Tensor, energy: torch.Tensor
+    ) -> torch.Tensor:
+        # Normalize energy to [0, 1]
+        energy_min, energy_max = energy.min(), energy.max()
+        energy_norm = (energy - energy_min) / (energy_max - energy_min + 1e-8)
+
+        # Target floor scales with energy; silence => near zero floor
+        target_floor = self.v_min * energy_norm
+        penalty = torch.relu(target_floor - velocity_magnitude)
+        return self.weight * penalty.mean()
+
+
+class ExplorationVarianceLoss(nn.Module):
+    """Encourage positional variance to avoid stagnation in one region."""
+
+    def __init__(self, weight: float = 0.05, target_variance: float = 0.02):
+        super().__init__()
+        self.weight = weight
+        self.target_variance = target_variance
+
+    def forward(self, positions: torch.Tensor) -> torch.Tensor:
+        # positions: (batch, 2) for c_real, c_imag
+        var = torch.var(positions, dim=0).mean()
+        shortfall = torch.relu(self.target_variance - var)
+        return self.weight * shortfall
 
 
 class PhysicsTrainer:
@@ -394,6 +439,8 @@ class PhysicsTrainer:
                 "boundary_proximity": 0.2,
                 "directional_consistency": 0.15,
                 "audio_driven_momentum": 0.1,
+                "energy_velocity_floor": 0.1,
+                "exploration_variance": 0.05,
             }
         self.correlation_weights = correlation_weights
 
@@ -419,6 +466,12 @@ class PhysicsTrainer:
         self.audio_driven_momentum_loss = AudioDrivenMomentumLoss(
             weight=correlation_weights.get("audio_driven_momentum", 0.1)
         )
+        self.energy_velocity_floor_loss = EnergyScaledVelocityFloorLoss(
+            weight=correlation_weights.get("energy_velocity_floor", 0.1)
+        )
+        self.exploration_variance_loss = ExplorationVarianceLoss(
+            weight=correlation_weights.get("exploration_variance", 0.05)
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -435,6 +488,8 @@ class PhysicsTrainer:
             "boundary_proximity_loss": [],
             "directional_consistency_loss": [],
             "audio_driven_momentum_loss": [],
+            "energy_velocity_floor_loss": [],
+            "exploration_variance_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
             "silence_stillness_loss": [],
@@ -493,6 +548,8 @@ class PhysicsTrainer:
         total_distortion_roughness = 0.0
         total_smoothness = 0.0
         total_audio_driven_momentum = 0.0
+        total_energy_velocity_floor = 0.0
+        total_exploration_variance = 0.0
 
         n_batches = 0
 
@@ -624,6 +681,9 @@ class PhysicsTrainer:
                 rms_energy = avg_features[:, 2]
                 zero_crossing_rate = avg_features[:, 3]
 
+                # Combine energy measures for audio-driven terms
+                audio_energy = rms_energy + 0.5 * spectral_flux
+
                 # Render Julia sets for visual metrics
                 images = []
                 color_hues = []
@@ -704,6 +764,9 @@ class PhysicsTrainer:
                     zero_crossing_rate, edge_density_tensor
                 )
 
+                # Combined audio energy for motion-related losses
+                audio_energy = rms_energy + 0.5 * spectral_flux
+
                 # Velocity loss (curriculum learning)
                 if curriculum_vel_batch is not None and current_curriculum_weight > 0.0:
                     velocity_loss_val = self.velocity_loss(
@@ -724,7 +787,9 @@ class PhysicsTrainer:
 
                     # Directional consistency (penalize oscillation)
                     directional_consistency_val = self.directional_consistency_loss(
-                        predicted_velocity[:min_size], previous_velocity[:min_size]
+                        predicted_velocity[:min_size],
+                        previous_velocity[:min_size],
+                        energy=audio_energy[:min_size],
                     )
                 else:
                     acceleration_smoothness_val = torch.zeros(1, device=self.device)
@@ -743,6 +808,16 @@ class PhysicsTrainer:
                     velocity_magnitude, rms_energy[:batch_size]
                 )
 
+                # Energy-scaled velocity floor (enforce motion when audio is active)
+                energy_velocity_floor_val = self.energy_velocity_floor_loss(
+                    velocity_magnitude, audio_energy[:batch_size]
+                )
+
+                # Exploration variance (encourage spread of c over batch)
+                exploration_variance_val = self.exploration_variance_loss(
+                    current_positions
+                )
+
                 # Parameter smoothness (placeholder for future use)
                 smoothness = torch.zeros(1, device=self.device)
 
@@ -759,6 +834,8 @@ class PhysicsTrainer:
                     + acceleration_smoothness_val
                     + directional_consistency_val
                     + boundary_proximity_val
+                    + energy_velocity_floor_val
+                    + exploration_variance_val
                     + audio_driven_momentum_val
                     + smoothness
                 )
@@ -775,6 +852,8 @@ class PhysicsTrainer:
                 total_boundary_proximity += boundary_proximity_val.item()
                 total_directional_consistency += directional_consistency_val.item()
                 total_audio_driven_momentum += audio_driven_momentum_val.item()
+                total_energy_velocity_floor += energy_velocity_floor_val.item()
+                total_exploration_variance += exploration_variance_val.item()
                 total_timbre_color += timbre_color_loss.item()
                 total_transient_impact += transient_impact_loss.item()
                 total_silence_stillness += silence_stillness_loss.item()
@@ -809,6 +888,8 @@ class PhysicsTrainer:
             "boundary_proximity_loss": total_boundary_proximity / n_batches,
             "directional_consistency_loss": total_directional_consistency / n_batches,
             "audio_driven_momentum_loss": total_audio_driven_momentum / n_batches,
+            "energy_velocity_floor_loss": total_energy_velocity_floor / n_batches,
+            "exploration_variance_loss": total_exploration_variance / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
             "silence_stillness_loss": total_silence_stillness / n_batches,
