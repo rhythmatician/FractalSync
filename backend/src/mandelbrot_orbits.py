@@ -321,15 +321,16 @@ def compute_boundary_distance(
         z = z * z + c
 
     # Did not escape - inside the set
-    # Points deep inside have small magnitude, points near boundary are close to threshold
+    # Points deep inside have small magnitude, points near boundary approach threshold
     final_magnitude = abs(z)
-    if final_magnitude < threshold:
-        # Inside set - distance proportional to how far from threshold
-        # Closer to threshold = closer to boundary = lower distance value
-        return 1.0 - (final_magnitude / threshold)
-    else:
-        # At or slightly beyond threshold (boundary region)
-        return 0.0
+    
+    # Normalize to [0, 1] where:
+    # - magnitude near 0 (deep inside) -> distance near 1 (far from boundary)
+    # - magnitude near threshold (edge) -> distance near 0 (close to boundary)
+    # Formula: higher magnitude = closer to boundary = lower distance
+    distance = (threshold - final_magnitude) / threshold
+    
+    return max(0.0, min(1.0, distance))
 
 
 def detect_boundary_crossing(
@@ -352,7 +353,7 @@ def detect_boundary_crossing(
         curr_real: Current real coordinate
         curr_imag: Current imaginary coordinate
         max_iter: Maximum iterations for boundary check
-        crossing_threshold: Threshold for considering a point "near" boundary
+        crossing_threshold: Distance threshold for boundary proximity
 
     Returns:
         True if boundary was crossed
@@ -361,13 +362,13 @@ def detect_boundary_crossing(
     curr_dist = compute_boundary_distance(curr_real, curr_imag, max_iter)
 
     # Check if we crossed from inside to outside or vice versa
-    # A crossing happens when both distances are small (near boundary)
-    # or when the sign of (distance - threshold) changes
-    prev_inside = prev_dist > (1.0 - crossing_threshold)
-    curr_inside = curr_dist > (1.0 - crossing_threshold)
+    # Low distance = near boundary, high distance = far from boundary
+    # Point is "near boundary" when distance < crossing_threshold
+    prev_near_boundary = prev_dist < crossing_threshold
+    curr_near_boundary = curr_dist < crossing_threshold
 
-    # Crossing detected if one is inside and one is outside
-    crossed = prev_inside != curr_inside
+    # Crossing detected if one is near boundary and one is not
+    crossed = prev_near_boundary != curr_near_boundary
 
     return crossed
 

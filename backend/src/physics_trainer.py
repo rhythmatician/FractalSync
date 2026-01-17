@@ -515,33 +515,57 @@ class PhysicsTrainer:
                     acceleration_smoothness_val = torch.zeros(1, device=self.device)
 
                 # Boundary crossing loss (reward crossing in sync with transitions)
-                # Use positions from previous batch (across batches, not within batch)
-                if not hasattr(self, "_prev_batch_positions") or batch_idx == 0:
-                    # First batch of epoch: no previous positions
+                # Track positions across entire training, not just per epoch
+                if not hasattr(self, "_prev_batch_positions"):
+                    # Very first batch of all training - initialize
                     self._prev_batch_positions = current_positions.clone().detach()
                     boundary_crossing_loss_val = torch.zeros(1, device=self.device)
-                else:
-                    # Use previous batch's final positions
-                    # Handle batch size mismatch (last batch may be smaller)
+                elif batch_idx == 0 and epoch > 0:
+                    # First batch of a new epoch - use last positions from previous epoch
+                    # Handle batch size mismatch by padding/truncating
                     prev_batch_size = self._prev_batch_positions.size(0)
                     curr_batch_size = current_positions.size(0)
                     
                     if prev_batch_size >= curr_batch_size:
-                        # Use last N positions from previous batch
+                        # Previous has more/equal positions - use last N
                         prev_positions_for_loss = self._prev_batch_positions[-curr_batch_size:]
                     else:
-                        # Previous batch was smaller - pad with itself
-                        prev_positions_for_loss = self._prev_batch_positions
-                        # Only compute loss for the overlapping portion
-                        curr_batch_size = prev_batch_size
+                        # Previous has fewer - repeat last position to fill
+                        padding_needed = curr_batch_size - prev_batch_size
+                        last_pos = self._prev_batch_positions[-1:].repeat(padding_needed, 1)
+                        prev_positions_for_loss = torch.cat(
+                            [self._prev_batch_positions, last_pos], dim=0
+                        )
                     
                     boundary_crossing_loss_val = self.boundary_crossing_loss(
-                        current_positions[:curr_batch_size],
+                        current_positions,
                         prev_positions_for_loss,
-                        transition_scores_tensor[:curr_batch_size],
+                        transition_scores_tensor,
                     )
                     
-                    # Update previous positions for next batch
+                    self._prev_batch_positions = current_positions.clone().detach()
+                else:
+                    # Regular batch - use positions from previous batch
+                    prev_batch_size = self._prev_batch_positions.size(0)
+                    curr_batch_size = current_positions.size(0)
+                    
+                    if prev_batch_size >= curr_batch_size:
+                        # Previous has more/equal positions - use last N
+                        prev_positions_for_loss = self._prev_batch_positions[-curr_batch_size:]
+                    else:
+                        # Previous has fewer - repeat last position to fill
+                        padding_needed = curr_batch_size - prev_batch_size
+                        last_pos = self._prev_batch_positions[-1:].repeat(padding_needed, 1)
+                        prev_positions_for_loss = torch.cat(
+                            [self._prev_batch_positions, last_pos], dim=0
+                        )
+                    
+                    boundary_crossing_loss_val = self.boundary_crossing_loss(
+                        current_positions,
+                        prev_positions_for_loss,
+                        transition_scores_tensor,
+                    )
+                    
                     self._prev_batch_positions = current_positions.clone().detach()
 
                 # Parameter smoothness (placeholder for future use)
