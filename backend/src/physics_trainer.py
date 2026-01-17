@@ -440,7 +440,7 @@ class PhysicsTrainer:
                 "directional_consistency": 0.15,
                 "audio_driven_momentum": 0.1,
                 "energy_velocity_floor": 0.1,
-                "exploration_variance": 0.05,
+                "exploration_variance": 0.15,
             }
         self.correlation_weights = correlation_weights
 
