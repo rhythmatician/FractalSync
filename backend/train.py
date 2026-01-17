@@ -67,7 +67,7 @@ def main():
     parser.add_argument(
         "--curriculum-decay",
         type=float,
-        default=0.85,
+        default=0.50,
         help="Decay factor for curriculum weight per epoch",
     )
     parser.add_argument(

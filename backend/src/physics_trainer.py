@@ -252,7 +252,9 @@ class BoundaryProximityLoss(nn.Module):
         # Normalize by target_iters so loss is scale-invariant
         normalized_distance = distance / self.target_iters
 
-        return self.weight * torch.mean(normalized_distance)
+        # Square the distance for quadratic penalty: small deviations barely penalized,
+        # large deviations heavily penalized (allows exploration near boundary)
+        return self.weight * torch.mean(normalized_distance**2)
 
 
 class DirectionalConsistencyLoss(nn.Module):
@@ -436,11 +438,11 @@ class PhysicsTrainer:
                 "smoothness": 0.1,
                 "acceleration_smoothness": 0.05,
                 "velocity_loss": 1.0,
-                "boundary_proximity": 0.2,
+                "boundary_proximity": 0.05,
                 "directional_consistency": 0.15,
                 "audio_driven_momentum": 0.1,
                 "energy_velocity_floor": 0.1,
-                "exploration_variance": 0.5,
+                "exploration_variance": 1.0,
             }
         self.correlation_weights = correlation_weights
 
