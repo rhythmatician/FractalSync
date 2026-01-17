@@ -8,7 +8,6 @@ with real audio data for improved model training.
 import sys
 import os
 from pathlib import Path
-import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -45,13 +44,19 @@ class MixedDataset(Dataset):
             window_frames: Window size for features
             n_audio_features: Number of audio features
         """
+        if not (0 <= synthetic_ratio < 1):
+            raise ValueError(f"synthetic_ratio must be in [0, 1), got {synthetic_ratio}")
+            
         self.audio_dataset = audio_dataset
         self.window_frames = window_frames
         self.n_audio_features = n_audio_features
         
         # Calculate number of synthetic samples to generate
         n_real = len(audio_dataset)
-        n_synthetic = int(n_real * synthetic_ratio / (1 - synthetic_ratio))
+        if synthetic_ratio == 0:
+            n_synthetic = 0
+        else:
+            n_synthetic = int(n_real * synthetic_ratio / (1 - synthetic_ratio))
         
         print(f"Creating mixed dataset:")
         print(f"  - Real samples: {n_real}")

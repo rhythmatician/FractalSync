@@ -15,7 +15,7 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from src.song_analyzer import SongAnalyzer, analyze_audio_file
+from src.song_analyzer import SongAnalyzer
 from src.orbit_engine import OrbitEngine, create_synthetic_dataset
 
 

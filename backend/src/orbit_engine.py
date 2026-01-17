@@ -7,10 +7,8 @@ to create trajectories that correlate with synthetic audio features.
 """
 
 import numpy as np
-from typing import Tuple, Dict, List, Optional
+from typing import Tuple, Dict, List, Union, Optional
 from src.mandelbrot_orbits import (
-    MandelbrotOrbit,
-    MandelbrotGeometry,
     get_preset_orbit,
     list_preset_names,
 )
@@ -39,6 +37,14 @@ class OrbitEngine:
             sr: Sample rate (for time calculations)
             hop_length: Hop length (for frame calculations)
         """
+        if not isinstance(n_audio_features, int):
+            raise TypeError(
+                f"n_audio_features must be an int, got {type(n_audio_features).__name__}"
+            )
+        if n_audio_features <= 0:
+            raise ValueError(
+                f"n_audio_features must be a positive integer, got {n_audio_features}"
+            )
         self.n_audio_features = n_audio_features
         self.sr = sr
         self.hop_length = hop_length
@@ -65,6 +71,9 @@ class OrbitEngine:
             - audio_features: shape (n_samples, n_audio_features)
             - visual_params: shape (n_samples, 2) [c_real, c_imag]
         """
+        if n_samples <= 0:
+            raise ValueError(f"n_samples must be a positive integer, got {n_samples}")
+            
         # Get the orbit
         orbit = get_preset_orbit(orbit_name)
 
@@ -276,7 +285,7 @@ class OrbitEngine:
         n_samples: int,
         orbit_names: Optional[List[str]] = None,
         correlation_types: Optional[List[str]] = None,
-    ) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, str | int]]]:
+    ) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, Union[str, int]]]]:
         """
         Generate a mixed curriculum of synthetic trajectories.
 
@@ -363,7 +372,6 @@ class OrbitEngine:
             - windowed_visual: (n_windows, 2) - uses center frame of window
         """
         n_frames = len(audio_features)
-        n_features = audio_features.shape[1]
 
         # Create sliding windows
         windowed_audio = []
@@ -398,7 +406,7 @@ def create_synthetic_dataset(
     n_samples: int = 10000,
     window_frames: int = 10,
     n_audio_features: int = 6,
-) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, str | int]]]:
+) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, Union[str, int]]]]:
     """
     Convenience function to create a complete synthetic dataset.
 

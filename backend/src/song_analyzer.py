@@ -7,7 +7,7 @@ significant audio events (hits, transitions) for synchronization.
 
 import numpy as np
 import librosa
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Union
 
 
 class SongAnalyzer:
@@ -33,7 +33,7 @@ class SongAnalyzer:
 
     def analyze_song(
         self, audio: np.ndarray
-    ) -> Dict[str, np.ndarray | float | List[float]]:
+    ) -> Dict[str, Union[np.ndarray, float, List[float]]]:
         """
         Perform comprehensive song analysis.
 
@@ -160,11 +160,6 @@ class SongAnalyzer:
         # Normalize features
         features = librosa.util.normalize(features, axis=0)
 
-        # Compute self-similarity matrix
-        rec_matrix = librosa.segment.recurrence_matrix(
-            features, mode="affinity", metric="cosine", width=3
-        )
-
         # Detect boundaries using structure features
         # Use default k or estimate based on audio length
         n_frames = features.shape[1]
@@ -220,7 +215,7 @@ class SongAnalyzer:
         onset_frames: np.ndarray,
         onset_strength: np.ndarray,
         threshold: float = 0.5,
-    ) -> List[Dict[str, int | float]]:
+    ) -> List[Dict[str, Union[int, float]]]:
         """
         Extract hit events with their strengths.
 
@@ -244,7 +239,7 @@ class SongAnalyzer:
 
         return hit_events
 
-    def frames_to_time(self, frames: np.ndarray | int) -> np.ndarray | float:
+    def frames_to_time(self, frames: Union[np.ndarray, int]) -> Union[np.ndarray, float]:
         """
         Convert frame indices to time in seconds.
 
@@ -258,7 +253,7 @@ class SongAnalyzer:
             frames, sr=self.sr, hop_length=self.hop_length
         )
 
-    def time_to_frames(self, time_sec: float | np.ndarray) -> int | np.ndarray:
+    def time_to_frames(self, time_sec: Union[float, np.ndarray]) -> Union[int, np.ndarray]:
         """
         Convert time in seconds to frame indices.
 
@@ -275,7 +270,7 @@ class SongAnalyzer:
 
 def analyze_audio_file(
     file_path: str, sr: int = 22050
-) -> Tuple[Dict[str, np.ndarray | float | List[float]], np.ndarray]:
+) -> Tuple[Dict[str, Union[np.ndarray, float, List[float]]], np.ndarray]:
     """
     Convenience function to analyze an audio file.
 
