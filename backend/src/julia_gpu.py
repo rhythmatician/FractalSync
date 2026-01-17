@@ -157,7 +157,8 @@ class GPUJuliaRenderer:
             self.fbo.use()
             self.ctx.viewport = (0, 0, self.width, self.height)
             self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-            self.vao.render(mode=self.ctx.TRIANGLES, vertices=6)
+            # Use a fullscreen quad via triangle strip (4 verts)
+            self.vao.render(mode=self.ctx.TRIANGLE_STRIP, vertices=4)
 
             # Read back as numpy array
             data = self.fbo.read(components=4)
