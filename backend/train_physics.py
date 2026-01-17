@@ -73,6 +73,12 @@ def main():
         help="Scaling factor for velocity magnitude",
     )
     parser.add_argument(
+        "--boundary-crossing-weight",
+        type=float,
+        default=0.5,
+        help="Weight for boundary crossing reward (0-1)",
+    )
+    parser.add_argument(
         "--save-dir",
         type=str,
         default="models/physics",
@@ -106,6 +112,7 @@ def main():
         print(f"  Curriculum decay: {args.curriculum_decay}")
     print(f"Damping factor: {args.damping_factor}")
     print(f"Speed scale: {args.speed_scale}")
+    print(f"Boundary crossing weight: {args.boundary_crossing_weight}")
     print(f"Device: {args.device}")
     print("=" * 60)
 
@@ -146,6 +153,19 @@ def main():
     print(f"Output dimension: {model.output_dim}")
 
     print("[5/6] Initializing physics trainer...")
+    
+    # Set correlation weights including boundary crossing
+    correlation_weights = {
+        "timbre_color": 1.0,
+        "transient_impact": 1.0,
+        "silence_stillness": 1.0,
+        "distortion_roughness": 1.0,
+        "smoothness": 0.1,
+        "acceleration_smoothness": 0.05,
+        "velocity_loss": 1.0,
+        "boundary_crossing": args.boundary_crossing_weight,
+    }
+    
     trainer = PhysicsTrainer(
         model=model,
         feature_extractor=feature_extractor,
@@ -154,6 +174,7 @@ def main():
         learning_rate=args.learning_rate,
         use_curriculum=args.use_curriculum,
         curriculum_weight=args.curriculum_weight,
+        correlation_weights=correlation_weights,
     )
 
     print("[6/6] Starting training...")

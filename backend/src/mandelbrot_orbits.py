@@ -444,3 +444,91 @@ def generate_random_mandelbrot_points(
             break
 
     return np.array(points[:n_points], dtype=np.float32)
+
+
+def generate_boundary_crossing_trajectory(
+    n_samples: int,
+    n_crossings: int = 10,
+    orbit_names: List[str] = None,
+    crossing_intensity: float = 0.5,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Generate synthetic trajectory with intentional boundary crossings.
+
+    Creates a trajectory that crosses the Mandelbrot set boundary at
+    regular intervals, useful for training with boundary crossing rewards.
+
+    Args:
+        n_samples: Total number of samples to generate
+        n_crossings: Approximate number of boundary crossings
+        orbit_names: List of orbit names to use (defaults to all presets)
+        crossing_intensity: How close to boundary to get (0-1, higher = closer)
+
+    Returns:
+        Tuple of (positions, velocities, crossing_events) arrays
+        - positions: (n_samples, 2) [real, imag]
+        - velocities: (n_samples, 2) [v_real, v_imag]
+        - crossing_events: (n_samples,) binary array indicating crossings
+    """
+    if orbit_names is None:
+        orbit_names = list(MANDELBROT_PRESETS.keys())
+
+    # Calculate samples per crossing segment
+    samples_per_segment = n_samples // (n_crossings + 1)
+
+    all_positions = []
+    all_velocities = []
+    all_crossings = []
+
+    # Generate trajectory segments
+    for i in range(n_crossings + 1):
+        # Alternate between different orbits
+        orbit_name = orbit_names[i % len(orbit_names)]
+        orbit = get_preset_orbit(orbit_name)
+
+        # Sample positions from orbit
+        positions = orbit.sample(samples_per_segment)
+        velocities = orbit.compute_velocities(samples_per_segment)
+
+        # Add boundary-crossing perturbation
+        if i > 0:
+            # Create a crossing at the start of this segment
+            # Move from inside to outside (or vice versa) Mandelbrot set
+            for j in range(min(5, samples_per_segment)):
+                # Gradually move across boundary
+                factor = j / 5.0
+                perturbation = crossing_intensity * 0.1 * factor
+
+                # Add perturbation to move across boundary
+                if is_in_mandelbrot_set(
+                    positions[j, 0], positions[j, 1], max_iter=50
+                ):
+                    # Move outward
+                    positions[j, 0] += perturbation
+                    positions[j, 1] += perturbation
+                else:
+                    # Move inward
+                    positions[j, 0] -= perturbation
+                    positions[j, 1] -= perturbation
+
+        # Detect crossings in this segment
+        crossings = np.zeros(samples_per_segment, dtype=np.float32)
+        for j in range(1, samples_per_segment):
+            if detect_boundary_crossing(
+                positions[j - 1, 0],
+                positions[j - 1, 1],
+                positions[j, 0],
+                positions[j, 1],
+            ):
+                crossings[j] = 1.0
+
+        all_positions.append(positions)
+        all_velocities.append(velocities)
+        all_crossings.append(crossings)
+
+    # Concatenate all segments
+    final_positions = np.concatenate(all_positions, axis=0)[:n_samples]
+    final_velocities = np.concatenate(all_velocities, axis=0)[:n_samples]
+    final_crossings = np.concatenate(all_crossings, axis=0)[:n_samples]
+
+    return final_positions, final_velocities, final_crossings
