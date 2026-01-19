@@ -1,17 +1,3 @@
-Below is a **single, self-contained architecture + implementation plan** for FractalSync going forward, assuming:
-
-* **Live visualizer** (not video generator)
-* **Audio input:** stereo board mix (room mic only as fallback; ignore for design)
-* **Primary visual goal:** **don’t get stuck in one lobe**, and deliver **many satisfying boundary-cross “impacts”** during big hits
-* **Section boundaries:** fully automatic, **allowed to be late** (seconds late is OK)
-* **Lobe switches:** only at *detected* section changes (not every few seconds)
-* **`s` behavior:** loud parts converge to **`s ≈ 1.02`**; quiet/noisy can push `s` large (up toward |c|≈2-ish); quiet/tonal can settle inward
-* **Orbit geometry:** use the project’s **tested/validated lobe centers and radii** already present in code (do not re-derive math)
-
-This is written so you can paste it into Copilot as a “do exactly this” spec.
-
----
-
 # FractalSync: New Goals + New Architecture (Implementation Plan)
 
 ## 0) What we’re building
