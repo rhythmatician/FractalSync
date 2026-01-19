@@ -29,6 +29,7 @@ ENV/
 # Byte-compiled / optimized / DLL files
 data/audio/*
 data/cache/*
+data/supervised/*
 
 # Test output
 tests/fixtures/*.json
@@ -36,3 +37,6 @@ tests/fixtures/*.json
 # curriculum visualization files
 curriculum_viz/curriculum_visualization.png
 curriculum_viz/curriculum.gif
+
+# Copilot's verbose markdown files
+docs/copilot/*
