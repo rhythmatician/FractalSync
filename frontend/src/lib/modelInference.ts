@@ -53,9 +53,10 @@ export class ModelInference {
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
   private colorHistorySize: number = 120; // ~2 seconds at 60fps
-  private lastLobeSwitch: number = 0;
+  private frameCount: number = 0; // Total frames processed
+  private lastLobeSwitch: number = 0; // Frame number of last lobe switch
   private lobeSwitchCooldown: number = 180; // ~3 seconds at 60fps (hysteresis)
-  private colorChangeThreshold: number = 0.15; // Hue change threshold
+  private colorChangeThreshold: number = 0.01; // Hue change threshold (lowered for sensitivity)
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
   private useAudioReactivePostProcessing: boolean = true;
@@ -347,6 +348,9 @@ export class ModelInference {
   private detectSectionChange(currentHue: number): void {
     if (!this.orbitState) return;
     
+    // Increment frame counter
+    this.frameCount++;
+    
     // Add current hue to history
     this.colorHistory.push(currentHue);
     if (this.colorHistory.length > this.colorHistorySize) {
@@ -357,7 +361,7 @@ export class ModelInference {
     if (this.colorHistory.length < this.colorHistorySize) return;
     
     // Check cooldown (hysteresis)
-    const framesSinceLastSwitch = this.colorHistory.length - this.lastLobeSwitch;
+    const framesSinceLastSwitch = this.frameCount - this.lastLobeSwitch;
     if (framesSinceLastSwitch < this.lobeSwitchCooldown) return;
     
     // Compute moving average of recent colors
@@ -382,6 +386,11 @@ export class ModelInference {
     let hueDiff = Math.abs(recentAvg - oldAvg);
     if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff; // Wraparound correction
     
+    // Log every few frames for debugging
+    if (this.colorHistory.length % 60 === 0) {
+      console.log(`🎨 Color tracking: recent=${recentAvg.toFixed(3)}, old=${oldAvg.toFixed(3)}, diff=${hueDiff.toFixed(3)}, threshold=${this.colorChangeThreshold}, cooldown=${framesSinceLastSwitch}/${this.lobeSwitchCooldown}`);
+    }
+    
     if (hueDiff > this.colorChangeThreshold) {
       // Section change detected! Switch to a random different lobe
       const currentLobe = this.orbitState.lobe;
@@ -389,7 +398,7 @@ export class ModelInference {
       const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
       
       this.orbitState.lobe = newLobe;
-      this.lastLobeSwitch = this.colorHistory.length;
+      this.lastLobeSwitch = this.frameCount; // Use frame counter instead of history length
       
       console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);
     }

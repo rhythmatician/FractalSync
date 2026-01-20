@@ -50,26 +50,62 @@ export class OrbitSynthesizer {
   }
 
   /**
-   * Map (s, alpha) to a point on/near the Mandelbrot boundary
+   * Get center and radius for a specific lobe
    */
-  private mandelbrotBoundary(s: number, alpha: number): Complex {
+  private getLobeParams(lobe: number, subLobe: number): { center: Complex; radius: number } {
+    // Hardcoded centers for common periods
+    const lobeData: Record<number, { center: Complex; radius: number }[]> = {
+      1: [{ center: { real: 0.0, imag: 0.0 }, radius: 0.25 }],
+      2: [{ center: { real: -1.0, imag: 0.0 }, radius: 0.25 }],
+      3: [
+        { center: { real: -0.125, imag: 0.649519 }, radius: 0.0943 },
+        { center: { real: -0.125, imag: -0.649519 }, radius: 0.0943 }
+      ],
+      4: [{ center: { real: 0.25, imag: 0.0 }, radius: 0.04 }]
+    };
+
+    const lobeArray = lobeData[lobe];
+    if (!lobeArray) {
+      // Fallback to lobe 1
+      return lobeData[1][0];
+    }
+
+    const index = Math.min(subLobe, lobeArray.length - 1);
+    return lobeArray[index];
+  }
+
+  /**
+   * Map (lobe, s, alpha) to a point on/near the Mandelbrot boundary
+   */
+  private mandelbrotBoundary(lobe: number, subLobe: number, s: number, alpha: number): Complex {
     // Clamp inputs
     s = Math.max(0.01, Math.min(3.0, s));
     alpha = Math.max(0.0, Math.min(1.0, alpha));
 
-    // Main cardioid: c = r * e^(iθ) where r = 0.25 * (1 - cos(2πα))
-    const theta = 2.0 * Math.PI * alpha;
-    const r = 0.25 * (1.0 - Math.cos(theta));
-    
-    let real = r * Math.cos(theta / 2.0);
-    let imag = r * Math.sin(theta / 2.0);
+    if (lobe === 1) {
+      // Main cardioid: c = r * e^(iθ) where r = 0.25 * (1 - cos(2πα))
+      const theta = 2.0 * Math.PI * alpha;
+      const r = 0.25 * (1.0 - Math.cos(theta));
+      
+      let real = r * Math.cos(theta / 2.0);
+      let imag = r * Math.sin(theta / 2.0);
 
-    // Scale by s to move away from boundary
-    const scale = Math.min(s, 1.5); // Cap at 1.5 to avoid escaping too far
-    real *= scale;
-    imag *= scale;
+      // Scale by s to move away from boundary
+      const scale = Math.min(s, 1.5);
+      real *= scale;
+      imag *= scale;
 
-    return { real, imag };
+      return { real, imag };
+    } else {
+      // Period-n bulbs: circular orbits around bulb center
+      const { center, radius } = this.getLobeParams(lobe, subLobe);
+      const theta = 2.0 * Math.PI * alpha;
+      
+      return {
+        real: center.real + s * radius * Math.cos(theta),
+        imag: center.imag + s * radius * Math.sin(theta)
+      };
+    }
   }
 
   /**
@@ -79,8 +115,8 @@ export class OrbitSynthesizer {
     // Update theta (orbit phase)
     const newTheta = (state.theta + state.omega * dt) % (2.0 * Math.PI);
 
-    // Get base position from Mandelbrot boundary
-    const cBase = this.mandelbrotBoundary(state.s, state.alpha);
+    // Get base position from Mandelbrot boundary (now respects lobe!)
+    const cBase = this.mandelbrotBoundary(state.lobe, state.subLobe, state.s, state.alpha);
 
     // Apply residual modulation
     let residualReal = 0.0;

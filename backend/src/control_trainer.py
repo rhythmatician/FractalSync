@@ -21,6 +21,7 @@ from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
 from .mandelbrot_orbits import generate_curriculum_sequence
 from .orbit_synth import OrbitSynthesizer, create_initial_state
+from .section_detector import SectionDetector
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,14 @@ class ControlTrainer:
 
         # Orbit synthesizer for generating c(t) from control signals
         self.synthesizer = OrbitSynthesizer(k_residuals=k_residuals, residual_cap=0.5)
+        
+        # Section detector for lobe switching during training
+        self.section_detector = SectionDetector(
+            smoothing=0.95,
+            change_threshold=0.15,
+            cooldown_frames=10,
+            num_lobes=4,
+        )
 
         # Default correlation weights
         default_weights = {
@@ -200,6 +209,9 @@ class ControlTrainer:
     ) -> Dict[str, float]:
         """Train for one epoch."""
         self.model.train()
+        
+        # Reset section detector at start of each epoch
+        self.section_detector.reset()
 
         total_loss = 0.0
         total_control_loss = 0.0
@@ -261,13 +273,24 @@ class ControlTrainer:
             alpha = parsed["alpha"]
             omega_scale = parsed["omega_scale"]
             band_gates = parsed["band_gates"]
+            
+            # Detect sections and assign lobes based on audio features
+            # Average features across time window for section detection
+            n_features_per_frame = 6
+            window_frames = features.shape[1] // n_features_per_frame
+            features_reshaped = features.view(
+                batch_size, window_frames, n_features_per_frame
+            )
+            avg_features = features_reshaped.mean(dim=1)  # [batch_size, 6]
+            
+            # Get lobe assignments from section detector
+            lobe_assignments = self.section_detector.detect_batch(avg_features)
 
-            # Synthesize c(t) using orbit synthesizer
-            # For training, use a fixed lobe (cardioid) and sample from orbit
+            # Synthesize c(t) using orbit synthesizer with detected lobes
             c_values = []
             for i in range(batch_size):
                 state = create_initial_state(
-                    lobe=1,
+                    lobe=int(lobe_assignments[i].item()),  # Use detected lobe
                     sub_lobe=0,
                     theta=float(i * 2 * np.pi / batch_size),  # Distributed around orbit
                     omega=omega_scale[i].detach().item(),
@@ -285,13 +308,6 @@ class ControlTrainer:
             julia_imag = c_tensor[:, 1]
 
             # Extract audio features for correlation
-            n_features_per_frame = 6
-            window_frames = features.shape[1] // n_features_per_frame
-            features_reshaped = features.view(
-                batch_size, window_frames, n_features_per_frame
-            )
-            avg_features = features_reshaped.mean(dim=1)
-
             spectral_centroid = avg_features[:, 0]
             spectral_flux = avg_features[:, 1]
 
