@@ -37,3 +37,7 @@ wasm-orbit/Cargo.lock
 
 # Frontend WASM files (generated from wasm-orbit)
 frontend/src/wasm/
+frontend/public/wasm/*.wasm
+frontend/public/wasm/*.js
+frontend/public/wasm/*.ts
+frontend/public/wasm/.gitignore
