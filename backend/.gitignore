@@ -25,14 +25,17 @@ env/
 ENV/
 .venv
 
+# Training artifacts
+checkpoints_orbit/training_history.json
 
 # Byte-compiled / optimized / DLL files
 data/audio/*
 data/cache/*
+data/supervised/*
 
 # Test output
 tests/fixtures/*.json
 
-# curriculum visualization files
-curriculum_viz/curriculum_visualization.png
-curriculum_viz/curriculum.gif
+
+# Copilot's verbose markdown files
+docs/copilot/*

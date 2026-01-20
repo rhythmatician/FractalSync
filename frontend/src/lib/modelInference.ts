@@ -3,6 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
+import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -26,6 +27,8 @@ export interface ModelMetadata {
   input_dim?: number;
   timestamp?: string;
   git_hash?: string;
+  model_type?: string; // 'orbit_control' or legacy
+  k_bands?: number;
 }
 
 export interface PerformanceMetrics {
@@ -41,6 +44,11 @@ export class ModelInference {
   private metadata: ModelMetadata | null = null;
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
+  
+  // Orbit-based synthesis (new architecture)
+  private orbitSynthesizer: OrbitSynthesizer | null = null;
+  private orbitState: OrbitState | null = null;
+  private isOrbitModel: boolean = false;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
   private useAudioReactivePostProcessing: boolean = true;
@@ -83,6 +91,19 @@ export class ModelInference {
         const response = await fetch(metadataPath);
         this.metadata = await response.json() as ModelMetadata;
         
+        // Check if this is an orbit-based control model
+        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
+        
+        if (this.isOrbitModel) {
+          // Initialize orbit synthesizer for control-signal models
+          const kBands = this.metadata.k_bands || 6;
+          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+          this.orbitState = createInitialState({ kResiduals: kBands });
+          console.log('[ModelInference] Loaded orbit-based control model');
+        } else {
+          console.log('[ModelInference] Loaded legacy visual parameter model');
+        }
+        
         // Set up normalization
         if (this.metadata.feature_mean && this.metadata.feature_std) {
           this.featureMean = new Float32Array(this.metadata.feature_mean);
@@ -101,7 +122,6 @@ export class ModelInference {
     if (!this.session) {
       throw new Error('Model not loaded');
     }
-
 
     const totalStartTime = performance.now();
     let normStartTime = performance.now();
@@ -133,75 +153,125 @@ export class ModelInference {
     const inferTime = performance.now() - inferStartTime;
 
     const outputTensor = results.visual_parameters;
-
-    // Extract parameters
     const params = Array.from(outputTensor.data as Float32Array);
 
     // Post-processing
     const postStartTime = performance.now();
 
-    // Apply post-processing based on model output
-    const visualParams: VisualParameters = {
-      juliaReal: params[0],
-      juliaImag: params[1],
-      colorHue: params[2],
-      colorSat: params[3],
-      colorBright: params[4],
-      zoom: params[5],
-      speed: params[6]
-    };
+    let visualParams: VisualParameters;
 
-    if (this.useAudioReactivePostProcessing) {
-      // AUDIO-REACTIVE POST-PROCESSING (MR #8 / commit 75c1a43)
-      // Use raw audio features to add dynamic variation for undertrained models
-      // Extract some key audio features from the input (assuming 6 features × window_frames)
+    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
+      // NEW ORBIT-BASED CONTROL MODEL
+      // Parse control signals from model output
+      const controlSignals: ControlSignals = {
+        sTarget: params[0],
+        alpha: params[1],
+        omegaScale: params[2],
+        bandGates: params.slice(3)
+      };
+      
+      console.debug('Raw model output (control signals):', {
+        s: controlSignals.sTarget,
+        alpha: controlSignals.alpha,
+        omegaScale: controlSignals.omegaScale,
+        bandGates: controlSignals.bandGates
+      });
+
+      // Update orbit state with new control signals
+      this.orbitState.s = controlSignals.sTarget;
+      this.orbitState.alpha = controlSignals.alpha;
+      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
+
+      // Synthesize Julia parameter c(t) from orbit
+      const dt = 1.0 / 60.0; // Assume 60 FPS
+      const { c, newState } = this.orbitSynthesizer.step(
+        this.orbitState,
+        dt,
+        controlSignals.bandGates
+      );
+      this.orbitState = newState;
+
+      // Extract audio features for color mapping
       const numFeatures = 6;
       const windowFrames = Math.floor(features.length / numFeatures);
-
-      if (features.length % numFeatures !== 0) {
-        console.warn(
-          `[modelInference] features.length (${features.length}) is not a multiple of numFeatures (${numFeatures}). ` +
-            `Using ${windowFrames} full frames.`
-        );
-      }
-      
-      // Average each feature type across the window
-      let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
+      let avgRMS = 0, avgOnset = 0;
       for (let i = 0; i < windowFrames; i++) {
-        avgCentroid += features[i * numFeatures + 0];
-        avgFlux += features[i * numFeatures + 1];
         avgRMS += features[i * numFeatures + 2];
-        avgZCR += features[i * numFeatures + 3];
         avgOnset += features[i * numFeatures + 4];
-        avgRolloff += features[i * numFeatures + 5];
       }
-      avgCentroid /= windowFrames;
-      avgFlux /= windowFrames;
       avgRMS /= windowFrames;
-      avgZCR /= windowFrames;
       avgOnset /= windowFrames;
-      avgRolloff /= windowFrames;
-      
-      // Color: Map RMS (loudness) to hue cycling, onset to saturation
-      visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0; // Cycle hue with loudness
-      visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)); // Boost sat on onsets
-      visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)); // Brightness from loudness
-    } else {
-      
-      // Color: enforce minimum saturation
-      visualParams.colorHue = visualParams.colorHue % 1.0;
-      visualParams.colorSat = Math.max(0.5, Math.min(1, visualParams.colorSat * 0.8 + 0.5));
-      visualParams.colorBright = Math.max(0.6, Math.min(0.9, visualParams.colorBright * 0.5 + 0.5));
-      
-    }
-    // ORIGINAL POST-PROCESSING (pre-MR #8)
-    // Scale down undertrained model outputs and add variation
-    visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
-    visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
 
-    // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
-    visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
-    visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
+      // Map to visual parameters
+      visualParams = {
+        juliaReal: c.real,
+        juliaImag: c.imag,
+        colorHue: (avgRMS * 2.0) % 1.0, // Map loudness to hue
+        colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
+        colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
+        zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
+        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
+      };
+    } else {
+      // LEGACY VISUAL PARAMETER MODEL
+      visualParams = {
+        juliaReal: params[0],
+        juliaImag: params[1],
+        colorHue: params[2],
+        colorSat: params[3],
+        colorBright: params[4],
+        zoom: params[5],
+        speed: params[6]
+      };
+
+      if (this.useAudioReactivePostProcessing) {
+        // AUDIO-REACTIVE POST-PROCESSING (MR #8 / commit 75c1a43)
+        const numFeatures = 6;
+        const windowFrames = Math.floor(features.length / numFeatures);
+
+        if (features.length % numFeatures !== 0) {
+          console.warn(
+            `[modelInference] features.length (${features.length}) is not a multiple of numFeatures (${numFeatures}). ` +
+              `Using ${windowFrames} full frames.`
+          );
+        }
+        
+        // Average each feature type across the window
+        let avgCentroid = 0, avgFlux = 0, avgRMS = 0, avgZCR = 0, avgOnset = 0, avgRolloff = 0;
+        for (let i = 0; i < windowFrames; i++) {
+          avgCentroid += features[i * numFeatures + 0];
+          avgFlux += features[i * numFeatures + 1];
+          avgRMS += features[i * numFeatures + 2];
+          avgZCR += features[i * numFeatures + 3];
+          avgOnset += features[i * numFeatures + 4];
+          avgRolloff += features[i * numFeatures + 5];
+        }
+        avgCentroid /= windowFrames;
+        avgFlux /= windowFrames;
+        avgRMS /= windowFrames;
+        avgZCR /= windowFrames;
+        avgOnset /= windowFrames;
+        avgRolloff /= windowFrames;
+        
+        // Color: Map RMS (loudness) to hue cycling, onset to saturation
+        visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0;
+        visualParams.colorSat = Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3));
+        visualParams.colorBright = Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3));
+      } else {
+        // Color: enforce minimum saturation
+        visualParams.colorHue = visualParams.colorHue % 1.0;
+        visualParams.colorSat = Math.max(0.5, Math.min(1, visualParams.colorSat * 0.8 + 0.5));
+        visualParams.colorBright = Math.max(0.6, Math.min(0.9, visualParams.colorBright * 0.5 + 0.5));
+      }
+      
+      // ORIGINAL POST-PROCESSING (pre-MR #8)
+      visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
+      visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
+
+      // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
+      visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
+      visualParams.speed = Math.max(0.3, Math.min(0.7, visualParams.speed));
+    }
 
     const postTime = performance.now() - postStartTime;
     const totalTime = performance.now() - totalStartTime;
@@ -229,7 +299,7 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        audioAvg: { avgRMS: avgRMS.toFixed(3), avgFlux: avgFlux.toFixed(3), avgOnset: avgOnset.toFixed(3) }
+        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
       });
     }
 

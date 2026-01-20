@@ -3,7 +3,6 @@ ONNX model export utilities.
 """
 
 import json
-import os
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -11,8 +10,6 @@ from typing import Any, Dict, Optional
 import numpy as np
 import onnx
 import torch
-
-from .physics_model import PhysicsAudioToVisualModel
 
 
 def export_to_onnx(
@@ -98,12 +95,26 @@ def export_to_onnx(
 
     # Save metadata
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
-    metadata_dict = {
-        "input_shape": (
-            list(input_shape) if len(input_shape) > 1 else [1, input_shape[0]]
-        ),
-        "output_dim": 7,
-        "parameter_names": [
+
+    # Determine parameter names and ranges based on metadata
+    if metadata and metadata.get("model_type") == "orbit_control":
+        # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
+        k_bands = metadata.get("k_bands", 6)
+        output_dim = metadata.get("output_dim", 3 + k_bands)
+        parameter_names = ["s_target", "alpha", "omega_scale"] + [
+            f"band_gate_{i}" for i in range(k_bands)
+        ]
+        parameter_ranges = {
+            "s_target": [0.2, 3.0],
+            "alpha": [0.0, 1.0],
+            "omega_scale": [0.1, 5.0],
+        }
+        for i in range(k_bands):
+            parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
+    else:
+        # Default: physics/visual parameter model (legacy)
+        output_dim = 7
+        parameter_names = [
             "julia_real",
             "julia_imag",
             "color_hue",
@@ -111,8 +122,8 @@ def export_to_onnx(
             "color_bright",
             "zoom",
             "speed",
-        ],
-        "parameter_ranges": {
+        ]
+        parameter_ranges = {
             "julia_real": [-2.0, 2.0],
             "julia_imag": [-2.0, 2.0],
             "color_hue": [0.0, 1.0],
@@ -120,7 +131,15 @@ def export_to_onnx(
             "color_bright": [0.0, 1.0],
             "zoom": [0.1, 10.0],
             "speed": [0.0, 1.0],
-        },
+        }
+
+    metadata_dict = {
+        "input_shape": (
+            list(input_shape) if len(input_shape) > 1 else [1, input_shape[0]]
+        ),
+        "output_dim": output_dim,
+        "parameter_names": parameter_names,
+        "parameter_ranges": parameter_ranges,
     }
 
     if feature_mean is not None:
@@ -137,79 +156,3 @@ def export_to_onnx(
     logging.info(f"Metadata saved to {metadata_path}")
 
     return metadata_path
-
-
-def load_checkpoint_and_export(
-    checkpoint_path: str,
-    model_class: type = PhysicsAudioToVisualModel,
-    model_kwargs: Optional[Dict[str, Any]] = None,
-    output_dir: str = "models",
-    window_frames: int = 10,
-    num_features_per_frame: Optional[int] = None,
-):
-    """
-    Load checkpoint and export to ONNX.
-
-    Args:
-        checkpoint_path: Path to PyTorch checkpoint
-        model_class: Model class to instantiate
-        model_kwargs: Keyword arguments for model initialization
-        output_dir: Directory to save ONNX model
-        window_frames: Number of audio frames
-        num_features_per_frame: DEPRECATED - PhysicsAudioToVisualModel always uses 6 features per frame
-    """
-    if model_kwargs is None:
-        model_kwargs = {}
-
-    # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-    # PhysicsAudioToVisualModel always uses 6 features per frame
-    expected_input_dim = 6 * window_frames
-
-    # Create model
-    model = model_class(
-        window_frames=window_frames,
-        **model_kwargs,
-    )
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
-
-    # Get normalization stats
-    feature_mean = checkpoint.get("feature_mean")
-    feature_std = checkpoint.get("feature_std")
-
-    # Validate feature stats dimensions if present
-    if feature_mean is not None and len(feature_mean) != expected_input_dim:
-        raise ValueError(
-            f"feature_mean length {len(feature_mean)} does not match expected input dim {expected_input_dim}"
-        )
-    if feature_std is not None and len(feature_std) != expected_input_dim:
-        raise ValueError(
-            f"feature_std length {len(feature_std)} does not match expected input dim {expected_input_dim}"
-        )
-
-    # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Calculate input dimension (6 features per frame for PhysicsAudioToVisualModel)
-    input_dim = 6 * window_frames
-
-    # Export
-    output_path = os.path.join(output_dir, "model.onnx")
-    metadata_path = export_to_onnx(
-        model,
-        input_shape=(1, input_dim),
-        output_path=output_path,
-        feature_mean=feature_mean,
-        feature_std=feature_std,
-        metadata={
-            "epoch": checkpoint.get("epoch", 0),
-            "checkpoint_path": checkpoint_path,
-            "window_frames": window_frames,
-            "num_features_per_frame": 6,  # Always 6 for PhysicsAudioToVisualModel
-            "input_dim": input_dim,
-        },
-    )
-
-    return output_path, metadata_path

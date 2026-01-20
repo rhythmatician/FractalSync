@@ -29,4 +29,15 @@ data/cache/
 *.onnx_metadata.json
 
 julia_over_time.png
-backend/data/supervised/TOOL - Stinkfist (Audio)_20260116_222545.json
+
+# Rust / WASM build artifacts
+wasm-orbit/target/
+wasm-orbit/pkg/
+wasm-orbit/Cargo.lock
+
+# Frontend WASM files (generated from wasm-orbit)
+frontend/src/wasm/
+frontend/public/wasm/*.wasm
+frontend/public/wasm/*.js
+frontend/public/wasm/*.ts
+frontend/public/wasm/.gitignore

@@ -22,9 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.audio_features import AudioFeatureExtractor  # noqa: E402
 from src.data_loader import AudioDataset  # noqa: E402
-from src.export_model import load_checkpoint_and_export  # noqa: E402
-from src.physics_model import PhysicsAudioToVisualModel  # noqa: E402
-from src.physics_trainer import PhysicsTrainer  # noqa: E402
+from src.control_model import AudioToControlModel  # noqa: E402
+from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
 
 # GPU rendering optimization imports
@@ -136,15 +135,14 @@ async def train_model_async(request: TrainingRequest):
             except Exception as e:
                 logging.warning(f"Failed to initialize GPU renderer: {e}")
 
-        # Initialize physics model
-        model = PhysicsAudioToVisualModel(
+        # Initialize control model
+        model = AudioToControlModel(
             window_frames=request.window_frames,
-            damping_factor=request.damping_factor,
-            speed_scale=request.speed_scale,
+            k_bands=6,  # Default to 6 band gates
         )
 
-        # Initialize physics trainer
-        trainer = PhysicsTrainer(
+        # Initialize control trainer
+        trainer = ControlTrainer(
             model=model,
             feature_extractor=feature_extractor,
             visual_metrics=visual_metrics,
@@ -215,19 +213,21 @@ async def train_model_async(request: TrainingRequest):
             await asyncio.sleep(0)  # Yield to event loop
 
         # Export to ONNX
-        checkpoint_files = list(Path("checkpoints").glob("checkpoint_epoch_*.pt"))
-        if checkpoint_files:
-            latest_checkpoint = max(
-                checkpoint_files,
-                key=lambda p: p.stat().st_mtime,
-            )
-            load_checkpoint_and_export(
-                str(latest_checkpoint),
-                output_dir="models",
-                window_frames=request.window_frames,
-            )
-        else:
-            logging.warning("No checkpoints found to export")
+        # TEMP: Disabled because load_checkpoint_and_export doesn't exist in current export_model.py
+        # checkpoint_files = list(Path("checkpoints").glob("checkpoint_epoch_*.pt"))
+        # if checkpoint_files:
+        #     latest_checkpoint = max(
+        #         checkpoint_files,
+        #         key=lambda p: p.stat().st_mtime,
+        #     )
+        #     load_checkpoint_and_export(
+        #         str(latest_checkpoint),
+        #         output_dir="models",
+        #         window_frames=request.window_frames,
+        #     )
+        # else:
+        #     logging.warning("No checkpoints found to export")
+        logging.warning("ONNX export after training is temporarily disabled")
 
         training_state.status = "completed"
         training_state.progress = 1.0

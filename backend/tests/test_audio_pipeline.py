@@ -216,7 +216,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         self.assertEqual(
             features.shape[1],
             60,
-            "Features must be 60-dimensional for PhysicsAudioToVisualModel",
+            "Features must be 60-dimensional for audio-visual models",
         )
 
         # Convert to tensor (as trainer would do)
@@ -264,126 +264,6 @@ class TestEndToEndPipeline(unittest.TestCase):
             60,
             "Features must always be 60-dimensional regardless of audio length",
         )
-
-    def test_partial_batch_handling(self):
-        """Test that trainer handles partial batches correctly.
-
-        This is a regression test for the bug where the final batch
-        of a dataset (size 30) would fail when previous_params from
-        the prior batch (size 32) was used in smoothness_loss.
-        """
-        from src.audio_features import AudioFeatureExtractor
-        from src.physics_model import PhysicsAudioToVisualModel
-        from src.physics_trainer import PhysicsTrainer
-        from src.visual_metrics import VisualMetrics
-        from torch.utils.data import DataLoader, TensorDataset
-
-        # Create a small dataset where last batch will be partial
-        # 162 samples with batch_size=32 gives: 5 full batches + 1 batch of 2
-        n_samples = 162
-        # Default: 60 = 6 base features × 10 frames
-        DEFAULT_INPUT_DIM = 60
-        input_dim = DEFAULT_INPUT_DIM
-        batch_size = 32
-
-        # Create synthetic feature data
-        features = torch.randn(n_samples, input_dim)
-        dataset = TensorDataset(features)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-        # Initialize dependencies
-        feature_extractor = AudioFeatureExtractor(sr=22050)
-        visual_metrics = VisualMetrics()
-
-        # Initialize model and trainer
-        model = PhysicsAudioToVisualModel(window_frames=10)
-        trainer = PhysicsTrainer(
-            model=model,
-            feature_extractor=feature_extractor,
-            visual_metrics=visual_metrics,
-            learning_rate=0.0001,
-        )
-
-        # Try to train for one epoch - this should not crash on the partial batch
-        try:
-            epoch_losses = trainer.train_epoch(dataloader, epoch=1)
-
-            # Verify we got a valid loss dictionary
-            self.assertIsInstance(epoch_losses, dict)
-            self.assertIn("loss", epoch_losses)
-            self.assertIn("velocity_loss", epoch_losses)
-            self.assertIsInstance(epoch_losses["loss"], float)
-            self.assertIsInstance(epoch_losses["velocity_loss"], float)
-
-            # Test passes if we reach here without exception
-            self.assertTrue(True, "Partial batch handled successfully")
-
-        except RuntimeError as e:
-            if "size of tensor" in str(e):
-                self.fail(
-                    f"Partial batch caused tensor size mismatch: {e}\n"
-                    "This likely means previous_params from a full batch (32) "
-                    "was used with a partial batch (2)."
-                )
-            else:
-                raise
-
-    def test_partial_batch_handling_with_velocity_loss(self):
-        """Test that trainer handles partial batches correctly with velocity loss."""
-        from src.audio_features import AudioFeatureExtractor
-        from src.physics_model import PhysicsAudioToVisualModel
-        from src.physics_trainer import PhysicsTrainer
-        from src.visual_metrics import VisualMetrics
-        from torch.utils.data import DataLoader, TensorDataset
-
-        # Create a small dataset where last batch will be partial
-        n_samples = 162
-        # Default: 60 = 6 base features × 10 frames
-        DEFAULT_INPUT_DIM = 60
-        input_dim = DEFAULT_INPUT_DIM
-        batch_size = 32
-
-        # Create synthetic feature data
-        features = torch.randn(n_samples, input_dim)
-        dataset = TensorDataset(features)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
-        # Initialize dependencies
-        feature_extractor = AudioFeatureExtractor(sr=22050)
-        visual_metrics = VisualMetrics()
-
-        # Initialize model and trainer (velocity loss always enabled)
-        model = PhysicsAudioToVisualModel(window_frames=10)
-        trainer = PhysicsTrainer(
-            model=model,
-            feature_extractor=feature_extractor,
-            visual_metrics=visual_metrics,
-            learning_rate=0.0001,
-        )
-
-        # Try to train for one epoch with velocity loss
-        try:
-            epoch_losses = trainer.train_epoch(dataloader, epoch=1)
-
-            # Verify we got a valid loss dictionary
-            self.assertIsInstance(epoch_losses, dict)
-            self.assertIn("loss", epoch_losses)
-            self.assertIn("velocity_loss", epoch_losses)
-            self.assertIsInstance(epoch_losses["loss"], float)
-            self.assertIsInstance(epoch_losses["velocity_loss"], float)
-
-            # Test passes if we reach here without exception
-            self.assertTrue(
-                True, "Partial batch with velocity loss handled successfully"
-            )
-
-        except RuntimeError as e:
-            if "size of tensor" in str(e):
-                self.fail(
-                    f"Partial batch with velocity loss caused tensor size mismatch: {e}"
-                )
-            else:
-                raise
 
 
 if __name__ == "__main__":

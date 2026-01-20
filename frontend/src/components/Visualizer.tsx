@@ -156,8 +156,8 @@ export function Visualizer() {
         // Reset failure counter on success
         setInferenceFailures(0);
         
-        // Debug: log parameters
-        console.debug('Model output params:', params);
+        // Debug: log final visual parameters (after orbit synthesis)
+        console.debug('Final visual params (post-orbit-synthesis):', params);
         
         // Update renderer
         rendererRef.current.updateParameters(params);
