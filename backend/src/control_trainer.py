@@ -16,6 +16,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from .audio_features import AudioFeatureExtractor
+from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
 from .mandelbrot_orbits import generate_curriculum_sequence
@@ -60,7 +61,7 @@ class ControlTrainer:
 
     def __init__(
         self,
-        model: nn.Module,
+        model: AudioToControlModel,
         feature_extractor: AudioFeatureExtractor,
         visual_metrics: VisualMetrics,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -92,7 +93,7 @@ class ControlTrainer:
             num_workers: DataLoader workers
             k_residuals: Number of residual circles
         """
-        self.model = model.to(device)
+        self.model: AudioToControlModel = model.to(device)
         self.feature_extractor = feature_extractor
         self.visual_metrics = visual_metrics
         self.device = device
@@ -208,7 +209,7 @@ class ControlTrainer:
 
         # Generate curriculum data if needed
         if self.use_curriculum and self.curriculum_positions is None:
-            total_samples = len(dataloader.dataset)
+            total_samples = len(dataloader.dataset)  # type: ignore
             self._generate_curriculum_data(total_samples)
 
         # Curriculum weight decays over epochs
