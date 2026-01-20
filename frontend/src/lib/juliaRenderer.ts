@@ -84,8 +84,8 @@ export class JuliaRenderer {
       
       void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
-        // Higher zoom = more zoomed OUT (see more of the fractal)
-        uv *= 2.5 / u_zoom;  // Invert zoom so 1.0 = reasonable view
+        // Fixed zoom: always show 2.5 unit range
+        uv *= 2.5;
         
         vec2 c = u_juliaSeed;
         vec2 z = uv;
