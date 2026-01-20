@@ -18,8 +18,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from .audio_features import AudioFeatureExtractor
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
-from .mandelbrot_orbits import generate_curriculum_sequence, get_preset_orbit
-from .orbit_synth import OrbitSynthesizer, OrbitState, create_initial_state
+from .mandelbrot_orbits import generate_curriculum_sequence
+from .orbit_synth import OrbitSynthesizer, create_initial_state
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +125,8 @@ class ControlTrainer:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Curriculum data
-        self.curriculum_positions = None
-        self.curriculum_velocities = None
+        self.curriculum_positions: torch.Tensor
+        self.curriculum_velocities: torch.Tensor
 
         # Training history
         self.history: Dict[str, List[float]] = {
@@ -269,9 +269,9 @@ class ControlTrainer:
                     lobe=1,
                     sub_lobe=0,
                     theta=float(i * 2 * np.pi / batch_size),  # Distributed around orbit
-                    omega=float(omega_scale[i]),
-                    s=float(s_target[i]),
-                    alpha=float(alpha[i]),
+                    omega=omega_scale[i].detach().item(),
+                    s=s_target[i].detach().item(),
+                    alpha=alpha[i].detach().item(),
                     k_residuals=self.k_residuals,
                 )
                 c = self.synthesizer.synthesize(
@@ -304,23 +304,23 @@ class ControlTrainer:
                 if self.julia_renderer is not None:
                     try:
                         image = self.julia_renderer.render(
-                            seed_real=float(julia_real[i]),
-                            seed_imag=float(julia_imag[i]),
+                            seed_real=julia_real[i].detach().item(),
+                            seed_imag=julia_imag[i].detach().item(),
                             max_iter=self.julia_max_iter,
                         )
                     except Exception as e:
                         logger.warning(f"GPU rendering failed: {e}")
                         image = self.visual_metrics.render_julia_set(
-                            seed_real=float(julia_real[i]),
-                            seed_imag=float(julia_imag[i]),
+                            seed_real=julia_real[i].detach().item(),
+                            seed_imag=julia_imag[i].detach().item(),
                             width=self.julia_resolution,
                             height=self.julia_resolution,
                             max_iter=self.julia_max_iter,
                         )
                 else:
                     image = self.visual_metrics.render_julia_set(
-                        seed_real=float(julia_real[i]),
-                        seed_imag=float(julia_imag[i]),
+                        seed_real=julia_real[i].detach().item(),
+                        seed_imag=julia_imag[i].detach().item(),
                         width=self.julia_resolution,
                         height=self.julia_resolution,
                         max_iter=self.julia_max_iter,
