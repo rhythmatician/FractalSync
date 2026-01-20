@@ -126,8 +126,8 @@ class ControlTrainer:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Curriculum data
-        self.curriculum_positions: torch.Tensor
-        self.curriculum_velocities: torch.Tensor
+        self.curriculum_positions: Optional[torch.Tensor] = None
+        self.curriculum_velocities: Optional[torch.Tensor] = None
 
         # Training history
         self.history: Dict[str, List[float]] = {
