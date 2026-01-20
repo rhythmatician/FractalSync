@@ -8,7 +8,21 @@
 
 use pyo3::prelude::*;
 
-use crate::controller::{OrbitState as RustOrbitState, ResidualParams as RustResidualParams, step as rust_step, synthesize as rust_synthesize};
+use crate::controller::{
+    OrbitState as RustOrbitState,
+    ResidualParams as RustResidualParams,
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_ORBIT_SEED,
+    DEFAULT_RESIDUAL_CAP,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    HOP_LENGTH,
+    N_FFT,
+    SAMPLE_RATE,
+    WINDOW_FRAMES,
+    step as rust_step,
+    synthesize as rust_synthesize,
+};
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 
@@ -70,7 +84,7 @@ pub struct OrbitState {
 #[pymethods]
 impl OrbitState {
     #[new]
-    #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale))]
+    #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed=None))]
     fn py_new(
         lobe: u32,
         sub_lobe: u32,
@@ -80,9 +94,10 @@ impl OrbitState {
         alpha: f64,
         k_residuals: usize,
         residual_omega_scale: f64,
+        seed: Option<u64>,
     ) -> Self {
         Self {
-            inner: RustOrbitState::new(
+            inner: RustOrbitState::new_seeded(
                 lobe,
                 sub_lobe,
                 theta,
@@ -91,6 +106,26 @@ impl OrbitState {
                 alpha,
                 k_residuals,
                 residual_omega_scale,
+                seed,
+            ),
+        }
+    }
+
+    /// Construct using the shared default constants and a deterministic seed.
+    #[staticmethod]
+    #[pyo3(signature = (seed=DEFAULT_ORBIT_SEED))]
+    fn new_with_seed(seed: u64) -> Self {
+        Self {
+            inner: RustOrbitState::new_seeded(
+                1,
+                0,
+                0.0,
+                DEFAULT_BASE_OMEGA,
+                1.02,
+                0.3,
+                DEFAULT_K_RESIDUALS,
+                DEFAULT_RESIDUAL_OMEGA_SCALE,
+                Some(seed),
             ),
         }
     }
@@ -210,6 +245,17 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
 
 #[pymodule]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
+    // Shared constants
+    m.add("SAMPLE_RATE", SAMPLE_RATE)?;
+    m.add("HOP_LENGTH", HOP_LENGTH)?;
+    m.add("N_FFT", N_FFT)?;
+    m.add("WINDOW_FRAMES", WINDOW_FRAMES)?;
+    m.add("DEFAULT_K_RESIDUALS", DEFAULT_K_RESIDUALS)?;
+    m.add("DEFAULT_RESIDUAL_CAP", DEFAULT_RESIDUAL_CAP)?;
+    m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
+    m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
+    m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+
     m.add_class::<Complex>()?;
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;

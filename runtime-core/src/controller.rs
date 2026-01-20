@@ -11,6 +11,19 @@
 //! controller’s `alpha` parameter and the band gate vector.
 
 use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+
+/// Shared runtime constants to keep backend and frontend in lockstep.
+/// Exposed through bindings so both sides can assert parity at startup.
+pub const SAMPLE_RATE: usize = 48_000;
+pub const HOP_LENGTH: usize = 1_024;
+pub const N_FFT: usize = 4_096;
+pub const WINDOW_FRAMES: usize = 10;
+pub const DEFAULT_K_RESIDUALS: usize = 6;
+pub const DEFAULT_RESIDUAL_CAP: f64 = 0.5;
+pub const DEFAULT_RESIDUAL_OMEGA_SCALE: f64 = 2.0;
+pub const DEFAULT_BASE_OMEGA: f64 = 1.0;
+pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 
 /// Parameters controlling the residual epicycle sums.  These values
 /// determine the number of residuals and the cap on their combined
@@ -29,35 +42,63 @@ pub struct ResidualParams {
 
 impl Default for ResidualParams {
     fn default() -> Self {
-        Self {
-            k_residuals: 6,
-            residual_cap: 2.0,
-            radius_scale: 1.0,
+        pub fn new(
+            lobe: u32,
+            sub_lobe: u32,
+            theta: f64,
+            omega: f64,
+            s: f64,
+            alpha: f64,
+            k_residuals: usize,
+            residual_omega_scale: f64,
+        ) -> Self {
+            Self::new_seeded(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+                None,
+            )
         }
-    }
-}
 
-/// State for the deterministic orbit synthesiser.
-///
-/// Both the backend and frontend share this struct (via pyo3 or
-/// wasm‑bindgen).  It contains the current lobe index, sub‑lobe,
-/// angular position (`theta`), angular velocity (`omega`), radial
-/// scaling factor (`s`), modulation depth (`alpha`) and the phase
-/// and angular velocity of each residual epicycle.
-#[derive(Clone, Debug)]
-pub struct OrbitState {
-    pub lobe: u32,
-    pub sub_lobe: u32,
-    pub theta: f64,
-    pub omega: f64,
-    pub s: f64,
-    pub alpha: f64,
-    pub residual_phases: Vec<f64>,
-    pub residual_omegas: Vec<f64>,
-}
-
-impl OrbitState {
-    /// Create a new OrbitState with random residual phases.  The
+        /// Deterministic constructor with optional seed for reproducible residual phases.
+        /// If `seed` is `None` a random seed is used.
+        pub fn new_seeded(
+            lobe: u32,
+            sub_lobe: u32,
+            theta: f64,
+            omega: f64,
+            s: f64,
+            alpha: f64,
+            k_residuals: usize,
+            residual_omega_scale: f64,
+            seed: Option<u64>,
+        ) -> Self {
+            let mut rng: StdRng = match seed {
+                Some(seed) => StdRng::seed_from_u64(seed),
+                None => StdRng::from_rng(rand::thread_rng()).expect("failed to seed StdRng"),
+            };
+            let residual_phases: Vec<f64> = (0..k_residuals)
+                .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
+                .collect();
+            let residual_omegas: Vec<f64> = (0..k_residuals)
+                .map(|k| residual_omega_scale * omega * (k as f64 + 1.0))
+                .collect();
+            Self {
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                residual_phases,
+                residual_omegas,
+            }
+        }
     /// residual frequencies are multiples of the base frequency
     /// (`omega`) scaled by `residual_omega_scale`.  This mirrors the
     /// behaviour of the existing Python and WASM implementations.

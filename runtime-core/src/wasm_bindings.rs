@@ -6,16 +6,29 @@
 
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
+use serde::{Deserialize, Serialize};
 
 use crate::controller::{
-    step as rust_step, synthesize as rust_synthesize, OrbitState as RustOrbitState,
+    step as rust_step,
+    synthesize as rust_synthesize,
+    OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_ORBIT_SEED,
+    DEFAULT_RESIDUAL_CAP,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    HOP_LENGTH,
+    N_FFT,
+    SAMPLE_RATE,
+    WINDOW_FRAMES,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 
 /// A complex number (Julia parameter c = a + bi).
 #[wasm_bindgen]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Complex {
     real: f64,
     imag: f64,
@@ -47,6 +60,7 @@ impl Complex {
 
 /// Parameters controlling the residual epicycle sum.
 #[wasm_bindgen]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResidualParams {
     k_residuals: usize,
     residual_cap: f64,
@@ -112,9 +126,17 @@ impl OrbitState {
         k_residuals: usize,
         residual_omega_scale: f64,
     ) -> OrbitState {
-        OrbitState {
-            inner: RustOrbitState::new(lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale),
-        }
+        OrbitState::new_with_seed(
+            lobe,
+            sub_lobe,
+            theta,
+            omega,
+            s,
+            alpha,
+            k_residuals,
+            residual_omega_scale,
+            None,
+        )
     }
 
     /// Create a new orbit state with a fixed RNG seed (deterministic).
@@ -128,10 +150,10 @@ impl OrbitState {
         alpha: f64,
         k_residuals: usize,
         residual_omega_scale: f64,
-        seed: u64,
+        seed: Option<u64>,
     ) -> OrbitState {
         OrbitState {
-            inner: RustOrbitState::new_with_seed(
+            inner: RustOrbitState::new_seeded(
                 lobe,
                 sub_lobe,
                 theta,
@@ -214,4 +236,50 @@ impl FeatureExtractor {
 #[wasm_bindgen]
 pub fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex {
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
+}
+
+/// Shared runtime constants for parity checks between backend and frontend.
+#[wasm_bindgen]
+pub fn sample_rate() -> usize {
+    SAMPLE_RATE
+}
+
+#[wasm_bindgen]
+pub fn hop_length() -> usize {
+    HOP_LENGTH
+}
+
+#[wasm_bindgen]
+pub fn n_fft() -> usize {
+    N_FFT
+}
+
+#[wasm_bindgen]
+pub fn window_frames() -> usize {
+    WINDOW_FRAMES
+}
+
+#[wasm_bindgen]
+pub fn default_k_residuals() -> usize {
+    DEFAULT_K_RESIDUALS
+}
+
+#[wasm_bindgen]
+pub fn default_residual_cap() -> f64 {
+    DEFAULT_RESIDUAL_CAP
+}
+
+#[wasm_bindgen]
+pub fn default_residual_omega_scale() -> f64 {
+    DEFAULT_RESIDUAL_OMEGA_SCALE
+}
+
+#[wasm_bindgen]
+pub fn default_base_omega() -> f64 {
+    DEFAULT_BASE_OMEGA
+}
+
+#[wasm_bindgen]
+pub fn default_orbit_seed() -> u64 {
+    DEFAULT_ORBIT_SEED
 }
