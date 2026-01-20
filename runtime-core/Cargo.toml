@@ -1,0 +1,66 @@
+##
+## Runtime Core Crate
+##
+## This crate contains the shared audio runtime for FractalSync.  It is
+## intended to be compiled as a Rust library for both Python (via
+## `pyo3`) and WebAssembly (via `wasm‑bindgen`).  The goal is to
+## encapsulate all orbit geometry, controller logic and feature
+## extraction in a single source of truth.  By building the crate
+## with different feature flags, you can generate either a Python
+## extension module or a WebAssembly module without touching the
+## underlying implementation.
+
+[package]
+name = "runtime_core"
+version = "0.1.0"
+authors = ["FractalSync Developers"]
+edition = "2021"
+license = "MIT"
+description = "Shared runtime for audio‑driven orbit synthesis"
+homepage = "https://example.com"
+publish = false
+
+# The library can be compiled as both an rlib and a cdylib.  The
+# cdylib build is required for Python and WASM bindings.  When built
+# for Python the `python` feature must be enabled.  When built for
+# WebAssembly the `wasm` feature must be enabled.
+[lib]
+name = "runtime_core"
+crate‑type = ["rlib", "cdylib"]
+
+[features]
+# Enable Python bindings via pyo3.  This flag pulls in pyo3 and
+# configures pyo3 for building an extension module.  When compiling
+# for Python you must use: `cargo build --features python`.
+python = ["pyo3", "pyo3/extension‑module"]
+
+# Enable WebAssembly bindings via wasm‑bindgen.  When compiling
+# for the browser you must use: `cargo build --target wasm32‑unknown‑unknown --features wasm`.
+wasm = ["wasm‑bindgen"]
+
+# The default feature does nothing.  Consumers must opt into one of
+# the language binding features to get export functions.
+default = []
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+serde_wasm_bindgen = { version = "0.6", optional = true }
+
+# pyo3 is optional and only pulled in when the `python` feature is
+# enabled.
+pyo3 = { version = "0.19", optional = true, features = ["macros"] }
+
+# wasm‑bindgen is optional and only pulled in when the `wasm` feature
+# is enabled.
+wasm‑bindgen = { version = "0.2", optional = true }
+
+# rustfft is used for spectral analysis in the feature extractor.
+rustfft = { version = "6" }
+
+# rand is used to initialise random phases for residual epicycles.  It
+# is a lightweight dependency and does not pull in heavy numerical
+# libraries.  If you wish to control randomness externally you can
+# expose the phases in the API and avoid using rand at all.
+rand = { version = "0.8", features = ["std"], optional = false }
