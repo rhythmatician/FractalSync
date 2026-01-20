@@ -1,18 +1,13 @@
 /**
  * Mandelbrot geometry utilities for orbit synthesis.
  * 
- * TypeScript port of backend/src/mandelbrot_orbits.py geometric functions.
- * This ensures the frontend uses the same authoritative geometric calculations.
+ * AUTO-GENERATED from backend/src/mandelbrot_orbits.py
+ * DO NOT EDIT MANUALLY - Run: python backend/generate_frontend_code.py
  */
 
 export class MandelbrotGeometry {
   /**
    * Compute position on lobe boundary at given angle.
-   * 
-   * @param lobe Period number (1=cardioid, 2=period-2, etc.)
-   * @param theta Angle in radians
-   * @param s Radius scaling factor (1.0 = boundary)
-   * @param subLobe Sub-lobe index
    */
   static lobePointAtAngle(
     lobe: number,
@@ -51,13 +46,9 @@ export class MandelbrotGeometry {
   ): { real: number; imag: number } {
     if (lobe === 1) {
       // Cardioid: d/dθ of (r*cos(φ), r*sin(φ))
-      // r = 0.25*(1 - cos(θ)), φ = θ
-      // dr/dθ = 0.25*sin(θ)
       const r = 0.25 * (1 - Math.cos(theta));
       const drDtheta = 0.25 * Math.sin(theta);
       
-      // d/dθ[r*cos(θ)] = dr/dθ*cos(θ) - r*sin(θ)
-      // d/dθ[r*sin(θ)] = dr/dθ*sin(θ) + r*cos(θ)
       return {
         real: s * (drDtheta * Math.cos(theta) - r * Math.sin(theta)),
         imag: s * (drDtheta * Math.sin(theta) + r * Math.cos(theta))
@@ -77,7 +68,7 @@ export class MandelbrotGeometry {
    */
   static periodNBulbCenter(n: number, k: number = 0): { real: number; imag: number } {
     if (n === 1) {
-      return { real: 0, imag: 0 }; // Cardioid center
+      return { real: 0, imag: 0 };
     }
 
     // Hardcoded centers for common periods
@@ -105,51 +96,18 @@ export class MandelbrotGeometry {
    */
   static periodNBulbRadius(n: number, _k: number = 0): number {
     if (n === 1) {
-      return 0.25; // Cardioid reference
+      return 0.25;
     }
     if (n === 2) {
       return 0.25;
     }
     if (n === 3) {
-      return 0.0943; // Hardcoded for period-3
+      return 0.0943;
     }
     if (n === 4) {
-      return 0.04; // Approximate for period-4
+      return 0.04;
     }
     
-    // General approximation
     return 0.25 / (n * n);
-  }
-
-  /**
-   * Euler's totient function.
-   */
-  static eulerTotient(n: number): number {
-    let result = n;
-    let p = 2;
-    
-    while (p * p <= n) {
-      if (n % p === 0) {
-        while (n % p === 0) {
-          n = Math.floor(n / p);
-        }
-        result -= Math.floor(result / p);
-      }
-      p++;
-    }
-    
-    if (n > 1) {
-      result -= Math.floor(result / n);
-    }
-    
-    return result;
-  }
-
-  /**
-   * Get maximum sub-lobe index for a given period.
-   */
-  static getMaxSubLobeForPeriod(n: number): number {
-    if (n === 1) return 0; // Cardioid has no sub-lobes
-    return this.eulerTotient(n) - 1;
   }
 }

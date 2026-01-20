@@ -79,7 +79,7 @@ def main():
     parser.add_argument(
         "--save-dir",
         type=str,
-        default="checkpoints_orbit",
+        default="checkpoints",
         help="Directory to save model checkpoints",
     )
     parser.add_argument(
