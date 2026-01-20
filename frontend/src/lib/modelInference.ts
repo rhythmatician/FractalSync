@@ -182,6 +182,8 @@ export class ModelInference {
       this.orbitState.alpha = controlSignals.alpha;
       this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
 
+      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
+
       // Synthesize Julia parameter c(t) from orbit
       const dt = 1.0 / 60.0; // Assume 60 FPS
       const { c, newState } = this.orbitSynthesizer.step(

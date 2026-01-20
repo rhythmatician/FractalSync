@@ -11,6 +11,8 @@ export interface ControlSignals {
 }
 
 export interface OrbitState {
+  lobe: number;
+  subLobe: number;
   s: number;
   alpha: number;
   omega: number;
@@ -28,6 +30,8 @@ export interface OrbitConfig {
 
 export function createInitialState(_config: OrbitConfig): OrbitState {
   return {
+    lobe: 1,
+    subLobe: 0,
     s: 0.5,
     alpha: 0.5,
     omega: 1.0,
@@ -100,6 +104,8 @@ export class OrbitSynthesizer {
     };
 
     const newState: OrbitState = {
+      lobe: state.lobe,
+      subLobe: state.subLobe,
       s: state.s,
       alpha: state.alpha,
       omega: state.omega,
