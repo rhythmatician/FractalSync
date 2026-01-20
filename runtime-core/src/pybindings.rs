@@ -7,7 +7,6 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyTuple};
 
 use crate::controller::{OrbitState as RustOrbitState, ResidualParams as RustResidualParams, step as rust_step, synthesize as rust_synthesize};
 use crate::features::FeatureExtractor as RustFeatureExtractor;
@@ -92,6 +91,35 @@ impl OrbitState {
                 alpha,
                 k_residuals,
                 residual_omega_scale,
+            ),
+        }
+    }
+
+    /// Create a new OrbitState with a deterministic residual phase seed.
+    #[staticmethod]
+    #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed))]
+    fn new_with_seed(
+        lobe: u32,
+        sub_lobe: u32,
+        theta: f64,
+        omega: f64,
+        s: f64,
+        alpha: f64,
+        k_residuals: usize,
+        residual_omega_scale: f64,
+        seed: u64,
+    ) -> Self {
+        Self {
+            inner: RustOrbitState::new_with_seed(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+                seed,
             ),
         }
     }

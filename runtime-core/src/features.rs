@@ -8,7 +8,6 @@
 //! transforms.  If you wish to adjust the hop length or FFT size
 //! please do so consistently across both training and inference.
 
-use crate::geometry::Complex;
 use rustfft::{FftPlanner, num_complex::Complex as FFTComplex};
 
 /// Extractor configuration.  Mirrors the Python `AudioFeatureExtractor`
@@ -57,8 +56,11 @@ impl FeatureExtractor {
         }
     }
 
-    /// Return the number of base features per frame (6).  Delta and
-    /// delta‑delta features multiply this accordingly.
+    /// Return the number of features per frame.
+    ///
+    /// Base features are 6. If `include_delta` and/or
+    /// `include_delta_delta` are enabled, another 6 features are
+    /// appended for each.
     pub fn num_features_per_frame(&self) -> usize {
         let mut base = 6;
         if self.include_delta {
@@ -184,14 +186,43 @@ impl FeatureExtractor {
         Self::normalise_in_place(&mut rms_energy);
         Self::normalise_in_place(&mut onset_env);
 
-        vec![
+        let mut base = vec![
             spectral_centroid,
             spectral_flux,
             rms_energy,
             zero_crossing_rate,
             onset_env,
             spectral_rolloff,
-        ]
+        ];
+
+        // Optional delta features
+        if self.include_delta {
+            let mut deltas: Vec<Vec<f64>> = base.iter().map(|s| Self::delta(s)).collect();
+            for d in deltas.iter_mut() {
+                Self::normalise_in_place(d);
+            }
+            base.extend(deltas);
+        }
+
+        // Optional delta-delta features
+        if self.include_delta_delta {
+            // If include_delta is false, we compute deltas from the base features.
+            let source: Vec<Vec<f64>> = if self.include_delta {
+                // base currently contains [base..., deltas...]
+                // Delta-delta should be computed from the delta series.
+                base[6..12].to_vec()
+            } else {
+                base[0..6].iter().map(|s| Self::delta(s)).collect()
+            };
+
+            let mut dd: Vec<Vec<f64>> = source.iter().map(|s| Self::delta(s)).collect();
+            for d in dd.iter_mut() {
+                Self::normalise_in_place(d);
+            }
+            base.extend(dd);
+        }
+
+        base
     }
 
     /// Compute a sliding window of flattened features.  The result has
@@ -211,7 +242,21 @@ impl FeatureExtractor {
         if n_frames == 0 {
             return windows;
         }
-        for start in 0..=(n_frames.saturating_sub(window_frames)) {
+
+        // If the audio is shorter than one full window, pad by repeating the last frame.
+        if n_frames < window_frames {
+            let mut padded: Vec<f64> = Vec::with_capacity(n_features * window_frames);
+            for f in 0..n_features {
+                for i in 0..window_frames {
+                    let idx = if i < n_frames { i } else { n_frames - 1 };
+                    padded.push(features[f][idx]);
+                }
+            }
+            windows.push(padded);
+            return windows;
+        }
+
+        for start in 0..=(n_frames - window_frames) {
             let mut window: Vec<f64> = Vec::with_capacity(n_features * window_frames);
             for f in 0..n_features {
                 for i in 0..window_frames {
@@ -220,18 +265,20 @@ impl FeatureExtractor {
             }
             windows.push(window);
         }
-        // If no windows were created because audio was too short, pad
-        if windows.is_empty() {
-            let mut padded: Vec<f64> = Vec::with_capacity(n_features * window_frames);
-            for f in 0..n_features {
-                let value = features[f][0];
-                for _ in 0..window_frames {
-                    padded.push(value);
-                }
-            }
-            windows.push(padded);
-        }
+
         windows
+    }
+
+    /// First-difference delta.
+    fn delta(series: &[f64]) -> Vec<f64> {
+        if series.is_empty() {
+            return vec![];
+        }
+        let mut d = vec![0.0; series.len()];
+        for i in 1..series.len() {
+            d[i] = series[i] - series[i - 1];
+        }
+        d
     }
 
     /// Compute the magnitude spectrum for each frame.  Returns a

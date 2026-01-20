@@ -73,6 +73,39 @@ impl OrbitState {
     ) -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
+        let seed: u64 = rng.gen();
+        Self::new_with_seed(
+            lobe,
+            sub_lobe,
+            theta,
+            omega,
+            s,
+            alpha,
+            k_residuals,
+            residual_omega_scale,
+            seed,
+        )
+    }
+
+    /// Create a new OrbitState with deterministic residual phases.
+    ///
+    /// This is the constructor you want if you need bit-for-bit
+    /// repeatability between runs.
+    pub fn new_with_seed(
+        lobe: u32,
+        sub_lobe: u32,
+        theta: f64,
+        omega: f64,
+        s: f64,
+        alpha: f64,
+        k_residuals: usize,
+        residual_omega_scale: f64,
+        seed: u64,
+    ) -> Self {
+        use rand::Rng;
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+
         let residual_phases: Vec<f64> = (0..k_residuals)
             .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
             .collect();

@@ -1,24 +1,24 @@
-//! WebAssembly bindings for runtime‑core
+//! WebAssembly bindings for runtime-core
 //!
-//! This module exposes Rust structs and functions to JavaScript via
-//! `wasm‑bindgen`.  It mirrors the API of the Python bindings so
-//! that browser code can interact with the same orbit and feature
-//! logic as the backend.
+//! This module exposes the shared runtime to JavaScript via
+//! `wasm-bindgen`. The API is intentionally kept close to the Python
+//! bindings so both front-end and back-end can call the same logic.
 
 use wasm_bindgen::prelude::*;
+use js_sys::Array;
 
-use crate::controller::{OrbitState as RustOrbitState, ResidualParams as RustResidualParams, step as rust_step, synthesize as rust_synthesize};
+use crate::controller::{
+    step as rust_step, synthesize as rust_synthesize, OrbitState as RustOrbitState,
+    ResidualParams as RustResidualParams,
+};
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 
-/// Simple JavaScript representation of a complex number.  This
-/// mirrors the structure exposed in Python.  When returned to
-/// JavaScript it becomes an object with `real` and `imag` fields.
+/// A complex number (Julia parameter c = a + bi).
 #[wasm_bindgen]
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Complex {
-    pub real: f64,
-    pub imag: f64,
+    real: f64,
+    imag: f64,
 }
 
 impl From<RustComplex> for Complex {
@@ -27,27 +27,34 @@ impl From<RustComplex> for Complex {
     }
 }
 
-/// Residual parameters exposed to JavaScript.
 #[wasm_bindgen]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ResidualParams {
-    pub k_residuals: usize,
-    pub residual_cap: f64,
-    pub radius_scale: f64,
-}
+impl Complex {
+    #[wasm_bindgen(constructor)]
+    pub fn new(real: f64, imag: f64) -> Complex {
+        Complex { real, imag }
+    }
 
-impl From<RustResidualParams> for ResidualParams {
-    fn from(p: RustResidualParams) -> Self {
-        Self {
-            k_residuals: p.k_residuals,
-            residual_cap: p.residual_cap,
-            radius_scale: p.radius_scale,
-        }
+    #[wasm_bindgen(getter)]
+    pub fn real(&self) -> f64 {
+        self.real
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn imag(&self) -> f64 {
+        self.imag
     }
 }
 
-impl From<ResidualParams> for RustResidualParams {
-    fn from(p: ResidualParams) -> RustResidualParams {
+/// Parameters controlling the residual epicycle sum.
+#[wasm_bindgen]
+pub struct ResidualParams {
+    k_residuals: usize,
+    residual_cap: f64,
+    radius_scale: f64,
+}
+
+impl From<&ResidualParams> for RustResidualParams {
+    fn from(p: &ResidualParams) -> RustResidualParams {
         RustResidualParams {
             k_residuals: p.k_residuals,
             residual_cap: p.residual_cap,
@@ -56,9 +63,34 @@ impl From<ResidualParams> for RustResidualParams {
     }
 }
 
-/// Orbit state accessible from JavaScript.  This struct wraps the
-/// internal Rust state and exposes methods to advance and synthesise
-/// the orbit.
+#[wasm_bindgen]
+impl ResidualParams {
+    #[wasm_bindgen(constructor)]
+    pub fn new(k_residuals: usize, residual_cap: f64, radius_scale: f64) -> ResidualParams {
+        ResidualParams {
+            k_residuals,
+            residual_cap,
+            radius_scale,
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn k_residuals(&self) -> usize {
+        self.k_residuals
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn residual_cap(&self) -> f64 {
+        self.residual_cap
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn radius_scale(&self) -> f64 {
+        self.radius_scale
+    }
+}
+
+/// Orbit state (carrier + residual phases).
 #[wasm_bindgen]
 pub struct OrbitState {
     inner: RustOrbitState,
@@ -66,7 +98,9 @@ pub struct OrbitState {
 
 #[wasm_bindgen]
 impl OrbitState {
-    /// Construct a new orbit state with random residual phases.
+    /// Create a new orbit state.
+    ///
+    /// If you want deterministic residual phases, use `new_with_seed`.
     #[wasm_bindgen(constructor)]
     pub fn new(
         lobe: u32,
@@ -79,7 +113,25 @@ impl OrbitState {
         residual_omega_scale: f64,
     ) -> OrbitState {
         OrbitState {
-            inner: RustOrbitState::new(
+            inner: RustOrbitState::new(lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale),
+        }
+    }
+
+    /// Create a new orbit state with a fixed RNG seed (deterministic).
+    #[wasm_bindgen]
+    pub fn new_with_seed(
+        lobe: u32,
+        sub_lobe: u32,
+        theta: f64,
+        omega: f64,
+        s: f64,
+        alpha: f64,
+        k_residuals: usize,
+        residual_omega_scale: f64,
+        seed: u64,
+    ) -> OrbitState {
+        OrbitState {
+            inner: RustOrbitState::new_with_seed(
                 lobe,
                 sub_lobe,
                 theta,
@@ -88,46 +140,31 @@ impl OrbitState {
                 alpha,
                 k_residuals,
                 residual_omega_scale,
+                seed,
             ),
         }
     }
 
-    /// Advance time by dt.  Mutates the internal state but does not
-    /// return c(t).  Call `synthesize` or `step` to compute the next
-    /// complex value.
+    /// Advance phases by dt (seconds).
+    #[wasm_bindgen]
     pub fn advance(&mut self, dt: f64) {
         self.inner.advance(dt);
     }
 
-    /// Synthesize c(t) without advancing time.  Band gates are
-    /// provided as an array of floats or omitted.  Returns an object
-    /// with `real` and `imag` fields.
+    /// Compute c(t) without advancing time.
     #[wasm_bindgen]
     pub fn synthesize(&self, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_synthesize(&self.inner, residual_params.clone().into(), band_gates.as_deref()).into()
+        rust_synthesize(&self.inner, RustResidualParams::from(residual_params), band_gates.as_deref()).into()
     }
 
-    /// Advance time by dt and synthesise c(t) in one call.  The band
-    /// gates are applied to the residuals.  Returns a tuple
-    /// `(c, new_state)` where `c` has `real` and `imag` fields and
-    /// `new_state` is a new `OrbitState` reflecting the updated
-    /// phases.
+    /// Advance by dt and return c(t). Mutates this OrbitState.
     #[wasm_bindgen]
-    pub fn step(&self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> JsValue {
-        // Clone the state so that we do not mutate the original
-        let mut new_state = self.inner.clone();
-        let c = rust_step(&mut new_state, dt, residual_params.clone().into(), band_gates.as_deref());
-        // Wrap into JS objects
-        serde_wasm_bindgen::to_value(&serde_json::json!({
-            "c": Complex::from(c),
-            "newState": OrbitState { inner: new_state }
-        })).unwrap()
+    pub fn step(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
+        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref()).into()
     }
 }
 
-/// Feature extractor exposed to JavaScript.  Note that processing
-/// large audio arrays in WebAssembly can be expensive; consider
-/// downsampling on the JavaScript side before calling into Rust.
+/// Audio feature extractor.
 #[wasm_bindgen]
 pub struct FeatureExtractor {
     inner: RustFeatureExtractor,
@@ -148,20 +185,32 @@ impl FeatureExtractor {
         }
     }
 
-    /// Extract a sequence of windowed features from a Float32Array.  The
-    /// result is returned as an array of arrays (nested JS arrays).  If
-    /// you need high performance consider streaming audio to a Web
-    /// Worker and processing it there.
     #[wasm_bindgen]
-    pub fn extract_windowed_features(&self, audio: Vec<f32>, window_frames: usize) -> JsValue {
+    pub fn num_features_per_frame(&self) -> usize {
+        self.inner.num_features_per_frame()
+    }
+
+    /// Extract windowed feature vectors.
+    ///
+    /// Returns a nested JS array: Vec<Vec<f64>>.
+    #[wasm_bindgen]
+    pub fn extract_windowed_features(&self, audio: Vec<f32>, window_frames: usize) -> Array {
         let windows = self.inner.extract_windowed_features(&audio[..], window_frames);
-        serde_wasm_bindgen::to_value(&windows).unwrap()
+        let outer = Array::new();
+
+        for w in windows {
+            let inner = Array::new();
+            for v in w {
+                inner.push(&JsValue::from_f64(v));
+            }
+            outer.push(&inner);
+        }
+
+        outer
     }
 }
 
-/// Compute a point on the Mandelbrot lobe boundary.  Returns an
-/// object with `real` and `imag` fields.  This is a free function
-/// analogous to the Python binding.
+/// Point on a lobe boundary.
 #[wasm_bindgen]
 pub fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex {
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
