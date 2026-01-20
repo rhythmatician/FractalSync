@@ -3,40 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-
-// WASM orbit synthesizer module will be loaded dynamically
-interface WasmOrbitState {
-  lobe: number;
-  sub_lobe: number;
-  theta: number;
-  omega: number;
-  s: number;
-  alpha: number;
-  residual_phases: () => number[];
-  residual_omegas: () => number[];
-}
-
-interface WasmOrbitSynthesizer {
-  step(state: WasmOrbitState, dt: number, bandGates?: number[]): {
-    c: { real: number; imag: number };
-    newState: WasmOrbitState;
-  };
-}
-
-interface WasmModule {
-  default: () => Promise<void>;
-  OrbitState: new(
-    lobe: number,
-    sub_lobe: number,
-    theta: number,
-    omega: number,
-    s: number,
-    alpha: number,
-    k_residuals: number,
-    residual_omega_scale: number
-  ) => WasmOrbitState;
-  OrbitSynthesizer: new(k_residuals: number, residual_cap: number) => WasmOrbitSynthesizer;
-}
+import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -78,10 +45,9 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // WASM orbit synthesizer (single source of truth - compiled from Rust)
-  private wasmModule: WasmModule | null = null;
-  private orbitSynthesizer: WasmOrbitSynthesizer | null = null;
-  private orbitState: WasmOrbitState | null = null;
+  // Orbit-based synthesis (new architecture)
+  private orbitSynthesizer: OrbitSynthesizer | null = null;
+  private orbitState: OrbitState | null = null;
   private isOrbitModel: boolean = false;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
@@ -129,27 +95,11 @@ export class ModelInference {
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
         
         if (this.isOrbitModel) {
-          // Initialize WASM orbit synthesizer (single source of truth)
+          // Initialize orbit synthesizer for control-signal models
           const kBands = this.metadata.k_bands || 6;
-          
-          // Load WASM module dynamically
-          const wasmPath = '/wasm/orbit_synth_wasm.js';
-          // @ts-ignore - dynamic WASM import
-          this.wasmModule = await import(/* @vite-ignore */ wasmPath);
-          await this.wasmModule!.default();  // Initialize WASM
-          
-          this.orbitSynthesizer = new this.wasmModule!.OrbitSynthesizer(kBands, 0.5);
-          this.orbitState = new this.wasmModule!.OrbitState(
-            1,    // lobe
-            0,    // sub_lobe
-            0.0,  // theta
-            1.0,  // omega
-            1.02, // s
-            0.3,  // alpha
-            kBands, // k_residuals
-            2.0   // residual_omega_scale
-          );
-          console.log('[ModelInference] Loaded orbit-based control model (WASM)');
+          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+          this.orbitState = createInitialState({ kResiduals: kBands });
+          console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
@@ -211,23 +161,28 @@ export class ModelInference {
     let visualParams: VisualParameters;
 
     if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL (WASM - single source of truth)
+      // NEW ORBIT-BASED CONTROL MODEL
       // Parse control signals from model output
-      const sTarget = params[0];
-      const alpha = params[1];
-      const omegaScale = params[2];
-      const bandGates = params.slice(3);
+      const controlSignals: ControlSignals = {
+        sTarget: params[0],
+        alpha: params[1],
+        omegaScale: params[2],
+        bandGates: params.slice(3)
+      };
 
       // Update orbit state with new control signals
-      this.orbitState.s = sTarget;
-      this.orbitState.alpha = alpha;
-      this.orbitState.omega = 1.0 * omegaScale; // Base omega * scale
+      this.orbitState.s = controlSignals.sTarget;
+      this.orbitState.alpha = controlSignals.alpha;
+      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
 
-      // Synthesize Julia parameter c(t) from orbit using WASM
+      // Synthesize Julia parameter c(t) from orbit
       const dt = 1.0 / 60.0; // Assume 60 FPS
-      const result = this.orbitSynthesizer.step(this.orbitState, dt, bandGates);
-      const c = result.c;
-      this.orbitState = result.newState;
+      const { c, newState } = this.orbitSynthesizer.step(
+        this.orbitState,
+        dt,
+        controlSignals.bandGates
+      );
+      this.orbitState = newState;
 
       // Extract audio features for color mapping
       const numFeatures = 6;
@@ -248,7 +203,7 @@ export class ModelInference {
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
         zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
-        speed: Math.max(0.3, Math.min(0.7, omegaScale / 5.0))
+        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
       };
     } else {
       // LEGACY VISUAL PARAMETER MODEL
