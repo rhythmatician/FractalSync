@@ -34,3 +34,6 @@ julia_over_time.png
 wasm-orbit/target/
 wasm-orbit/pkg/
 wasm-orbit/Cargo.lock
+
+# Frontend WASM files (generated from wasm-orbit)
+frontend/src/wasm/

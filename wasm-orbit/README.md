@@ -33,10 +33,10 @@ Copy the built WASM files to the frontend:
 
 ```bash
 # PowerShell
-Copy-Item -Path "wasm-orbit\pkg\*" -Destination "frontend\public\wasm\" -Recurse -Force
+Copy-Item -Path "wasm-orbit\pkg\*" -Destination "frontend\src\wasm\" -Recurse -Force
 
 # Bash
-cp -r wasm-orbit/pkg/* frontend/public/wasm/
+cp -r wasm-orbit/pkg/* frontend/src/wasm/
 ```
 
 Or use the provided script:
@@ -49,7 +49,7 @@ npm run deploy  # (if configured in package.json)
 
 1. **Modify Rust code**: Edit `wasm-orbit/src/lib.rs`
 2. **Build WASM**: `cd wasm-orbit && wasm-pack build --target web`
-3. **Copy to frontend**: Copy `pkg/*` to `frontend/public/wasm/`
+3. **Copy to frontend**: Copy `pkg/*` to `frontend/src/wasm/`
 4. **Test**: Refresh browser (hard refresh: Ctrl+Shift+R)
 
 ## Frontend Integration
@@ -90,7 +90,7 @@ cargo install wasm-pack
 ## Troubleshooting
 
 ### WASM not loading in browser
-- Check that files exist in `frontend/public/wasm/`
+- Check that files exist in `frontend/src/wasm/`
 - Hard refresh browser (Ctrl+Shift+R)
 - Check browser console for errors
 
