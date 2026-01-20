@@ -83,6 +83,29 @@ export class ModelInference {
   };
 
   /**
+   * Load WASM module dynamically at runtime (avoids Vite import errors).
+   */
+  private async loadWasmModule(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/wasm/orbit_synth_wasm.js';
+      script.onload = async () => {
+        try {
+          // @ts-ignore - WASM module attaches to window
+          const wasmInit = window.wasm_bindgen;
+          await wasmInit('/wasm/orbit_synth_wasm_bg.wasm');
+          // @ts-ignore
+          resolve(window.wasm_bindgen);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
    * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
    * When enabled, mixes model outputs with raw audio features for dynamic visuals.
    * When disabled, uses only model outputs with basic normalization.
@@ -116,15 +139,14 @@ export class ModelInference {
           // Initialize WASM orbit synthesizer (single source of truth)
           const kBands = this.metadata.k_bands || 6;
           
-          // Load WASM module from src (Vite can process these)
-          const wasmModule = await import('../wasm/orbit_synth_wasm.js');
-          await wasmModule.default();
+          // Load WASM module from public folder at runtime
+          const wasmModule = await this.loadWasmModule();
           
           this.orbitSynthesizer = new wasmModule.OrbitSynthesizer(kBands, 0.5) as any;
           this.orbitState = new wasmModule.OrbitState(
             1,    // lobe
             0,    // sub_lobe
-            0.0,  // theta
+            Math.PI / 2,  // theta (start at π/2 for visible position)
             1.0,  // omega
             1.02, // s
             0.3,  // alpha
@@ -200,6 +222,13 @@ export class ModelInference {
       const omegaScale = params[2];
       const bandGates = params.slice(3);
 
+      console.log('[ModelInference] RAW model outputs (control signals):', {
+        s: sTarget,
+        alpha: alpha,
+        omegaScale: omegaScale,
+        bandGates: bandGates.map(g => g.toFixed(3))
+      });
+
       // Update orbit state with new control signals
       this.orbitState.s = sTarget;
       this.orbitState.alpha = alpha;
@@ -209,11 +238,14 @@ export class ModelInference {
       const dt = 1.0 / 60.0; // Assume 60 FPS
       const result = this.orbitSynthesizer.step(this.orbitState, dt, bandGates) as any;
       
-      // WASM returns JsValue - need to access properties correctly
+      // WASM returns a JavaScript object (not Map)
       const c = result.c || { real: 0, imag: 0 };
-      this.orbitState = result.newState || this.orbitState;
+      const newState = result.newState;
+      if (newState) {
+        this.orbitState = newState;
+      }
 
-      console.log('[WASM Debug] c:', c, 'result:', result);
+      console.log('[WASM Debug] c:', c, 's:', sTarget, 'alpha:', alpha, 'theta:', this.orbitState.theta);
 
       // Extract audio features for color mapping
       const numFeatures = 6;
