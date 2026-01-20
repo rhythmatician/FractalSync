@@ -3,25 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-
-// WASM orbit synthesizer module will be loaded dynamically
-interface WasmOrbitState {
-  lobe: number;
-  sub_lobe: number;
-  theta: number;
-  omega: number;
-  s: number;
-  alpha: number;
-  residual_phases: () => number[];
-  residual_omegas: () => number[];
-}
-
-interface WasmOrbitSynthesizer {
-  step(state: WasmOrbitState, dt: number, bandGates?: number[]): {
-    c: { real: number; imag: number };
-    newState: WasmOrbitState;
-  };
-}
+import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -63,9 +45,9 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // WASM orbit synthesizer (single source of truth - compiled from Rust)
-  private orbitSynthesizer: WasmOrbitSynthesizer | null = null;
-  private orbitState: WasmOrbitState | null = null;
+  // Orbit-based synthesis (new architecture)
+  private orbitSynthesizer: OrbitSynthesizer | null = null;
+  private orbitState: OrbitState | null = null;
   private isOrbitModel: boolean = false;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
@@ -81,29 +63,6 @@ export class ModelInference {
     inferenceTime: 0,
     postProcessingTime: 0
   };
-
-  /**
-   * Load WASM module dynamically at runtime (avoids Vite import errors).
-   */
-  private async loadWasmModule(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = '/wasm/orbit_synth_wasm.js';
-      script.onload = async () => {
-        try {
-          // @ts-ignore - WASM module attaches to window
-          const wasmInit = window.wasm_bindgen;
-          await wasmInit('/wasm/orbit_synth_wasm_bg.wasm');
-          // @ts-ignore
-          resolve(window.wasm_bindgen);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  }
 
   /**
    * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
@@ -136,24 +95,11 @@ export class ModelInference {
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
         
         if (this.isOrbitModel) {
-          // Initialize WASM orbit synthesizer (single source of truth)
+          // Initialize orbit synthesizer for control-signal models
           const kBands = this.metadata.k_bands || 6;
-          
-          // Load WASM module from public folder at runtime
-          const wasmModule = await this.loadWasmModule();
-          
-          this.orbitSynthesizer = new wasmModule.OrbitSynthesizer(kBands, 0.5) as any;
-          this.orbitState = new wasmModule.OrbitState(
-            1,    // lobe
-            0,    // sub_lobe
-            Math.PI / 2,  // theta (start at π/2 for visible position)
-            1.0,  // omega
-            1.02, // s
-            0.3,  // alpha
-            kBands, // k_residuals
-            2.0   // residual_omega_scale
-          ) as any;
-          console.log('[ModelInference] Loaded orbit-based control model (WASM)');
+          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+          this.orbitState = createInitialState({ kResiduals: kBands });
+          console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
@@ -215,37 +161,28 @@ export class ModelInference {
     let visualParams: VisualParameters;
 
     if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL (WASM - single source of truth)
+      // NEW ORBIT-BASED CONTROL MODEL
       // Parse control signals from model output
-      const sTarget = params[0];
-      const alpha = params[1];
-      const omegaScale = params[2];
-      const bandGates = params.slice(3);
-
-      console.log('[ModelInference] RAW model outputs (control signals):', {
-        s: sTarget,
-        alpha: alpha,
-        omegaScale: omegaScale,
-        bandGates: bandGates.map(g => g.toFixed(3))
-      });
+      const controlSignals: ControlSignals = {
+        sTarget: params[0],
+        alpha: params[1],
+        omegaScale: params[2],
+        bandGates: params.slice(3)
+      };
 
       // Update orbit state with new control signals
-      this.orbitState.s = sTarget;
-      this.orbitState.alpha = alpha;
-      this.orbitState.omega = 1.0 * omegaScale; // Base omega * scale
+      this.orbitState.s = controlSignals.sTarget;
+      this.orbitState.alpha = controlSignals.alpha;
+      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
 
-      // Synthesize Julia parameter c(t) from orbit using WASM
+      // Synthesize Julia parameter c(t) from orbit
       const dt = 1.0 / 60.0; // Assume 60 FPS
-      const result = this.orbitSynthesizer.step(this.orbitState, dt, bandGates) as any;
-      
-      // WASM returns a JavaScript object (not Map)
-      const c = result.c || { real: 0, imag: 0 };
-      const newState = result.newState;
-      if (newState) {
-        this.orbitState = newState;
-      }
-
-      console.log('[WASM Debug] c:', c, 's:', sTarget, 'alpha:', alpha, 'theta:', this.orbitState.theta);
+      const { c, newState } = this.orbitSynthesizer.step(
+        this.orbitState,
+        dt,
+        controlSignals.bandGates
+      );
+      this.orbitState = newState;
 
       // Extract audio features for color mapping
       const numFeatures = 6;
@@ -266,7 +203,7 @@ export class ModelInference {
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
         zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
-        speed: Math.max(0.3, Math.min(0.7, omegaScale / 5.0))
+        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
       };
     } else {
       // LEGACY VISUAL PARAMETER MODEL
