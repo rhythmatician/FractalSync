@@ -15,3 +15,9 @@ public/onnxruntime-web/*
 src/assets/onnxruntime-web/*
 src/assets/onnxruntime/*.wasm
 src/assets/onnxruntime/*.mjs
+
+# WASM files (generated from wasm-orbit)
+public/wasm/*.wasm
+public/wasm/*.js
+public/wasm/*.ts
+public/wasm/.gitignore
