@@ -13,10 +13,8 @@ import librosa
 from typing import Tuple, Dict, List, Optional, Union
 from dataclasses import dataclass
 from collections import deque
-import time
 
 from src.mandelbrot_orbits import (
-    MandelbrotGeometry,
     get_preset_orbit,
     list_preset_names,
 )
@@ -319,7 +317,7 @@ class ImpactDetector:
         hysteresis_threshold = threshold * self.hysteresis_ratio
 
         # Detect impact
-        is_impact = score > threshold and not self.in_refractory
+        is_impact = bool(score > threshold) and not self.in_refractory
 
         if is_impact:
             self.last_impact_time = features.timestamp

@@ -7,7 +7,6 @@ The orbit synthesizer uses these signals to generate deterministic c(t).
 
 import torch
 import torch.nn as nn
-from typing import Tuple, Optional
 
 
 class AudioToControlModel(nn.Module):
