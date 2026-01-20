@@ -129,7 +129,23 @@ impl OrbitSynthesizer {
 
     /// Step forward in time and synthesize c(t)
     pub fn step(&self, state: &OrbitState, dt: f64, band_gates: Option<Vec<f64>>) -> JsValue {
-        let c = self.synthesize(state, band_gates);
+        // Select lobe based on band gates (highest gate value wins)
+        let new_lobe = if let Some(ref gates) = band_gates {
+            if gates.is_empty() {
+                state.lobe
+            } else {
+                // Find index of maximum gate value
+                let (max_idx, _) = gates.iter().enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
+                // Map to lobe: 0->1 (cardioid), 1->2 (period-2), 2->3, etc.
+                (max_idx as u32 + 1).min(6)
+            }
+        } else {
+            state.lobe
+        };
+
+        let c = self.synthesize(state, band_gates.clone());
 
         let new_theta = (state.theta + state.omega * dt) % (2.0 * std::f64::consts::PI);
         let new_residual_phases: Vec<f64> = state.residual_phases
@@ -139,7 +155,7 @@ impl OrbitSynthesizer {
             .collect();
 
         let new_state = OrbitState {
-            lobe: state.lobe,
+            lobe: new_lobe,
             sub_lobe: state.sub_lobe,
             theta: new_theta,
             omega: state.omega,

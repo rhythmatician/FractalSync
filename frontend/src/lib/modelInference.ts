@@ -50,6 +50,13 @@ export class ModelInference {
   private orbitState: OrbitState | null = null;
   private isOrbitModel: boolean = false;
   
+  // Color-based section detection for lobe switching
+  private colorHistory: number[] = [];
+  private colorHistorySize: number = 120; // ~2 seconds at 60fps
+  private lastLobeSwitch: number = 0;
+  private lobeSwitchCooldown: number = 180; // ~3 seconds at 60fps (hysteresis)
+  private colorChangeThreshold: number = 0.15; // Hue change threshold
+  
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
   private useAudioReactivePostProcessing: boolean = true;
   
@@ -205,15 +212,19 @@ export class ModelInference {
       avgOnset /= windowFrames;
 
       // Map to visual parameters
+      const currentHue = (avgRMS * 2.0) % 1.0;
       visualParams = {
         juliaReal: c.real,
         juliaImag: c.imag,
-        colorHue: (avgRMS * 2.0) % 1.0, // Map loudness to hue
+        colorHue: currentHue,
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
         zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
         speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
       };
+      
+      // Color-based section detection for lobe switching
+      this.detectSectionChange(currentHue);
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -327,5 +338,60 @@ export class ModelInference {
    */
   isLoaded(): boolean {
     return this.session !== null;
+  }
+  
+  /**
+   * Detect section changes using color moving average with hysteresis.
+   * Switches to a random different lobe when a significant color change is detected.
+   */
+  private detectSectionChange(currentHue: number): void {
+    if (!this.orbitState) return;
+    
+    // Add current hue to history
+    this.colorHistory.push(currentHue);
+    if (this.colorHistory.length > this.colorHistorySize) {
+      this.colorHistory.shift();
+    }
+    
+    // Need enough history to detect changes
+    if (this.colorHistory.length < this.colorHistorySize) return;
+    
+    // Check cooldown (hysteresis)
+    const framesSinceLastSwitch = this.colorHistory.length - this.lastLobeSwitch;
+    if (framesSinceLastSwitch < this.lobeSwitchCooldown) return;
+    
+    // Compute moving average of recent colors
+    const recentWindow = Math.floor(this.colorHistorySize / 4); // Last 30 frames (~0.5s)
+    const oldWindow = Math.floor(this.colorHistorySize / 2); // Middle 60 frames (~1s)
+    
+    let recentAvg = 0;
+    for (let i = this.colorHistory.length - recentWindow; i < this.colorHistory.length; i++) {
+      recentAvg += this.colorHistory[i];
+    }
+    recentAvg /= recentWindow;
+    
+    let oldAvg = 0;
+    const oldStart = this.colorHistory.length - oldWindow - recentWindow;
+    const oldEnd = this.colorHistory.length - recentWindow;
+    for (let i = oldStart; i < oldEnd; i++) {
+      if (i >= 0) oldAvg += this.colorHistory[i];
+    }
+    oldAvg /= oldWindow;
+    
+    // Detect significant change (accounting for hue wraparound)
+    let hueDiff = Math.abs(recentAvg - oldAvg);
+    if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff; // Wraparound correction
+    
+    if (hueDiff > this.colorChangeThreshold) {
+      // Section change detected! Switch to a random different lobe
+      const currentLobe = this.orbitState.lobe;
+      const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
+      const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
+      
+      this.orbitState.lobe = newLobe;
+      this.lastLobeSwitch = this.colorHistory.length;
+      
+      console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);
+    }
   }
 }
