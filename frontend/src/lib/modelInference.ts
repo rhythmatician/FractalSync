@@ -169,6 +169,13 @@ export class ModelInference {
         omegaScale: params[2],
         bandGates: params.slice(3)
       };
+      
+      console.debug('Raw model output (control signals):', {
+        s: controlSignals.sTarget,
+        alpha: controlSignals.alpha,
+        omegaScale: controlSignals.omegaScale,
+        bandGates: controlSignals.bandGates
+      });
 
       // Update orbit state with new control signals
       this.orbitState.s = controlSignals.sTarget;
