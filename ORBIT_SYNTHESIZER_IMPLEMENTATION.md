@@ -147,25 +147,11 @@ To fully test the orbit synthesis:
 2. Export ONNX with `model_type: 'orbit_control'` metadata
 3. Load in frontend and verify c(t) trajectories match backend
 
-## Backward Compatibility
+## Model Training
 
-### Existing Models
-Old models (trained with `backend/train.py`) will:
-- ✅ Still load and run
-- ✅ Use legacy post-processing pipeline
-- ✅ No changes required
-
-### New Models
-New models (trained with `backend/train_orbit.py`) will:
-- ✅ Be detected as `orbit_control` type
-- ✅ Use orbit synthesizer automatically
-- ✅ Generate deterministic c(t) trajectories
+The orbit-based control model is trained with `backend/train_orbit.py` and exports ONNX models with `model_type: 'orbit_control'` metadata, including all required fields (`k_bands`, etc.).
 
 ## Next Steps
-
-### Backend
-1. ✅ Ensure `backend/src/export_model.py` sets `model_type: 'orbit_control'` for orbit models
-2. ✅ Verify metadata includes all required fields (`k_bands`, etc.)
 
 ### Frontend
 3. ✅ Orbit synthesizer implemented

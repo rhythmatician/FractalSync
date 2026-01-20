@@ -163,13 +163,9 @@ averageInferenceTime: Y.YY ms
 
 ## Comparing Models
 
-### Train Both Types
+### Train Model
 ```bash
-# Legacy model
 cd backend
-python train.py --data-dir data/audio --epochs 100
-
-# Orbit model
 python train_orbit.py --data-dir data/audio --epochs 100
 ```
 

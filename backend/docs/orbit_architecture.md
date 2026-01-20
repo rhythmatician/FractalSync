@@ -78,11 +78,10 @@ python backend/train_orbit.py --data-dir data/audio --epochs 100 --use-curriculu
 
 ## Integration with Existing System
 
-### Backward Compatibility
-- Old `train.py` → trains `PhysicsAudioToVisualModel` (velocity-based)
-- New `train_orbit.py` → trains `AudioToControlModel` (control-based)
+### Training
+- `train_orbit.py` → trains `AudioToControlModel` (control-based)
 
-Both models can coexist. The orbit-based approach is recommended for:
+The orbit-based approach provides:
 - **Deterministic behavior**: Same audio → same orbit
 - **Interpretable controls**: s, alpha, omega have clear geometric meaning
 - **Live performance**: Fast synthesis without model inference per frame
@@ -158,7 +157,5 @@ Both terms are analytic, enabling smooth motion.
 **Modified:**
 - `backend/src/live_controller.py` - Now uses OrbitSynthesizer
 
-**Unchanged:**
-- `backend/train.py` - Old physics-based training still works
-- `backend/src/physics_model.py` - Old model still functional
-- `backend/src/mandelbrot_orbits.py` - Authoritative geometry source
+**Authoritative sources:**
+- `backend/src/mandelbrot_orbits.py` - Geometric constants

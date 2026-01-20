@@ -45,7 +45,7 @@ npm run dev
 
 ## Training
 
-### Standard Model Training
+### Orbit-Based Control Model Training
 
 To train a new model:
 
@@ -53,16 +53,16 @@ To train a new model:
 2. Start training via the UI or command line:
 ```bash
 cd backend
-python train.py --data-dir data/audio --epochs 100
+python train_orbit.py --data-dir data/audio --epochs 100
 ```
 
 The trained model will be exported to ONNX format and can be used by the frontend.
 
-**Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
+**Note:** Training uses orbit-based synthesis with curriculum learning from preset Mandelbrot orbits for deterministic, interpretable control signals.
 
-### Physics-Based Model Training (NEW)
+### Training with Curriculum Learning
 
-To train with physics-based velocity prediction and curriculum learning:
+To train with curriculum learning and advanced features:
 
 ```bash
 cd backend
@@ -120,7 +120,7 @@ See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed 
 - Adds 6 more features per frame representing the rate of change of audio features.
 - Helps the model learn patterns related to how quickly audio properties are changing.
 - 10 frames × 12 features (6 base + 6 delta) = 120-dimensional input vector.
-- Use: `python train.py --data-dir data/audio --include-delta --epochs 100`
+- Use: `python train_orbit.py --data-dir data/audio --include-delta --epochs 100`
 
 **include_delta_delta** (optional, flag)
 - Include acceleration (second-order derivative) features in addition to base and/or delta features.
@@ -128,7 +128,7 @@ See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed 
 - Can be used with or without `--include-delta`:
   - With `--include-delta`: 10 frames × 18 features (6 base + 6 delta + 6 delta-delta) = 180-dimensional input vector.
   - Without `--include-delta`: 10 frames × 12 features (6 base + 6 delta-delta) = 120-dimensional input vector (delta is computed internally but not concatenated).
-- Example (with both): `python train.py --data-dir data/audio --include-delta --include-delta-delta --epochs 100`
+- Example (with both): `python train_orbit.py --data-dir data/audio --include-delta --include-delta-delta --epochs 100`
 
 ## Advanced Features
 
@@ -158,7 +158,7 @@ curl -X POST http://localhost:8000/api/train/start \
 Training with velocity features via CLI:
 ```bash
 cd backend
-python train.py --data-dir data/audio --epochs 100 --include-delta
+python train_orbit.py --data-dir data/audio --epochs 100 --include-delta
 ```
 
 **Note**: The frontend currently only supports models trained with base features (6 per frame, 60-dimensional input). Models trained with velocity features require updating the frontend audio feature extractor to compute delta and delta-delta features. This will be implemented in a future update.

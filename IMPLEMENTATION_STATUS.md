@@ -110,15 +110,9 @@ python -c "from src.export_model import export_to_onnx; print('OK')"
 - ✅ All interfaces properly typed
 - ✅ Mathematical formulas verified against Python implementation
 
-## Backward Compatibility
+## Model Training
 
-### Existing Models (Legacy)
-Models trained with `backend/train.py`:
-- ✅ Will continue to work
-- ✅ Use legacy post-processing pipeline
-- ✅ No changes required to frontend for existing deployments
-
-### New Models (Orbit Control)
+### Orbit Control Models
 Models trained with `backend/train_orbit.py`:
 - ✅ Automatically detected via metadata
 - ✅ Use orbit synthesizer

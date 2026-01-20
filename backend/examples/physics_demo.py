@@ -151,7 +151,7 @@ def main():
     print(
         "1. Train a physics model: python train_physics.py --data-dir data/audio --use-curriculum"
     )
-    print("2. Compare with standard model: python train.py --data-dir data/audio")
+    print("2. Compare with orbit control model: python train_orbit.py --data-dir data/audio")
     print("3. Read documentation: backend/docs/PHYSICS_MODEL.md")
 
 

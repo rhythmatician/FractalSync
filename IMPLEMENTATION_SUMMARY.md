@@ -97,20 +97,9 @@ All Integration Tests Passed!
 ============================================================
 ```
 
-## Backward Compatibility
+## Training
 
-### Existing Training Still Works
-- **Old**: `python backend/train.py` → trains `PhysicsAudioToVisualModel` (velocity-based)
-- **New**: `python backend/train_orbit.py` → trains `AudioToControlModel` (control-based)
-
-Both approaches coexist. The orbit-based approach is recommended for:
-- **Deterministic behavior**: Same audio → same orbit trajectory
-- **Interpretable controls**: s, alpha, omega have clear geometric meaning
-- **Live performance**: Fast synthesis without per-frame model inference
-
-## Next Steps for Integration
-
-### 1. Training
+### Training the Control Model
 ```bash
 python backend/train_orbit.py \
     --data-dir data/audio \
@@ -120,7 +109,12 @@ python backend/train_orbit.py \
     --k-bands 6
 ```
 
-### 2. Frontend Integration
+The orbit-based approach is recommended for:
+- **Deterministic behavior**: Same audio → same orbit trajectory
+- **Interpretable controls**: s, alpha, omega have clear geometric meaning
+- **Live performance**: Fast synthesis without per-frame model inference
+
+## Next Steps for Integration
 - Port `OrbitSynthesizer` to TypeScript/JavaScript
 - Load ONNX control model for inference
 - Pipeline: Audio → Model → Controls → Synthesizer → c(t) → Julia render
@@ -163,9 +157,8 @@ python backend/train_orbit.py \
 **Modified (1 file):**
 - `backend/src/live_controller.py` - Now uses `OrbitSynthesizer`
 
-**Unchanged (authoritative sources):**
+**Authoritative sources:**
 - `backend/src/mandelbrot_orbits.py` - Geometric constants (authoritative)
-- `backend/train.py` - Old physics-based training (still functional)
 
 ## Success Criteria Met
 
@@ -175,7 +168,6 @@ python backend/train_orbit.py \
 ✅ **Control signals**: Predicts s, α, ω, gates (not raw c)  
 ✅ **Curriculum learning**: Trains on preset Mandelbrot orbits  
 ✅ **Live-ready**: Fast synthesis without per-frame inference  
-✅ **Backward compatible**: Old training pipeline unchanged  
 ✅ **Fully tested**: All integration tests passing  
 
 ## Implementation Status: COMPLETE ✓
