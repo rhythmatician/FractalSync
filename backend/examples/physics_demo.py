@@ -1,11 +1,11 @@
 """
-Example script demonstrating physics-based model usage.
+Example script demonstrating Mandelbrot orbit geometry.
 
 This script shows how to:
 1. Create preset Mandelbrot orbits
-2. Initialize a physics-based model
-3. Simulate velocity predictions and position integration
-4. Visualize the trajectory
+2. Use orbit geometry for visualization
+3. Generate curriculum sequences
+4. Understand orbit parameters
 
 Run: python examples/physics_demo.py
 """
@@ -148,11 +148,9 @@ def main():
     print("Demo complete!")
     print("=" * 60)
     print("\nNext steps:")
-    print(
-        "1. Train a physics model: python train_physics.py --data-dir data/audio --use-curriculum"
-    )
-    print("2. Compare with orbit control model: python train_orbit.py --data-dir data/audio")
-    print("3. Read documentation: backend/docs/PHYSICS_MODEL.md")
+    print("1. Train orbit control model: python train_orbit.py --data-dir data/audio --use-curriculum")
+    print("2. Explore orbit presets: python -c 'from src.mandelbrot_orbits import list_preset_names; print(list_preset_names())'")
+    print("3. Read documentation: backend/docs/orbit_architecture.md")
 
 
 if __name__ == "__main__":
