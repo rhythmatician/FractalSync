@@ -30,8 +30,16 @@ data/cache/
 
 julia_over_time.png
 
-# Rust / WASM build artifacts
+# Rust build artifacts (runtime-core, wasm-orbit)
+target/
+runtime-core/target/
 wasm-orbit/target/
 wasm-orbit/pkg/
 wasm-orbit/Cargo.lock
 
+# Python cache
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

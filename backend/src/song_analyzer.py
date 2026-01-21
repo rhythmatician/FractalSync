@@ -164,10 +164,8 @@ class SongAnalyzer:
         # Use default k or estimate based on audio length
         n_frames = features.shape[1]
         k = max(2, min(10, n_frames // 100))  # Roughly one segment per 100 frames
-        
-        boundaries = librosa.segment.agglomerative(
-            features, k=k
-        )
+
+        boundaries = librosa.segment.agglomerative(features, k=k)
 
         return boundaries
 
@@ -235,11 +233,15 @@ class SongAnalyzer:
             if frame < len(onset_norm):
                 strength = onset_norm[frame]
                 if strength >= threshold:
-                    hit_events.append({"frame": int(frame), "strength": float(strength)})
+                    hit_events.append(
+                        {"frame": int(frame), "strength": float(strength)}
+                    )
 
         return hit_events
 
-    def frames_to_time(self, frames: Union[np.ndarray, int]) -> Union[np.ndarray, float]:
+    def frames_to_time(
+        self, frames: Union[np.ndarray, int]
+    ) -> Union[np.ndarray, float]:
         """
         Convert frame indices to time in seconds.
 
@@ -249,11 +251,11 @@ class SongAnalyzer:
         Returns:
             Time in seconds (scalar or array)
         """
-        return librosa.frames_to_time(
-            frames, sr=self.sr, hop_length=self.hop_length
-        )
+        return librosa.frames_to_time(frames, sr=self.sr, hop_length=self.hop_length)
 
-    def time_to_frames(self, time_sec: Union[float, np.ndarray]) -> Union[int, np.ndarray]:
+    def time_to_frames(
+        self, time_sec: Union[float, np.ndarray]
+    ) -> Union[int, np.ndarray]:
         """
         Convert time in seconds to frame indices.
 
@@ -263,9 +265,7 @@ class SongAnalyzer:
         Returns:
             Frame index (integer or array)
         """
-        return librosa.time_to_frames(
-            time_sec, sr=self.sr, hop_length=self.hop_length
-        )
+        return librosa.time_to_frames(time_sec, sr=self.sr, hop_length=self.hop_length)
 
 
 def analyze_audio_file(

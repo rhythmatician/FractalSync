@@ -53,9 +53,9 @@ class VisualMetrics:
             )
 
         # Brightness distribution
-        metrics["brightness_mean"] = np.mean(gray)
-        metrics["brightness_std"] = np.std(gray)
-        metrics["brightness_range"] = np.max(gray) - np.min(gray)
+        metrics["brightness_mean"] = float(np.mean(gray))
+        metrics["brightness_std"] = float(np.std(gray))
+        metrics["brightness_range"] = float(np.max(gray) - np.min(gray))
 
         # Temporal change rate
         if prev_image is not None:
@@ -128,7 +128,7 @@ class VisualMetrics:
         local_var = cv2.filter2D((gray - local_mean) ** 2, -1, kernel)
 
         # Average variance (lower is more uniform)
-        avg_variance = np.mean(local_var)
+        avg_variance = float(np.mean(local_var))
 
         # Convert to uniformity score [0, 1] (inverse relationship)
         uniformity = 1.0 / (1.0 + avg_variance * 10.0)

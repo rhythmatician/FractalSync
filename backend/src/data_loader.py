@@ -10,7 +10,13 @@ import logging
 
 import numpy as np
 
-from .audio_features import AudioFeatureExtractor, load_audio_file
+from .runtime_core_bridge import (
+    SAMPLE_RATE,
+    HOP_LENGTH,
+    N_FFT,
+    make_feature_extractor,
+)
+import librosa
 
 
 class AudioDataset:
@@ -19,7 +25,7 @@ class AudioDataset:
     def __init__(
         self,
         data_dir: str,
-        feature_extractor: Optional[AudioFeatureExtractor] = None,
+        feature_extractor=None,
         window_frames: int = 10,
         max_files: Optional[int] = None,
         cache_dir: Optional[str] = "data/cache",
@@ -39,10 +45,7 @@ class AudioDataset:
         self.max_files = max_files
         self.cache_dir = Path(cache_dir) if cache_dir else None
 
-        if feature_extractor is None:
-            self.feature_extractor = AudioFeatureExtractor()
-        else:
-            self.feature_extractor = feature_extractor
+        self.feature_extractor = feature_extractor or make_feature_extractor()
 
         # Supported audio formats
         self.supported_formats = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
@@ -85,10 +88,9 @@ class AudioDataset:
         cache_payload = {
             "path": str(audio_file.resolve()),
             "mtime_ns": file_stat.st_mtime_ns,
-            "sr": self.feature_extractor.sr,
-            "hop_length": self.feature_extractor.hop_length,
-            "n_fft": self.feature_extractor.n_fft,
-            "window_size": self.feature_extractor.window_size,
+            "sr": SAMPLE_RATE,
+            "hop_length": HOP_LENGTH,
+            "n_fft": N_FFT,
             "window_frames": self.window_frames,
         }
         cache_key = hashlib.sha1(
@@ -97,7 +99,11 @@ class AudioDataset:
         return self.cache_dir / f"{cache_key}.npy"
 
     def _load_features(self, audio_file: Path) -> np.ndarray:
-        """Load features, using cache if available."""
+        """Load features, using cache if available.
+
+        For long audio files, performs chunked extraction to avoid large
+        arrays causing stalls in the Rust/PyO3 bridge on Windows.
+        """
         cache_file = self._cache_path(audio_file) if self.cache_dir else None
 
         if cache_file and cache_file.exists():
@@ -106,10 +112,35 @@ class AudioDataset:
             except Exception:
                 cache_file.unlink(missing_ok=True)
 
-        audio, _ = load_audio_file(str(audio_file))
-        features = self.feature_extractor.extract_windowed_features(
-            audio, window_frames=self.window_frames
+        logging.info(f"Extracting features from {audio_file.name}...")
+        # Limit decode time to avoid reading entire multi-hour files in quick runs
+        audio, _ = librosa.load(
+            str(audio_file), sr=SAMPLE_RATE, mono=True, duration=5 * 60
         )
+
+        # Chunk very long audio to prevent large allocations
+        max_total_seconds = 5 * 60  # 5 minutes threshold
+        chunk_seconds = 60  # process in 60s chunks
+        if len(audio) > SAMPLE_RATE * max_total_seconds:
+            chunk_size = SAMPLE_RATE * chunk_seconds
+            all_chunks: list[np.ndarray] = []
+            for start in range(0, len(audio), chunk_size):
+                end = min(start + chunk_size, len(audio))
+                chunk = audio[start:end].astype(np.float32)
+                chunk_features = self.feature_extractor.extract_windowed_features(
+                    chunk, window_frames=self.window_frames
+                )
+                all_chunks.append(chunk_features)
+                logging.info(f"  chunk {start//chunk_size + 1}: {chunk_features.shape}")
+            features = (
+                np.vstack(all_chunks)
+                if all_chunks
+                else np.empty((0, 6 * self.window_frames), dtype=np.float32)
+            )
+        else:
+            features = self.feature_extractor.extract_windowed_features(
+                audio.astype(np.float32), window_frames=self.window_frames
+            )
 
         if cache_file:
             try:

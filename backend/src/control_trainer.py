@@ -15,12 +15,20 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-from .audio_features import AudioFeatureExtractor
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
-from .mandelbrot_orbits import generate_curriculum_sequence
-from .orbit_synth import OrbitSynthesizer, create_initial_state
+from .runtime_core_bridge import (
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_ORBIT_SEED,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    make_feature_extractor,
+    make_orbit_state,
+    make_residual_params,
+    synthesize,
+)
+import runtime_core as rc
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +70,8 @@ class ControlTrainer:
     def __init__(
         self,
         model: AudioToControlModel,
-        feature_extractor: AudioFeatureExtractor,
         visual_metrics: VisualMetrics,
+        feature_extractor: Optional[object] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         use_curriculum: bool = True,
@@ -73,7 +81,7 @@ class ControlTrainer:
         julia_resolution: int = 128,
         julia_max_iter: int = 100,
         num_workers: int = 0,
-        k_residuals: int = 6,
+        k_residuals: int = DEFAULT_K_RESIDUALS,
     ):
         """
         Initialize control trainer.
@@ -104,9 +112,7 @@ class ControlTrainer:
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
         self.k_residuals = k_residuals
-
-        # Orbit synthesizer for generating c(t) from control signals
-        self.synthesizer = OrbitSynthesizer(k_residuals=k_residuals, residual_cap=0.5)
+        self.residual_params = make_residual_params(k_residuals=k_residuals)
 
         # Default correlation weights
         default_weights = {
@@ -115,6 +121,9 @@ class ControlTrainer:
             "control_loss": 1.0,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
+
+        # Runtime-core feature extractor (shared constants)
+        self.feature_extractor = feature_extractor or make_feature_extractor()
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()
@@ -136,11 +145,21 @@ class ControlTrainer:
             "timbre_color_loss": [],
             "transient_impact_loss": [],
         }
+        # Track last checkpoint for reporting
+        self.last_checkpoint_path: Optional[str] = None
 
     def _generate_curriculum_data(self, n_samples: int):
         """Generate curriculum learning data from preset orbits."""
         logger.info(f"Generating curriculum data: {n_samples} samples")
-        positions, velocities = generate_curriculum_sequence(n_samples)
+        thetas = np.linspace(0.0, 2 * np.pi, n_samples, endpoint=False)
+        positions = []
+        velocities = []
+        for idx, theta in enumerate(thetas):
+            current = rc.lobe_point_at_angle(1, 0, float(theta), 1.02)
+            next_theta = thetas[(idx + 1) % len(thetas)]
+            nxt = rc.lobe_point_at_angle(1, 0, float(next_theta), 1.02)
+            positions.append([current.real, current.imag])
+            velocities.append([nxt.real - current.real, nxt.imag - current.imag])
 
         self.curriculum_positions = torch.tensor(
             positions, dtype=torch.float32, device=self.device
@@ -155,13 +174,17 @@ class ControlTrainer:
         )
 
     def _extract_control_targets_from_curriculum(
-        self, positions: torch.Tensor, velocities: torch.Tensor
+        self, positions: torch.Tensor, velocities: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
         Extract control signal targets from curriculum positions/velocities.
 
         This is a simplified mapping - in practice, we derive s, alpha, etc.
         from the curriculum orbit parameters.
+
+        Args:
+            positions: Tensor of shape (batch_size, 2) with position data
+            velocities: Optional tensor of shape (batch_size, 2) with velocity data
 
         Returns:
             Tensor of shape (batch_size, output_dim) with control targets
@@ -173,8 +196,13 @@ class ControlTrainer:
         s_target = torch.clamp(position_mag * 1.5, 0.2, 3.0)
 
         # Compute alpha from velocity magnitude (higher velocity = more residual)
-        velocity_mag = torch.norm(velocities, dim=1)
-        alpha = torch.clamp(velocity_mag * 2.0, 0.0, 1.0)
+        if velocities is not None:
+            velocity_mag = torch.norm(velocities, dim=1)
+            alpha = torch.clamp(velocity_mag * 2.0, 0.0, 1.0)
+        else:
+            alpha = (
+                torch.ones(batch_size, device=self.device) * 0.3
+            )  # Default amplitude
 
         # Omega scale from velocity direction changes (placeholder)
         omega_scale = torch.ones(batch_size, device=self.device) * 1.0
@@ -220,8 +248,9 @@ class ControlTrainer:
         for batch_idx, batch_item in tqdm(
             enumerate(dataloader),
             total=len(dataloader),
-            desc="  Batches",
-            leave=False,
+            desc="Batches",
+            leave=True,
+            mininterval=0.5,
         ):
             # Extract features
             if isinstance(batch_item, (tuple, list)):
@@ -240,7 +269,11 @@ class ControlTrainer:
 
                 if actual_batch_size > 0:
                     curriculum_pos = self.curriculum_positions[sample_idx:end_idx]
-                    curriculum_vel = self.curriculum_velocities[sample_idx:end_idx]
+                    curriculum_vel = (
+                        self.curriculum_velocities[sample_idx:end_idx]
+                        if self.curriculum_velocities is not None
+                        else None
+                    )
 
                     control_targets = self._extract_control_targets_from_curriculum(
                         curriculum_pos, curriculum_vel
@@ -262,21 +295,24 @@ class ControlTrainer:
             omega_scale = parsed["omega_scale"]
             band_gates = parsed["band_gates"]
 
-            # Synthesize c(t) using orbit synthesizer
-            # For training, use a fixed lobe (cardioid) and sample from orbit
+            # Synthesize c(t) using runtime_core (cardioid lobe)
             c_values = []
             for i in range(batch_size):
-                state = create_initial_state(
+                state = make_orbit_state(
                     lobe=1,
                     sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),  # Distributed around orbit
-                    omega=omega_scale[i].detach().item(),
-                    s=s_target[i].detach().item(),
-                    alpha=alpha[i].detach().item(),
+                    theta=float(i * 2 * np.pi / batch_size),
+                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
+                    s=float(s_target[i].detach().item()),
+                    alpha=float(alpha[i].detach().item()),
                     k_residuals=self.k_residuals,
+                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                    seed=int(DEFAULT_ORBIT_SEED + i),
                 )
-                c = self.synthesizer.synthesize(
-                    state, band_gates=band_gates[i].detach().cpu().numpy()
+                c = synthesize(
+                    state,
+                    residual_params=self.residual_params,
+                    band_gates=band_gates[i].detach().cpu().tolist(),
                 )
                 c_values.append([c.real, c.imag])
 
@@ -285,7 +321,7 @@ class ControlTrainer:
             julia_imag = c_tensor[:, 1]
 
             # Extract audio features for correlation
-            n_features_per_frame = 6
+            n_features_per_frame = self.feature_extractor.num_features_per_frame()
             window_frames = features.shape[1] // n_features_per_frame
             features_reshaped = features.view(
                 batch_size, window_frames, n_features_per_frame
@@ -400,9 +436,20 @@ class ControlTrainer:
         save_dir: Optional[str] = None,
         curriculum_decay: float = 0.95,
     ):
-        """Train model on dataset."""
+        """Train model on dataset.
+
+        Returns:
+            Path to the final checkpoint if saved, else None.
+        """
         logger.info("Loading audio features...")
         all_features = dataset.load_all_features()
+        logger.info(f"Loaded {len(all_features)} feature set(s)")
+
+        if len(all_features) == 0:
+            logger.error(
+                "No features loaded. Ensure data/audio contains supported files and that feature extraction succeeded."
+            )
+            raise ValueError("No features loaded from dataset")
 
         logger.info("Computing normalization statistics...")
         self.feature_extractor.compute_normalization_stats(all_features)
@@ -411,9 +458,12 @@ class ControlTrainer:
             self.feature_extractor.normalize_features(f) for f in all_features
         ]
 
-        all_features_tensor = torch.tensor(
-            np.concatenate(normalized_features, axis=0), dtype=torch.float32
-        )
+        try:
+            concatenated = np.concatenate(normalized_features, axis=0)
+        except Exception as e:
+            logger.error(f"Failed to concatenate features: {e}")
+            raise
+        all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
 
         tensor_dataset = TensorDataset(all_features_tensor)
         dataloader = DataLoader(
@@ -423,9 +473,13 @@ class ControlTrainer:
             num_workers=self.num_workers,
         )
 
-        logger.info(f"Starting control signal training for {epochs} epochs...")
+        logger.info(
+            f"Starting control signal training for {epochs} epochs... (total frames: {all_features_tensor.shape[0]})"
+        )
 
-        for epoch in tqdm(range(epochs), desc="Training Epochs"):
+        for epoch in tqdm(
+            range(epochs), desc="Epochs", total=epochs, leave=True, mininterval=0.5
+        ):
             avg_losses = self.train_epoch(dataloader, epoch, curriculum_decay)
 
             for key, value in avg_losses.items():
@@ -441,6 +495,7 @@ class ControlTrainer:
                 self.save_checkpoint(save_dir, epoch + 1)
 
         logger.info("Training complete!")
+        return self.last_checkpoint_path
 
     def save_checkpoint(self, save_dir: str, epoch: int):
         """Save model checkpoint."""
@@ -457,6 +512,9 @@ class ControlTrainer:
 
         checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
         torch.save(checkpoint, checkpoint_path)
+        # Also emit a console print for immediate visibility
+        print(f"[CHECKPOINT] Saved: {checkpoint_path}")
+        self.last_checkpoint_path = checkpoint_path
 
         history_path = os.path.join(save_dir, "training_history.json")
         with open(history_path, "w") as f:
