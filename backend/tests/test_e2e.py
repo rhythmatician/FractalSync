@@ -10,8 +10,8 @@ Tests:
 5. ONNX export works
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
@@ -22,7 +22,7 @@ def test_imports():
     print("TEST 1: Backend Imports")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (
+        from src.runtime_core_bridge import (  # noqa: F401
             make_feature_extractor,
             make_orbit_state,
             synthesize,
@@ -34,19 +34,19 @@ def test_imports():
 
         print("✓ runtime_core_bridge imports")
 
-        from src.data_loader import AudioDataset
+        from src.data_loader import AudioDataset  # noqa: F401
 
         print("✓ data_loader imports")
 
-        from src.control_model import AudioToControlModel
+        from src.control_model import AudioToControlModel  # noqa: F401
 
         print("✓ control_model imports")
 
-        from src.control_trainer import ControlTrainer
+        from src.control_trainer import ControlTrainer  # noqa: F401
 
         print("✓ control_trainer imports")
 
-        from src.visual_metrics import VisualMetrics
+        from src.visual_metrics import VisualMetrics  # noqa: F401
 
         print("✓ visual_metrics imports")
 
@@ -65,7 +65,7 @@ def test_feature_extraction():
     print("TEST 2: Feature Extraction")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (
+        from src.runtime_core_bridge import (  # noqa: F401
             make_feature_extractor,
             SAMPLE_RATE,
             N_FFT,
@@ -75,7 +75,7 @@ def test_feature_extraction():
 
         # Create extractor
         extractor = make_feature_extractor()
-        print(f"✓ Feature extractor created")
+        print("✓ Feature extractor created")
 
         # Generate test audio
         duration_sec = 1.0
@@ -85,14 +85,14 @@ def test_feature_extraction():
         # Extract features
         features = extractor.extract_windowed_features(audio, window_frames=10)
         print(f"✓ Extracted features shape: {features.shape}")
-        print(f"  Expected: (n_frames, 6*10=60)")
+        print("  Expected: (n_frames, 6*10=60)")
 
         # Verify shape
         assert features.ndim == 2, f"Expected 2D array, got {features.ndim}D"
         assert (
             features.shape[1] == 60
         ), f"Expected 60 features per frame, got {features.shape[1]}"
-        print(f"✓ Feature shape is correct")
+        print("✓ Feature shape is correct")
 
         return True
     except Exception as e:
@@ -146,7 +146,7 @@ def test_orbit_synthesis():
 
         # Verify outputs are different (orbit progresses)
         assert c1 != c2, "Orbit did not progress"
-        print(f"✓ Orbit progression verified")
+        print("✓ Orbit progression verified")
 
         return True
     except Exception as e:
@@ -182,7 +182,7 @@ def test_model_init():
 
         # Verify output shape
         assert output.shape == (1, 9), f"Expected output (1,9), got {output.shape}"
-        print(f"✓ Output shape is correct")
+        print("✓ Output shape is correct")
 
         return True
     except Exception as e:
@@ -213,7 +213,7 @@ def test_visual_metrics():
 
         assert isinstance(result, dict), f"Expected dict, got {type(result)}"
         assert len(result) > 0, "Expected at least one metric"
-        print(f"✓ Visual metrics computation works")
+        print("✓ Visual metrics computation works")
 
         return True
     except Exception as e:

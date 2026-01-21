@@ -15,15 +15,15 @@ This ensures the backend training uses identical features to what the
 frontend WASM will compute, preventing drift.
 """
 
-import numpy as np
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-# Add backend to path
-backend_path = Path(__file__).parent / "backend"
-sys.path.insert(0, str(backend_path))
+import numpy as np
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.python_feature_extractor import PythonFeatureExtractor
 
@@ -142,7 +142,7 @@ def test_feature_parity():
     print("\n4. Comparing outputs...")
 
     if python_features.shape != rust_features.shape:
-        print(f"   SHAPE MISMATCH!")
+        print("   SHAPE MISMATCH!")
         print(f"      Python: {python_features.shape}")
         print(f"      Rust:   {rust_features.shape}")
         return False
@@ -165,7 +165,7 @@ def test_feature_parity():
 
         # Show where differences occur
         problem_indices = np.where(abs_diff > tolerance)
-        print(f"\n   Problem locations (first 10):")
+        print("\n   Problem locations (first 10):")
         for i in range(min(10, len(problem_indices[0]))):
             win_idx = problem_indices[0][i]
             feat_idx = problem_indices[1][i]

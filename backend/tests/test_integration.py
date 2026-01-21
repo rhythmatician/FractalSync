@@ -14,7 +14,6 @@ Run this test to verify:
 """
 
 import sys
-import json
 from pathlib import Path
 
 
@@ -24,21 +23,21 @@ def test_imports():
     try:
         import runtime_core
 
-        print(f"  [OK] runtime_core imported")
+        print("  [OK] runtime_core imported")
         print(f"    - SAMPLE_RATE: {runtime_core.SAMPLE_RATE}")
         print(f"    - DEFAULT_K_RESIDUALS: {runtime_core.DEFAULT_K_RESIDUALS}")
 
-        from backend.src.runtime_core_bridge import (
+        from src.runtime_core_bridge import (  # noqa: F401
             make_feature_extractor,
             make_orbit_state,
             synthesize,
         )
 
-        print(f"  [OK] runtime_core_bridge imported")
+        print("  [OK] runtime_core_bridge imported")
         return True
     except ImportError as e:
         print(f"  [FAIL] Import failed: {e}")
-        print(f"    -> Run: cd runtime-core && maturin develop --release")
+        print("    -> Run: cd runtime-core && maturin develop --release")
         return False
 
 
@@ -47,10 +46,10 @@ def test_feature_extraction():
     print("\n[Test 2] Testing feature extraction...")
     try:
         import numpy as np
-        from backend.src.runtime_core_bridge import make_feature_extractor
+        from src.runtime_core_bridge import make_feature_extractor
 
         extractor = make_feature_extractor()
-        print(f"  ✓ Feature extractor created")
+        print("  ✓ Feature extractor created")
 
         # Generate synthetic audio
         audio = np.random.randn(48000).astype(np.float32)  # 1 second at 48kHz
@@ -68,7 +67,7 @@ def test_orbit_synthesis():
     """Test 3: Can we synthesize orbits deterministically?"""
     print("\n[Test 3] Testing orbit synthesis...")
     try:
-        from backend.src.runtime_core_bridge import make_orbit_state, synthesize
+        from src.runtime_core_bridge import make_orbit_state, synthesize
 
         # Create state with seed
         state1 = make_orbit_state(seed=1337)
@@ -78,16 +77,16 @@ def test_orbit_synthesis():
         state2 = make_orbit_state(seed=1337)
         c2 = synthesize(state2)
 
-        print(f"  ✓ Orbit state created (seed=1337)")
+        print("  ✓ Orbit state created (seed=1337)")
         print(f"    - First synthesis: {c1.real:.6f} + {c1.imag:.6f}i")
         print(f"    - Second synthesis: {c2.real:.6f} + {c2.imag:.6f}i")
 
         # Check determinism
         if abs(c1.real - c2.real) < 1e-10 and abs(c1.imag - c2.imag) < 1e-10:
-            print(f"  ✓ Synthesis is deterministic")
+            print("  ✓ Synthesis is deterministic")
             return True
         else:
-            print(f"  ✗ Synthesis not deterministic")
+            print("  ✗ Synthesis not deterministic")
             return False
     except Exception as e:
         print(f"  ✗ Orbit synthesis failed: {e}")
@@ -98,8 +97,7 @@ def test_model_init():
     """Test 4: Can we initialize the training model?"""
     print("\n[Test 4] Testing model initialization...")
     try:
-        import torch
-        from backend.src.control_model import AudioToControlModel
+        from src.control_model import AudioToControlModel
 
         model = AudioToControlModel(
             window_frames=10,
@@ -107,7 +105,7 @@ def test_model_init():
             hidden_dims=[128, 256, 128],
             k_bands=6,
         )
-        print(f"  ✓ AudioToControlModel created")
+        print("  ✓ AudioToControlModel created")
 
         # Check parameters
         total_params = sum(p.numel() for p in model.parameters())
@@ -123,10 +121,10 @@ def test_visual_metrics():
     print("\n[Test 5] Testing visual metrics...")
     try:
         import numpy as np
-        from backend.src.visual_metrics import VisualMetrics
+        from src.visual_metrics import VisualMetrics
 
         vm = VisualMetrics()
-        print(f"  ✓ VisualMetrics created")
+        print("  ✓ VisualMetrics created")
 
         # Create a synthetic image
         image = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
