@@ -42,64 +42,30 @@ pub struct ResidualParams {
 
 impl Default for ResidualParams {
     fn default() -> Self {
-        pub fn new(
-            lobe: u32,
-            sub_lobe: u32,
-            theta: f64,
-            omega: f64,
-            s: f64,
-            alpha: f64,
-            k_residuals: usize,
-            residual_omega_scale: f64,
-        ) -> Self {
-            Self::new_seeded(
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                k_residuals,
-                residual_omega_scale,
-                None,
-            )
+        Self {
+            k_residuals: DEFAULT_K_RESIDUALS,
+            residual_cap: DEFAULT_RESIDUAL_CAP,
+            radius_scale: 1.0,
         }
+    }
+}
 
-        /// Deterministic constructor with optional seed for reproducible residual phases.
-        /// If `seed` is `None` a random seed is used.
-        pub fn new_seeded(
-            lobe: u32,
-            sub_lobe: u32,
-            theta: f64,
-            omega: f64,
-            s: f64,
-            alpha: f64,
-            k_residuals: usize,
-            residual_omega_scale: f64,
-            seed: Option<u64>,
-        ) -> Self {
-            let mut rng: StdRng = match seed {
-                Some(seed) => StdRng::seed_from_u64(seed),
-                None => StdRng::from_rng(rand::thread_rng()).expect("failed to seed StdRng"),
-            };
-            let residual_phases: Vec<f64> = (0..k_residuals)
-                .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
-                .collect();
-            let residual_omegas: Vec<f64> = (0..k_residuals)
-                .map(|k| residual_omega_scale * omega * (k as f64 + 1.0))
-                .collect();
-            Self {
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                residual_phases,
-                residual_omegas,
-            }
-        }
-    /// residual frequencies are multiples of the base frequency
+/// Orbit state: carrier and residual phases.
+#[derive(Clone, Debug)]
+pub struct OrbitState {
+    pub lobe: u32,
+    pub sub_lobe: u32,
+    pub theta: f64,
+    pub omega: f64,
+    pub s: f64,
+    pub alpha: f64,
+    pub residual_phases: Vec<f64>,
+    pub residual_omegas: Vec<f64>,
+}
+
+impl OrbitState {
+    /// Create a new random OrbitState with arbitrary initial phases.
+    /// Residual frequencies are multiples of the base frequency
     /// (`omega`) scaled by `residual_omega_scale`.  This mirrors the
     /// behaviour of the existing Python and WASM implementations.
     pub fn new(
@@ -143,9 +109,7 @@ impl Default for ResidualParams {
         residual_omega_scale: f64,
         seed: u64,
     ) -> Self {
-        use rand::Rng;
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        let mut rng = StdRng::seed_from_u64(seed);
 
         let residual_phases: Vec<f64> = (0..k_residuals)
             .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)

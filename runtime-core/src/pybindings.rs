@@ -54,6 +54,23 @@ pub struct ResidualParams {
     pub radius_scale: f64,
 }
 
+#[pymethods]
+impl ResidualParams {
+    #[new]
+    #[pyo3(signature = (k_residuals=DEFAULT_K_RESIDUALS, residual_cap=DEFAULT_RESIDUAL_CAP, radius_scale=1.0))]
+    fn py_new(
+        k_residuals: usize,
+        residual_cap: f64,
+        radius_scale: f64,
+    ) -> Self {
+        Self {
+            k_residuals,
+            residual_cap,
+            radius_scale,
+        }
+    }
+}
+
 impl From<RustResidualParams> for ResidualParams {
     fn from(p: RustResidualParams) -> Self {
         Self {
@@ -97,26 +114,38 @@ impl OrbitState {
         seed: Option<u64>,
     ) -> Self {
         Self {
-            inner: RustOrbitState::new_seeded(
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                k_residuals,
-                residual_omega_scale,
-                seed,
-            ),
+            inner: match seed {
+                Some(s) => RustOrbitState::new_with_seed(
+                    lobe,
+                    sub_lobe,
+                    theta,
+                    omega,
+                    s as f64,
+                    alpha,
+                    k_residuals,
+                    residual_omega_scale,
+                    s,
+                ),
+                None => RustOrbitState::new(
+                    lobe,
+                    sub_lobe,
+                    theta,
+                    omega,
+                    s,
+                    alpha,
+                    k_residuals,
+                    residual_omega_scale,
+                ),
+            },
         }
     }
 
-    /// Construct using the shared default constants and a deterministic seed.
+    /// Create with deterministic seed (no-arg convenience using shared defaults).
     #[staticmethod]
     #[pyo3(signature = (seed=DEFAULT_ORBIT_SEED))]
-    fn new_with_seed(seed: u64) -> Self {
+    fn new_default_seeded(seed: u64) -> Self {
         Self {
-            inner: RustOrbitState::new_seeded(
+            inner: RustOrbitState::new_with_seed(
                 1,
                 0,
                 0.0,
@@ -125,12 +154,12 @@ impl OrbitState {
                 0.3,
                 DEFAULT_K_RESIDUALS,
                 DEFAULT_RESIDUAL_OMEGA_SCALE,
-                Some(seed),
+                seed,
             ),
         }
     }
 
-    /// Create a new OrbitState with a deterministic residual phase seed.
+    /// Create fully specified state with deterministic seed.
     #[staticmethod]
     #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed))]
     fn new_with_seed(

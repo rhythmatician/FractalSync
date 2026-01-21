@@ -145,14 +145,19 @@ impl FeatureExtractor {
             // Compute RMS and zero crossing on corresponding time domain window
             let start = frame_idx * hop;
             let end = start + window_size;
+            
+            // Create a padded buffer if needed
+            let padded;
             let window = if end <= audio.len() {
                 &audio[start..end]
             } else {
                 // If the window extends beyond the audio length, pad with zeros
-                // by extending the slice artificially using an iterator
-                let mut padded: Vec<f32> = Vec::with_capacity(window_size);
-                padded.extend_from_slice(&audio[start..]);
-                padded.resize(window_size, 0.0);
+                padded = {
+                    let mut v = Vec::with_capacity(window_size);
+                    v.extend_from_slice(&audio[start..]);
+                    v.resize(window_size, 0.0);
+                    v
+                };
                 &padded[..]
             };
 

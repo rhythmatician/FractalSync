@@ -126,17 +126,18 @@ impl OrbitState {
         k_residuals: usize,
         residual_omega_scale: f64,
     ) -> OrbitState {
-        OrbitState::new_with_seed(
-            lobe,
-            sub_lobe,
-            theta,
-            omega,
-            s,
-            alpha,
-            k_residuals,
-            residual_omega_scale,
-            None,
-        )
+        OrbitState {
+            inner: RustOrbitState::new(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+            ),
+        }
     }
 
     /// Create a new orbit state with a fixed RNG seed (deterministic).
@@ -150,10 +151,10 @@ impl OrbitState {
         alpha: f64,
         k_residuals: usize,
         residual_omega_scale: f64,
-        seed: Option<u64>,
+        seed: u64,
     ) -> OrbitState {
         OrbitState {
-            inner: RustOrbitState::new_seeded(
+            inner: RustOrbitState::new_with_seed(
                 lobe,
                 sub_lobe,
                 theta,
