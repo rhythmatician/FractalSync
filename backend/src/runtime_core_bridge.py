@@ -8,9 +8,13 @@ matching values exposed by the wasm bindings.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Union
+import logging
 
 import runtime_core as rc
+from .python_feature_extractor import PythonFeatureExtractor
+
+logger = logging.getLogger(__name__)
 
 SAMPLE_RATE: int = rc.SAMPLE_RATE
 HOP_LENGTH: int = rc.HOP_LENGTH
@@ -26,9 +30,28 @@ DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
 def make_feature_extractor(
     include_delta: bool = False,
     include_delta_delta: bool = False,
-) -> rc.FeatureExtractor:
-    """Create a FeatureExtractor configured with the shared defaults."""
-    return rc.FeatureExtractor(
+) -> Union[rc.FeatureExtractor, PythonFeatureExtractor]:
+    """Create a FeatureExtractor configured with the shared defaults.
+
+    TODO(CRITICAL): Fix Rust extractor hanging bug
+    Issue: runtime_core.FeatureExtractor.extract_windowed_features() hangs indefinitely
+    Root cause: Unknown - likely PyO3 parameter conversion or GIL deadlock
+    Tested: Hangs on inputs as small as 10 samples, all other Rust functions work
+    Workaround: Python fallback extractor (this function returns PythonFeatureExtractor)
+
+    To fix:
+    1. Debug PyO3 Vec<f32> parameter conversion (might need numpy integration)
+    2. Check for infinite loops in features.rs extract_features()
+    3. Verify GIL is properly released during computation
+    4. Test with minimal reproducible example in Rust unit tests
+
+    Once fixed, change this function to return rc.FeatureExtractor directly.
+    """
+    logger.warning(
+        "Using Python fallback feature extractor due to Rust implementation bug. "
+        "Performance will be degraded. See TODO in runtime_core_bridge.py"
+    )
+    return PythonFeatureExtractor(
         sr=SAMPLE_RATE,
         hop_length=HOP_LENGTH,
         n_fft=N_FFT,

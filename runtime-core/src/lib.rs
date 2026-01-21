@@ -35,3 +35,6 @@ pub mod pybindings;
 
 #[cfg(feature = "wasm")]
 pub mod wasm_bindings;
+
+#[cfg(test)]
+mod features_test;

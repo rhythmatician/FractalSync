@@ -7,6 +7,7 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 
 use crate::controller::{
     OrbitState as RustOrbitState,
@@ -255,13 +256,20 @@ impl FeatureExtractor {
     fn num_features_per_frame(&self) -> usize {
         self.inner.num_features_per_frame()
     }
+    
+    /// Simple test function to verify Rust execution
+    fn test_simple(&self) -> Vec<f32> {
+        eprintln!("[DEBUG] test_simple called");
+        vec![1.0, 2.0, 3.0]
+    }
 
-    /// Extract windowed features from a Python list/array of floats.
-    /// The returned value is a list of lists of floats with shape
-    /// `(n_windows, n_features × window_frames)`.
+    /// Extract windowed features from audio samples as a Python list.
     #[pyo3(signature = (audio, window_frames))]
-    fn extract_windowed_features(&self, py: Python, audio: Vec<f32>, window_frames: usize) -> PyResult<Vec<Vec<f64>>> {
-        Ok(self.inner.extract_windowed_features(&audio[..], window_frames))
+    fn extract_windowed_features(&self, audio: Vec<f32>, window_frames: usize) -> PyResult<Vec<Vec<f64>>> {
+        eprintln!("[PYBIND] extract_windowed_features called with {} samples", audio.len());
+        let features = self.inner.extract_windowed_features(&audio, window_frames);
+        eprintln!("[PYBIND] Returned {} windows", features.len());
+        Ok(features)
     }
 }
 
