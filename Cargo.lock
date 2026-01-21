@@ -322,6 +322,7 @@ dependencies = [
  "rand",
  "rustfft",
  "serde",
+ "serde_json",
  "wasm-bindgen",
 ]
 
