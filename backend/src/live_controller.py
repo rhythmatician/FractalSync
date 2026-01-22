@@ -537,81 +537,408 @@ class NoveltyBoundaryDetector:
         return boundary_detected, smoothed_novelty
 
 
-class LobeScheduler:
+@dataclass
+class LobeCharacteristics:
     """
-    Manages lobe selection and transitions for section boundaries.
-    Avoids repetition and ping-ponging.
+    Visual and emotional characteristics of a Mandelbrot lobe.
+
+    Each lobe produces Julia sets with distinct visual properties:
+    - Period determines symmetry (n-fold rotational symmetry)
+    - Location affects connectedness and detail level
+    - Size affects transition smoothness
     """
 
-    def __init__(self, available_lobes: Optional[List[Tuple[int, int]]] = None):
+    lobe: int
+    sub_lobe: int
+    name: str
+    # Visual characteristics
+    symmetry: int  # n-fold rotational symmetry
+    smoothness: float  # 0=jagged, 1=smooth (connected Julia sets)
+    complexity: float  # 0=simple, 1=intricate detail
+    warmth: float  # 0=cold/angular, 1=warm/rounded
+    # Emotional mapping
+    tension: float  # 0=resolved, 1=tense
+    energy_affinity: float  # Preferred energy level (0=quiet, 1=loud)
+    # Transition costs (how "far" to shift)
+    gear: int  # Like car transmission: 1=slow/smooth, 5=fast/complex
+
+
+# Lobe characteristics database - the "transmission" system
+LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
+    # Cardioid: The "home base" - smooth, warm, connected Julia sets
+    # Best for: verses, quiet sections, resolution moments
+    (1, 0): LobeCharacteristics(
+        lobe=1,
+        sub_lobe=0,
+        name="Cardioid",
+        symmetry=1,
+        smoothness=1.0,
+        complexity=0.3,
+        warmth=1.0,
+        tension=0.0,
+        energy_affinity=0.4,
+        gear=1,
+    ),
+    # Period-2: The "tension builder" - angular, two-fold symmetry
+    # Best for: pre-chorus, building sections, mild tension
+    (2, 0): LobeCharacteristics(
+        lobe=2,
+        sub_lobe=0,
+        name="Period-2 Main",
+        symmetry=2,
+        smoothness=0.7,
+        complexity=0.5,
+        warmth=0.5,
+        tension=0.4,
+        energy_affinity=0.6,
+        gear=2,
+    ),
+    # Period-3 upper: Dramatic, three-fold symmetry, complex
+    # Best for: chorus, climax, high-energy moments
+    (3, 0): LobeCharacteristics(
+        lobe=3,
+        sub_lobe=0,
+        name="Period-3 Upper",
+        symmetry=3,
+        smoothness=0.5,
+        complexity=0.7,
+        warmth=0.3,
+        tension=0.7,
+        energy_affinity=0.8,
+        gear=3,
+    ),
+    # Period-3 lower: Mirror of upper, same characteristics
+    (3, 1): LobeCharacteristics(
+        lobe=3,
+        sub_lobe=1,
+        name="Period-3 Lower",
+        symmetry=3,
+        smoothness=0.5,
+        complexity=0.7,
+        warmth=0.3,
+        tension=0.7,
+        energy_affinity=0.8,
+        gear=3,
+    ),
+    # Period-3 mini-Mandelbrot: Very complex, breakdown territory
+    (3, 2): LobeCharacteristics(
+        lobe=3,
+        sub_lobe=2,
+        name="Period-3 Mini-M",
+        symmetry=3,
+        smoothness=0.3,
+        complexity=0.9,
+        warmth=0.2,
+        tension=0.9,
+        energy_affinity=0.5,
+        gear=4,
+    ),
+    # Period-4 cascade: Off period-2, transitional feel
+    (4, 0): LobeCharacteristics(
+        lobe=4,
+        sub_lobe=0,
+        name="Period-4 Cascade",
+        symmetry=4,
+        smoothness=0.4,
+        complexity=0.6,
+        warmth=0.4,
+        tension=0.5,
+        energy_affinity=0.7,
+        gear=3,
+    ),
+    # Period-4 primaries: Higher complexity, four-fold symmetry
+    (4, 1): LobeCharacteristics(
+        lobe=4,
+        sub_lobe=1,
+        name="Period-4 Primary",
+        symmetry=4,
+        smoothness=0.3,
+        complexity=0.8,
+        warmth=0.3,
+        tension=0.6,
+        energy_affinity=0.7,
+        gear=4,
+    ),
+    (4, 2): LobeCharacteristics(
+        lobe=4,
+        sub_lobe=2,
+        name="Period-4 Primary 2",
+        symmetry=4,
+        smoothness=0.3,
+        complexity=0.8,
+        warmth=0.3,
+        tension=0.6,
+        energy_affinity=0.7,
+        gear=4,
+    ),
+    # Period-8: Very intricate, for special moments
+    (8, 0): LobeCharacteristics(
+        lobe=8,
+        sub_lobe=0,
+        name="Period-8 Cascade",
+        symmetry=8,
+        smoothness=0.2,
+        complexity=0.95,
+        warmth=0.1,
+        tension=0.8,
+        energy_affinity=0.6,
+        gear=5,
+    ),
+}
+
+
+class LobeScheduler:
+    """
+    Strategic lobe selection system - like a car transmission.
+
+    Manages lobe switching based on:
+    1. Section characteristics (verse/chorus/breakdown)
+    2. Energy levels and musical tension
+    3. Transition smoothness (avoid jarring gear shifts)
+    4. History (avoid repetition and ping-ponging)
+
+    The "gear" metaphor:
+    - Gear 1 (Cardioid): Smooth, warm, low-energy sections
+    - Gear 2 (Period-2): Building tension, moderate energy
+    - Gear 3 (Period-3/4): High energy, chorus/climax
+    - Gear 4-5 (Higher periods): Maximum complexity, breakdowns
+
+    Rules:
+    - Prefer shifting one gear at a time (smooth transitions)
+    - Match lobe energy_affinity to section energy
+    - Use tension to drive dramatic moments
+    - Respect cooldown to avoid rapid switching
+    """
+
+    def __init__(
+        self,
+        available_lobes: Optional[List[Tuple[int, int]]] = None,
+        max_gear_jump: int = 2,
+        min_transition_sec: float = 8.0,
+    ):
         """
         Initialize lobe scheduler.
 
         Args:
             available_lobes: List of (lobe, sub_lobe) tuples to choose from
+            max_gear_jump: Maximum gear difference for transitions (default: 2)
+            min_transition_sec: Minimum time between lobe switches
         """
         if available_lobes is None:
-            # Default: cardioid + main bulbs
+            # Default: main lobes ordered by gear
             self.available_lobes = [
-                (1, 0),  # Cardioid
-                (2, 0),  # Period-2
-                (3, 0),  # Period-3 upper
-                (3, 1),  # Period-3 lower
-                (4, 0),  # Period-4 cascade
-                (4, 1),  # Period-4 primary 1
+                (1, 0),  # Gear 1: Cardioid
+                (2, 0),  # Gear 2: Period-2
+                (3, 0),  # Gear 3: Period-3 upper
+                (3, 1),  # Gear 3: Period-3 lower
+                (4, 0),  # Gear 3: Period-4 cascade
+                (4, 1),  # Gear 4: Period-4 primary
             ]
         else:
             self.available_lobes = available_lobes
 
-        # History
+        self.max_gear_jump = max_gear_jump
+        self.min_transition_sec = min_transition_sec
+
+        # State
         self.lobe_history: deque = deque(maxlen=5)
         self.current_lobe = (1, 0)  # Start at cardioid
+        self.last_transition_time = -999.0
 
-    def select_next_lobe(self, energy_level: float, novelty: float) -> Tuple[int, int]:
+    def get_characteristics(self, lobe: Tuple[int, int]) -> LobeCharacteristics:
+        """Get characteristics for a lobe, with fallback for unknown lobes."""
+        if lobe in LOBE_CHARACTERISTICS:
+            return LOBE_CHARACTERISTICS[lobe]
+        # Fallback for unknown lobes
+        period = lobe[0]
+        return LobeCharacteristics(
+            lobe=lobe[0],
+            sub_lobe=lobe[1],
+            name=f"Period-{period}",
+            symmetry=period,
+            smoothness=max(0.1, 1.0 - period * 0.1),
+            complexity=min(1.0, period * 0.15),
+            warmth=max(0.1, 1.0 - period * 0.1),
+            tension=min(1.0, period * 0.1),
+            energy_affinity=0.5,
+            gear=min(5, (period + 1) // 2),
+        )
+
+    def select_next_lobe(
+        self,
+        energy_level: float,
+        novelty: float,
+        timestamp: float = 0.0,
+        section_type: Optional[str] = None,
+    ) -> Tuple[int, int]:
         """
-        Select next lobe based on audio state.
+        Select next lobe based on audio state and section context.
 
         Args:
             energy_level: Current energy level [0, 1]
-            novelty: Current novelty score
+            novelty: Current novelty score [0, 1]
+            timestamp: Current time in seconds
+            section_type: Optional hint ('verse', 'chorus', 'breakdown', 'build')
 
         Returns:
             Tuple of (lobe, sub_lobe)
         """
-        # Filter out current and recent lobes
-        candidates = [
-            lobe
-            for lobe in self.available_lobes
-            if lobe != self.current_lobe and lobe not in self.lobe_history
-        ]
+        # Enforce minimum transition time
+        if timestamp - self.last_transition_time < self.min_transition_sec:
+            return self.current_lobe
 
-        if not candidates:
-            # All lobes used, reset history
+        current_chars = self.get_characteristics(self.current_lobe)
+        current_gear = current_chars.gear
+
+        # For verse/quiet sections, allow returning to cardioid even if in history
+        allow_history_override = section_type in ("verse",) and energy_level < 0.4
+
+        # Score each candidate lobe
+        candidates_with_scores: List[Tuple[Tuple[int, int], float]] = []
+
+        for lobe in self.available_lobes:
+            if lobe == self.current_lobe:
+                continue
+            # Skip lobes in history unless override is active for this lobe
+            if lobe in self.lobe_history:
+                if allow_history_override and lobe == (1, 0):
+                    pass  # Allow cardioid even if in history
+                else:
+                    continue
+
+            chars = self.get_characteristics(lobe)
+            score = self._score_lobe(
+                chars, current_gear, energy_level, novelty, section_type
+            )
+            candidates_with_scores.append((lobe, score))
+
+        # If no candidates, reset history and try again
+        if not candidates_with_scores:
             self.lobe_history.clear()
-            candidates = [
-                lobe for lobe in self.available_lobes if lobe != self.current_lobe
-            ]
+            for lobe in self.available_lobes:
+                if lobe == self.current_lobe:
+                    continue
+                chars = self.get_characteristics(lobe)
+                score = self._score_lobe(
+                    chars, current_gear, energy_level, novelty, section_type
+                )
+                candidates_with_scores.append((lobe, score))
 
-        if not candidates:
-            # Fallback
-            candidates = self.available_lobes
+        if not candidates_with_scores:
+            return self.current_lobe
 
-        # Simple selection: random with slight bias toward period-2/3 for high energy
-        if energy_level > 0.7 and novelty > 0.6:
-            # Prefer bigger bulbs for high energy
-            preferred = [(2, 0), (3, 0), (3, 1)]
-            preferred_candidates = [c for c in candidates if c in preferred]
-            if preferred_candidates:
-                candidates = preferred_candidates
+        # Sort by score (highest first)
+        candidates_with_scores.sort(key=lambda x: x[1], reverse=True)
 
-        # Select randomly from candidates
-        selected = candidates[np.random.randint(len(candidates))]
+        # Select from top candidates with some randomness
+        # Take top 3 and weighted random select
+        top_candidates = candidates_with_scores[:3]
+        weights = [score for _, score in top_candidates]
+        total_weight = sum(weights) + 1e-8
+        normalized_weights = [w / total_weight for w in weights]
 
-        # Update history
+        # Weighted random selection
+        r = np.random.random()
+        cumsum = 0.0
+        selected = top_candidates[0][0]
+        for (lobe, _), w in zip(top_candidates, normalized_weights):
+            cumsum += w
+            if r < cumsum:
+                selected = lobe
+                break
+
+        # Update state
         self.lobe_history.append(self.current_lobe)
         self.current_lobe = selected
+        self.last_transition_time = timestamp
 
         return selected
+
+    def _score_lobe(
+        self,
+        chars: LobeCharacteristics,
+        current_gear: int,
+        energy_level: float,
+        novelty: float,
+        section_type: Optional[str],
+    ) -> float:
+        """
+        Score a candidate lobe based on fit with current audio state.
+
+        Higher score = better fit.
+        """
+        score = 0.0
+
+        # 1. Gear proximity bonus (prefer smooth transitions)
+        gear_diff = abs(chars.gear - current_gear)
+        if gear_diff <= self.max_gear_jump:
+            score += 2.0 * (1.0 - gear_diff / (self.max_gear_jump + 1))
+        else:
+            score -= 1.0  # Penalty for too big a jump
+
+        # 2. Energy affinity match
+        energy_match = 1.0 - abs(chars.energy_affinity - energy_level)
+        score += 2.0 * energy_match
+
+        # 3. Section type bonuses (strong influence)
+        if section_type:
+            if section_type == "verse":
+                # Strongly prefer low gear, smooth, warm
+                score += chars.smoothness * 1.0
+                score += chars.warmth * 1.0
+                if chars.gear == 1:
+                    score += 3.0  # Strong bonus for cardioid
+                elif chars.gear == 2:
+                    score += 1.5
+                elif chars.gear >= 3:
+                    score -= 1.0  # Penalty for high gear in verse
+            elif section_type == "chorus":
+                # Prefer medium-high gear, more complex
+                score += chars.complexity * 0.8
+                score += chars.tension * 0.5
+                if 2 <= chars.gear <= 4:
+                    score += 2.0
+            elif section_type == "breakdown":
+                # Prefer high gear, maximum complexity
+                score += chars.complexity * 1.0
+                score += chars.tension * 0.5
+                if chars.gear >= 4:
+                    score += 2.0
+                elif chars.gear >= 3:
+                    score += 1.0
+            elif section_type == "build":
+                # Match tension to novelty, prefer gradual increase
+                score += chars.tension * novelty * 1.5
+                # Prefer incrementing gear from current
+                if chars.gear == current_gear + 1:
+                    score += 2.5
+                elif chars.gear == current_gear:
+                    score += 1.0
+
+        # 4. High novelty = allow bigger jumps
+        if novelty > 0.7:
+            score += 0.5  # General bonus for any transition at high novelty
+
+        # 5. Complexity matches energy at high levels
+        if energy_level > 0.7:
+            score += chars.complexity * 0.5
+
+        return max(0.0, score)
+
+    def suggest_transition_duration(
+        self, from_lobe: Tuple[int, int], to_lobe: Tuple[int, int]
+    ) -> float:
+        """
+        Suggest transition duration based on gear difference.
+
+        Larger gear jumps need longer transitions for smoothness.
+        """
+        from_chars = self.get_characteristics(from_lobe)
+        to_chars = self.get_characteristics(to_lobe)
+        gear_diff = abs(to_chars.gear - from_chars.gear)
+
+        # Base duration + extra for bigger jumps
+        return 2.0 + gear_diff * 1.0  # 2-5 seconds typically
 
 
 class BeatLockedOmega:
