@@ -541,19 +541,26 @@ class NoveltyBoundaryDetector:
 class LobeCharacteristics:
     """
     Visual and emotional characteristics of a Mandelbrot lobe.
-
-    Each lobe produces Julia sets with distinct visual properties:
-    - Period determines symmetry (n-fold rotational symmetry)
-    - Location affects connectedness and detail level
-    - Size affects transition smoothness
+    
+    Based on mathematical properties from Julia set theory:
+    - Connectedness: Points inside M → connected Julia sets (smooth, whole)
+                     Points outside M → Cantor dust (disconnected, chaotic)
+    - Period/Order: Determines n-fold rotational symmetry
+    - Step size: How orbit traces through periodic points
+    - Location affects visual interest and detail level
     """
 
     lobe: int
     sub_lobe: int
     name: str
+    linton_label: str  # Linton notation for precise lobe identification
+    # Mathematical properties
+    period: int  # Period of orbit (same as lobe number for primary lobes)
+    step_size: int  # How orbit steps through periodic points
+    is_connected: bool  # True if Julia set is connected, False if Cantor dust
     # Visual characteristics
-    symmetry: int  # n-fold rotational symmetry
-    smoothness: float  # 0=jagged, 1=smooth (connected Julia sets)
+    symmetry: int  # n-fold rotational symmetry (equals period)
+    smoothness: float  # 0=jagged, 1=smooth (for connected Julia sets)
     complexity: float  # 0=simple, 1=intricate detail
     warmth: float  # 0=cold/angular, 1=warm/rounded
     # Emotional mapping
@@ -564,13 +571,19 @@ class LobeCharacteristics:
 
 
 # Lobe characteristics database - the "transmission" system
+# Based on Mandelbrot set geometry and Julia set properties
 LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
-    # Cardioid: The "home base" - smooth, warm, connected Julia sets
+    # Cardioid (Lobe 1): The "home base" - connected, smooth, warm Julia sets
+    # Mathematical: Period-1 fixed point attractor, connected Julia set
     # Best for: verses, quiet sections, resolution moments
     (1, 0): LobeCharacteristics(
         lobe=1,
         sub_lobe=0,
         name="Cardioid",
+        linton_label="1",
+        period=1,
+        step_size=1,
+        is_connected=True,
         symmetry=1,
         smoothness=1.0,
         complexity=0.3,
@@ -579,12 +592,17 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         energy_affinity=0.4,
         gear=1,
     ),
-    # Period-2: The "tension builder" - angular, two-fold symmetry
+    # Period-2: The "tension builder" - connected, angular, two-fold symmetry
+    # Mathematical: Period-2 orbit, step size 1 (alternating pattern)
     # Best for: pre-chorus, building sections, mild tension
     (2, 0): LobeCharacteristics(
         lobe=2,
         sub_lobe=0,
         name="Period-2 Main",
+        linton_label="2",
+        period=2,
+        step_size=1,
+        is_connected=True,
         symmetry=2,
         smoothness=0.7,
         complexity=0.5,
@@ -593,12 +611,17 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         energy_affinity=0.6,
         gear=2,
     ),
-    # Period-3 upper: Dramatic, three-fold symmetry, complex
+    # Period-3 upper: Dramatic, connected, three-fold symmetry
+    # Mathematical: Period-3 orbit, step size 1 (sequential tracing)
     # Best for: chorus, climax, high-energy moments
     (3, 0): LobeCharacteristics(
         lobe=3,
         sub_lobe=0,
         name="Period-3 Upper",
+        linton_label="3",
+        period=3,
+        step_size=1,
+        is_connected=True,
         symmetry=3,
         smoothness=0.5,
         complexity=0.7,
@@ -612,6 +635,10 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         lobe=3,
         sub_lobe=1,
         name="Period-3 Lower",
+        linton_label="3'",
+        period=3,
+        step_size=1,
+        is_connected=True,
         symmetry=3,
         smoothness=0.5,
         complexity=0.7,
@@ -620,12 +647,18 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         energy_affinity=0.8,
         gear=3,
     ),
-    # Period-3 mini-Mandelbrot: Very complex, breakdown territory
+    # Period-3 mini-Mandelbrot: Near disconnected boundary, very complex
+    # Mathematical: Period-3 but near Cantor dust regions
+    # Best for: breakdown, transition to chaos
     (3, 2): LobeCharacteristics(
         lobe=3,
         sub_lobe=2,
         name="Period-3 Mini-M",
-        symmetry=3,
+        linton_label="3›2", 
+        period=5,  # Order = 3 + 2
+        step_size=2,
+        is_connected=True,
+        symmetry=5,
         smoothness=0.3,
         complexity=0.9,
         warmth=0.2,
@@ -634,10 +667,15 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         gear=4,
     ),
     # Period-4 cascade: Off period-2, transitional feel
+    # Mathematical: Lobe 4›3 (4 + 3 = 7 order), step size 2
     (4, 0): LobeCharacteristics(
         lobe=4,
         sub_lobe=0,
         name="Period-4 Cascade",
+        linton_label="4",
+        period=4,
+        step_size=1,
+        is_connected=True,
         symmetry=4,
         smoothness=0.4,
         complexity=0.6,
@@ -646,12 +684,17 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         energy_affinity=0.7,
         gear=3,
     ),
-    # Period-4 primaries: Higher complexity, four-fold symmetry
+    # Period-4 primary 1: Higher complexity, four-fold symmetry
+    # Mathematical: Lobe 4›3 (order 7), step size 2 (skips every other point)
     (4, 1): LobeCharacteristics(
         lobe=4,
         sub_lobe=1,
-        name="Period-4 Primary",
-        symmetry=4,
+        name="Period-4›3",
+        linton_label="4›3",
+        period=7,  # 4 + 3
+        step_size=2,
+        is_connected=True,
+        symmetry=7,
         smoothness=0.3,
         complexity=0.8,
         warmth=0.3,
@@ -659,11 +702,16 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         energy_affinity=0.7,
         gear=4,
     ),
+    # Period-4 primary 2: Similar to 4›3
     (4, 2): LobeCharacteristics(
         lobe=4,
         sub_lobe=2,
-        name="Period-4 Primary 2",
-        symmetry=4,
+        name="Period-3›2²",
+        linton_label="3›2²",
+        period=7,  # 3 + 2 + 2
+        step_size=3,  # Steps 3 at a time (star pattern)
+        is_connected=True,
+        symmetry=7,
         smoothness=0.3,
         complexity=0.8,
         warmth=0.3,
@@ -672,10 +720,15 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         gear=4,
     ),
     # Period-8: Very intricate, for special moments
+    # Mathematical: Higher period, complex step pattern
     (8, 0): LobeCharacteristics(
         lobe=8,
         sub_lobe=0,
         name="Period-8 Cascade",
+        linton_label="8",
+        period=8,
+        step_size=1,
+        is_connected=True,
         symmetry=8,
         smoothness=0.2,
         complexity=0.95,
@@ -755,6 +808,10 @@ class LobeScheduler:
             lobe=lobe[0],
             sub_lobe=lobe[1],
             name=f"Period-{period}",
+            linton_label=f"{period}",
+            period=period,
+            step_size=1,  # Assume step size 1 for primary lobes
+            is_connected=True,  # Assume connected for interior points
             symmetry=period,
             smoothness=max(0.1, 1.0 - period * 0.1),
             complexity=min(1.0, period * 0.15),

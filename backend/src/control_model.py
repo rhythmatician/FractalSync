@@ -31,6 +31,8 @@ class AudioToControlModel(nn.Module):
         dropout: float = 0.2,
         include_delta: bool = False,
         include_delta_delta: bool = False,
+        n_lobes: int = 9,  # Number of available lobes to predict
+        predict_lobes: bool = True,  # Whether to predict lobe transitions
     ):
         """
         Initialize control signal model.
@@ -43,6 +45,8 @@ class AudioToControlModel(nn.Module):
             dropout: Dropout rate
             include_delta: Include delta (velocity) features
             include_delta_delta: Include delta-delta (acceleration) features
+            n_lobes: Number of lobes to predict (for lobe switching)
+            predict_lobes: Whether to include lobe prediction head
         """
         super().__init__()
 
@@ -51,6 +55,8 @@ class AudioToControlModel(nn.Module):
         self.k_bands = k_bands
         self.include_delta = include_delta
         self.include_delta_delta = include_delta_delta
+        self.n_lobes = n_lobes
+        self.predict_lobes = predict_lobes
 
         # Calculate input dimension based on feature configuration
         features_multiplier = 1
@@ -62,7 +68,10 @@ class AudioToControlModel(nn.Module):
         self.input_dim = n_features_per_frame * features_multiplier * window_frames
 
         # Output dimension: s_target(1) + alpha(1) + omega_scale(1) + band_gates(k_bands)
+        # If predict_lobes: + lobe_logits(n_lobes)
         self.output_dim = 3 + k_bands
+        if predict_lobes:
+            self.output_dim += n_lobes
 
         # Build encoder layers
         encoder_layers = []
@@ -108,6 +117,16 @@ class AudioToControlModel(nn.Module):
             nn.Sigmoid(),  # Gates in [0, 1]
         )
 
+        # Lobe prediction head (if enabled)
+        if predict_lobes:
+            self.lobe_head = nn.Sequential(
+                nn.Linear(prev_dim, 64),
+                nn.ReLU(),
+                nn.Dropout(dropout * 0.5),
+                nn.Linear(64, n_lobes),
+                # No activation - use with CrossEntropyLoss which includes LogSoftmax
+            )
+
         # Initialize weights
         self._initialize_weights()
 
@@ -132,6 +151,7 @@ class AudioToControlModel(nn.Module):
         Returns:
             Control signals of shape (batch_size, output_dim)
             Format: [s_target, alpha, omega_scale, band_gate_0, ..., band_gate_k-1]
+            If predict_lobes: [..., lobe_logit_0, ..., lobe_logit_n-1]
         """
         # Validate input shape
         if x.shape[1] != self.input_dim:
@@ -160,8 +180,13 @@ class AudioToControlModel(nn.Module):
         omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
         omega_scale = torch.clamp(omega_scale, 0.1, 5.0)
 
-        # Concatenate all control signals
+        # Concatenate control signals
         output = torch.cat([s_target, alpha, omega_scale, band_gates], dim=1)
+
+        # Add lobe predictions if enabled
+        if self.predict_lobes:
+            lobe_logits = self.lobe_head(encoded)  # (batch_size, n_lobes)
+            output = torch.cat([output, lobe_logits], dim=1)
 
         return output
 
@@ -190,10 +215,16 @@ class AudioToControlModel(nn.Module):
 
         Returns:
             Dictionary with keys: s_target, alpha, omega_scale, band_gates
+            If predict_lobes: also includes lobe_logits
         """
-        return {
+        result = {
             "s_target": output[:, 0],
             "alpha": output[:, 1],
             "omega_scale": output[:, 2],
-            "band_gates": output[:, 3:],
+            "band_gates": output[:, 3 : 3 + self.k_bands],
         }
+
+        if self.predict_lobes:
+            result["lobe_logits"] = output[:, 3 + self.k_bands :]
+
+        return result

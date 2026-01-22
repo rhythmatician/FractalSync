@@ -124,6 +124,62 @@ class BoundaryCrossingReward(nn.Module):
         return self.weight * torch.mean(loss)
 
 
+class LobePredictionLoss(nn.Module):
+    """
+    Cross-entropy loss for lobe prediction at section boundaries.
+
+    Trains the model to switch lobes appropriately based on:
+    - Section boundaries (detected via ruptures/novelty)
+    - Audio energy levels
+    - Musical context
+
+    Uses the LobeScheduler's strategic selection as supervision signal.
+    """
+
+    def __init__(self, weight: float = 1.0, smoothing: float = 0.1):
+        """
+        Initialize lobe prediction loss.
+
+        Args:
+            weight: Loss weight multiplier
+            smoothing: Label smoothing factor (0 = hard labels, 0.1 = smooth)
+        """
+        super().__init__()
+        self.weight = weight
+        self.smoothing = smoothing
+        self.cross_entropy = nn.CrossEntropyLoss(label_smoothing=smoothing)
+
+    def forward(
+        self,
+        lobe_logits: torch.Tensor,
+        target_lobes: torch.Tensor,
+        at_boundary: torch.Tensor = None,
+    ) -> torch.Tensor:
+        """
+        Compute lobe prediction loss.
+
+        Args:
+            lobe_logits: Predicted lobe logits (batch_size, n_lobes)
+            target_lobes: Target lobe indices (batch_size,) long tensor
+            at_boundary: Optional mask for frames at section boundaries (batch_size,)
+                        If provided, only compute loss at boundaries
+
+        Returns:
+            Loss value
+        """
+        if at_boundary is not None:
+            # Only compute loss at section boundaries
+            boundary_mask = at_boundary > 0.5
+            if not boundary_mask.any():
+                return torch.tensor(0.0, device=lobe_logits.device)
+
+            lobe_logits = lobe_logits[boundary_mask]
+            target_lobes = target_lobes[boundary_mask]
+
+        loss = self.cross_entropy(lobe_logits, target_lobes)
+        return self.weight * loss
+
+
 class ControlTrainer:
     """Trainer for control signal model with orbit synthesis."""
 
@@ -180,6 +236,7 @@ class ControlTrainer:
             "transient_impact": 1.0,
             "control_loss": 1.0,
             "boundary_crossing": 0.5,  # Reward s crossing boundary on transients
+            "lobe_prediction": 0.3,  # Teach lobe switching at section boundaries
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -196,6 +253,10 @@ class ControlTrainer:
             margin=0.05,
             weight=self.correlation_weights.get("boundary_crossing", 0.5),
         )
+        self.lobe_prediction_loss = LobePredictionLoss(
+            weight=self.correlation_weights.get("lobe_prediction", 0.3),
+            smoothing=0.1,
+        )
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -211,9 +272,14 @@ class ControlTrainer:
             "timbre_color_loss": [],
             "transient_impact_loss": [],
             "boundary_crossing_loss": [],
+            "lobe_prediction_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
+
+        # Lobe curriculum data (for section-aware training)
+        self.curriculum_lobes: Optional[torch.Tensor] = None
+        self.section_boundaries: Optional[List[int]] = None
 
     def _generate_curriculum_data(self, n_samples: int):
         """Generate curriculum learning data from preset orbits."""
@@ -238,6 +304,99 @@ class ControlTrainer:
         logger.info(
             f"Curriculum generated: positions={self.curriculum_positions.shape}, "
             f"velocities={self.curriculum_velocities.shape}"
+        )
+
+    def _generate_lobe_curriculum(
+        self,
+        section_data: Dict[str, Any],
+        n_samples: int,
+        lobe_to_index: Dict[Tuple[int, int], int],
+    ):
+        """
+        Generate lobe switching curriculum from section boundary data.
+
+        Uses LobeScheduler to strategically assign lobes to sections based on:
+        - Energy levels
+        - Section boundaries from audio analysis
+        - Musical structure (verse/chorus/etc if available)
+
+        Args:
+            section_data: Dict with 'section_boundaries', 'tempo', 'energy_profile'
+            n_samples: Total number of samples in training data
+            lobe_to_index: Mapping from (lobe, sub_lobe) to index for classification
+        """
+        from .live_controller import LobeScheduler
+
+        logger.info("Generating lobe curriculum from section boundaries")
+
+        section_boundaries = section_data.get("section_boundaries", [])
+        if not section_boundaries or len(section_boundaries) == 0:
+            # No section data - assign default lobe (cardioid) to all
+            logger.warning(
+                "No section boundaries found, using default lobe for all samples"
+            )
+            default_lobe_idx = lobe_to_index.get((1, 0), 0)
+            self.curriculum_lobes = torch.full(
+                (n_samples,), default_lobe_idx, dtype=torch.long, device=self.device
+            )
+            return
+
+        # Initialize scheduler
+        scheduler = LobeScheduler()
+
+        # Create lobe assignments for each sample
+        lobe_assignments = []
+        current_lobe = (1, 0)  # Start with cardioid
+
+        # Convert boundaries to sample indices (assuming uniform sampling)
+        boundary_samples = [
+            (
+                int(b * n_samples / section_boundaries[-1])
+                if section_boundaries[-1] > 0
+                else 0
+            )
+            for b in section_boundaries
+        ]
+        boundary_samples.append(n_samples)  # Add final boundary
+
+        for i in range(len(boundary_samples)):
+            start_sample = boundary_samples[i - 1] if i > 0 else 0
+            end_sample = boundary_samples[i]
+
+            # Simple energy estimation (could be enhanced with real audio analysis)
+            # Assume energy cycles: low at start, builds up, high in middle, returns to low
+            relative_pos = i / max(len(boundary_samples) - 1, 1)
+            energy = 0.3 + 0.7 * np.sin(relative_pos * np.pi)  # 0.3 to 1.0
+            novelty = 0.5 + 0.5 * np.random.random()  # Some randomness
+
+            # Select lobe for this section
+            new_lobe = scheduler.select_next_lobe(
+                energy_level=energy,
+                novelty=novelty,
+                timestamp=float(i * 10),  # Dummy timestamp
+                section_type=None,  # Could classify sections here
+            )
+
+            # Assign this lobe to all samples in the section
+            lobe_idx = lobe_to_index.get(new_lobe, lobe_to_index.get((1, 0), 0))
+            for _ in range(start_sample, end_sample):
+                lobe_assignments.append(lobe_idx)
+
+            current_lobe = new_lobe
+
+        # Convert to tensor
+        self.curriculum_lobes = torch.tensor(
+            lobe_assignments[:n_samples],  # Ensure exact length
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        # Mark section boundaries for targeted training
+        self.section_boundaries = boundary_samples[:-1]  # Exclude final boundary
+
+        logger.info(
+            f"Lobe curriculum generated: {len(set(lobe_assignments))} unique lobes assigned, "
+            f"{len(self.section_boundaries)} section boundaries"
         )
 
     def _extract_control_targets_from_curriculum(
@@ -301,6 +460,7 @@ class ControlTrainer:
         total_timbre_color = 0.0
         total_transient_impact = 0.0
         total_boundary_crossing = 0.0
+        total_lobe_prediction = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -470,6 +630,32 @@ class ControlTrainer:
                 s_target, transient_strength
             )
 
+            # Lobe prediction loss (if model predicts lobes and curriculum is available)
+            lobe_prediction_loss_val = torch.zeros(1, device=self.device)
+            if self.model.predict_lobes and self.curriculum_lobes is not None:
+                lobe_logits = parsed.get("lobe_logits")
+                if lobe_logits is not None:
+                    # Get target lobes for this batch
+                    end_idx = min(sample_idx + batch_size, len(self.curriculum_lobes))
+                    actual_batch_size = end_idx - sample_idx
+                    if actual_batch_size > 0:
+                        target_lobes = self.curriculum_lobes[sample_idx:end_idx]
+
+                        # Create boundary mask if section boundaries are available
+                        at_boundary = None
+                        if self.section_boundaries:
+                            at_boundary = torch.zeros(
+                                actual_batch_size, device=self.device
+                            )
+                            for boundary_idx in self.section_boundaries:
+                                if sample_idx <= boundary_idx < end_idx:
+                                    local_idx = boundary_idx - sample_idx
+                                    at_boundary[local_idx] = 1.0
+
+                        lobe_prediction_loss_val = self.lobe_prediction_loss(
+                            lobe_logits[:actual_batch_size], target_lobes, at_boundary
+                        )
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -483,6 +669,7 @@ class ControlTrainer:
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
                 + boundary_crossing_loss
+                + lobe_prediction_loss_val
                 + current_curriculum_weight * control_loss_val
             )
 
@@ -497,6 +684,7 @@ class ControlTrainer:
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
             total_boundary_crossing += boundary_crossing_loss.item()
+            total_lobe_prediction += lobe_prediction_loss_val.item()
             n_batches += 1
 
         # Average losses
@@ -506,6 +694,7 @@ class ControlTrainer:
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
             "boundary_crossing_loss": total_boundary_crossing / n_batches,
+            "lobe_prediction_loss": total_lobe_prediction / n_batches,
         }
 
         return avg_losses
