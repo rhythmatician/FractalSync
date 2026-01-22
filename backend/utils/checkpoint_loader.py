@@ -160,6 +160,17 @@ def load_and_export(
             "model_class": "AudioToControlModel",
             "timestamp": datetime.now().isoformat(),
             "git_hash": git_hash,
+            # Training hyperparameters from checkpoint
+            "learning_rate": checkpoint.get("learning_rate"),
+            "batch_size": checkpoint.get("batch_size"),
+            "total_epochs": checkpoint.get("total_epochs"),
+            "use_curriculum": checkpoint.get("use_curriculum"),
+            "curriculum_weight": checkpoint.get("curriculum_weight"),
+            "curriculum_decay": checkpoint.get("curriculum_decay"),
+            "correlation_weights": checkpoint.get("correlation_weights"),
+            "julia_resolution": checkpoint.get("julia_resolution"),
+            "julia_max_iter": checkpoint.get("julia_max_iter"),
+            "k_residuals": checkpoint.get("k_residuals"),
         }
 
         # Use export_to_onnx for consistent ONNX export logic

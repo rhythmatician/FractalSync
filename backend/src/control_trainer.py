@@ -132,6 +132,7 @@ class ControlTrainer:
         )
 
         # Optimizer
+        self.learning_rate = learning_rate
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
         # Curriculum data
@@ -492,13 +493,22 @@ class ControlTrainer:
             )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
-                self.save_checkpoint(save_dir, epoch + 1)
+                self.save_checkpoint(
+                    save_dir, epoch + 1, batch_size, curriculum_decay, epochs
+                )
 
         logger.info("Training complete!")
         return self.last_checkpoint_path
 
-    def save_checkpoint(self, save_dir: str, epoch: int):
-        """Save model checkpoint."""
+    def save_checkpoint(
+        self,
+        save_dir: str,
+        epoch: int,
+        batch_size: int = 32,
+        curriculum_decay: float = 0.95,
+        total_epochs: int = 100,
+    ):
+        """Save model checkpoint with full training configuration."""
         os.makedirs(save_dir, exist_ok=True)
 
         checkpoint = {
@@ -508,6 +518,17 @@ class ControlTrainer:
             "history": self.history,
             "feature_mean": self.feature_extractor.feature_mean,
             "feature_std": self.feature_extractor.feature_std,
+            # Training hyperparameters
+            "learning_rate": self.learning_rate,
+            "batch_size": batch_size,
+            "total_epochs": total_epochs,
+            "use_curriculum": self.use_curriculum,
+            "curriculum_weight": self.curriculum_weight,
+            "curriculum_decay": curriculum_decay,
+            "correlation_weights": self.correlation_weights,
+            "julia_resolution": self.julia_resolution,
+            "julia_max_iter": self.julia_max_iter,
+            "k_residuals": self.k_residuals,
         }
 
         checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
