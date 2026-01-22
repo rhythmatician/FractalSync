@@ -374,6 +374,7 @@ class ControlTrainer:
             images = []
             color_hues = []
             temporal_changes = []
+            edge_densities = []
 
             prev_image = None
             for i in range(batch_size):
@@ -416,16 +417,7 @@ class ControlTrainer:
                         dtype=torch.float32,
                     )
                 )
-
-                prev_image = image
-
-            color_hue_tensor = torch.stack(color_hues)
-            temporal_change_tensor = torch.stack(temporal_changes)
-            
-            # Compute edge density for all images
-            edge_densities = []
-            for image in images:
-                metrics = self.visual_metrics.compute_all_metrics(image)
+                # Store edge density (computed once)
                 edge_densities.append(
                     torch.tensor(
                         metrics["edge_density"],
@@ -433,6 +425,11 @@ class ControlTrainer:
                         dtype=torch.float32,
                     )
                 )
+
+                prev_image = image
+
+            color_hue_tensor = torch.stack(color_hues)
+            temporal_change_tensor = torch.stack(temporal_changes)
             edge_density_tensor = torch.stack(edge_densities)
 
             # Compute correlation losses

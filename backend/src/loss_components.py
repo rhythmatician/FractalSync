@@ -124,6 +124,9 @@ class MembershipProximityLoss(nn.Module):
         Returns:
             Scalar loss value
         """
+        # Ensure audio_intensity is in valid range [0, 1]
+        audio_intensity = torch.clamp(audio_intensity, 0.0, 1.0)
+        
         # Compute membership proxy
         membership = self.compute_membership_proxy(c_real, c_imag)
 
@@ -203,6 +206,7 @@ class LobeVarietyLoss(nn.Module):
         history_size: int = 100,
         n_clusters: int = 5,
         weight: float = 1.0,
+        target_variety_scale: float = 0.3,
     ):
         """
         Initialize lobe variety loss.
@@ -211,11 +215,16 @@ class LobeVarietyLoss(nn.Module):
             history_size: Number of recent c values to track
             n_clusters: Expected number of different regions/lobes
             weight: Loss weight multiplier
+            target_variety_scale: Scaling factor for target variety calculation.
+                This value (default 0.3) represents the expected std per cluster
+                in c-space, where the Mandelbrot set has diameter ~3. The target
+                variety is computed as: target_variety_scale * sqrt(n_clusters).
         """
         super().__init__()
         self.history_size = history_size
         self.n_clusters = n_clusters
         self.weight = weight
+        self.target_variety_scale = target_variety_scale
         self.c_history: List[Tuple[float, float]] = []
 
     def update_history(self, c_real: torch.Tensor, c_imag: torch.Tensor):
@@ -257,8 +266,8 @@ class LobeVarietyLoss(nn.Module):
         std_real = float(np.std(c_real_vals))
         std_imag = float(np.std(c_imag_vals))
 
-        # Combined variety score
-        variety = np.sqrt(std_real**2 + std_imag**2)
+        # Combined variety score (Euclidean norm of standard deviations)
+        variety = float(np.linalg.norm([std_real, std_imag]))
 
         return variety
 
@@ -282,8 +291,7 @@ class LobeVarietyLoss(nn.Module):
         variety = self.compute_variety_score()
 
         # Target variety based on expected n_clusters and typical Mandelbrot extent
-        # Mandelbrot set has diameter ~3, so std for n_clusters would be roughly:
-        target_variety = 0.3 * np.sqrt(self.n_clusters)
+        target_variety = self.target_variety_scale * np.sqrt(self.n_clusters)
 
         # Penalize when variety is below target
         shortfall = max(0.0, target_variety - variety)
