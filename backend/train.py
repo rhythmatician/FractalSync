@@ -103,6 +103,7 @@ def precompute_sections(
             # Convert numpy arrays to lists for JSON serialization
             result = {
                 "tempo": analysis["tempo"],
+                "local_tempo": analysis["local_tempo"].tolist(),
                 "section_boundaries": analysis["section_boundaries"].tolist(),
                 "section_times": analyzer.frames_to_time(
                     analysis["section_boundaries"]
@@ -112,8 +113,18 @@ def precompute_sections(
             }
 
             section_data[filename] = result
+            
+            # Compute tempo statistics for display
+            local_tempo_array = analysis["local_tempo"]
+            tempo_mean = float(np.mean(local_tempo_array))
+            tempo_std = float(np.std(local_tempo_array))
+            tempo_min = float(np.min(local_tempo_array))
+            tempo_max = float(np.max(local_tempo_array))
+            
             print(
-                f"    -> {result['n_sections']} sections, tempo={result['tempo']:.1f} BPM"
+                f"    -> {result['n_sections']} sections, "
+                f"tempo={tempo_mean:.1f}±{tempo_std:.1f} BPM "
+                f"(range: {tempo_min:.1f}-{tempo_max:.1f})"
             )
 
             # Cache result

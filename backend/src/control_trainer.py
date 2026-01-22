@@ -344,6 +344,9 @@ class ControlTrainer:
         # Initialize scheduler
         scheduler = LobeScheduler()
 
+        # Get local tempo if available
+        local_tempo = section_data.get("local_tempo", None)
+
         # Create lobe assignments for each sample
         lobe_assignments = []
         current_lobe = (1, 0)  # Start with cardioid
@@ -359,28 +362,107 @@ class ControlTrainer:
         ]
         boundary_samples.append(n_samples)  # Add final boundary
 
+        # Compute tempo statistics if local tempo available
+        tempo_std = 0.0
+        if local_tempo is not None and len(local_tempo) > 0:
+            local_tempo_array = np.array(local_tempo)
+            tempo_mean = np.mean(local_tempo_array)
+            tempo_std = np.std(local_tempo_array)
+            logger.info(
+                f"  Tempo: {tempo_mean:.1f} ± {tempo_std:.1f} BPM (range: {local_tempo_array.min():.1f}-{local_tempo_array.max():.1f})"
+            )
+        else:
+            local_tempo_array = None
+            tempo_mean = 0.0
+            logger.critical("  No local tempo data available")
+
         for i in range(len(boundary_samples)):
             start_sample = boundary_samples[i - 1] if i > 0 else 0
             end_sample = boundary_samples[i]
 
-            # Simple energy estimation (could be enhanced with real audio analysis)
-            # Assume energy cycles: low at start, builds up, high in middle, returns to low
+            # Compute section characteristics
+            section_duration = end_sample - start_sample
+
+            # Energy estimation: consider position in song + section length
+            # Longer sections often = verses (lower energy), shorter = transitions/chorus (higher)
             relative_pos = i / max(len(boundary_samples) - 1, 1)
-            energy = 0.3 + 0.7 * np.sin(relative_pos * np.pi)  # 0.3 to 1.0
-            novelty = 0.5 + 0.5 * np.random.random()  # Some randomness
+
+            # Base energy from song position (builds toward middle)
+            base_energy = 0.3 + 0.7 * np.sin(relative_pos * np.pi)  # 0.3 to 1.0
+
+            # Adjust for section length (shorter sections = more intense)
+            avg_section_length = n_samples / len(boundary_samples)
+            length_factor = 1.0 - 0.3 * (section_duration / avg_section_length - 1.0)
+            length_factor = np.clip(length_factor, 0.5, 1.5)
+
+            energy = np.clip(base_energy * length_factor, 0.2, 1.0)
+
+            # Compute local tempo for this section
+            tempo_change = 0.0
+
+            if local_tempo is not None and len(local_tempo) > 0:
+                # Map section to tempo frames
+                # section_boundaries are in frames, local_tempo is per-frame
+                if i < len(section_boundaries):
+                    boundary_frame = int(section_boundaries[i])
+                    prev_boundary_frame = int(section_boundaries[i - 1]) if i > 0 else 0
+
+                    # Get tempo for this section
+                    if boundary_frame < len(
+                        local_tempo_array
+                    ) and prev_boundary_frame < len(local_tempo_array):
+                        section_tempo_values = local_tempo_array[
+                            prev_boundary_frame:boundary_frame
+                        ]
+                        if len(section_tempo_values) > 0:
+                            section_tempo = np.mean(section_tempo_values)
+
+                            # Compute tempo change relative to global mean
+                            tempo_change = (section_tempo - tempo_mean) / (
+                                tempo_std + 1e-8
+                            )
+
+            # Map tempo to energy boost
+            # Faster tempo → higher energy, slower → lower energy
+            tempo_factor = 1.0 + 0.2 * tempo_change  # ±20% based on tempo deviation
+            energy = np.clip(energy * tempo_factor, 0.2, 1.0)
+
+            # Novelty: higher at boundaries, especially with tempo changes
+            novelty = 0.5 + 0.3 * abs(tempo_change) + 0.2 * np.random.random()
+            novelty = np.clip(novelty, 0.0, 1.0)
+
+            # Classify section type based on characteristics
+            section_type = None
+            if energy < 0.4 and section_duration > avg_section_length * 1.2:
+                section_type = "verse"  # Low energy, long section
+            elif energy > 0.7 and novelty > 0.6:
+                section_type = "chorus"  # High energy, high novelty
+            elif abs(tempo_change) > 1.0:  # More than 1 std dev
+                section_type = "breakdown"  # Significant tempo change
+            elif 0.4 <= energy < 0.7 and novelty > 0.5:
+                section_type = "build"  # Medium energy, rising
 
             # Select lobe for this section
             new_lobe = scheduler.select_next_lobe(
                 energy_level=energy,
                 novelty=novelty,
                 timestamp=float(i * 10),  # Dummy timestamp
-                section_type=None,  # Could classify sections here
+                section_type=section_type,
             )
 
             # Assign this lobe to all samples in the section
             lobe_idx = lobe_to_index.get(new_lobe, lobe_to_index.get((1, 0), 0))
             for _ in range(start_sample, end_sample):
                 lobe_assignments.append(lobe_idx)
+
+            # Log transition if lobe changed
+            if new_lobe != current_lobe:
+                old_chars = scheduler.get_characteristics(current_lobe)
+                new_chars = scheduler.get_characteristics(new_lobe)
+                logger.debug(
+                    f"  Section {i}: {old_chars.name} → {new_chars.name} "
+                    f"(energy={energy:.2f}, tempo_change={tempo_change:.2f}, {section_type or 'neutral'})"
+                )
 
             current_lobe = new_lobe
 
