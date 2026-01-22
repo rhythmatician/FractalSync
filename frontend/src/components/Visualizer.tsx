@@ -8,7 +8,7 @@ import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 import { FullscreenToggle } from './FullscreenToggle';
-import { TOOL_GRADIENTS } from '../lib/toolGradients';
+import { TOOL_GRADIENTS, DEFAULT_GRADIENT_INDEX } from '../lib/toolGradients';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,7 +24,7 @@ export function Visualizer() {
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
-  const [currentGradientIndex, setCurrentGradientIndex] = useState(3); // Default to "Shadow & Blood"
+  const [currentGradientIndex, setCurrentGradientIndex] = useState(DEFAULT_GRADIENT_INDEX); // Shared default with renderer
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -353,7 +353,11 @@ export function Visualizer() {
             onClick={() => {
               const nextIndex = (currentGradientIndex + 1) % TOOL_GRADIENTS.length;
               setCurrentGradientIndex(nextIndex);
-              const hue = nextIndex / TOOL_GRADIENTS.length;
+              // Map to full [0, 1] range to avoid asymmetry
+              const hue =
+                TOOL_GRADIENTS.length > 1
+                  ? nextIndex / (TOOL_GRADIENTS.length - 1)
+                  : 0;
               if (rendererRef.current) {
                 // Preserve existing parameters, only change hue
                 const currentParams = rendererRef.current.getCurrentParameters();
@@ -372,6 +376,7 @@ export function Visualizer() {
               marginLeft: '10px'
             }}
             title="Cycle through TOOL-themed gradient palettes"
+            aria-label={`Cycle through TOOL-themed gradient palettes. Current: ${TOOL_GRADIENTS[currentGradientIndex].name}`}
           >
             🎨 {TOOL_GRADIENTS[currentGradientIndex].name}
           </button>

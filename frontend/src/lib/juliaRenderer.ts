@@ -2,7 +2,7 @@
  * WebGL-based Julia set renderer for real-time visualization.
  */
 
-import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS } from './toolGradients';
+import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS, DEFAULT_GRADIENT_INDEX, TOOL_GRADIENTS } from './toolGradients';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -32,6 +32,9 @@ export class JuliaRenderer {
   private uResolutionLocation: WebGLUniformLocation | null = null;
   private uGradientCountLocation: WebGLUniformLocation | null = null;
   
+  // Cached gradient uniform locations for performance
+  private gradientUniformLocations: (WebGLUniformLocation | null)[] = [];
+  
   private currentGradient: Gradient | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -42,11 +45,12 @@ export class JuliaRenderer {
     }
     this.gl = gl;
 
-    // Initialize default parameters
+    // Initialize default parameters (using shared constant for gradient)
+    const defaultHue = DEFAULT_GRADIENT_INDEX / TOOL_GRADIENTS.length;
     this.currentParams = {
       juliaReal: -0.7269,
       juliaImag: 0.1889,
-      colorHue: 0.5,
+      colorHue: defaultHue,
       colorSat: 0.8,
       colorBright: 0.9,
       zoom: 1.0,
@@ -75,7 +79,7 @@ export class JuliaRenderer {
       
       uniform vec2 u_juliaSeed;
       uniform float u_zoom;
-      uniform vec3 u_color;  // x=gradientSelect, y=intensity, z=contrast
+      uniform vec3 u_color;  // y=intensity, z=contrast (hue handled in JS)
       uniform float u_time;
       uniform vec2 u_resolution;
       uniform int u_gradientCount;
@@ -110,6 +114,7 @@ export class JuliaRenderer {
         t = clamp(t, 0.0, 1.0);
         
         // Find the two stops we're between
+        // Defaults to first and last stops if no match found (fallback for edge cases)
         vec4 lowerStop = getGradientStop(0);
         vec4 upperStop = getGradientStop(u_gradientCount - 1);
         
@@ -160,8 +165,8 @@ export class JuliaRenderer {
         float intensity = u_color.y;  // colorSat controls intensity
         float contrast = u_color.z;   // colorBright controls contrast
         
-        // Adjust t based on contrast
-        t = pow(t, 1.0 / (contrast + 0.5));
+        // Adjust t based on contrast; add small epsilon to avoid division by zero
+        t = pow(t, 1.0 / (contrast + 0.5 + 0.001));
         
         // Sample gradient
         vec3 color = sampleGradient(t);
@@ -199,8 +204,14 @@ export class JuliaRenderer {
     this.uResolutionLocation = gl.getUniformLocation(this.program, 'u_resolution');
     this.uGradientCountLocation = gl.getUniformLocation(this.program, 'u_gradientCount');
     
-    // Initialize with default gradient
-    this.updateGradient(0.5);
+    // Cache gradient uniform locations for performance
+    for (let i = 0; i < MAX_GRADIENT_STOPS; i++) {
+      this.gradientUniformLocations[i] = gl.getUniformLocation(this.program, `u_gradient${i}`);
+    }
+    
+    // Initialize with default gradient (using shared constant)
+    const defaultHue = DEFAULT_GRADIENT_INDEX / TOOL_GRADIENTS.length;
+    this.updateGradient(defaultHue);
 
     // Create full-screen quad
     const positionBuffer = gl.createBuffer();
@@ -281,15 +292,17 @@ export class JuliaRenderer {
     const flatData = flattenGradient(gradient);
     
     // Upload to GPU as individual vec4 uniforms (WebGL 1.0 compatible)
+    // Note: This changes the active WebGL program state. Callers should be aware
+    // that the program will be active after this call (typically called before rendering).
     gl.useProgram(this.program);
     
     // Set gradient count
     gl.uniform1i(this.uGradientCountLocation!, gradient.stops.length);
     
-    // Set gradient stops as individual uniforms
+    // Set gradient stops using cached uniform locations (performance optimization)
     for (let i = 0; i < Math.min(gradient.stops.length, MAX_GRADIENT_STOPS); i++) {
       const baseIdx = i * 4;
-      const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
+      const location = this.gradientUniformLocations[i];
       if (location) {
         gl.uniform4f(
           location,
@@ -303,7 +316,7 @@ export class JuliaRenderer {
     
     // Fill remaining slots with black if gradient has fewer stops
     for (let i = gradient.stops.length; i < MAX_GRADIENT_STOPS; i++) {
-      const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
+      const location = this.gradientUniformLocations[i];
       if (location) {
         gl.uniform4f(location, 0.0, 0.0, 0.0, 1.0);
       }

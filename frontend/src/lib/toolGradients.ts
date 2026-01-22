@@ -12,6 +12,9 @@
 // Maximum gradient stops supported by WebGL shader
 export const MAX_GRADIENT_STOPS = 8;
 
+// Default gradient index (Shadow & Blood)
+export const DEFAULT_GRADIENT_INDEX = 3;
+
 export interface GradientStop {
   position: number; // 0.0 to 1.0
   r: number; // 0.0 to 1.0
@@ -27,8 +30,14 @@ export interface Gradient {
 
 /**
  * Convert hex color to RGB components (0-1 range)
+ * @throws Error if hex string is invalid
  */
 function hex2rgb(hex: string): [number, number, number] {
+  // Validate hex format
+  if (!hex || typeof hex !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+    throw new Error(`Invalid hex color: ${hex}. Expected format: #RRGGBB`);
+  }
+  
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
   const b = parseInt(hex.slice(5, 7), 16) / 255;
@@ -37,6 +46,10 @@ function hex2rgb(hex: string): [number, number, number] {
 
 /**
  * Create gradient stops from hex colors
+ * @param name - Display name for the gradient
+ * @param description - Thematic description
+ * @param colors - Array of hex color strings (e.g., ["#000000", "#ffffff"])
+ * @returns Gradient object with interpolated stops
  */
 function createGradient(
   name: string,
@@ -184,8 +197,13 @@ export function getGradient(index: number): Gradient {
  * Get gradient by hue value (0-1 mapped to gradient families)
  */
 export function getGradientByHue(hue: number): Gradient {
-  // Map hue 0-1 to gradient indices
-  const index = Math.floor(hue * TOOL_GRADIENTS.length);
+  // Clamp hue to [0, 1] to avoid wrapping edge cases (hue = 1 should map to last gradient)
+  const clampedHue = Math.max(0, Math.min(1, hue));
+  // Map clamped hue 0-1 to gradient indices, ensuring we never exceed length - 1
+  const index = Math.min(
+    Math.floor(clampedHue * TOOL_GRADIENTS.length),
+    TOOL_GRADIENTS.length - 1
+  );
   return getGradient(index);
 }
 
