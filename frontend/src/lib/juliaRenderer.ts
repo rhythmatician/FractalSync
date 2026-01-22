@@ -152,16 +152,17 @@ export class JuliaRenderer {
         float minDist = 1000.0;  // Track closest approach to origin
         vec2 trapPoint = vec2(0.0, 0.0);  // Orbit trap center
         
-        int iterations = 0;
-        float smoothIter = 0.0;
+        float iterations = 0.0;
         vec2 zFinal = z;  // Store final z value for lighting calculation
         
         for (int i = 0; i < MAX_ITERATIONS; i++) {
           float zMagnitude = dot(z, z);
           if (zMagnitude > 4.0) {
-            // Smooth coloring: calculate real iteration number using potential function
-            // This eliminates banding by using fractional iterations
-            smoothIter = float(i) - log2(log2(zMagnitude)) + 4.0;
+            // Smooth coloring using normalized iteration count
+            // This completely eliminates banding
+            float log_zn = log(zMagnitude) / 2.0;
+            float nu = log(log_zn / log(2.0)) / log(2.0);
+            iterations = float(i) + 1.0 - nu;
             zFinal = z;
             break;
           }
@@ -174,29 +175,28 @@ export class JuliaRenderer {
             z.x * z.x - z.y * z.y + c.x,
             2.0 * z.x * z.y + c.y
           );
-          iterations = i + 1;
         }
         
-        // Normalize smooth iteration count
-        if (iterations == MAX_ITERATIONS) {
-          smoothIter = float(MAX_ITERATIONS);
+        // Handle points inside the set
+        if (iterations == 0.0) {
+          iterations = float(MAX_ITERATIONS);
           zFinal = z;
         }
         
-        // Use smooth iteration for truly smooth coloring
-        float t = smoothIter / float(MAX_ITERATIONS);
+        // Normalize to [0, 1] range for color mapping
+        float t = iterations / float(MAX_ITERATIONS);
         
         // Apply hue, intensity, and contrast
         float hue = u_color.x;        // colorHue shifts gradient position
         float intensity = u_color.y;  // colorSat controls intensity
         float contrast = u_color.z;   // colorBright controls contrast
         
-        // Blend orbit trap coloring very subtly for organic textures
-        float trapInfluence = smoothstep(0.5, 0.0, minDist);
-        t = mix(t, t * (1.0 + minDist * 0.1), trapInfluence * 0.2);
-        
-        // Apply contrast adjustment smoothly
+        // Apply contrast adjustment smoothly BEFORE any other modifications
         t = pow(clamp(t, 0.0, 1.0), 1.0 / (contrast + 0.5 + 0.001));
+        
+        // Very subtle orbit trap influence to maintain smoothness
+        float trapInfluence = smoothstep(0.5, 0.0, minDist);
+        t = mix(t, t * (1.0 + minDist * 0.05), trapInfluence * 0.1);
         
         // Shift t by hue for smooth color transitions across the gradient
         // Use smooth modulo to maintain smoothness
@@ -210,7 +210,7 @@ export class JuliaRenderer {
         color = color * (0.5 + intensity * 0.5);
         
         // Enhanced lighting effect: calculate for all escaped points
-        if (iterations < MAX_ITERATIONS) {
+        if (iterations < float(MAX_ITERATIONS)) {
           // Calculate surface normal from potential gradient
           float h = 0.001;
           float potentialCenter = log(dot(zFinal, zFinal) + 1.0);
@@ -222,7 +222,6 @@ export class JuliaRenderer {
           float potentialY = log(dot(zPlusY, zPlusY) + 1.0);
           
           vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
-          float gradMag = length(grad);
           
           // Calculate normal (pointing outward from fractal surface)
           vec3 normal = normalize(vec3(grad, 0.5));
