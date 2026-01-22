@@ -84,7 +84,6 @@ impl FeatureExtractor {
         let mut spectral_flux: Vec<f64> = Vec::new();
         let mut rms_energy: Vec<f64> = Vec::new();
         let mut zero_crossing_rate: Vec<f64> = Vec::new();
-        let mut onsets: Vec<f64> = Vec::new();
         let mut spectral_rolloff: Vec<f64> = Vec::new();
 
         // Precompute frequency bins
