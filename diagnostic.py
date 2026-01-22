@@ -50,7 +50,7 @@ except Exception as e:
 try:
     from src.visual_metrics import VisualMetrics  # noqa: F401
 
-    print(f"  ✓ visual_metrics.VisualMetrics imports")
+    print(f"  ✓ visual_metrics.VisualMetrics imports (class: {VisualMetrics.__name__})")
 except Exception as e:
     print(f"  ✗ visual_metrics failed: {e}")
 
