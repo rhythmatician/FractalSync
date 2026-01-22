@@ -9,6 +9,9 @@
  * - Raw intensity
  */
 
+// Maximum gradient stops supported by WebGL shader
+export const MAX_GRADIENT_STOPS = 8;
+
 export interface GradientStop {
   position: number; // 0.0 to 1.0
   r: number; // 0.0 to 1.0
@@ -172,6 +175,7 @@ export const TOOL_GRADIENTS: Gradient[] = [
  * Get gradient by index (wraps around if out of bounds)
  */
 export function getGradient(index: number): Gradient {
+  // Handle negative indices and wrap around
   const wrappedIndex = ((index % TOOL_GRADIENTS.length) + TOOL_GRADIENTS.length) % TOOL_GRADIENTS.length;
   return TOOL_GRADIENTS[wrappedIndex];
 }

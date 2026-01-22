@@ -2,7 +2,7 @@
  * WebGL-based Julia set renderer for real-time visualization.
  */
 
-import { getGradientByHue, flattenGradient, Gradient } from './toolGradients';
+import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS } from './toolGradients';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -113,6 +113,8 @@ export class JuliaRenderer {
         vec4 lowerStop = getGradientStop(0);
         vec4 upperStop = getGradientStop(u_gradientCount - 1);
         
+        // Loop through stops to find interpolation range
+        // Note: hardcoded to MAX_GRADIENT_STOPS-1 for WebGL 1.0 compatibility
         for (int i = 0; i < 7; i++) {
           if (i >= u_gradientCount - 1) break;
           
@@ -260,6 +262,10 @@ export class JuliaRenderer {
     }
   }
   
+  getCurrentParameters(): VisualParameters {
+    return { ...this.currentParams };
+  }
+  
   private updateGradient(hue: number): void {
     const gradient = getGradientByHue(hue);
     
@@ -281,7 +287,7 @@ export class JuliaRenderer {
     gl.uniform1i(this.uGradientCountLocation!, gradient.stops.length);
     
     // Set gradient stops as individual uniforms
-    for (let i = 0; i < Math.min(gradient.stops.length, 8); i++) {
+    for (let i = 0; i < Math.min(gradient.stops.length, MAX_GRADIENT_STOPS); i++) {
       const baseIdx = i * 4;
       const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
       if (location) {
@@ -295,8 +301,8 @@ export class JuliaRenderer {
       }
     }
     
-    // Fill remaining slots with black if gradient has fewer than 8 stops
-    for (let i = gradient.stops.length; i < 8; i++) {
+    // Fill remaining slots with black if gradient has fewer stops
+    for (let i = gradient.stops.length; i < MAX_GRADIENT_STOPS; i++) {
       const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
       if (location) {
         gl.uniform4f(location, 0.0, 0.0, 0.0, 1.0);

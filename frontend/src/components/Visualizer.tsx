@@ -355,7 +355,9 @@ export function Visualizer() {
               setCurrentGradientIndex(nextIndex);
               const hue = nextIndex / TOOL_GRADIENTS.length;
               if (rendererRef.current) {
-                const newParams = { ...DEFAULT_PARAMS, colorHue: hue };
+                // Preserve existing parameters, only change hue
+                const currentParams = rendererRef.current.getCurrentParameters();
+                const newParams = { ...currentParams, colorHue: hue };
                 rendererRef.current.updateParameters(newParams);
               }
             }}
