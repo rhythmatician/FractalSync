@@ -86,6 +86,13 @@ See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed 
 - **Velocity-based prediction** for physics-inspired smooth parameter transitions
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
+- **NEW**: Advanced loss functions for emotional coherence and variety
+  - Membership proximity loss: keeps visuals interesting during intense audio
+  - Edge density correlation: matches visual detail with audio brightness
+  - Lobe variety loss: encourages exploration of different fractal regions
+  - Neighborhood penalty: prevents staying in one area too long
+
+See [backend/docs/ADVANCED_LOSSES.md](backend/docs/ADVANCED_LOSSES.md) for detailed documentation.
 
 
 ## Training parameters:
