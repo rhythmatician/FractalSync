@@ -7,8 +7,8 @@
 //! to their angular velocities, then the complex Julia parameter
 //! `c(t)` is synthesised as the sum of the carrier point on the
 //! Mandelbrot lobe and the residual epicycles.  The amplitude of
-//! each residual decays as 1/(k+1)² and is modulated by the
-//! controller’s `alpha` parameter and the band gate vector.
+//! each residual decays exponentially as 1/2^(k+1) and is modulated
+//! by the controller's `alpha` parameter and the band gate vector.
 
 use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -174,8 +174,8 @@ pub fn synthesize(
     let mut residual_imag = 0.0;
 
     for k in 0..residual_params.k_residuals {
-        // Amplitude decays as 1/(k+1)^2
-        let amplitude = (state.alpha * (state.s * radius)) / ((k as f64 + 1.0).powi(2));
+        // Amplitude decays exponentially as 1/2^(k+1) for tighter jitter
+        let amplitude = (state.alpha * (state.s * radius)) / 2.0_f64.powi(k as i32 + 1);
         // Optional gating for each residual band
         let gate = band_gates.map(|g| g.get(k).copied().unwrap_or(1.0)).unwrap_or(1.0);
         let phase = state.residual_phases.get(k).copied().unwrap_or(0.0);
