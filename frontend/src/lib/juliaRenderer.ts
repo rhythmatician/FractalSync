@@ -2,6 +2,8 @@
  * WebGL-based Julia set renderer for real-time visualization.
  */
 
+import { getGradientByHue, flattenGradient, Gradient } from './toolGradients';
+
 export interface VisualParameters {
   juliaReal: number;
   juliaImag: number;
@@ -28,6 +30,9 @@ export class JuliaRenderer {
   private uColorLocation: WebGLUniformLocation | null = null;
   private uTimeLocation: WebGLUniformLocation | null = null;
   private uResolutionLocation: WebGLUniformLocation | null = null;
+  private uGradientCountLocation: WebGLUniformLocation | null = null;
+  
+  private currentGradient: Gradient | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -64,22 +69,47 @@ export class JuliaRenderer {
       }
     `;
 
-    // Fragment shader (Julia set computation)
+    // Fragment shader (Julia set computation with gradient coloring)
     const fragmentShaderSource = `
       precision highp float;
       
       uniform vec2 u_juliaSeed;
       uniform float u_zoom;
-      uniform vec3 u_color;
+      uniform vec3 u_color;  // x=gradientSelect, y=intensity, z=contrast
       uniform float u_time;
       uniform vec2 u_resolution;
+      uniform vec4 u_gradientStops[16];  // vec4(r, g, b, position)
+      uniform int u_gradientCount;
       
       const int MAX_ITERATIONS = 100;
       
-      vec3 hsv2rgb(vec3 c) {
-        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      // Sample gradient at position t (0-1)
+      vec3 sampleGradient(float t) {
+        t = clamp(t, 0.0, 1.0);
+        
+        // Find the two stops we're between
+        vec4 lowerStop = u_gradientStops[0];
+        vec4 upperStop = u_gradientStops[u_gradientCount - 1];
+        
+        for (int i = 0; i < 15; i++) {
+          if (i >= u_gradientCount - 1) break;
+          
+          float pos1 = u_gradientStops[i].w;
+          float pos2 = u_gradientStops[i + 1].w;
+          
+          if (t >= pos1 && t <= pos2) {
+            lowerStop = u_gradientStops[i];
+            upperStop = u_gradientStops[i + 1];
+            break;
+          }
+        }
+        
+        // Interpolate between stops
+        float range = upperStop.w - lowerStop.w;
+        float localT = range > 0.0 ? (t - lowerStop.w) / range : 0.0;
+        
+        vec3 color = mix(lowerStop.rgb, upperStop.rgb, localT);
+        return color;
       }
       
       void main() {
@@ -102,14 +132,23 @@ export class JuliaRenderer {
         
         float t = float(iterations) / float(MAX_ITERATIONS);
         
-        // Color mapping using HSV
-        vec3 hsv = vec3(
-          u_color.x + t * 0.3,  // Hue
-          u_color.y,              // Saturation
-          u_color.z * (1.0 - t * 0.5)  // Brightness
-        );
+        // Apply intensity (colorSat) and contrast (colorBright)
+        float intensity = u_color.y;  // colorSat controls intensity
+        float contrast = u_color.z;   // colorBright controls contrast
         
-        vec3 color = hsv2rgb(hsv);
+        // Adjust t based on contrast
+        t = pow(t, 1.0 / (contrast + 0.5));
+        
+        // Sample gradient
+        vec3 color = sampleGradient(t);
+        
+        // Apply intensity
+        color = color * (0.5 + intensity * 0.5);
+        
+        // Add subtle variation based on position for depth
+        float depthFactor = 1.0 - t * 0.3;
+        color *= depthFactor;
+        
         gl_FragColor = vec4(color, 1.0);
       }
     `;
@@ -134,6 +173,10 @@ export class JuliaRenderer {
     this.uColorLocation = gl.getUniformLocation(this.program, 'u_color');
     this.uTimeLocation = gl.getUniformLocation(this.program, 'u_time');
     this.uResolutionLocation = gl.getUniformLocation(this.program, 'u_resolution');
+    this.uGradientCountLocation = gl.getUniformLocation(this.program, 'u_gradientCount');
+    
+    // Initialize with default gradient
+    this.updateGradient(0.5);
 
     // Create full-screen quad
     const positionBuffer = gl.createBuffer();
@@ -187,6 +230,49 @@ export class JuliaRenderer {
 
   updateParameters(params: VisualParameters): void {
     this.targetParams = { ...params };
+    
+    // Update gradient if hue changed significantly
+    if (Math.abs(params.colorHue - this.currentParams.colorHue) > 0.1) {
+      this.updateGradient(params.colorHue);
+    }
+  }
+  
+  private updateGradient(hue: number): void {
+    const gradient = getGradientByHue(hue);
+    
+    // Only update if gradient actually changed
+    if (this.currentGradient?.name === gradient.name) {
+      return;
+    }
+    
+    this.currentGradient = gradient;
+    const gl = this.gl;
+    
+    // Flatten gradient for WebGL uniform
+    const flatData = flattenGradient(gradient);
+    
+    // Upload to GPU as vec4 array
+    gl.useProgram(this.program);
+    
+    // Set gradient count
+    gl.uniform1i(this.uGradientCountLocation!, gradient.stops.length);
+    
+    // Set gradient stops (pack as vec4: rgb + position)
+    for (let i = 0; i < gradient.stops.length; i++) {
+      const baseIdx = i * 4;
+      const location = gl.getUniformLocation(this.program, `u_gradientStops[${i}]`);
+      if (location) {
+        gl.uniform4f(
+          location,
+          flatData[baseIdx],     // r
+          flatData[baseIdx + 1], // g
+          flatData[baseIdx + 2], // b
+          flatData[baseIdx + 3]  // position
+        );
+      }
+    }
+    
+    console.log(`🎨 Gradient changed to: ${gradient.name}`);
   }
 
   private interpolateParams(_dt: number): void {
@@ -226,7 +312,7 @@ export class JuliaRenderer {
     // Debug log every 100 frames for deterministic logging
     this.frameCount++;
     if (this.frameCount % 100 === 0) {
-      console.log('🎨 Rendering with:', this.currentParams, 'canvas:', this.canvas.width, 'x', this.canvas.height);
+      console.log('🎨 Rendering with:', this.currentParams, 'gradient:', this.currentGradient?.name, 'canvas:', this.canvas.width, 'x', this.canvas.height);
     }
     
     // Draw
