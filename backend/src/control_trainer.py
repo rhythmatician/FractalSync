@@ -366,11 +366,24 @@ class ControlTrainer:
         tempo_std = 0.0
         if local_tempo is not None and len(local_tempo) > 0:
             local_tempo_array = np.array(local_tempo)
-            tempo_mean = np.mean(local_tempo_array)
-            tempo_std = np.std(local_tempo_array)
-            logger.info(
-                f"  Tempo: {tempo_mean:.1f} ± {tempo_std:.1f} BPM (range: {local_tempo_array.min():.1f}-{local_tempo_array.max():.1f})"
-            )
+
+            # Filter out invalid values (inf, nan)
+            valid_tempo = local_tempo_array[np.isfinite(local_tempo_array)]
+
+            if len(valid_tempo) > 0:
+                tempo_mean = np.mean(valid_tempo)
+                tempo_std = np.std(valid_tempo)
+                logger.info(
+                    f"  Tempo: {tempo_mean:.1f} ± {tempo_std:.1f} BPM (range: {valid_tempo.min():.1f}-{valid_tempo.max():.1f})"
+                )
+                # Use only valid tempo values for section analysis
+                local_tempo_array = valid_tempo
+            else:
+                local_tempo_array = None
+                tempo_mean = 0.0
+                logger.warning(
+                    "  Local tempo contains only invalid values (inf/nan), using fallback"
+                )
         else:
             local_tempo_array = None
             tempo_mean = 0.0
@@ -400,7 +413,7 @@ class ControlTrainer:
             # Compute local tempo for this section
             tempo_change = 0.0
 
-            if local_tempo is not None and len(local_tempo) > 0:
+            if local_tempo_array is not None and len(local_tempo_array) > 0:
                 # Map section to tempo frames
                 # section_boundaries are in frames, local_tempo is per-frame
                 if i < len(section_boundaries):
@@ -504,13 +517,16 @@ class ControlTrainer:
         s_target = torch.clamp(position_mag * 1.5, 0.2, 3.0)
 
         # Compute alpha from velocity magnitude (higher velocity = more residual)
+        # Scale up dramatically to provide meaningful variation in alpha
         if velocities is not None:
             velocity_mag = torch.norm(velocities, dim=1)
-            alpha = torch.clamp(velocity_mag * 2.0, 0.0, 1.0)
+            # Scale by 20x to stretch small curriculum velocities into [0, 1] range
+            # This allows model to learn meaningful alpha values
+            alpha = torch.clamp(velocity_mag * 20.0, 0.0, 1.0)
         else:
             alpha = (
-                torch.ones(batch_size, device=self.device) * 0.3
-            )  # Default amplitude
+                torch.ones(batch_size, device=self.device) * 0.5
+            )  # Use 0.5 as default to encourage model to learn variation
 
         # Omega scale from velocity direction changes (placeholder)
         omega_scale = torch.ones(batch_size, device=self.device) * 1.0
@@ -740,11 +756,24 @@ class ControlTrainer:
 
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
+                # Only compare control signals, not lobe logits
+                # predicted_controls includes lobe logits if predict_lobes=True
+                # control_targets only has s, alpha, omega, band_gates
+                n_control_dims = (
+                    3 + self.k_residuals
+                )  # s, alpha, omega_scale, band_gates
+                predicted_controls_only = predicted_controls[:, :n_control_dims]
+
                 control_loss_val = self.control_loss(
-                    predicted_controls, control_targets
+                    predicted_controls_only, control_targets
                 )
             else:
                 control_loss_val = torch.zeros(1, device=self.device)
+
+            # Alpha variance regularization: encourage model to learn varied alpha values
+            # This prevents mode collapse where alpha stays near zero
+            alpha_variance = torch.var(alpha)
+            alpha_variance_loss = 0.01 * (1.0 - alpha_variance)  # Penalize low variance
 
             # Total loss
             total_batch_loss = (
@@ -753,6 +782,7 @@ class ControlTrainer:
                 + boundary_crossing_loss
                 + lobe_prediction_loss_val
                 + current_curriculum_weight * control_loss_val
+                + alpha_variance_loss
             )
 
             # Backward pass

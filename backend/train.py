@@ -84,11 +84,19 @@ def precompute_sections(
             try:
                 with open(section_cache_file, "r") as f:
                     cached = json.load(f)
-                section_data[filename] = cached
-                print(
-                    f"  [{idx+1}/{len(dataset)}] {filename}: loaded from cache ({len(cached['section_boundaries'])} sections)"
-                )
-                continue
+
+                # Validate cache has local_tempo (invalidate old cache format)
+                if "local_tempo" not in cached:
+                    print(
+                        f"  [{idx+1}/{len(dataset)}] {filename}: cache outdated (missing local_tempo), re-analyzing..."
+                    )
+                    section_cache_file.unlink(missing_ok=True)
+                else:
+                    section_data[filename] = cached
+                    print(
+                        f"  [{idx+1}/{len(dataset)}] {filename}: loaded from cache ({len(cached['section_boundaries'])} sections)"
+                    )
+                    continue
             except Exception:
                 section_cache_file.unlink(missing_ok=True)
 
@@ -113,19 +121,30 @@ def precompute_sections(
             }
 
             section_data[filename] = result
-            
+
             # Compute tempo statistics for display
             local_tempo_array = analysis["local_tempo"]
-            tempo_mean = float(np.mean(local_tempo_array))
-            tempo_std = float(np.std(local_tempo_array))
-            tempo_min = float(np.min(local_tempo_array))
-            tempo_max = float(np.max(local_tempo_array))
-            
-            print(
-                f"    -> {result['n_sections']} sections, "
-                f"tempo={tempo_mean:.1f}±{tempo_std:.1f} BPM "
-                f"(range: {tempo_min:.1f}-{tempo_max:.1f})"
-            )
+
+            # Filter out invalid values (inf, nan)
+            valid_tempo = local_tempo_array[np.isfinite(local_tempo_array)]
+
+            if len(valid_tempo) > 0:
+                tempo_mean = float(np.mean(valid_tempo))
+                tempo_std = float(np.std(valid_tempo))
+                tempo_min = float(np.min(valid_tempo))
+                tempo_max = float(np.max(valid_tempo))
+
+                print(
+                    f"    -> {result['n_sections']} sections, "
+                    f"tempo={tempo_mean:.1f}±{tempo_std:.1f} BPM "
+                    f"(range: {tempo_min:.1f}-{tempo_max:.1f})"
+                )
+            else:
+                # Fallback to global tempo if local tempo is all invalid
+                print(
+                    f"    -> {result['n_sections']} sections, "
+                    f"tempo={result['tempo']:.1f} BPM (global, local tempo unavailable)"
+                )
 
             # Cache result
             with open(section_cache_file, "w") as f:

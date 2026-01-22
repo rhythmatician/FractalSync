@@ -541,7 +541,7 @@ class NoveltyBoundaryDetector:
 class LobeCharacteristics:
     """
     Visual and emotional characteristics of a Mandelbrot lobe.
-    
+
     Based on mathematical properties from Julia set theory:
     - Connectedness: Points inside M → connected Julia sets (smooth, whole)
                      Points outside M → Cantor dust (disconnected, chaotic)
@@ -654,7 +654,7 @@ LOBE_CHARACTERISTICS: Dict[Tuple[int, int], LobeCharacteristics] = {
         lobe=3,
         sub_lobe=2,
         name="Period-3 Mini-M",
-        linton_label="3›2", 
+        linton_label="3›2",
         period=5,  # Order = 3 + 2
         step_size=2,
         is_connected=True,
