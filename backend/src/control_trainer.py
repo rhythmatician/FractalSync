@@ -18,6 +18,12 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
+from .loss_components import (
+    MembershipProximityLoss,
+    EdgeDensityCorrelationLoss,
+    LobeVarietyLoss,
+    NeighborhoodPenaltyLoss,
+)
 from .runtime_core_bridge import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -119,6 +125,10 @@ class ControlTrainer:
             "timbre_color": 1.0,
             "transient_impact": 1.0,
             "control_loss": 1.0,
+            "membership_proximity": 0.5,
+            "edge_density_correlation": 0.3,
+            "lobe_variety": 0.2,
+            "neighborhood_penalty": 0.1,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -129,6 +139,26 @@ class ControlTrainer:
         self.correlation_loss = CorrelationLoss()
         self.control_loss = ControlLoss(
             weight=self.correlation_weights.get("control_loss", 1.0)
+        )
+        
+        # Advanced loss components for emotional coherence and variety
+        self.membership_proximity_loss = MembershipProximityLoss(
+            target_membership=0.75,
+            max_iter=50,
+            weight=self.correlation_weights.get("membership_proximity", 0.5),
+        )
+        self.edge_density_correlation_loss = EdgeDensityCorrelationLoss(
+            weight=self.correlation_weights.get("edge_density_correlation", 0.3),
+        )
+        self.lobe_variety_loss = LobeVarietyLoss(
+            history_size=100,
+            n_clusters=5,
+            weight=self.correlation_weights.get("lobe_variety", 0.2),
+        )
+        self.neighborhood_penalty_loss = NeighborhoodPenaltyLoss(
+            window_size=32,
+            min_radius=0.1,
+            weight=self.correlation_weights.get("neighborhood_penalty", 0.1),
         )
 
         # Optimizer
@@ -145,6 +175,10 @@ class ControlTrainer:
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "membership_proximity_loss": [],
+            "edge_density_correlation_loss": [],
+            "lobe_variety_loss": [],
+            "neighborhood_penalty_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -234,6 +268,10 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_membership_proximity = 0.0
+        total_edge_density_correlation = 0.0
+        total_lobe_variety = 0.0
+        total_neighborhood_penalty = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -383,6 +421,19 @@ class ControlTrainer:
 
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
+            
+            # Compute edge density for all images
+            edge_densities = []
+            for image in images:
+                metrics = self.visual_metrics.compute_all_metrics(image)
+                edge_densities.append(
+                    torch.tensor(
+                        metrics["edge_density"],
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                )
+            edge_density_tensor = torch.stack(edge_densities)
 
             # Compute correlation losses
             timbre_color_loss = self.correlation_loss(
@@ -391,6 +442,20 @@ class ControlTrainer:
             transient_impact_loss = self.correlation_loss(
                 spectral_flux, temporal_change_tensor
             )
+            
+            # Compute audio intensity (RMS energy) for membership proximity loss
+            rms_energy = avg_features[:, 2]  # RMS is feature index 2
+            audio_intensity = torch.clamp(rms_energy * 5.0, 0.0, 1.0)  # Normalize to [0, 1]
+            
+            # Advanced loss components for emotional coherence and variety
+            membership_prox_loss = self.membership_proximity_loss(
+                julia_real, julia_imag, audio_intensity
+            )
+            edge_density_corr_loss = self.edge_density_correlation_loss(
+                edge_density_tensor, spectral_centroid
+            )
+            lobe_var_loss = self.lobe_variety_loss(julia_real, julia_imag)
+            neighborhood_pen_loss = self.neighborhood_penalty_loss(julia_real, julia_imag)
 
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
@@ -405,6 +470,10 @@ class ControlTrainer:
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
                 + current_curriculum_weight * control_loss_val
+                + membership_prox_loss  # Already weighted in __init__
+                + edge_density_corr_loss  # Already weighted in __init__
+                + lobe_var_loss  # Already weighted in __init__
+                + neighborhood_pen_loss  # Already weighted in __init__
             )
 
             # Backward pass
@@ -417,6 +486,10 @@ class ControlTrainer:
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_membership_proximity += membership_prox_loss.item()
+            total_edge_density_correlation += edge_density_corr_loss.item()
+            total_lobe_variety += lobe_var_loss.item()
+            total_neighborhood_penalty += neighborhood_pen_loss.item()
             n_batches += 1
 
         # Average losses
@@ -425,6 +498,10 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "membership_proximity_loss": total_membership_proximity / n_batches,
+            "edge_density_correlation_loss": total_edge_density_correlation / n_batches,
+            "lobe_variety_loss": total_lobe_variety / n_batches,
+            "neighborhood_penalty_loss": total_neighborhood_penalty / n_batches,
         }
 
         return avg_losses
