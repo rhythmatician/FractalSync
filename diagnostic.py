@@ -41,30 +41,30 @@ else:
 # Test 3: Backend modules (without runtime_core)
 print("\n[3] Checking backend modules (independent of runtime_core)...")
 try:
-    from src.control_model import AudioToControlModel
+    from src.control_model import AudioToControlModel  # noqa: F401
 
     print(f"  ✓ control_model.AudioToControlModel imports")
 except Exception as e:
     print(f"  ✗ control_model failed: {e}")
 
 try:
-    from src.visual_metrics import VisualMetrics
+    from src.visual_metrics import VisualMetrics  # noqa: F401
 
-    print(f"  ✓ visual_metrics.VisualMetrics imports")
+    print(f"  ✓ visual_metrics.VisualMetrics imports (class: {VisualMetrics.__name__})")
 except Exception as e:
     print(f"  ✗ visual_metrics failed: {e}")
 
 try:
-    import torch
+    import torch  # noqa: F401
 
     print(f"  ✓ torch available")
 except Exception as e:
     print(f"  ✗ torch not available: {e}")
 
 try:
-    import cv2
+    import cv2  # noqa: F401
 
-    print(f"  ✓ cv2 (OpenCV) available")
+    print(f"  ✓ cv2 (OpenCV) available, version: {cv2.__version__}")
 except Exception as e:
     print(f"  ✗ cv2 not available: {e}")
 
