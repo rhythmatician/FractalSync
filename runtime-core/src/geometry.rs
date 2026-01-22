@@ -16,6 +16,7 @@
 //! Newton solvers.
 
 use std::f64::consts::PI;
+use std::ops::{Add, Mul};
 
 /// Simple complex struct for interoperability.  This avoids pulling
 /// in `num_complex` as a dependency and keeps the ABI stable across
@@ -54,6 +55,28 @@ impl Complex {
         Self {
             real: self.real * f,
             imag: self.imag * f,
+        }
+    }
+}
+
+impl Mul for Complex {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            real: self.real * rhs.real - self.imag * rhs.imag,
+            imag: self.real * rhs.imag + self.imag * rhs.real,
+        }
+    }
+}
+
+impl Add for Complex {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            real: self.real + rhs.real,
+            imag: self.imag + rhs.imag,
         }
     }
 }

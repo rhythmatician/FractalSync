@@ -88,15 +88,21 @@ fn test_k_residuals_effect() {
 fn test_omega_scale_sensitivity() {
     let params = ResidualParams::default();
     
-    let state1 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 1.0, 999);
-    let state2 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 2.0, 999);
+    // Create two states with different omega_scale values
+    let mut state1 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 1.0, 999);
+    let mut state2 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 2.0, 999);
+    
+    // Advance time so that omega_scale difference has an effect
+    let dt = 0.1;
+    state1.advance(dt);
+    state2.advance(dt);
     
     let c1 = synthesize(&state1, params, None);
     let c2 = synthesize(&state2, params, None);
     
-    // Different omega_scale should affect residuals
+    // Different omega_scale should cause phases to diverge after time advances
     let diff = ((c1.real - c2.real).powi(2) + (c1.imag - c2.imag).powi(2)).sqrt();
-    assert!(diff > 1e-6, "Omega scale should affect output");
+    assert!(diff > 1e-6, "Omega scale should affect output after time advances");
 }
 
 #[test]
