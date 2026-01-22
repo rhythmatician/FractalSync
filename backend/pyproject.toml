@@ -1,0 +1,29 @@
+[tool.mypy]
+mypy_path = "stubs"
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# Allow gradual typing
+disallow_any_unimported = false
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = false
+
+# Runtime core is a Rust extension
+[[tool.mypy.overrides]]
+module = "runtime_core"
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+module = "runtime_core.*"
+ignore_missing_imports = false
+
+# Third-party libraries without stubs
+[[tool.mypy.overrides]]
+module = ["cv2", "librosa", "librosa.*", "glfw", "glfw.*"]
+ignore_missing_imports = true

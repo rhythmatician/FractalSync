@@ -1,0 +1,52 @@
+##
+## Runtime Core Crate
+##
+## This crate contains the shared audio runtime for FractalSync.  It is
+## intended to be compiled as a Rust library for both Python (via
+## `pyo3`) and WebAssembly (via `wasm-bindgen`).  The goal is to
+## encapsulate all orbit geometry, controller logic and feature
+## extraction in a single source of truth.  By building the crate
+## with different feature flags, you can generate either a Python
+## extension module or a WebAssembly module without touching the
+## underlying implementation.
+
+[package]
+name = "runtime_core"
+version = "0.1.0"
+authors = ["FractalSync Developers"]
+edition = "2021"
+license = "MIT"
+description = "Shared runtime for audio-driven orbit synthesis"
+publish = false
+
+# The library can be compiled as both an rlib and a cdylib.  The
+# cdylib build is required for Python and WASM bindings.  When built
+# for Python the `python` feature must be enabled.  When built for
+# WebAssembly the `wasm` feature must be enabled.
+[lib]
+name = "runtime_core"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# Build as a Python extension module (PyO3).
+python = ["pyo3", "pyo3/extension-module"]
+
+# Build WebAssembly bindings (wasm-bindgen).
+wasm = ["wasm-bindgen", "js-sys"]
+
+default = []
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Optional bindings
+pyo3 = { version = "0.21", optional = true, features = ["macros", "abi3-py38"] }
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+# DSP
+rustfft = { version = "6" }
+
+# For deterministic residual initialization (seeded RNG supported).
+rand = { version = "0.8", features = ["std"] }

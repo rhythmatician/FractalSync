@@ -2,26 +2,29 @@
 Training script for orbit-based control signal model.
 
 Usage:
-    python train_orbit.py --data-dir data/audio --epochs 100 --use-curriculum
+    python train.py --data-dir data/audio --epochs 100 --use-curriculum
 """
 
 import argparse
 import os
 import sys
 import subprocess
+import logging
 from datetime import datetime
+import traceback
 
 import torch
+import numpy as np
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.audio_features import AudioFeatureExtractor  # noqa: E402
 from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
 from src.export_model import export_to_onnx  # noqa: E402
+from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
 # GPU rendering optimization imports
 try:
@@ -34,6 +37,16 @@ except ImportError:
 
 def main():
     """Main training function."""
+    # Configure logging so ControlTrainer messages are visible
+    os.makedirs("logs", exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("logs/train.log"),
+        ],
+    )
     parser = argparse.ArgumentParser(
         description="Train orbit-based control signal model"
     )
@@ -111,6 +124,12 @@ def main():
         default=4,
         help="Number of DataLoader workers",
     )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        help="Maximum number of audio files to load (for quick runs)",
+    )
 
     args = parser.parse_args()
 
@@ -137,17 +156,14 @@ def main():
 
     # Initialize components
     print("\n[1/7] Initializing feature extractor...")
-    feature_extractor = AudioFeatureExtractor(
-        sr=22050,
-        hop_length=512,
-        n_fft=2048,
-    )
+    feature_extractor = make_feature_extractor()
 
     print("[2/7] Loading audio dataset...")
     dataset = AudioDataset(
         data_dir=args.data_dir,
         feature_extractor=feature_extractor,
         window_frames=args.window_frames,
+        max_files=args.max_files,
         cache_dir="data/cache",
     )
 
@@ -172,7 +188,7 @@ def main():
             print("  Falling back to CPU rendering")
             julia_renderer = None
     else:
-        print(f"  GPU rendering disabled, using CPU")
+        print("  GPU rendering disabled, using CPU")
 
     print("[5/7] Creating orbit-based control model...")
     model = AudioToControlModel(
@@ -213,7 +229,7 @@ def main():
     print("  - Correlation losses map audio features to visual parameters")
     print("=" * 60)
 
-    trainer.train(
+    final_checkpoint = trainer.train(
         dataset=dataset,
         epochs=args.epochs,
         batch_size=args.batch_size,
@@ -253,8 +269,16 @@ def main():
             model=model,
             input_shape=(1, model.input_dim),
             output_path=onnx_path,
-            feature_mean=feature_extractor.feature_mean,
-            feature_std=feature_extractor.feature_std,
+            feature_mean=(
+                np.array(feature_extractor.feature_mean, dtype=np.float32)
+                if hasattr(feature_extractor, "feature_mean")
+                else None
+            ),
+            feature_std=(
+                np.array(feature_extractor.feature_std, dtype=np.float32)
+                if hasattr(feature_extractor, "feature_std")
+                else None
+            ),
             metadata={
                 "model_type": "orbit_control",
                 "output_dim": model.output_dim,
@@ -275,9 +299,16 @@ def main():
         "\nTraining history saved to:",
         os.path.join(args.save_dir, "training_history.json"),
     )
-    print("Final checkpoint saved to:", args.save_dir)
+    if final_checkpoint:
+        print("Final checkpoint:", final_checkpoint)
+    else:
+        print("Final checkpoint saved to:", args.save_dir)
     print("\n[OK] Training complete! Orbit-based model ready for deployment.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
+        print(f"\n[ERROR] Training failed: {e}")

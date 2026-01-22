@@ -20,11 +20,11 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-from src.audio_features import AudioFeatureExtractor  # noqa: E402
 from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
 # GPU rendering optimization imports
 try:
@@ -120,7 +120,7 @@ async def train_model_async(request: TrainingRequest):
 
     try:
         # Initialize components
-        feature_extractor = AudioFeatureExtractor()
+        feature_extractor = make_feature_extractor()
         visual_metrics = VisualMetrics()
 
         # Initialize GPU renderer if requested and available

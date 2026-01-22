@@ -1,0 +1,13 @@
+{
+    "stubPath": "backend/stubs",
+    "pythonVersion": "3.10",
+    "typeCheckingMode": "basic",
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false,
+    "executionEnvironments": [
+        {
+            "root": "backend",
+            "stubPath": "stubs"
+        }
+    ]
+}

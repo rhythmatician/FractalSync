@@ -1,26 +1,83 @@
 //! Orbit synthesizer for Julia set parameter generation
 //! 
-//! Single source of truth for orbit synthesis logic.
-//! Compiled to WebAssembly for use in browser.
+//! WebAssembly bindings to runtime_core for browser use.
 
 use wasm_bindgen::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use runtime_core::controller::{
+    OrbitState as RustOrbitState,
+    ResidualParams as RustResidualParams,
+    synthesize as rust_synthesize,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_RESIDUAL_CAP,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_ORBIT_SEED,
+    SAMPLE_RATE,
+    HOP_LENGTH,
+    N_FFT,
+    WINDOW_FRAMES,
+};
+use runtime_core::geometry::Complex as RustComplex;
 
+/// Shared constants exposed to JavaScript
 #[wasm_bindgen]
-#[derive(Clone, Serialize, Deserialize)]
+pub fn constants() -> JsValue {
+    #[derive(Serialize)]
+    struct Constants {
+        sample_rate: usize,
+        hop_length: usize,
+        n_fft: usize,
+        window_frames: usize,
+        default_k_residuals: usize,
+        default_residual_cap: f64,
+        default_residual_omega_scale: f64,
+        default_base_omega: f64,
+        default_orbit_seed: u64,
+    }
+
+    let c = Constants {
+        sample_rate: SAMPLE_RATE,
+        hop_length: HOP_LENGTH,
+        n_fft: N_FFT,
+        window_frames: WINDOW_FRAMES,
+        default_k_residuals: DEFAULT_K_RESIDUALS,
+        default_residual_cap: DEFAULT_RESIDUAL_CAP,
+        default_residual_omega_scale: DEFAULT_RESIDUAL_OMEGA_SCALE,
+        default_base_omega: DEFAULT_BASE_OMEGA,
+        default_orbit_seed: DEFAULT_ORBIT_SEED,
+    };
+
+    serde_wasm_bindgen::to_value(&c).unwrap_or_else(|_| JsValue::NULL)
+}
+
+/// Wrapper for complex number to/from JavaScript
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct Complex {
+    pub real: f64,
+    pub imag: f64,
+}
+
+impl From<RustComplex> for Complex {
+    fn from(c: RustComplex) -> Self {
+        Self {
+            real: c.real,
+            imag: c.imag,
+        }
+    }
+}
+
+/// Orbit state wrapper for WASM
+#[wasm_bindgen]
+#[derive(Clone)]
 pub struct OrbitState {
-    pub lobe: u32,
-    pub sub_lobe: u32,
-    pub theta: f64,
-    pub omega: f64,
-    pub s: f64,
-    pub alpha: f64,
-    residual_phases: Vec<f64>,
-    residual_omegas: Vec<f64>,
+    inner: RustOrbitState,
 }
 
 #[wasm_bindgen]
 impl OrbitState {
+    /// Create new orbit state with optional seed
     #[wasm_bindgen(constructor)]
     pub fn new(
         lobe: u32,
@@ -31,208 +88,137 @@ impl OrbitState {
         alpha: f64,
         k_residuals: usize,
         residual_omega_scale: f64,
+        seed: Option<u64>,
     ) -> OrbitState {
-        let residual_phases: Vec<f64> = (0..k_residuals)
-            .map(|_| js_sys::Math::random() * 2.0 * std::f64::consts::PI)
-            .collect();
-        
-        let residual_omegas: Vec<f64> = (0..k_residuals)
-            .map(|k| residual_omega_scale * omega * (k as f64 + 1.0))
-            .collect();
+        let inner = match seed {
+            Some(seed_val) => RustOrbitState::new_with_seed(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+                seed_val,
+            ),
+            None => RustOrbitState::new(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+            ),
+        };
 
-        OrbitState {
-            lobe,
-            sub_lobe,
-            theta,
-            omega,
-            s,
-            alpha,
-            residual_phases,
-            residual_omegas,
-        }
+        OrbitState { inner }
     }
 
+    /// Create deterministic orbit with default parameters and seed
+    #[wasm_bindgen(js_name = "newDefault")]
+    pub fn new_default(seed: u64) -> OrbitState {
+        let inner = RustOrbitState::new_with_seed(
+            1,
+            0,
+            0.0,
+            DEFAULT_BASE_OMEGA,
+            1.02,
+            0.3,
+            DEFAULT_K_RESIDUALS,
+            DEFAULT_RESIDUAL_OMEGA_SCALE,
+            seed,
+        );
+        OrbitState { inner }
+    }
+
+    /// Get lobe
     #[wasm_bindgen(getter)]
-    pub fn residual_phases(&self) -> Vec<f64> {
-        self.residual_phases.clone()
+    pub fn lobe(&self) -> u32 {
+        self.inner.lobe
     }
 
+    /// Set lobe
+    #[wasm_bindgen(setter)]
+    pub fn set_lobe(&mut self, lobe: u32) {
+        self.inner.lobe = lobe;
+    }
+
+    /// Get theta
     #[wasm_bindgen(getter)]
-    pub fn residual_omegas(&self) -> Vec<f64> {
-        self.residual_omegas.clone()
+    pub fn theta(&self) -> f64 {
+        self.inner.theta
+    }
+
+    /// Get s (radius scaling)
+    #[wasm_bindgen(getter)]
+    pub fn s(&self) -> f64 {
+        self.inner.s
+    }
+
+    /// Get alpha (residual amplitude)
+    #[wasm_bindgen(getter)]
+    pub fn alpha(&self) -> f64 {
+        self.inner.alpha
+    }
+
+    /// Advance state by dt seconds
+    pub fn advance(&mut self, dt: f64) {
+        self.inner.advance(dt);
     }
 }
 
+/// Residual parameters
 #[wasm_bindgen]
-pub struct Complex {
-    pub real: f64,
-    pub imag: f64,
+#[derive(Clone)]
+pub struct ResidualParams {
+    inner: RustResidualParams,
 }
 
 #[wasm_bindgen]
-pub struct OrbitSynthesizer {
-    k_residuals: usize,
-    residual_cap: f64,
-}
-
-#[wasm_bindgen]
-impl OrbitSynthesizer {
+impl ResidualParams {
+    /// Create default residual parameters
     #[wasm_bindgen(constructor)]
-    pub fn new(k_residuals: usize, residual_cap: f64) -> OrbitSynthesizer {
-        OrbitSynthesizer {
-            k_residuals,
-            residual_cap,
-        }
-    }
-
-    /// Synthesize Julia parameter c from orbit state
-    /// 
-    /// FORMULA: amplitude_k = α × (s × radius) / (k + 1)²
-    pub fn synthesize(&self, state: &OrbitState, band_gates: Option<Vec<f64>>) -> Complex {
-        // Carrier: deterministic orbit point
-        let carrier = lobe_point_at_angle(state.lobe, state.theta, state.s, state.sub_lobe);
-
-        if state.alpha == 0.0 {
-            return carrier;
-        }
-
-        let radius = get_lobe_radius(state.lobe, state.sub_lobe);
-
-        // Sum residual circles with 1/k² amplitude decay
-        let mut residual_real = 0.0;
-        let mut residual_imag = 0.0;
-
-        for k in 0..self.k_residuals {
-            // CORE FORMULA: amplitude decreases as 1/k²
-            let amplitude = (state.alpha * (state.s * radius)) / ((k as f64 + 1.0).powi(2));
-            let g_k = band_gates.as_ref().map(|g| g[k]).unwrap_or(1.0);
-
-            let phase = state.residual_phases[k];
-            residual_real += amplitude * g_k * phase.cos();
-            residual_imag += amplitude * g_k * phase.sin();
-        }
-
-        // Cap residual magnitude
-        let mag = (residual_real * residual_real + residual_imag * residual_imag).sqrt();
-        let cap = self.residual_cap * radius;
-        if mag > cap {
-            let scale = cap / mag;
-            residual_real *= scale;
-            residual_imag *= scale;
-        }
-
-        Complex {
-            real: carrier.real + residual_real,
-            imag: carrier.imag + residual_imag,
-        }
-    }
-
-    /// Step forward in time and synthesize c(t)
-    pub fn step(&self, state: &OrbitState, dt: f64, band_gates: Option<Vec<f64>>) -> JsValue {
-        // Select lobe based on band gates (highest gate value wins)
-        let new_lobe = if let Some(ref gates) = band_gates {
-            if gates.is_empty() {
-                state.lobe
-            } else {
-                // Find index of maximum gate value
-                let (max_idx, _) = gates.iter().enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .unwrap();
-                // Map to lobe: 0->1 (cardioid), 1->2 (period-2), 2->3, etc.
-                (max_idx as u32 + 1).min(6)
-            }
-        } else {
-            state.lobe
-        };
-
-        let c = self.synthesize(state, band_gates.clone());
-
-        let new_theta = (state.theta + state.omega * dt) % (2.0 * std::f64::consts::PI);
-        let new_residual_phases: Vec<f64> = state.residual_phases
-            .iter()
-            .zip(&state.residual_omegas)
-            .map(|(phase, omega)| (phase + omega * dt) % (2.0 * std::f64::consts::PI))
-            .collect();
-
-        let new_state = OrbitState {
-            lobe: new_lobe,
-            sub_lobe: state.sub_lobe,
-            theta: new_theta,
-            omega: state.omega,
-            s: state.s,
-            alpha: state.alpha,
-            residual_phases: new_residual_phases,
-            residual_omegas: state.residual_omegas.clone(),
-        };
-
-        // Return as JavaScript object
-        serde_wasm_bindgen::to_value(&serde_json::json!({
-            "c": { "real": c.real, "imag": c.imag },
-            "newState": new_state
-        })).unwrap()
-    }
-}
-
-/// Compute position on lobe boundary at given angle
-fn lobe_point_at_angle(lobe: u32, theta: f64, s: f64, sub_lobe: u32) -> Complex {
-    if lobe == 1 {
-        // Cardioid parametrization
-        let r = 0.25 * (1.0 - theta.cos());
-        let phi = theta;
-        Complex {
-            real: s * r * phi.cos(),
-            imag: s * r * phi.sin(),
-        }
-    } else {
-        // Period-n bulb
-        let center = period_n_bulb_center(lobe, sub_lobe);
-        let radius = period_n_bulb_radius(lobe, sub_lobe);
-        Complex {
-            real: center.real + s * radius * theta.cos(),
-            imag: center.imag + s * radius * theta.sin(),
+    pub fn new(
+        k_residuals: usize,
+        residual_cap: f64,
+        radius_scale: f64,
+    ) -> ResidualParams {
+        ResidualParams {
+            inner: RustResidualParams {
+                k_residuals,
+                residual_cap,
+                radius_scale,
+            },
         }
     }
 }
 
-/// Get center of period-n bulb
-fn period_n_bulb_center(n: u32, k: u32) -> Complex {
-    if n == 1 {
-        return Complex { real: 0.0, imag: 0.0 };
-    }
-
-    // Hardcoded centers for common periods
-    match (n, k) {
-        (2, 0) => Complex { real: -1.0, imag: 0.0 },
-        (3, 0) => Complex { real: -0.125, imag: 0.649519 },
-        (3, 1) => Complex { real: -0.125, imag: -0.649519 },
-        _ => {
-            // Approximate formula
-            let angle = (2.0 * std::f64::consts::PI * k as f64) / n as f64;
-            let r = 0.25 * (1.0 - angle.cos());
-            Complex {
-                real: r * angle.cos(),
-                imag: r * angle.sin(),
-            }
-        }
-    }
+/// Synthesize Julia parameter from orbit state
+#[wasm_bindgen(js_name = "synthesize")]
+pub fn synthesize(
+    state: &OrbitState,
+    residual_params: &ResidualParams,
+    band_gates: Option<Vec<f64>>,
+) -> Complex {
+    let c = rust_synthesize(
+        &state.inner,
+        residual_params.inner,
+        band_gates.as_deref(),
+    );
+    c.into()
 }
 
-/// Get radius of period-n bulb
-fn period_n_bulb_radius(n: u32, _k: u32) -> f64 {
-    match n {
-        1 => 0.25,
-        2 => 0.25,
-        3 => 0.0943,
-        4 => 0.04,
-        _ => 0.25 / (n as f64 * n as f64),
-    }
-}
-
-/// Get lobe radius for residual scaling
-fn get_lobe_radius(lobe: u32, sub_lobe: u32) -> f64 {
-    if lobe == 1 {
-        0.25
-    } else {
-        period_n_bulb_radius(lobe, sub_lobe)
-    }
+/// Step the orbit forward and synthesize
+#[wasm_bindgen]
+pub fn step(
+    state: &mut OrbitState,
+    dt: f64,
+    residual_params: &ResidualParams,
+    band_gates: Option<Vec<f64>>,
+) -> Complex {
+    state.inner.advance(dt);
+    synthesize(state, residual_params, band_gates)
 }

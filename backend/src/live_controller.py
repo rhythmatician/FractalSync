@@ -14,11 +14,10 @@ from typing import Tuple, Dict, List, Optional, Union
 from dataclasses import dataclass
 from collections import deque
 
-from src.mandelbrot_orbits import (
-    get_preset_orbit,
-    list_preset_names,
+from .runtime_core_bridge import (
+    make_orbit_state,
+    step_orbit,
 )
-from src.orbit_synth import OrbitSynthesizer, OrbitState, create_initial_state
 
 
 @dataclass
@@ -652,13 +651,8 @@ class OrbitStateMachine:
         self.s_quiet_tonal = s_quiet_tonal
         self.s_smoothing_tau = s_smoothing_tau
 
-        # Initialize synthesizer
-        self.synthesizer = OrbitSynthesizer(
-            k_residuals=residual_k, residual_cap=residual_cap
-        )
-
-        # Current orbit state (using orbit_synth module)
-        self.orbit_state = create_initial_state(
+        # Initialize orbit state using runtime_core
+        self.orbit_state = make_orbit_state(
             lobe=1,
             sub_lobe=0,
             theta=0.0,
@@ -666,6 +660,7 @@ class OrbitStateMachine:
             s=1.02,
             alpha=0.3,
             k_residuals=residual_k,
+            seed=42,
         )
 
         self.s_target = 1.02
@@ -681,9 +676,6 @@ class OrbitStateMachine:
         self.control_loudness = 0.5
         self.control_tonalness = 0.5
         self.control_noisiness = 0.5
-
-        # Get orbit object for geometry (for compatibility)
-        self.orbit = get_preset_orbit("cardioid_boundary")
 
     def start_transition(self, new_lobe: int, new_sub_lobe: int, duration: float = 3.0):
         """Start transition to new lobe."""
@@ -761,52 +753,23 @@ class OrbitStateMachine:
         impact_alpha_boost = 0.5 * impact_envelope_value
         residual_alpha = base_alpha + impact_alpha_boost
 
-        # Handle transitions
+        # Handle transitions - just update lobe/sub_lobe for now
         if self.in_transition:
             self.transition_progress += self.dt / self.transition_duration
             if self.transition_progress >= 1.0:
-                # Transition complete - update orbit state
-                new_lobe, new_sub_lobe = self.transition_end_lobe
-                self.orbit_state = OrbitState(
-                    lobe=new_lobe,
-                    sub_lobe=new_sub_lobe,
-                    theta=self.orbit_state.theta,
-                    omega=self.orbit_state.omega,
-                    s=smoothed_s,
-                    alpha=residual_alpha,
-                    residual_phases=self.orbit_state.residual_phases,
-                    residual_omegas=self.orbit_state.residual_omegas,
-                )
+                # Transition complete
+                self.orbit_state.lobe = self.transition_end_lobe[0]
+                self.orbit_state.sub_lobe = self.transition_end_lobe[1]
                 self.in_transition = False
 
-                # Update orbit object for compatibility
-                preset_names = list_preset_names()
-                for name in preset_names:
-                    orbit = get_preset_orbit(name)
-                    if hasattr(orbit, "lobe") and orbit.lobe == new_lobe:
-                        if (
-                            hasattr(orbit, "sub_lobe")
-                            and orbit.sub_lobe == new_sub_lobe
-                        ):
-                            self.orbit = orbit
-                            break
+        # Update orbit state parameters (mutation happens via runtime_core)
+        self.orbit_state.s = smoothed_s
+        self.orbit_state.alpha = residual_alpha
 
-        # Update orbit state with current parameters
-        self.orbit_state = OrbitState(
-            lobe=self.orbit_state.lobe,
-            sub_lobe=self.orbit_state.sub_lobe,
-            theta=self.orbit_state.theta,
-            omega=self.orbit_state.omega,
-            s=smoothed_s,
-            alpha=residual_alpha,
-            residual_phases=self.orbit_state.residual_phases,
-            residual_omegas=self.orbit_state.residual_omegas,
-        )
+        # Advance state and synthesize
+        c = step_orbit(self.orbit_state, self.dt)
 
-        # Synthesize c(t) and advance state
-        c, self.orbit_state = self.synthesizer.step(self.orbit_state, self.dt)
-
-        return c
+        return complex(c.re, c.im)
 
     def get_debug_info(self) -> Dict[str, Union[float, int, str]]:
         """Get debug information for HUD."""
