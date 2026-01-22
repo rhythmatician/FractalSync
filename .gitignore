@@ -24,6 +24,9 @@ data/cache/
 # Copilot's verbose markdown files
 /docs/copilot/*.md
 
+# My verbose documents
+docs/ignore/*
+
 # ONNX model files
 *.onnx
 *.onnx_metadata.json
