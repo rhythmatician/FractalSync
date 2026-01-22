@@ -48,8 +48,9 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
     """
     print("Running Rust feature extraction via cargo test...")
 
-    # Save audio to temp file
-    audio_path = Path("backend/data/cache/parity_test_audio.npy")
+    # Save audio to temp file (relative to this file's directory)
+    test_dir = Path(__file__).parent
+    audio_path = test_dir.parent / "data" / "cache" / "parity_test_audio.npy"
     audio_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(audio_path, audio)
 
