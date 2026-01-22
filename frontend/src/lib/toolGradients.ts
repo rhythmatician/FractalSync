@@ -78,13 +78,13 @@ export const CONTINUOUS_GRADIENT = createGradient(
   "Continuous gradient spanning blacks, blues, and reds",
   [
     "#0a0a0a", // Pure black
-    "#1a1a2d", // Dark blue-black
-    "#2d2a4a", // Deep blue
-    "#4a2a5a", // Purple-blue
-    "#5a1a2a", // Deep crimson
-    "#7a2222", // Blood red
-    "#4a2a2a", // Dark crimson
-    "#1a1a1a", // Back to black (wrap around)
+    "#1a1428", // Dark blue-black
+    "#2a2448", // Deep blue
+    "#3a1a4a", // Purple-blue
+    "#4a1a3a", // Deep purple-red
+    "#5a1a2a", // Dark crimson
+    "#6a2222", // Blood red
+    "#3a1a1a", // Dark shadow (transition back)
   ]
 );
 
