@@ -289,8 +289,6 @@ export function Visualizer() {
               {inferenceFailures > 0 && (
                 <span style={{ color: '#ffaa00' }}>⚠️ {inferenceFailures} failures (fallback mode)</span>
               )}
-
-              <FullscreenToggle targetId="visualizerCanvas" />
             </div>
           </div>
           
@@ -415,17 +413,21 @@ export function Visualizer() {
         )}
       </div>
 
-      <canvas
-        ref={canvasRef}
-        style={{
-          flex: 1,
-          width: '100%',
-          height: '100%',
-          display: 'block',
-          background: '#000'
-        }}
-        id="visualizerCanvas"
-      />
+      <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', position: 'relative' }}>
+        <canvas
+          ref={canvasRef}
+          style={{
+            flex: 1,
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            background: '#000'
+          }}
+          id="visualizerCanvas"
+        />
+
+        <FullscreenToggle targetId="visualizerCanvas" position="top-right" />
+      </div>
 
       {isVisualizing && (
         <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} audioFile={audioFile} />
