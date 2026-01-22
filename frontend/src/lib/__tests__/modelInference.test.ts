@@ -11,7 +11,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import * as ort from "onnxruntime-web";
 
-const INFERENCE_BASELINE_PATH = "/fixtures/inference_baseline.json";
+// Use relative path for test fixtures in vitest
+const INFERENCE_BASELINE_PATH = "./src/lib/__tests__/fixtures/inference_baseline.json";
 
 interface InferenceBaseline {
   config: {
