@@ -183,11 +183,6 @@ export class JuliaRenderer {
           zFinal = z;
         }
         
-        // Add stable per-pixel noise to break up equipotential rings
-        // This jitter is deterministic (same for same pixel) and creates smooth anti-banding
-        float ign = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
-        iterations += (ign - 0.5) * 0.5;  // Jitter by ~0.25 iterations
-        
         // Normalize to [0, 1] range for color mapping
         float t = clamp(iterations / float(MAX_ITERATIONS), 0.0, 1.0);
         
@@ -213,39 +208,32 @@ export class JuliaRenderer {
         // Apply intensity
         color = color * (0.5 + intensity * 0.5);
         
-        // Enhanced lighting effect: calculate for all escaped points
+        // Wet paint effect: glossy specular highlights with anti-banding jitter
         if (iterations < float(MAX_ITERATIONS)) {
-          // Calculate surface normal from potential gradient
-          float h = 0.001;
-          float potentialCenter = log(dot(zFinal, zFinal) + 1.0);
-          
-          // Estimate gradient using finite differences
+          // Calculate normal from potential
+          float h = 0.002;
           vec2 zPlusX = zFinal + vec2(h, 0.0);
           vec2 zPlusY = zFinal + vec2(0.0, h);
-          float potentialX = log(dot(zPlusX, zPlusX) + 1.0);
-          float potentialY = log(dot(zPlusY, zPlusY) + 1.0);
           
-          vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
+          float potCenter = log(length(zFinal) + 1.0);
+          float potX = log(length(zPlusX) + 1.0);
+          float potY = log(length(zPlusY) + 1.0);
           
-          // Calculate normal (pointing outward from fractal surface)
-          vec3 normal = normalize(vec3(grad, 0.5));
+          vec2 grad = vec2(potX - potCenter, potY - potCenter) / h;
+          vec3 normal = normalize(vec3(grad.x, grad.y, 0.4));
           
-          // Stronger lighting: virtual light from upper-left-front
-          vec3 lightDir = normalize(vec3(-0.7, -0.7, 1.0));
-          float diffuse = max(dot(normal, lightDir), 0.0);
+          // Animated light direction
+          vec3 lightDir = normalize(vec3(sin(u_time * 0.4), cos(u_time * 0.3), 0.8));
           
-          // Add ambient and specular-like highlights
-          float ambient = 0.4;
-          float specular = pow(max(dot(normal, lightDir), 0.0), 8.0) * 0.3;
+          // Sharp specular highlight
+          float specular = pow(max(dot(normal, lightDir), 0.0), 32.0) * 0.9;
           
-          float lighting = ambient + diffuse * 0.8 + specular;
-          
-          // Apply stronger lighting for more visible 3D effect
-          // color *= lighting;
+          // Add glossy shine
+          color += vec3(specular);
         }
         
-        // Reduce the depth darkening to maintain brightness
-        float depthFactor = 1.0 - t * 0.1;
+        // Subtle depth darkening to maintain brightness
+        float depthFactor = 1.0 - t * 0.05;
         color *= depthFactor;
         
         gl_FragColor = vec4(color, 1.0);
