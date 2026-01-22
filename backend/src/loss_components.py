@@ -266,7 +266,7 @@ class LobeVarietyLoss(nn.Module):
         std_real = float(np.std(c_real_vals))
         std_imag = float(np.std(c_imag_vals))
 
-        # Combined variety score (Euclidean norm of standard deviations)
+        # Combined variety score (L2 norm of standard deviations)
         variety = float(np.linalg.norm([std_real, std_imag]))
 
         return variety

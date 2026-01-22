@@ -441,8 +441,13 @@ class ControlTrainer:
             )
             
             # Compute audio intensity (RMS energy) for membership proximity loss
+            # Scale factor of 5.0 is chosen based on typical RMS energy range
+            # (which is usually [0, 0.2] for normalized audio) to map to [0, 1]
+            RMS_TO_INTENSITY_SCALE = 5.0
             rms_energy = avg_features[:, 2]  # RMS is feature index 2
-            audio_intensity = torch.clamp(rms_energy * 5.0, 0.0, 1.0)  # Normalize to [0, 1]
+            audio_intensity = torch.clamp(
+                rms_energy * RMS_TO_INTENSITY_SCALE, 0.0, 1.0
+            )
             
             # Advanced loss components for emotional coherence and variety
             membership_prox_loss = self.membership_proximity_loss(
