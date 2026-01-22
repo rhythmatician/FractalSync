@@ -2,7 +2,7 @@
  * WebGL-based Julia set renderer for real-time visualization.
  */
 
-import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS, DEFAULT_GRADIENT_INDEX, TOOL_GRADIENTS } from './toolGradients';
+import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS, DEFAULT_HUE } from './toolGradients';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -45,12 +45,11 @@ export class JuliaRenderer {
     }
     this.gl = gl;
 
-    // Initialize default parameters (using shared constant for gradient)
-    const defaultHue = DEFAULT_GRADIENT_INDEX / TOOL_GRADIENTS.length;
+    // Initialize default parameters (using shared constant for hue)
     this.currentParams = {
       juliaReal: -0.7269,
       juliaImag: 0.1889,
-      colorHue: defaultHue,
+      colorHue: DEFAULT_HUE,
       colorSat: 0.8,
       colorBright: 0.9,
       zoom: 1.0,
@@ -79,7 +78,7 @@ export class JuliaRenderer {
       
       uniform vec2 u_juliaSeed;
       uniform float u_zoom;
-      uniform vec3 u_color;  // y=intensity, z=contrast (hue handled in JS)
+      uniform vec3 u_color;  // x=hue, y=intensity, z=contrast
       uniform float u_time;
       uniform vec2 u_resolution;
       uniform int u_gradientCount;
@@ -161,12 +160,17 @@ export class JuliaRenderer {
         
         float t = float(iterations) / float(MAX_ITERATIONS);
         
-        // Apply intensity (colorSat) and contrast (colorBright)
+        // Apply hue, intensity, and contrast
+        float hue = u_color.x;        // colorHue shifts gradient position
         float intensity = u_color.y;  // colorSat controls intensity
         float contrast = u_color.z;   // colorBright controls contrast
         
         // Adjust t based on contrast; add small epsilon to avoid division by zero
         t = pow(t, 1.0 / (contrast + 0.5 + 0.001));
+        
+        // Shift t by hue for smooth color transitions across the gradient
+        // This creates continuous color changes as hue varies
+        t = fract(t + hue);
         
         // Sample gradient
         vec3 color = sampleGradient(t);
@@ -209,9 +213,8 @@ export class JuliaRenderer {
       this.gradientUniformLocations[i] = gl.getUniformLocation(this.program, `u_gradient${i}`);
     }
     
-    // Initialize with default gradient (using shared constant)
-    const defaultHue = DEFAULT_GRADIENT_INDEX / TOOL_GRADIENTS.length;
-    this.updateGradient(defaultHue);
+    // Initialize with the continuous gradient (single gradient for all hue values)
+    this.updateGradient(DEFAULT_HUE);
 
     // Create full-screen quad
     const positionBuffer = gl.createBuffer();
@@ -266,9 +269,8 @@ export class JuliaRenderer {
   updateParameters(params: VisualParameters): void {
     this.targetParams = { ...params };
     
-    // Update gradient immediately when hue changes significantly
-    const targetGradient = getGradientByHue(params.colorHue);
-    if (!this.currentGradient || this.currentGradient.name !== targetGradient.name) {
+    // Update gradient only on first call (continuous gradient doesn't change)
+    if (!this.currentGradient) {
       this.updateGradient(params.colorHue);
     }
   }
@@ -280,8 +282,8 @@ export class JuliaRenderer {
   private updateGradient(hue: number): void {
     const gradient = getGradientByHue(hue);
     
-    // Only update if gradient actually changed
-    if (this.currentGradient?.name === gradient.name) {
+    // Only update once (we use a single continuous gradient)
+    if (this.currentGradient) {
       return;
     }
     
@@ -322,7 +324,7 @@ export class JuliaRenderer {
       }
     }
     
-    console.log(`🎨 Gradient changed to: ${gradient.name}`);
+    console.log(`🎨 Gradient loaded: ${gradient.name} (continuous smooth transitions)`);
   }
 
   private interpolateParams(_dt: number): void {

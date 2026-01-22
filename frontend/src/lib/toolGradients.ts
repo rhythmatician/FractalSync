@@ -2,18 +2,15 @@
  * TOOL-themed gradient system for Julia set visualization.
  * Inspired by the band's aesthetic: dark, intentional, emotionally resonant.
  * 
- * Each gradient is designed to evoke specific moods from TOOL's music:
- * - Introspective depth
- * - Industrial decay
- * - Cosmic transcendence
- * - Raw intensity
+ * Uses a single continuous gradient that smoothly transitions through
+ * badass colors (blacks, blues, and reds) based on hue value.
  */
 
 // Maximum gradient stops supported by WebGL shader
 export const MAX_GRADIENT_STOPS = 8;
 
-// Default gradient index (Shadow & Blood)
-export const DEFAULT_GRADIENT_INDEX = 3;
+// Default hue value (mid-range for smooth transitions)
+export const DEFAULT_HUE = 0.5;
 
 export interface GradientStop {
   position: number; // 0.0 to 1.0
@@ -69,142 +66,37 @@ function createGradient(
 }
 
 /**
- * TOOL-themed gradient families
- * Each gradient evokes specific moods from the band's aesthetic
+ * Single continuous gradient for smooth color transitions.
+ * Spans full hue range [0, 1] with TOOL-appropriate colors:
+ * blacks, deep blues, crimsons, and purples.
+ * 
+ * This gradient interpolates smoothly based on colorHue parameter,
+ * creating natural transitions similar to HSV but confined to badass colors.
  */
-export const TOOL_GRADIENTS: Gradient[] = [
-  // 1. Flesh Tones & Bronze - Organic, ritualistic, primal
-  createGradient(
-    "Flesh & Bronze",
-    "Organic ritualistic feel - primal connection",
-    [
-      "#1a1410", // Deep shadow
-      "#3d2817", // Dark bronze
-      "#6b4423", // Rich bronze
-      "#8b6239", // Warm bronze
-      "#a67c52", // Light bronze
-      "#c4997a", // Flesh tone
-      "#d4b5a0", // Pale flesh
-    ]
-  ),
-
-  // 2. Deep Ocean Blues to Violet - Introspective, watery depth
-  createGradient(
-    "Ocean Depths",
-    "Introspective watery depth - drowning in thought",
-    [
-      "#050a12", // Near black
-      "#0d1a2d", // Deep ocean
-      "#1a2f4a", // Dark water
-      "#274663", // Mid ocean
-      "#335d7c", // Ocean blue
-      "#4a6d8a", // Light blue
-      "#5d7a9a", // Blue-violet
-      "#7086a8", // Pale violet
-    ]
-  ),
-
-  // 3. Rust & Decay - Industrial decay, mechanical breakdown
-  createGradient(
-    "Rust & Decay",
-    "Industrial decay aesthetic - entropy and breakdown",
-    [
-      "#1a1412", // Dark decay
-      "#2d1f17", // Rust shadow
-      "#4a2f1f", // Deep rust
-      "#6b422a", // Rust
-      "#8d5436", // Orange rust
-      "#a96844", // Light rust
-      "#c4825a", // Oxidized metal
-    ]
-  ),
-
-  // 4. Blacks & Charcoal with Crimson - Darkness with intensity bursts
-  createGradient(
-    "Shadow & Blood",
-    "Darkness with crimson bursts - controlled violence",
-    [
-      "#0a0a0a", // Pure black
-      "#1a1a1a", // Charcoal
-      "#2a2424", // Dark gray
-      "#3d2a2a", // Warm shadow
-      "#5a2a2a", // Deep crimson
-      "#7a2222", // Blood red
-      "#9a3333", // Crimson
-      "#b44444", // Bright crimson
-    ]
-  ),
-
-  // 5. Cosmic Purple to Deep Space - Psychedelic, otherworldly
-  createGradient(
-    "Cosmic Purple",
-    "Psychedelic otherworldly journey - transcendence",
-    [
-      "#0a0512", // Deep space
-      "#150a24", // Void purple
-      "#24124a", // Deep purple
-      "#331a63", // Royal purple
-      "#4a2477", // Purple
-      "#5d2f8a", // Bright purple
-      "#7a4aa0", // Light purple
-      "#8d5fb0", // Lavender purple
-    ]
-  ),
-
-  // 6. Amber & Gold with Shadow - Fire through smoke
-  createGradient(
-    "Amber Fire",
-    "Fire through smoke - smoldering intensity",
-    [
-      "#1a1205", // Smoke shadow
-      "#2d1f0a", // Dark smoke
-      "#4a3312", // Brown smoke
-      "#6b4a1a", // Deep amber
-      "#8d6324", // Amber
-      "#b08030", // Gold amber
-      "#d4a040", // Bright gold
-      "#f0c060", // Pale gold
-    ]
-  ),
-
-  // 7. Bone White to Slate Gray - Minimalist, stark contrast
-  createGradient(
-    "Bone & Stone",
-    "Minimalist stark contrast - skeletal structure",
-    [
-      "#121212", // Near black
-      "#242424", // Dark slate
-      "#3d3d3d", // Slate
-      "#5a5a5a", // Mid gray
-      "#7a7a7a", // Light gray
-      "#9a9a9a", // Pale gray
-      "#c4c4c4", // Bone
-      "#e0e0e0", // Bright bone
-    ]
-  ),
-];
+export const CONTINUOUS_GRADIENT = createGradient(
+  "TOOL Spectrum",
+  "Continuous gradient spanning blacks, blues, and reds",
+  [
+    "#0a0a0a", // Pure black
+    "#1a1a2d", // Dark blue-black
+    "#2d2a4a", // Deep blue
+    "#4a2a5a", // Purple-blue
+    "#5a1a2a", // Deep crimson
+    "#7a2222", // Blood red
+    "#4a2a2a", // Dark crimson
+    "#1a1a1a", // Back to black (wrap around)
+  ]
+);
 
 /**
- * Get gradient by index (wraps around if out of bounds)
+ * Get gradient for the current hue value.
+ * Returns the continuous gradient that interpolates across the full hue range.
+ * 
+ * @param _hue - Hue value 0-1 (not used since we have a single continuous gradient)
+ * @returns The continuous TOOL gradient
  */
-export function getGradient(index: number): Gradient {
-  // Handle negative indices and wrap around
-  const wrappedIndex = ((index % TOOL_GRADIENTS.length) + TOOL_GRADIENTS.length) % TOOL_GRADIENTS.length;
-  return TOOL_GRADIENTS[wrappedIndex];
-}
-
-/**
- * Get gradient by hue value (0-1 mapped to gradient families)
- */
-export function getGradientByHue(hue: number): Gradient {
-  // Clamp hue to [0, 1] to avoid wrapping edge cases (hue = 1 should map to last gradient)
-  const clampedHue = Math.max(0, Math.min(1, hue));
-  // Map clamped hue 0-1 to gradient indices, ensuring we never exceed length - 1
-  const index = Math.min(
-    Math.floor(clampedHue * TOOL_GRADIENTS.length),
-    TOOL_GRADIENTS.length - 1
-  );
-  return getGradient(index);
+export function getGradientByHue(_hue: number): Gradient {
+  return CONTINUOUS_GRADIENT;
 }
 
 /**
