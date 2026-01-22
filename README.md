@@ -87,7 +87,7 @@ See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed 
 - **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
 - **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
 - **NEW**: Advanced loss functions for emotional coherence and variety
-  - Membership proximity loss: keeps visuals interesting during intense audio
+  - **Boundary proximity loss**: During exciting music, encourages c values near the Mandelbrot boundary where the most beautiful, intricate Julia sets occur (Misiurewicz points, boundary spirals)
   - Edge density correlation: matches visual detail with audio brightness
   - Lobe variety loss: encourages exploration of different fractal regions
   - Neighborhood penalty: prevents staying in one area too long

@@ -26,35 +26,62 @@ def demo_membership_proximity_loss():
     print("DEMO 1: Membership Proximity Loss")
     print("=" * 60)
     
-    loss_fn = MembershipProximityLoss(target_membership=0.75, max_iter=50, weight=1.0)
-    
     # Test points: inside M, near boundary, outside M
     test_points = [
         (0.0, 0.0, "Origin (deep inside M)"),
         (-0.5, 0.0, "Cardioid lobe center"),
+        (-0.75, 0.0, "Near period-2 boundary"),
         (-1.0, 0.0, "Period-2 bulb center"),
-        (0.3, 0.3, "Near boundary"),
+        (0.3, 0.3, "Near main boundary"),
         (1.5, 0.0, "Far outside M"),
     ]
+    
+    # Simple mode test
+    print("\n--- SIMPLE MODE (original behavior) ---")
+    loss_fn_simple = MembershipProximityLoss(
+        target_membership=0.75, max_iter=50, weight=1.0, use_boundary_mode=False
+    )
     
     print("\nMembership proxy for test points:")
     for real, imag, label in test_points:
         c_real = torch.tensor([real])
         c_imag = torch.tensor([imag])
-        membership = loss_fn.compute_membership_proxy(c_real, c_imag)
+        membership = loss_fn_simple.compute_membership_proxy(c_real, c_imag)
         print(f"  {label:30s}: membership = {membership.item():.3f}")
     
-    # Test with different audio intensities
-    print("\nLoss with varying audio intensity (point outside M):")
-    c_real = torch.tensor([1.5])
-    c_imag = torch.tensor([0.0])
+    print("\nSimple mode loss at high intensity (1.0):")
+    for real, imag, label in test_points:
+        c_real = torch.tensor([real])
+        c_imag = torch.tensor([imag])
+        high_intensity = torch.tensor([1.0])
+        loss = loss_fn_simple(c_real, c_imag, high_intensity)
+        print(f"  {label:30s}: loss = {loss.item():.4f}")
     
-    for intensity in [0.0, 0.25, 0.5, 0.75, 1.0]:
-        audio_intensity = torch.tensor([intensity])
-        loss = loss_fn(c_real, c_imag, audio_intensity)
-        print(f"  Intensity {intensity:.2f}: loss = {loss.item():.4f}")
+    # Boundary mode test
+    print("\n--- BOUNDARY MODE (NEW: encourages beautiful boundary patterns) ---")
+    loss_fn_boundary = MembershipProximityLoss(
+        target_membership=0.75,
+        boundary_membership=0.95,
+        boundary_width=0.1,
+        max_iter=50,
+        weight=1.0,
+        use_boundary_mode=True,
+    )
     
-    print("\nKey insight: Higher intensity → higher loss for points outside M")
+    print("\nBoundary mode loss at high intensity (1.0):")
+    for real, imag, label in test_points:
+        c_real = torch.tensor([real])
+        c_imag = torch.tensor([imag])
+        high_intensity = torch.tensor([1.0])
+        loss = loss_fn_boundary(c_real, c_imag, high_intensity)
+        print(f"  {label:30s}: loss = {loss.item():.4f}")
+    
+    print("\nKey insights:")
+    print("  • Simple mode: penalizes points outside M (membership < 0.75)")
+    print("  • Boundary mode: during exciting music, encourages boundary proximity")
+    print("  • Boundary c values (membership ~0.95) produce the most beautiful,")
+    print("    intricate Julia sets - perfect for drops and climaxes!")
+
 
 
 def demo_edge_density_correlation_loss():
@@ -184,8 +211,11 @@ def main():
     print("""
 The four loss components work together to:
 
-1. Membership Proximity: Keep visuals interesting during intense audio
-   - Prevents sparse/empty fractals when music is loud
+1. Membership Proximity: Keep visuals beautiful during intense audio
+   - NEW BOUNDARY MODE: During exciting music, encourages c values near
+     the Mandelbrot boundary where the most intricate, beautiful Julia
+     sets occur (Misiurewicz points, boundary spirals, etc.)
+   - Prevents sparse/empty fractals when music is calm
    
 2. Edge Density Correlation: Match visual detail with audio brightness
    - Jagged fractals for bright audio, smooth for dark audio
@@ -197,7 +227,8 @@ The four loss components work together to:
    - Encourages movement on shorter timescales
 
 Together, these create visuals that are both emotionally coherent
-with the music and visually varied throughout the song.
+with the music and visually varied throughout the song, with stunning
+intricate patterns during the most exciting musical moments.
     """)
 
 

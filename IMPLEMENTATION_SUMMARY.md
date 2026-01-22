@@ -16,24 +16,33 @@ The original problem had two main objectives:
 
 ### Four New Loss Components
 
-#### 1. MembershipProximityLoss
-**Problem solved**: Prevents sparse/empty fractals when music is intense
+#### 1. MembershipProximityLoss (Enhanced with Boundary Mode)
+**Problem solved**: Encourages visually beautiful Julia sets during exciting music
 
 **How it works**:
 - Computes Mandelbrot set membership proxy using escape-time iteration
+- **NEW Boundary Mode**: During high intensity, encourages c values **near the Mandelbrot boundary** (membership ~0.95) where the most intricate, beautiful Julia sets occur
+- During calm moments, uses minimum membership threshold to avoid sparse sets
 - Weighted by audio intensity (RMS energy)
-- Penalizes points far from the Mandelbrot set during loud moments
+
+**Why boundary proximity matters**:
+- Near boundary (membership ~0.9-0.99): Complex, intricate, "lacy" or "spiral" patterns - the most visually beautiful Julia sets, including Misiurewicz points
+- Deep inside M (membership = 1.0): Simpler, less interesting patterns
+- Outside M (membership < 0.5): Sparse, disconnected "Cantor dust"
 
 **Configuration**:
 ```python
 MembershipProximityLoss(
-    target_membership=0.75,  # Target membership [0-1]
-    max_iter=50,            # Escape-time iterations
-    weight=0.5              # Loss weight
+    target_membership=0.75,      # Min membership (avoid sparse)
+    boundary_membership=0.95,    # Target boundary proximity
+    boundary_width=0.1,          # Allowed width around boundary
+    max_iter=50,                 # Escape-time iterations
+    weight=0.5,                  # Loss weight
+    use_boundary_mode=True       # Enable boundary targeting
 )
 ```
 
-**Impact**: Keeps visuals interesting and connected during intense audio, avoiding the "drop hits but fractal is empty" problem.
+**Impact**: During drops and climaxes, produces stunning intricate patterns by leveraging the mathematical beauty of the Mandelbrot boundary region.
 
 #### 2. EdgeDensityCorrelationLoss
 **Problem solved**: Matches visual detail with audio brightness/timbre

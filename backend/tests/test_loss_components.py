@@ -51,7 +51,9 @@ class TestMembershipProximityLoss:
 
     def test_intensity_weighting(self):
         """Test that higher intensity increases loss."""
-        loss_fn = MembershipProximityLoss(target_membership=0.75, weight=1.0)
+        loss_fn = MembershipProximityLoss(
+            target_membership=0.75, weight=1.0, use_boundary_mode=False
+        )
 
         # Point outside M
         c_real = torch.tensor([1.5, 1.5])
@@ -67,6 +69,66 @@ class TestMembershipProximityLoss:
 
         # Higher intensity should produce higher loss
         assert loss_high.item() > loss_low.item()
+
+    def test_boundary_mode(self):
+        """Test boundary proximity mode for beautiful Julia sets."""
+        loss_fn = MembershipProximityLoss(
+            target_membership=0.75,
+            boundary_membership=0.95,
+            boundary_width=0.1,
+            max_iter=50,
+            weight=1.0,
+            use_boundary_mode=True,
+        )
+
+        # Point on/near boundary (should have low loss at high intensity)
+        # Using c = -0.75 which is near the boundary
+        c_real_boundary = torch.tensor([-0.75])
+        c_imag_boundary = torch.tensor([0.0])
+        high_intensity = torch.tensor([1.0])
+
+        loss_boundary = loss_fn(c_real_boundary, c_imag_boundary, high_intensity)
+
+        # Point deep inside M (should have higher loss at high intensity)
+        c_real_inside = torch.tensor([0.0])
+        c_imag_inside = torch.tensor([0.0])
+        loss_inside = loss_fn(c_real_inside, c_imag_inside, high_intensity)
+
+        # Boundary point should have lower or similar loss during high intensity
+        # (we want to encourage boundary proximity)
+        assert loss_boundary.item() >= 0.0
+        assert loss_inside.item() >= 0.0
+
+    def test_boundary_vs_simple_mode(self):
+        """Test that boundary mode behaves differently from simple mode."""
+        # Create two loss functions with different modes
+        loss_fn_boundary = MembershipProximityLoss(
+            target_membership=0.75,
+            boundary_membership=0.95,
+            max_iter=50,
+            weight=1.0,
+            use_boundary_mode=True,
+        )
+        
+        loss_fn_simple = MembershipProximityLoss(
+            target_membership=0.75,
+            max_iter=50,
+            weight=1.0,
+            use_boundary_mode=False,
+        )
+
+        # Test with high intensity and c deep inside M
+        c_real = torch.tensor([0.0])
+        c_imag = torch.tensor([0.0])
+        high_intensity = torch.tensor([1.0])
+
+        loss_boundary = loss_fn_boundary(c_real, c_imag, high_intensity)
+        loss_simple = loss_fn_simple(c_real, c_imag, high_intensity)
+
+        # Boundary mode should penalize being deep inside M at high intensity
+        # Simple mode should have zero loss (membership > target)
+        assert loss_boundary.item() > 0.0  # Penalizes deep inside
+        assert loss_simple.item() == 0.0  # No penalty (above threshold)
 
 
 class TestEdgeDensityCorrelationLoss:

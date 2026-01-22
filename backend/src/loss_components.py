@@ -20,37 +20,60 @@ logger = logging.getLogger(__name__)
 
 class MembershipProximityLoss(nn.Module):
     """
-    Penalizes sparse Julia sets during high-intensity audio.
+    Encourages visually beautiful Julia sets during high-intensity audio.
     
     Uses escape-time of orbit of 0 under f_c(z) = z^2 + c to approximate
-    Mandelbrot set membership. Points closer to the set produce more
-    visually interesting, connected Julia sets.
+    Mandelbrot set membership. During exciting music, encourages c values
+    near the Mandelbrot boundary (not deep inside) where the most intricate,
+    beautiful Julia sets occur.
+    
+    Key insights:
+    - Boundary proximity (membership ~0.9-0.99): Complex, intricate, "lacy" patterns
+    - Deep inside M (membership = 1.0): Simpler, less interesting patterns
+    - Outside M (membership < 0.5): Sparse, disconnected "Cantor dust"
     
     Loss is weighted by audio intensity - during loud/intense moments,
-    we strongly penalize c values that are far from the Mandelbrot set.
+    we strongly encourage c values near the boundary for maximum visual beauty.
     """
 
     def __init__(
         self,
         target_membership: float = 0.75,
+        boundary_membership: float = 0.95,
+        boundary_width: float = 0.1,
         max_iter: int = 50,
         escape_radius: float = 2.0,
         weight: float = 1.0,
+        use_boundary_mode: bool = True,
     ):
         """
         Initialize membership proximity loss.
 
         Args:
-            target_membership: Target membership ratio (0-1). Higher means closer to M.
+            target_membership: Minimum membership ratio (0-1) to avoid sparse sets.
+                Used when intensity is low or boundary_mode is disabled.
+            boundary_membership: Target membership for boundary proximity (0-1).
+                During high intensity, encourages c values near this membership
+                level, which corresponds to the Mandelbrot boundary region where
+                the most beautiful Julia sets occur. Default 0.95 targets the
+                boundary while staying connected.
+            boundary_width: Width of the target boundary region. Loss is minimized
+                when membership is within ±boundary_width of boundary_membership.
+                Default 0.1 allows membership in [0.85, 1.0] range.
             max_iter: Maximum iterations for escape-time computation
             escape_radius: Escape radius threshold
             weight: Loss weight multiplier
+            use_boundary_mode: If True, encourages boundary proximity during high
+                intensity. If False, uses simple minimum membership threshold.
         """
         super().__init__()
         self.target_membership = target_membership
+        self.boundary_membership = boundary_membership
+        self.boundary_width = boundary_width
         self.max_iter = max_iter
         self.escape_radius = escape_radius
         self.weight = weight
+        self.use_boundary_mode = use_boundary_mode
 
     def compute_membership_proxy(
         self, c_real: torch.Tensor, c_imag: torch.Tensor
@@ -130,16 +153,38 @@ class MembershipProximityLoss(nn.Module):
         # Compute membership proxy
         membership = self.compute_membership_proxy(c_real, c_imag)
 
-        # Penalize when membership < target, weighted by intensity
-        shortfall = torch.clamp(self.target_membership - membership, min=0.0)
-        
-        # Weight by audio intensity - higher intensity = stronger penalty
-        weighted_shortfall = audio_intensity * shortfall
+        if self.use_boundary_mode:
+            # Boundary proximity mode: encourage c near Mandelbrot boundary
+            # during high intensity for maximum visual beauty
+            
+            # Compute distance from target boundary membership
+            boundary_distance = torch.abs(membership - self.boundary_membership)
+            
+            # Allow some width around the boundary (no penalty if within range)
+            boundary_error = torch.clamp(
+                boundary_distance - self.boundary_width, min=0.0
+            )
+            
+            # During high intensity: penalize deviation from boundary
+            # During low intensity: use simple minimum threshold
+            high_intensity_loss = boundary_error**2
+            low_intensity_loss = torch.clamp(
+                self.target_membership - membership, min=0.0
+            )**2
+            
+            # Blend based on intensity: high intensity → boundary mode,
+            # low intensity → minimum threshold mode
+            loss = audio_intensity * high_intensity_loss + (
+                1.0 - audio_intensity
+            ) * low_intensity_loss
+            
+        else:
+            # Simple mode: just penalize when membership < target
+            shortfall = torch.clamp(self.target_membership - membership, min=0.0)
+            weighted_shortfall = audio_intensity * shortfall
+            loss = weighted_shortfall**2
 
-        # MSE-style loss
-        loss = torch.mean(weighted_shortfall**2)
-
-        return self.weight * loss
+        return self.weight * torch.mean(loss)
 
 
 class EdgeDensityCorrelationLoss(nn.Module):

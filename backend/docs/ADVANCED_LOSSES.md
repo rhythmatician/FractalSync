@@ -13,28 +13,37 @@ The enhanced loss function addresses two key objectives:
 
 ### 1. Membership Proximity Loss
 
-**Purpose**: Prevents sparse/empty Julia sets during high-intensity audio moments.
+**Purpose**: Encourages visually beautiful Julia sets during high-intensity audio moments.
 
 **How it works**: 
 - Computes a membership proxy for the Mandelbrot set using escape-time iteration
-- Points closer to the Mandelbrot set produce more visually interesting, connected Julia sets
+- **NEW (Boundary Mode)**: During exciting music, encourages c values **near the Mandelbrot boundary** (membership ~0.9-0.99), not deep inside, where the most intricate, beautiful Julia sets occur
+- During calm moments, uses a minimum membership threshold to avoid sparse sets
 - Loss is weighted by audio intensity (RMS energy)
-- During loud/intense moments, strongly penalizes c values far from M
+
+**Why boundary proximity matters**:
+- **Near boundary** (membership ~0.9-0.99): Complex, intricate, "lacy" or "spiral" patterns - the most visually beautiful Julia sets
+- **Deep inside M** (membership = 1.0): Simpler, less interesting patterns
+- **Outside M** (membership < 0.5): Sparse, disconnected "Cantor dust"
+
+This is based on the principle that the most beautiful Julia sets come from c values on or very close to the Mandelbrot boundary, including Misiurewicz points (pre-periodic points on the boundary).
 
 **Configuration**:
 ```python
 MembershipProximityLoss(
-    target_membership=0.75,  # Target membership ratio [0-1]
-    max_iter=50,            # Max iterations for escape-time
-    escape_radius=2.0,      # Escape radius threshold
-    weight=0.5,             # Default weight
+    target_membership=0.75,      # Min membership (avoid sparse sets)
+    boundary_membership=0.95,    # Target boundary proximity [0-1]
+    boundary_width=0.1,          # Allowed width around boundary
+    max_iter=50,                 # Max iterations for escape-time
+    escape_radius=2.0,           # Escape radius threshold
+    weight=0.5,                  # Default weight
+    use_boundary_mode=True,      # Enable boundary targeting
 )
 ```
 
 **Training weight**: `correlation_weights['membership_proximity']` (default: 0.5)
 
-**Key insight**: From EMOTIONAL_COHERENCE.md:
-> "Your 'sparse fractal when music is going hard' is almost always 'c wandered far outside M' (escape fast ⇒ Julia set dust / nothing)."
+**Key insight**: During exciting music moments, the loss encourages c values in the boundary region where membership ≈ 0.95 ± 0.1, producing the most visually stunning, intricate Julia set patterns.
 
 ### 2. Edge Density Correlation Loss
 
