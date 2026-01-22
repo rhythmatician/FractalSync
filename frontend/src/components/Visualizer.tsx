@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
+import { FullscreenToggle } from './FullscreenToggle';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -412,16 +413,21 @@ export function Visualizer() {
         )}
       </div>
 
-      <canvas
-        ref={canvasRef}
-        style={{
-          flex: 1,
-          width: '100%',
-          height: '100%',
-          display: 'block',
-          background: '#000'
-        }}
-      />
+      <div style={{ flex: 1, width: '100%', height: '100%', display: 'flex', position: 'relative' }}>
+        <canvas
+          ref={canvasRef}
+          style={{
+            flex: 1,
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            background: '#000'
+          }}
+          id="visualizerCanvas"
+        />
+
+        <FullscreenToggle targetId="visualizerCanvas" position="top-right" />
+      </div>
 
       {isVisualizing && (
         <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} audioFile={audioFile} />
