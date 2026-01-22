@@ -78,28 +78,50 @@ export class JuliaRenderer {
       uniform vec3 u_color;  // x=gradientSelect, y=intensity, z=contrast
       uniform float u_time;
       uniform vec2 u_resolution;
-      uniform vec4 u_gradientStops[16];  // vec4(r, g, b, position)
       uniform int u_gradientCount;
       
+      // Gradient stops - using individual uniforms for WebGL 1.0 compatibility
+      uniform vec4 u_gradient0;
+      uniform vec4 u_gradient1;
+      uniform vec4 u_gradient2;
+      uniform vec4 u_gradient3;
+      uniform vec4 u_gradient4;
+      uniform vec4 u_gradient5;
+      uniform vec4 u_gradient6;
+      uniform vec4 u_gradient7;
+      
       const int MAX_ITERATIONS = 100;
+      
+      // Get gradient stop by index
+      vec4 getGradientStop(int index) {
+        if (index == 0) return u_gradient0;
+        if (index == 1) return u_gradient1;
+        if (index == 2) return u_gradient2;
+        if (index == 3) return u_gradient3;
+        if (index == 4) return u_gradient4;
+        if (index == 5) return u_gradient5;
+        if (index == 6) return u_gradient6;
+        if (index == 7) return u_gradient7;
+        return vec4(0.0);
+      }
       
       // Sample gradient at position t (0-1)
       vec3 sampleGradient(float t) {
         t = clamp(t, 0.0, 1.0);
         
         // Find the two stops we're between
-        vec4 lowerStop = u_gradientStops[0];
-        vec4 upperStop = u_gradientStops[u_gradientCount - 1];
+        vec4 lowerStop = getGradientStop(0);
+        vec4 upperStop = getGradientStop(u_gradientCount - 1);
         
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 7; i++) {
           if (i >= u_gradientCount - 1) break;
           
-          float pos1 = u_gradientStops[i].w;
-          float pos2 = u_gradientStops[i + 1].w;
+          vec4 stop1 = getGradientStop(i);
+          vec4 stop2 = getGradientStop(i + 1);
           
-          if (t >= pos1 && t <= pos2) {
-            lowerStop = u_gradientStops[i];
-            upperStop = u_gradientStops[i + 1];
+          if (t >= stop1.w && t <= stop2.w) {
+            lowerStop = stop1;
+            upperStop = stop2;
             break;
           }
         }
@@ -231,8 +253,9 @@ export class JuliaRenderer {
   updateParameters(params: VisualParameters): void {
     this.targetParams = { ...params };
     
-    // Update gradient if hue changed significantly
-    if (Math.abs(params.colorHue - this.currentParams.colorHue) > 0.1) {
+    // Update gradient immediately when hue changes significantly
+    const targetGradient = getGradientByHue(params.colorHue);
+    if (!this.currentGradient || this.currentGradient.name !== targetGradient.name) {
       this.updateGradient(params.colorHue);
     }
   }
@@ -251,16 +274,16 @@ export class JuliaRenderer {
     // Flatten gradient for WebGL uniform
     const flatData = flattenGradient(gradient);
     
-    // Upload to GPU as vec4 array
+    // Upload to GPU as individual vec4 uniforms (WebGL 1.0 compatible)
     gl.useProgram(this.program);
     
     // Set gradient count
     gl.uniform1i(this.uGradientCountLocation!, gradient.stops.length);
     
-    // Set gradient stops (pack as vec4: rgb + position)
-    for (let i = 0; i < gradient.stops.length; i++) {
+    // Set gradient stops as individual uniforms
+    for (let i = 0; i < Math.min(gradient.stops.length, 8); i++) {
       const baseIdx = i * 4;
-      const location = gl.getUniformLocation(this.program, `u_gradientStops[${i}]`);
+      const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
       if (location) {
         gl.uniform4f(
           location,
@@ -269,6 +292,14 @@ export class JuliaRenderer {
           flatData[baseIdx + 2], // b
           flatData[baseIdx + 3]  // position
         );
+      }
+    }
+    
+    // Fill remaining slots with black if gradient has fewer than 8 stops
+    for (let i = gradient.stops.length; i < 8; i++) {
+      const location = gl.getUniformLocation(this.program, `u_gradient${i}`);
+      if (location) {
+        gl.uniform4f(location, 0.0, 0.0, 0.0, 1.0);
       }
     }
     

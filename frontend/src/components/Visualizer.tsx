@@ -8,6 +8,7 @@ import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 import { FullscreenToggle } from './FullscreenToggle';
+import { TOOL_GRADIENTS } from '../lib/toolGradients';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +24,7 @@ export function Visualizer() {
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [currentGradientIndex, setCurrentGradientIndex] = useState(3); // Default to "Shadow & Blood"
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -345,6 +347,31 @@ export function Visualizer() {
             title="Toggle audio-reactive post-processing (MR #8 / commit 75c1a43)"
           >
             Audio-Reactive: {audioReactiveEnabled ? 'ON' : 'OFF'}
+          </button>
+          
+          <button
+            onClick={() => {
+              const nextIndex = (currentGradientIndex + 1) % TOOL_GRADIENTS.length;
+              setCurrentGradientIndex(nextIndex);
+              const hue = nextIndex / TOOL_GRADIENTS.length;
+              if (rendererRef.current) {
+                const newParams = { ...DEFAULT_PARAMS, colorHue: hue };
+                rendererRef.current.updateParameters(newParams);
+              }
+            }}
+            style={{
+              padding: '5px 10px',
+              background: '#555',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginLeft: '10px'
+            }}
+            title="Cycle through TOOL-themed gradient palettes"
+          >
+            🎨 {TOOL_GRADIENTS[currentGradientIndex].name}
           </button>
         </div>
 
