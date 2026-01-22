@@ -64,7 +64,7 @@ except Exception as e:
 try:
     import cv2  # noqa: F401
 
-    print(f"  ✓ cv2 (OpenCV) available")
+    print(f"  ✓ cv2 (OpenCV) available, version: {cv2.__version__}")
 except Exception as e:
     print(f"  ✗ cv2 not available: {e}")
 
