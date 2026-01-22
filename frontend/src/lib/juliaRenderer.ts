@@ -154,6 +154,7 @@ export class JuliaRenderer {
         
         int iterations = 0;
         float smoothIter = 0.0;
+        vec2 zFinal = z;  // Store final z value for lighting calculation
         
         for (int i = 0; i < MAX_ITERATIONS; i++) {
           float zMagnitude = dot(z, z);
@@ -161,6 +162,7 @@ export class JuliaRenderer {
             // Smooth coloring: calculate real iteration number using potential function
             // This eliminates banding by using fractional iterations
             smoothIter = float(i) - log2(log2(zMagnitude)) + 4.0;
+            zFinal = z;
             break;
           }
           
@@ -178,7 +180,10 @@ export class JuliaRenderer {
         // Normalize smooth iteration count
         if (iterations == MAX_ITERATIONS) {
           smoothIter = float(MAX_ITERATIONS);
+          zFinal = z;
         }
+        
+        // Use smooth iteration for truly smooth coloring
         float t = smoothIter / float(MAX_ITERATIONS);
         
         // Apply hue, intensity, and contrast
@@ -186,17 +191,17 @@ export class JuliaRenderer {
         float intensity = u_color.y;  // colorSat controls intensity
         float contrast = u_color.z;   // colorBright controls contrast
         
-        // Adjust t based on contrast; add small epsilon to avoid division by zero
-        t = pow(t, 1.0 / (contrast + 0.5 + 0.001));
-        
-        // Blend orbit trap coloring for organic textures
-        // Use orbit trap distance to create cloud-like patterns
+        // Blend orbit trap coloring very subtly for organic textures
         float trapInfluence = smoothstep(0.5, 0.0, minDist);
-        t = mix(t, minDist * 2.0, trapInfluence * 0.3);
+        t = mix(t, t * (1.0 + minDist * 0.1), trapInfluence * 0.2);
+        
+        // Apply contrast adjustment smoothly
+        t = pow(clamp(t, 0.0, 1.0), 1.0 / (contrast + 0.5 + 0.001));
         
         // Shift t by hue for smooth color transitions across the gradient
-        // This creates continuous color changes as hue varies
-        t = fract(t + hue);
+        // Use smooth modulo to maintain smoothness
+        float tShifted = t + hue;
+        t = tShifted - floor(tShifted);  // Smooth wrapping instead of fract
         
         // Sample gradient
         vec3 color = sampleGradient(t);
@@ -204,32 +209,40 @@ export class JuliaRenderer {
         // Apply intensity
         color = color * (0.5 + intensity * 0.5);
         
-        // Lighting effect: simulate 3D depth using derivative-based normal
-        // Only calculate lighting for points inside the set or near boundary
-        if (iterations > 2 && iterations < MAX_ITERATIONS) {
-          // Calculate approximate surface normal from potential gradient
-          float h = 0.001;  // Small offset for derivative estimation
-          float potentialCenter = log(dot(z, z)) * 0.5;
+        // Enhanced lighting effect: calculate for all escaped points
+        if (iterations < MAX_ITERATIONS) {
+          // Calculate surface normal from potential gradient
+          float h = 0.001;
+          float potentialCenter = log(dot(zFinal, zFinal) + 1.0);
           
-          // Estimate gradient using finite differences (approximates surface normal)
-          vec2 dz = vec2(h, 0.0);
-          float potentialX = log(dot(z + dz, z + dz)) * 0.5;
-          dz = vec2(0.0, h);
-          float potentialY = log(dot(z + dz, z + dz)) * 0.5;
+          // Estimate gradient using finite differences
+          vec2 zPlusX = zFinal + vec2(h, 0.0);
+          vec2 zPlusY = zFinal + vec2(0.0, h);
+          float potentialX = log(dot(zPlusX, zPlusX) + 1.0);
+          float potentialY = log(dot(zPlusY, zPlusY) + 1.0);
           
           vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
+          float gradMag = length(grad);
           
-          // Simple lighting: virtual light from upper-left
-          vec3 lightDir = normalize(vec3(-1.0, -1.0, 0.5));
-          vec3 normal = normalize(vec3(grad, 1.0));
-          float lighting = max(dot(normal, lightDir), 0.0) * 0.5 + 0.5;
+          // Calculate normal (pointing outward from fractal surface)
+          vec3 normal = normalize(vec3(grad, 0.5));
           
-          // Apply lighting for 3D depth effect
+          // Stronger lighting: virtual light from upper-left-front
+          vec3 lightDir = normalize(vec3(-0.7, -0.7, 1.0));
+          float diffuse = max(dot(normal, lightDir), 0.0);
+          
+          // Add ambient and specular-like highlights
+          float ambient = 0.4;
+          float specular = pow(max(dot(normal, lightDir), 0.0), 8.0) * 0.3;
+          
+          float lighting = ambient + diffuse * 0.8 + specular;
+          
+          // Apply stronger lighting for more visible 3D effect
           color *= lighting;
         }
         
-        // Add subtle variation based on position for additional depth
-        float depthFactor = 1.0 - t * 0.2;
+        // Reduce the depth darkening to maintain brightness
+        float depthFactor = 1.0 - t * 0.1;
         color *= depthFactor;
         
         gl_FragColor = vec4(color, 1.0);
