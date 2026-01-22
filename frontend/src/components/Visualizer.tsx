@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
+import { FullscreenToggle } from './FullscreenToggle';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -288,6 +289,8 @@ export function Visualizer() {
               {inferenceFailures > 0 && (
                 <span style={{ color: '#ffaa00' }}>⚠️ {inferenceFailures} failures (fallback mode)</span>
               )}
+
+              <FullscreenToggle targetId="visualizerCanvas" />
             </div>
           </div>
           
@@ -421,6 +424,7 @@ export function Visualizer() {
           display: 'block',
           background: '#000'
         }}
+        id="visualizerCanvas"
       />
 
       {isVisualizing && (
