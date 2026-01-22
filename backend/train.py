@@ -25,6 +25,7 @@ from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
+from src.song_analyzer import SongAnalyzer  # noqa: E402
 
 # GPU rendering optimization imports
 try:
@@ -33,6 +34,103 @@ try:
     GPU_AVAILABLE = True
 except ImportError:
     GPU_AVAILABLE = False
+
+
+def precompute_sections(
+    dataset: AudioDataset,
+    section_method: str = "auto",
+    cache_dir: str = "data/cache",
+) -> dict:
+    """
+    Precompute section boundaries for all audio files in the dataset.
+
+    Args:
+        dataset: AudioDataset instance
+        section_method: Section detection method ('auto', 'ruptures', 'librosa')
+        cache_dir: Directory to cache section data
+
+    Returns:
+        Dictionary mapping filename to section analysis data
+    """
+    import json
+    import hashlib
+    import librosa
+    from pathlib import Path
+    from src.runtime_core_bridge import SAMPLE_RATE
+
+    analyzer = SongAnalyzer(sr=SAMPLE_RATE, section_method=section_method)
+    cache_path = Path(cache_dir)
+    cache_path.mkdir(parents=True, exist_ok=True)
+
+    section_data = {}
+
+    for idx, audio_file in enumerate(dataset.audio_files):
+        filename = audio_file.name
+
+        # Generate cache key
+        file_stat = audio_file.stat()
+        cache_payload = {
+            "path": str(audio_file.resolve()),
+            "mtime_ns": file_stat.st_mtime_ns,
+            "section_method": section_method,
+        }
+        cache_key = hashlib.sha1(
+            json.dumps(cache_payload, sort_keys=True).encode()
+        ).hexdigest()
+        section_cache_file = cache_path / f"sections_{cache_key}.json"
+
+        # Check cache
+        if section_cache_file.exists():
+            try:
+                with open(section_cache_file, "r") as f:
+                    cached = json.load(f)
+                section_data[filename] = cached
+                print(
+                    f"  [{idx+1}/{len(dataset)}] {filename}: loaded from cache ({len(cached['section_boundaries'])} sections)"
+                )
+                continue
+            except Exception:
+                section_cache_file.unlink(missing_ok=True)
+
+        # Load audio and analyze
+        print(f"  [{idx+1}/{len(dataset)}] {filename}: analyzing...")
+        try:
+            audio, _ = librosa.load(
+                str(audio_file), sr=SAMPLE_RATE, mono=True, duration=5 * 60
+            )
+            analysis = analyzer.analyze_song(audio)
+
+            # Convert numpy arrays to lists for JSON serialization
+            result = {
+                "tempo": analysis["tempo"],
+                "section_boundaries": analysis["section_boundaries"].tolist(),
+                "section_times": analyzer.frames_to_time(
+                    analysis["section_boundaries"]
+                ).tolist(),
+                "beat_frames": analysis["beat_frames"].tolist(),
+                "n_sections": len(analysis["section_boundaries"]) + 1,
+            }
+
+            section_data[filename] = result
+            print(
+                f"    -> {result['n_sections']} sections, tempo={result['tempo']:.1f} BPM"
+            )
+
+            # Cache result
+            with open(section_cache_file, "w") as f:
+                json.dump(result, f, indent=2)
+
+        except Exception as e:
+            print(f"    -> Error: {e}")
+            continue
+
+    # Save combined section data
+    combined_path = cache_path / "all_sections.json"
+    with open(combined_path, "w") as f:
+        json.dump(section_data, f, indent=2)
+    print(f"\nSection data saved to: {combined_path}")
+
+    return section_data
 
 
 def main():
@@ -130,6 +228,18 @@ def main():
         default=None,
         help="Maximum number of audio files to load (for quick runs)",
     )
+    parser.add_argument(
+        "--precompute-sections",
+        action="store_true",
+        help="Precompute section boundaries for all audio files using ruptures",
+    )
+    parser.add_argument(
+        "--section-method",
+        type=str,
+        default="auto",
+        choices=["auto", "ruptures", "librosa"],
+        help="Section detection method (auto uses ruptures if available)",
+    )
 
     args = parser.parse_args()
 
@@ -152,6 +262,8 @@ def main():
     print(f"  Julia resolution: {args.julia_resolution}x{args.julia_resolution}")
     print(f"  Julia max iterations: {args.julia_max_iter}")
     print(f"  DataLoader workers: {args.num_workers}")
+    if args.precompute_sections:
+        print(f"  Section detection: {args.section_method}")
     print("=" * 60)
 
     # Initialize components
@@ -168,6 +280,12 @@ def main():
     )
 
     print(f"Found {len(dataset)} audio files")
+
+    # Precompute section boundaries if requested
+    section_data = None
+    if args.precompute_sections:
+        print("\n[2.5/7] Precomputing section boundaries...")
+        section_data = precompute_sections(dataset, section_method=args.section_method)
 
     print("[3/7] Initializing visual metrics...")
     visual_metrics = VisualMetrics()

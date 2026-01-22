@@ -3,11 +3,22 @@ Song analyzer for real-time audio analysis and section detection.
 
 Extracts local tempo, detects section boundaries, and identifies
 significant audio events (hits, transitions) for synchronization.
+
+Supports multiple section detection methods:
+- librosa agglomerative clustering (default)
+- ruptures kernel-based change point detection (more accurate for music)
 """
 
 import numpy as np
 import librosa
-from typing import Tuple, List, Dict, Union
+from typing import Tuple, List, Dict, Union, Optional
+
+try:
+    import ruptures as rpt
+
+    RUPTURES_AVAILABLE = True
+except ImportError:
+    RUPTURES_AVAILABLE = False
 
 
 class SongAnalyzer:
@@ -18,6 +29,7 @@ class SongAnalyzer:
         sr: int = 22050,
         hop_length: int = 512,
         n_fft: int = 2048,
+        section_method: str = "auto",
     ):
         """
         Initialize song analyzer.
@@ -26,10 +38,13 @@ class SongAnalyzer:
             sr: Sample rate
             hop_length: Hop length for feature extraction
             n_fft: FFT size for spectral analysis
+            section_method: Section detection method ('auto', 'ruptures', 'librosa')
+                           'auto' uses ruptures if available, else librosa
         """
         self.sr = sr
         self.hop_length = hop_length
         self.n_fft = n_fft
+        self.section_method = section_method
 
     def analyze_song(
         self, audio: np.ndarray
@@ -132,10 +147,94 @@ class SongAnalyzer:
         self, audio: np.ndarray, n_mfcc: int = 13
     ) -> np.ndarray:
         """
-        Detect section boundaries using spectral novelty.
+        Detect section boundaries using selected method.
 
-        Uses self-similarity matrix analysis to find points where
-        the audio character changes significantly.
+        Args:
+            audio: Audio signal
+            n_mfcc: Number of MFCC coefficients to use
+
+        Returns:
+            Array of frame indices marking section boundaries
+        """
+        # Determine method
+        use_ruptures = self.section_method == "ruptures" or (
+            self.section_method == "auto" and RUPTURES_AVAILABLE
+        )
+
+        if use_ruptures and RUPTURES_AVAILABLE:
+            return self._detect_sections_ruptures(audio, n_mfcc)
+        else:
+            return self._detect_sections_librosa(audio, n_mfcc)
+
+    def _detect_sections_ruptures(
+        self, audio: np.ndarray, n_mfcc: int = 13
+    ) -> np.ndarray:
+        """
+        Detect section boundaries using ruptures kernel-based change point detection.
+
+        Based on music segmentation research using kernel change point detection
+        with combined timbral (MFCC) and harmonic (chroma) features.
+
+        Args:
+            audio: Audio signal
+            n_mfcc: Number of MFCC coefficients to use
+
+        Returns:
+            Array of frame indices marking section boundaries
+        """
+        if not RUPTURES_AVAILABLE:
+            return self._detect_sections_librosa(audio, n_mfcc)
+
+        # Extract MFCCs (timbral features)
+        mfcc = librosa.feature.mfcc(
+            y=audio, sr=self.sr, n_mfcc=n_mfcc, hop_length=self.hop_length
+        )
+
+        # Extract chroma features (harmonic content)
+        chroma = librosa.feature.chroma_cqt(
+            y=audio, sr=self.sr, hop_length=self.hop_length
+        )
+
+        # Stack and transpose to (n_frames, n_features)
+        features = np.vstack([mfcc, chroma]).T
+
+        # Normalize features
+        features = (features - features.mean(axis=0)) / (features.std(axis=0) + 1e-8)
+
+        n_frames = features.shape[0]
+
+        # Use Pelt algorithm with rbf kernel for music structure detection
+        # Penalty controls sensitivity - higher = fewer change points
+        # For music, we want roughly 4-12 sections for a typical 3-5 minute song
+        duration_seconds = len(audio) / self.sr
+        expected_sections = max(
+            2, min(12, int(duration_seconds / 20))
+        )  # ~20s per section
+
+        # Use kernel-based change point detection (captures non-linear relationships)
+        model = rpt.KernelCPD(kernel="rbf", min_size=50).fit(features)
+
+        # Use Pelt with penalty tuned for expected number of sections
+        # Penalty is roughly inverse to desired number of change points
+        penalty = np.log(n_frames) * features.shape[1] * 2
+
+        try:
+            change_points = model.predict(pen=penalty)
+        except Exception:
+            # Fallback: use expected number of sections directly
+            change_points = model.predict(n_bkps=expected_sections)
+
+        # Remove the last element (end of signal)
+        if change_points and change_points[-1] == n_frames:
+            change_points = change_points[:-1]
+
+        return np.array(change_points, dtype=np.int64)
+
+    def _detect_sections_librosa(
+        self, audio: np.ndarray, n_mfcc: int = 13
+    ) -> np.ndarray:
+        """
+        Detect section boundaries using librosa agglomerative clustering.
 
         Args:
             audio: Audio signal
