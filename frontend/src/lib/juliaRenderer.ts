@@ -183,8 +183,13 @@ export class JuliaRenderer {
           zFinal = z;
         }
         
+        // Add stable per-pixel noise to break up equipotential rings
+        // This jitter is deterministic (same for same pixel) and creates smooth anti-banding
+        float ign = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
+        iterations += (ign - 0.5) * 0.5;  // Jitter by ~0.25 iterations
+        
         // Normalize to [0, 1] range for color mapping
-        float t = iterations / float(MAX_ITERATIONS);
+        float t = clamp(iterations / float(MAX_ITERATIONS), 0.0, 1.0);
         
         // Apply hue, intensity, and contrast
         float hue = u_color.x;        // colorHue shifts gradient position
@@ -198,10 +203,9 @@ export class JuliaRenderer {
         float trapInfluence = smoothstep(0.5, 0.0, minDist);
         t = mix(t, t * (1.0 + minDist * 0.05), trapInfluence * 0.1);
         
-        // Shift t by hue for smooth color transitions across the gradient
-        // Use smooth modulo to maintain smoothness
-        float tShifted = t + hue;
-        t = tShifted - floor(tShifted);  // Smooth wrapping instead of fract
+        // Keep t monotonic (0 to 1) to avoid creating repeating bands
+        // The gradient sampling handles color shifts internally
+        t = clamp(t, 0.0, 1.0);
         
         // Sample gradient
         vec3 color = sampleGradient(t);
@@ -237,7 +241,7 @@ export class JuliaRenderer {
           float lighting = ambient + diffuse * 0.8 + specular;
           
           // Apply stronger lighting for more visible 3D effect
-          color *= lighting;
+          // color *= lighting;
         }
         
         // Reduce the depth darkening to maintain brightness
