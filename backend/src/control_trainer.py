@@ -64,6 +64,66 @@ class CorrelationLoss(nn.Module):
         return -correlation
 
 
+class BoundaryCrossingReward(nn.Module):
+    """
+    Reward s crossing the Mandelbrot boundary (s=1) when transients are strong.
+
+    This teaches the model to create dramatic visual moments when there are
+    big audio hits - crossing s=1 causes significant visual changes in Julia sets.
+    """
+
+    def __init__(
+        self, boundary: float = 1.0, margin: float = 0.05, weight: float = 1.0
+    ):
+        """
+        Initialize boundary crossing reward.
+
+        Args:
+            boundary: The s value boundary to cross (typically 1.0)
+            margin: Region around boundary considered "near"
+            weight: Loss weight multiplier
+        """
+        super().__init__()
+        self.boundary = boundary
+        self.margin = margin
+        self.weight = weight
+
+    def forward(
+        self, s: torch.Tensor, transient_strength: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute boundary crossing reward/penalty.
+
+        Args:
+            s: Predicted s values (batch_size,)
+            transient_strength: Audio transient strength (batch_size,), normalized to [0, 1]
+
+        Returns:
+            Loss value (negative reward for good crossings, penalty for bad behavior)
+        """
+        # Detect if s is near the boundary
+        near_boundary = (torch.abs(s - self.boundary) < self.margin).float()
+
+        # Detect boundary crossings (s changes sign relative to boundary)
+        s_prev = torch.roll(s, 1, dims=0)
+        # First element can't have a valid crossing
+        crossed = ((s > self.boundary) != (s_prev > self.boundary)).float()
+        crossed[0] = 0.0  # Invalid for first element
+
+        # Reward: crossing when transient is strong
+        # Penalty: crossing when transient is weak (random/chaotic)
+        crossing_reward = crossed * transient_strength
+        crossing_penalty = crossed * (1.0 - transient_strength) * 0.5
+
+        # Small penalty for lingering near boundary without crossing
+        linger_penalty = (1 - crossed) * near_boundary * 0.1
+
+        # Total: negative reward (we minimize), plus penalties
+        loss = -crossing_reward + crossing_penalty + linger_penalty
+
+        return self.weight * torch.mean(loss)
+
+
 class ControlTrainer:
     """Trainer for control signal model with orbit synthesis."""
 
@@ -119,6 +179,7 @@ class ControlTrainer:
             "timbre_color": 1.0,
             "transient_impact": 1.0,
             "control_loss": 1.0,
+            "boundary_crossing": 0.5,  # Reward s crossing boundary on transients
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -129,6 +190,11 @@ class ControlTrainer:
         self.correlation_loss = CorrelationLoss()
         self.control_loss = ControlLoss(
             weight=self.correlation_weights.get("control_loss", 1.0)
+        )
+        self.boundary_crossing_reward = BoundaryCrossingReward(
+            boundary=1.0,
+            margin=0.05,
+            weight=self.correlation_weights.get("boundary_crossing", 0.5),
         )
 
         # Optimizer
@@ -144,6 +210,7 @@ class ControlTrainer:
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "boundary_crossing_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -233,6 +300,7 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_boundary_crossing = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -391,6 +459,17 @@ class ControlTrainer:
                 spectral_flux, temporal_change_tensor
             )
 
+            # Boundary crossing reward: reward crossing s=1 when spectral_flux is high
+            # Normalize spectral flux to [0, 1] range for transient strength
+            flux_min = spectral_flux.min()
+            flux_max = spectral_flux.max()
+            transient_strength = (spectral_flux - flux_min) / (
+                flux_max - flux_min + 1e-8
+            )
+            boundary_crossing_loss = self.boundary_crossing_reward(
+                s_target, transient_strength
+            )
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -403,6 +482,7 @@ class ControlTrainer:
             total_batch_loss = (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
+                + boundary_crossing_loss
                 + current_curriculum_weight * control_loss_val
             )
 
@@ -416,6 +496,7 @@ class ControlTrainer:
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_boundary_crossing += boundary_crossing_loss.item()
             n_batches += 1
 
         # Average losses
@@ -424,6 +505,7 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "boundary_crossing_loss": total_boundary_crossing / n_batches,
         }
 
         return avg_losses

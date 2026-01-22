@@ -614,6 +614,84 @@ class LobeScheduler:
         return selected
 
 
+class BeatLockedOmega:
+    """
+    Manages beat-locked angular velocity for musically coherent orbits.
+
+    Locks the base omega to detected BPM so orbit motion feels "on the beat".
+    The model can still modulate omega_scale for expressive variation.
+    """
+
+    def __init__(
+        self,
+        default_bpm: float = 120.0,
+        subdivision: int = 1,
+        smoothing_tau: float = 2.0,
+    ):
+        """
+        Initialize beat-locked omega manager.
+
+        Args:
+            default_bpm: Default tempo when none detected
+            subdivision: Beat subdivision (1 = quarter notes, 2 = eighth notes, etc.)
+            smoothing_tau: Time constant for BPM smoothing (seconds)
+        """
+        self.default_bpm = default_bpm
+        self.subdivision = subdivision
+        self.smoothing_tau = smoothing_tau
+
+        self.current_bpm = default_bpm
+        self.smoothed_bpm = default_bpm
+        self.last_update_time = 0.0
+
+    def update_tempo(self, detected_bpm: float, timestamp: float):
+        """
+        Update the locked tempo from detected BPM.
+
+        Args:
+            detected_bpm: Detected tempo in BPM
+            timestamp: Current timestamp
+        """
+        # Validate BPM range (typical music is 60-180 BPM)
+        if 40.0 <= detected_bpm <= 220.0:
+            self.current_bpm = detected_bpm
+
+        # Smooth the BPM to avoid jarring changes
+        dt = timestamp - self.last_update_time
+        if dt > 0:
+            alpha = 1.0 - np.exp(-dt / self.smoothing_tau)
+            self.smoothed_bpm = self.smoothed_bpm + alpha * (
+                self.current_bpm - self.smoothed_bpm
+            )
+
+        self.last_update_time = timestamp
+
+    def get_omega_base(self) -> float:
+        """
+        Get the beat-locked base angular velocity.
+
+        Returns:
+            Base omega in radians per second
+        """
+        # Convert BPM to radians/second
+        # One full orbit per beat (or per subdivision)
+        beats_per_second = self.smoothed_bpm / 60.0
+        omega = 2 * np.pi * beats_per_second * self.subdivision
+        return omega
+
+    def get_omega(self, omega_scale: float = 1.0) -> float:
+        """
+        Get scaled angular velocity.
+
+        Args:
+            omega_scale: Scale factor from model prediction (typically 0.5 to 2.0)
+
+        Returns:
+            Final omega in radians per second
+        """
+        return self.get_omega_base() * np.clip(omega_scale, 0.25, 4.0)
+
+
 class OrbitStateMachine:
     """
     Main orbit state machine managing carrier + residual synthesis.

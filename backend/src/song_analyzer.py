@@ -203,16 +203,22 @@ class SongAnalyzer:
 
         n_frames = features.shape[0]
 
+        # For very short audio, fall back to librosa
+        # ruptures requires at least min_size * 2 frames
+        min_size = 50
+        if n_frames < min_size * 3:
+            return self._detect_sections_librosa(audio, n_mfcc)
+
         # Use Pelt algorithm with rbf kernel for music structure detection
         # Penalty controls sensitivity - higher = fewer change points
         # For music, we want roughly 4-12 sections for a typical 3-5 minute song
         duration_seconds = len(audio) / self.sr
         expected_sections = max(
-            2, min(12, int(duration_seconds / 20))
+            1, min(12, int(duration_seconds / 20))
         )  # ~20s per section
 
         # Use kernel-based change point detection (captures non-linear relationships)
-        model = rpt.KernelCPD(kernel="rbf", min_size=50).fit(features)
+        model = rpt.KernelCPD(kernel="rbf", min_size=min_size).fit(features)
 
         # Use Pelt with penalty tuned for expected number of sections
         # Penalty is roughly inverse to desired number of change points
@@ -222,7 +228,11 @@ class SongAnalyzer:
             change_points = model.predict(pen=penalty)
         except Exception:
             # Fallback: use expected number of sections directly
-            change_points = model.predict(n_bkps=expected_sections)
+            try:
+                change_points = model.predict(n_bkps=max(1, expected_sections))
+            except Exception:
+                # Final fallback: use librosa
+                return self._detect_sections_librosa(audio, n_mfcc)
 
         # Remove the last element (end of signal)
         if change_points and change_points[-1] == n_frames:
