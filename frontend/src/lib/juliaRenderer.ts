@@ -205,26 +205,28 @@ export class JuliaRenderer {
         color = color * (0.5 + intensity * 0.5);
         
         // Lighting effect: simulate 3D depth using derivative-based normal
-        // Calculate approximate surface normal from potential gradient
-        float h = 0.001;  // Small offset for derivative estimation
-        float potentialCenter = log(dot(z, z)) * 0.5;
-        
-        // Estimate gradient using finite differences (approximates surface normal)
-        vec2 dz = vec2(h, 0.0);
-        float potentialX = log(dot(z + dz, z + dz)) * 0.5;
-        dz = vec2(0.0, h);
-        float potentialY = log(dot(z + dz, z + dz)) * 0.5;
-        
-        vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
-        float gradLength = length(grad);
-        
-        // Simple lighting: virtual light from upper-left
-        vec3 lightDir = normalize(vec3(-1.0, -1.0, 0.5));
-        vec3 normal = normalize(vec3(grad, 1.0));
-        float lighting = max(dot(normal, lightDir), 0.0) * 0.5 + 0.5;
-        
-        // Apply lighting for 3D depth effect
-        color *= lighting;
+        // Only calculate lighting for points inside the set or near boundary
+        if (iterations > 2 && iterations < MAX_ITERATIONS) {
+          // Calculate approximate surface normal from potential gradient
+          float h = 0.001;  // Small offset for derivative estimation
+          float potentialCenter = log(dot(z, z)) * 0.5;
+          
+          // Estimate gradient using finite differences (approximates surface normal)
+          vec2 dz = vec2(h, 0.0);
+          float potentialX = log(dot(z + dz, z + dz)) * 0.5;
+          dz = vec2(0.0, h);
+          float potentialY = log(dot(z + dz, z + dz)) * 0.5;
+          
+          vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
+          
+          // Simple lighting: virtual light from upper-left
+          vec3 lightDir = normalize(vec3(-1.0, -1.0, 0.5));
+          vec3 normal = normalize(vec3(grad, 1.0));
+          float lighting = max(dot(normal, lightDir), 0.0) * 0.5 + 0.5;
+          
+          // Apply lighting for 3D depth effect
+          color *= lighting;
+        }
         
         // Add subtle variation based on position for additional depth
         float depthFactor = 1.0 - t * 0.2;
