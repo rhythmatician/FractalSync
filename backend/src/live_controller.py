@@ -16,9 +16,7 @@ from collections import deque
 
 from .runtime_core_bridge import (
     make_orbit_state,
-    synthesize,
     step_orbit,
-    DEFAULT_K_RESIDUALS,
 )
 
 

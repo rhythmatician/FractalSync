@@ -116,16 +116,16 @@ impl OrbitState {
     ) -> Self {
         Self {
             inner: match seed {
-                Some(s) => RustOrbitState::new_with_seed(
+                Some(seed_val) => RustOrbitState::new_with_seed(
                     lobe,
                     sub_lobe,
                     theta,
                     omega,
-                    s as f64,
+                    s,
                     alpha,
                     k_residuals,
                     residual_omega_scale,
-                    s,
+                    seed_val,
                 ),
                 None => RustOrbitState::new(
                     lobe,
