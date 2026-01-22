@@ -148,17 +148,38 @@ export class JuliaRenderer {
         vec2 c = u_juliaSeed;
         vec2 z = uv;
         
+        // Orbit trap tracking for organic textures
+        float minDist = 1000.0;  // Track closest approach to origin
+        vec2 trapPoint = vec2(0.0, 0.0);  // Orbit trap center
+        
         int iterations = 0;
+        float smoothIter = 0.0;
+        
         for (int i = 0; i < MAX_ITERATIONS; i++) {
-          if (dot(z, z) > 4.0) break;
+          float zMagnitude = dot(z, z);
+          if (zMagnitude > 4.0) {
+            // Smooth coloring: calculate real iteration number using potential function
+            // This eliminates banding by using fractional iterations
+            smoothIter = float(i) - log2(log2(zMagnitude)) + 4.0;
+            break;
+          }
+          
+          // Orbit trap: track minimum distance to trap point
+          float dist = length(z - trapPoint);
+          minDist = min(minDist, dist);
+          
           z = vec2(
             z.x * z.x - z.y * z.y + c.x,
             2.0 * z.x * z.y + c.y
           );
-          iterations++;
+          iterations = i + 1;
         }
         
-        float t = float(iterations) / float(MAX_ITERATIONS);
+        // Normalize smooth iteration count
+        if (iterations == MAX_ITERATIONS) {
+          smoothIter = float(MAX_ITERATIONS);
+        }
+        float t = smoothIter / float(MAX_ITERATIONS);
         
         // Apply hue, intensity, and contrast
         float hue = u_color.x;        // colorHue shifts gradient position
@@ -167,6 +188,11 @@ export class JuliaRenderer {
         
         // Adjust t based on contrast; add small epsilon to avoid division by zero
         t = pow(t, 1.0 / (contrast + 0.5 + 0.001));
+        
+        // Blend orbit trap coloring for organic textures
+        // Use orbit trap distance to create cloud-like patterns
+        float trapInfluence = smoothstep(0.5, 0.0, minDist);
+        t = mix(t, minDist * 2.0, trapInfluence * 0.3);
         
         // Shift t by hue for smooth color transitions across the gradient
         // This creates continuous color changes as hue varies
@@ -178,8 +204,30 @@ export class JuliaRenderer {
         // Apply intensity
         color = color * (0.5 + intensity * 0.5);
         
-        // Add subtle variation based on position for depth
-        float depthFactor = 1.0 - t * 0.3;
+        // Lighting effect: simulate 3D depth using derivative-based normal
+        // Calculate approximate surface normal from potential gradient
+        float h = 0.001;  // Small offset for derivative estimation
+        float potentialCenter = log(dot(z, z)) * 0.5;
+        
+        // Estimate gradient using finite differences (approximates surface normal)
+        vec2 dz = vec2(h, 0.0);
+        float potentialX = log(dot(z + dz, z + dz)) * 0.5;
+        dz = vec2(0.0, h);
+        float potentialY = log(dot(z + dz, z + dz)) * 0.5;
+        
+        vec2 grad = vec2(potentialX - potentialCenter, potentialY - potentialCenter) / h;
+        float gradLength = length(grad);
+        
+        // Simple lighting: virtual light from upper-left
+        vec3 lightDir = normalize(vec3(-1.0, -1.0, 0.5));
+        vec3 normal = normalize(vec3(grad, 1.0));
+        float lighting = max(dot(normal, lightDir), 0.0) * 0.5 + 0.5;
+        
+        // Apply lighting for 3D depth effect
+        color *= lighting;
+        
+        // Add subtle variation based on position for additional depth
+        float depthFactor = 1.0 - t * 0.2;
         color *= depthFactor;
         
         gl_FragColor = vec4(color, 1.0);

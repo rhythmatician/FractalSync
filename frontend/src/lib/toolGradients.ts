@@ -70,21 +70,35 @@ function createGradient(
  * Spans full hue range [0, 1] with TOOL-appropriate colors:
  * blacks, deep blues, crimsons, and purples.
  * 
- * This gradient interpolates smoothly based on colorHue parameter,
- * creating natural transitions similar to HSV but confined to badass colors.
+ * High-density gradient with cyclic color palette for vibrant,
+ * repeating patterns that create organic, cloud-like textures.
+ * This gradient interpolates smoothly based on colorHue parameter.
  */
 export const CONTINUOUS_GRADIENT = createGradient(
   "TOOL Spectrum",
-  "Continuous gradient spanning blacks, blues, and reds",
+  "Continuous high-density gradient spanning blacks, blues, and reds",
   [
     "#0a0a0a", // Pure black
+    "#151420", // Very dark blue-black
     "#1a1428", // Dark blue-black
+    "#20182d", // Deep midnight
     "#2a2448", // Deep blue
+    "#2e2855", // Royal blue-purple
     "#3a1a4a", // Purple-blue
+    "#421a48", // Deep purple
     "#4a1a3a", // Deep purple-red
+    "#521a30", // Dark magenta
     "#5a1a2a", // Dark crimson
+    "#621a24", // Blood crimson
     "#6a2222", // Blood red
-    "#3a1a1a", // Dark shadow (transition back)
+    "#5a1f1f", // Dark red
+    "#4a1a1a", // Very dark red
+    "#3a1a1a", // Dark shadow
+    // Cycle back through variations for repeating patterns
+    "#2a1820", // Dark purple shadow
+    "#1a1420", // Near black with blue
+    "#0f0f14", // Almost black
+    "#0a0a0a", // Pure black (wrap around)
   ]
 );
 
