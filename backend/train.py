@@ -167,7 +167,14 @@ def main():
     parser.add_argument(
         "--use-curriculum",
         action="store_true",
-        help="Use curriculum learning with Mandelbrot orbits",
+        default=True,
+        help="Use curriculum learning with Mandelbrot orbits (default: True)",
+    )
+    parser.add_argument(
+        "--no-curriculum",
+        dest="use_curriculum",
+        action="store_false",
+        help="Disable curriculum learning",
     )
     parser.add_argument(
         "--curriculum-weight",
@@ -231,14 +238,45 @@ def main():
     parser.add_argument(
         "--precompute-sections",
         action="store_true",
-        help="Precompute section boundaries for all audio files using ruptures",
+        default=True,
+        help="Precompute section boundaries for all audio files (default: True)",
+    )
+    parser.add_argument(
+        "--no-precompute-sections",
+        dest="precompute_sections",
+        action="store_false",
+        help="Disable section boundary precomputation",
     )
     parser.add_argument(
         "--section-method",
         type=str,
-        default="auto",
+        default="ruptures",
         choices=["auto", "ruptures", "librosa"],
-        help="Section detection method (auto uses ruptures if available)",
+        help="Section detection method (default: ruptures)",
+    )
+    parser.add_argument(
+        "--predict-lobes",
+        action="store_true",
+        default=True,
+        help="Train model to predict lobe switching (default: True, requires --precompute-sections)",
+    )
+    parser.add_argument(
+        "--no-predict-lobes",
+        dest="predict_lobes",
+        action="store_false",
+        help="Disable lobe prediction",
+    )
+    parser.add_argument(
+        "--n-lobes",
+        type=int,
+        default=9,
+        help="Number of lobes for lobe prediction (default: 9)",
+    )
+    parser.add_argument(
+        "--lobe-loss-weight",
+        type=float,
+        default=0.3,
+        help="Weight for lobe prediction loss",
     )
 
     args = parser.parse_args()
@@ -315,13 +353,21 @@ def main():
         hidden_dims=[128, 256, 128],
         k_bands=args.k_bands,
         dropout=0.2,
+        n_lobes=args.n_lobes,
+        predict_lobes=args.predict_lobes,
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Input dimension: {model.input_dim}")
     print(f"Output dimension: {model.output_dim}")
+    if args.predict_lobes:
+        print(f"Lobe prediction: ENABLED ({args.n_lobes} lobes)")
 
     print("[6/7] Initializing control trainer...")
+    correlation_weights = {}
+    if args.predict_lobes:
+        correlation_weights["lobe_prediction"] = args.lobe_loss_weight
+
     trainer = ControlTrainer(
         model=model,
         feature_extractor=feature_extractor,
@@ -330,6 +376,7 @@ def main():
         learning_rate=args.learning_rate,
         use_curriculum=args.use_curriculum,
         curriculum_weight=args.curriculum_weight,
+        correlation_weights=correlation_weights if correlation_weights else None,
         julia_renderer=julia_renderer,
         julia_resolution=args.julia_resolution,
         julia_max_iter=args.julia_max_iter,
@@ -337,14 +384,50 @@ def main():
         k_residuals=args.k_bands,
     )
 
+    # Generate lobe curriculum if lobe prediction is enabled and sections are precomputed
+    if args.predict_lobes and section_data:
+        print("\n[6.5/7] Generating lobe curriculum from section boundaries...")
+        from src.live_controller import LOBE_CHARACTERISTICS
+
+        # Create lobe to index mapping
+        lobe_to_index = {}
+        for idx, (lobe_key, chars) in enumerate(sorted(LOBE_CHARACTERISTICS.items())):
+            lobe_to_index[lobe_key] = idx
+
+        print(f"  Lobe mapping: {len(lobe_to_index)} lobes")
+
+        # Compute total samples (approximate based on dataset size)
+        # This is a simplification - in practice you'd want exact sample counts
+        approx_samples = len(dataset) * 100  # Rough estimate
+
+        # For now, use first audio file's section data as template
+        # In production, you'd merge all section data properly
+        if section_data:
+            first_section_data = next(iter(section_data.values()))
+            trainer._generate_lobe_curriculum(
+                section_data=first_section_data,
+                n_samples=approx_samples,
+                lobe_to_index=lobe_to_index,
+            )
+            print(f"  Lobe curriculum generated for {approx_samples} samples")
+    elif args.predict_lobes and not section_data:
+        print("\n⚠️  WARNING: --predict-lobes requires --precompute-sections")
+        print("  Lobe prediction will not be trained without section data.")
+
     print("[7/7] Starting training...")
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
     print("\nArchitecture overview:")
     print("  - Model predicts control signals: s, alpha, omega_scale, band_gates")
+    if args.predict_lobes:
+        print(f"  - Model predicts lobe switching: {args.n_lobes} lobe classes")
     print("  - Orbit synthesizer generates deterministic c(t) from controls")
     print("  - Curriculum learning teaches Mandelbrot orbit geometry")
     print("  - Correlation losses map audio features to visual parameters")
+    if args.predict_lobes:
+        print(
+            f"  - Lobe prediction loss (weight={args.lobe_loss_weight}) teaches section switching"
+        )
     print("=" * 60)
 
     final_checkpoint = trainer.train(
