@@ -72,7 +72,7 @@ export class JuliaRenderer {
       }
     `;
 
-    // Fragment shader (Julia set computation with gradient coloring)
+    // Fragment shader - Frax-style rendering with 5 stages
     const fragmentShaderSource = `
       precision highp float;
       
@@ -83,7 +83,7 @@ export class JuliaRenderer {
       uniform vec2 u_resolution;
       uniform int u_gradientCount;
       
-      // Gradient stops - using individual uniforms for WebGL 1.0 compatibility
+      // Gradient stops
       uniform vec4 u_gradient0;
       uniform vec4 u_gradient1;
       uniform vec4 u_gradient2;
@@ -93,9 +93,21 @@ export class JuliaRenderer {
       uniform vec4 u_gradient6;
       uniform vec4 u_gradient7;
       
-      const int MAX_ITERATIONS = 100;
+      const int MAX_ITERATIONS = 128;
+      const float ESCAPE_RADIUS = 2.0;
       
-      // Get gradient stop by index
+      // Height mapping parameters (the "art knobs")
+      const float HEIGHT_K = 240.0;
+      const float HEIGHT_P = 0.9;
+      
+      // Lighting parameters
+      const float SPEC_EXPONENT = 110.0;
+      const float FRESNEL_F0 = 0.12;
+      const float AMBIENT = 0.15;
+      const float DIFFUSE_STRENGTH = 0.6;
+      const float SPEC_STRENGTH = 0.8;
+      const float REFLECTION_STRENGTH = 0.5;
+      
       vec4 getGradientStop(int index) {
         if (index == 0) return u_gradient0;
         if (index == 1) return u_gradient1;
@@ -108,23 +120,15 @@ export class JuliaRenderer {
         return vec4(0.0);
       }
       
-      // Sample gradient at position t (0-1)
       vec3 sampleGradient(float t) {
         t = clamp(t, 0.0, 1.0);
-        
-        // Find the two stops we're between
-        // Defaults to first and last stops if no match found (fallback for edge cases)
         vec4 lowerStop = getGradientStop(0);
         vec4 upperStop = getGradientStop(u_gradientCount - 1);
         
-        // Loop through stops to find interpolation range
-        // Note: hardcoded to MAX_GRADIENT_STOPS-1 for WebGL 1.0 compatibility
         for (int i = 0; i < 7; i++) {
           if (i >= u_gradientCount - 1) break;
-          
           vec4 stop1 = getGradientStop(i);
           vec4 stop2 = getGradientStop(i + 1);
-          
           if (t >= stop1.w && t <= stop2.w) {
             lowerStop = stop1;
             upperStop = stop2;
@@ -132,108 +136,208 @@ export class JuliaRenderer {
           }
         }
         
-        // Interpolate between stops
         float range = upperStop.w - lowerStop.w;
         float localT = range > 0.0 ? (t - lowerStop.w) / range : 0.0;
+        return mix(lowerStop.rgb, upperStop.rgb, localT);
+      }
+      
+      // Complex multiplication
+      vec2 cmul(vec2 a, vec2 b) {
+        return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+      }
+      
+      // Stage 1 & 2: Iterate Julia set with derivative tracking
+      // Returns: (smoothIter, escaped, distance)
+      vec3 juliaIterate(vec2 c, vec2 z0) {
+        vec2 z = z0;
+        vec2 dz = vec2(0.0, 0.0);  // Derivative z'_0 = 0
         
-        vec3 color = mix(lowerStop.rgb, upperStop.rgb, localT);
-        return color;
+        float n = 0.0;
+        bool escaped = false;
+        
+        for (int i = 0; i < MAX_ITERATIONS; i++) {
+          n = float(i);
+          float zMag2 = dot(z, z);
+          
+          if (zMag2 > ESCAPE_RADIUS * ESCAPE_RADIUS) {
+            // Smooth iteration count
+            float nu = n + 1.0 - log(log(sqrt(zMag2))) / log(2.0);
+            
+            // Distance estimator: d ≈ |z|ln|z| / |z'|
+            float zMag = sqrt(zMag2);
+            float dzMag = length(dz);
+            float dist = (dzMag > 0.0) ? (zMag * log(zMag)) / dzMag : 0.0;
+            
+            return vec3(nu, 1.0, dist);
+          }
+          
+          // Update derivative: z'_{n+1} = 2*z_n*z'_n + 1
+          dz = cmul(vec2(2.0, 0.0) * z, dz) + vec2(1.0, 0.0);
+          
+          // Update z: z_{n+1} = z_n^2 + c
+          z = cmul(z, z) + c;
+        }
+        
+        return vec3(float(MAX_ITERATIONS), 0.0, 0.0);
+      }
+      
+      // Stage 3: Map distance to height with nonlinear curve
+      float distanceToHeight(float d) {
+        float kd = HEIGHT_K * d;
+        return 1.0 / (1.0 + pow(kd, HEIGHT_P));
+      }
+      
+      // Sample height at offset (for normal calculation with smoothing)
+      float sampleHeight(vec2 uv, vec2 offset, vec2 c) {
+        vec3 result = juliaIterate(c, uv + offset);
+        if (result.y < 0.5) return 0.0;  // Inside set
+        return distanceToHeight(result.z);
+      }
+      
+      // Stage 3d/e: Calculate normals from height field with box blur smoothing
+      vec3 calculateNormal(vec2 uv, vec2 c, float pixelSize) {
+        // Box blur radius for smoothing
+        float blur = pixelSize * 2.0;
+        
+        // Sample heights in a small neighborhood (3x3 box blur approximation)
+        float h = 0.0;
+        float hx = 0.0;
+        float hy = 0.0;
+        
+        // Center samples
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            vec2 offset = vec2(float(dx), float(dy)) * blur;
+            float hSample = sampleHeight(uv, offset, c);
+            h += hSample;
+            
+            // Accumulate for gradients
+            if (dx != 0) hx += float(dx) * hSample;
+            if (dy != 0) hy += float(dy) * hSample;
+          }
+        }
+        
+        // Average
+        h /= 9.0;
+        hx /= 6.0;  // 6 samples contribute to x gradient
+        hy /= 6.0;
+        
+        // Gradients
+        float dhx = hx / blur;
+        float dhy = hy / blur;
+        
+        // Normal: normalize(-∂h/∂x, -∂h/∂y, 1)
+        return normalize(vec3(-dhx, -dhy, 1.0));
+      }
+      
+      // Stage 5b: Fresnel (Schlick approximation)
+      float fresnel(vec3 normal, vec3 view) {
+        float cosTheta = max(dot(normal, view), 0.0);
+        return FRESNEL_F0 + (1.0 - FRESNEL_F0) * pow(1.0 - cosTheta, 5.0);
+      }
+      
+      // Stage 5c: Procedural environment map (studio window)
+      vec3 sampleEnvironment(vec3 reflectDir) {
+        // Warm gradient background
+        float y = reflectDir.z * 0.5 + 0.5;
+        vec3 bg = mix(vec3(0.3, 0.25, 0.2), vec3(0.6, 0.7, 0.8), y);
+        
+        // Add two rectangular "window" highlights (softbox reflections)
+        vec2 dir2d = reflectDir.xy;
+        
+        // Window 1 (rotated by time)
+        float angle1 = u_time * 0.1;
+        vec2 rot1 = vec2(
+          dir2d.x * cos(angle1) - dir2d.y * sin(angle1),
+          dir2d.x * sin(angle1) + dir2d.y * cos(angle1)
+        );
+        float window1 = smoothstep(0.3, 0.2, abs(rot1.x)) * smoothstep(0.5, 0.4, abs(rot1.y));
+        
+        // Window 2 (opposite rotation)
+        float angle2 = -u_time * 0.15 + 1.5;
+        vec2 rot2 = vec2(
+          dir2d.x * cos(angle2) - dir2d.y * sin(angle2),
+          dir2d.x * sin(angle2) + dir2d.y * cos(angle2)
+        );
+        float window2 = smoothstep(0.4, 0.3, abs(rot2.x)) * smoothstep(0.3, 0.2, abs(rot2.y));
+        
+        return bg + vec3(2.0) * window1 + vec3(1.8, 1.9, 2.0) * window2;
       }
       
       void main() {
         vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
-        // Fixed zoom: always show 2.7 unit range
         uv *= 2.7;
+        float pixelSize = 2.7 / min(u_resolution.x, u_resolution.y);
         
         vec2 c = u_juliaSeed;
-        vec2 z = uv;
         
-        // Orbit trap tracking for organic textures
-        float minDist = 1000.0;  // Track closest approach to origin
-        vec2 trapPoint = vec2(0.0, 0.0);  // Orbit trap center
+        // Stage 1 & 2: Compute fractal with smooth iteration count
+        vec3 fractalData = juliaIterate(c, uv);
+        float smoothIter = fractalData.x;
+        float escaped = fractalData.y;
+        float distance = fractalData.z;
         
-        float iterations = 0.0;
-        vec2 zFinal = z;
-        vec2 dz = vec2(1.0, 0.0);  // Derivative
-        vec2 dzFinal = dz;
+        // Stage 2: Normalize smooth iteration to [0,1]
+        // Using percentile-like normalization (clamped)
+        float t = clamp(smoothIter / float(MAX_ITERATIONS), 0.0, 1.0);
+        t = pow(t, 0.7);  // Adjust distribution
         
-        for (int i = 0; i < MAX_ITERATIONS; i++) {
-          float zMagnitude = dot(z, z);
-          if (zMagnitude > 4.0) {
-            // Smooth coloring
-            float log_zn = log(zMagnitude) / 2.0;
-            float nu = log(log_zn / log(2.0)) / log(2.0);
-            iterations = float(i) + 1.0 - nu;
-            
-            zFinal = z;
-            dzFinal = dz;
-            break;
-          }
-          
-          // Orbit trap
-          float dist = length(z - trapPoint);
-          minDist = min(minDist, dist);
-          
-          // Derivative update: dz = 2*z*dz
-          vec2 dz_new = vec2(
-            2.0 * (z.x * dz.x - z.y * dz.y),
-            2.0 * (z.x * dz.y + z.y * dz.x)
-          );
-          dz = dz_new;
-          
-          z = vec2(
-            z.x * z.x - z.y * z.y + c.x,
-            2.0 * z.x * z.y + c.y
-          );
+        // Stage 4: Color from gradient
+        float paletteCoord = fract(t * 4.2 * u_color.z);  // Palette cycling
+        vec3 baseColor = sampleGradient(paletteCoord);
+        
+        // Inside set: dark
+        if (escaped < 0.5) {
+          gl_FragColor = vec4(baseColor * 0.05, 1.0);
+          return;
         }
         
-        // Handle points inside the set
-        if (iterations == 0.0) {
-          iterations = float(MAX_ITERATIONS);
-          zFinal = z;
-          dzFinal = dz;
+        // Stage 3: Calculate height and normal
+        float height = distanceToHeight(distance);
+        vec3 normal = calculateNormal(uv, c, pixelSize);
+        
+        // Stage 5: Glossy 3D lighting
+        vec3 viewDir = vec3(0.0, 0.0, 1.0);  // Straight down
+        
+        // Animated light direction
+        float lightAngle = u_time * 0.3;
+        vec3 lightDir = normalize(vec3(
+          cos(lightAngle) * 0.6,
+          sin(lightAngle) * 0.4,
+          0.8
+        ));
+        
+        // Stage 5a: Diffuse lighting
+        float diffuse = max(dot(normal, lightDir), 0.0);
+        
+        // Stage 5a: Specular (Blinn-Phong)
+        vec3 halfVec = normalize(lightDir + viewDir);
+        float specular = pow(max(dot(normal, halfVec), 0.0), SPEC_EXPONENT);
+        
+        // Stage 5b: Fresnel
+        float F = fresnel(normal, viewDir);
+        
+        // Stage 5c: Reflection
+        vec3 reflectDir = reflect(-viewDir, normal);
+        vec3 envColor = sampleEnvironment(reflectDir);
+        
+        // Stage 5d: Final composite
+        vec3 pigment = baseColor * (AMBIENT + DIFFUSE_STRENGTH * diffuse);
+        vec3 gloss = vec3(1.0) * SPEC_STRENGTH * specular;
+        vec3 reflection = envColor * REFLECTION_STRENGTH * F;
+        
+        vec3 finalColor = pigment + gloss + reflection;
+        
+        // Apply intensity from controls
+        finalColor *= (0.5 + u_color.y * 0.5);
+        
+        // Subtle bloom approximation (brighten bright areas)
+        float brightness = dot(finalColor, vec3(0.299, 0.587, 0.114));
+        if (brightness > 1.0) {
+          finalColor += vec3(brightness - 1.0) * 0.3;
         }
         
-        // Normalize to [0, 1] range for color mapping
-        float t = clamp(iterations / float(MAX_ITERATIONS), 0.0, 1.0);
-        
-        // Apply hue, intensity, and contrast
-        float hue = u_color.x;        // colorHue shifts gradient position
-        float intensity = u_color.y;  // colorSat controls intensity
-        float contrast = u_color.z;   // colorBright controls contrast
-        
-        // Apply contrast adjustment smoothly BEFORE any other modifications
-        t = pow(clamp(t, 0.0, 1.0), 1.0 / (contrast + 0.5 + 0.001));
-        
-        // Very subtle orbit trap influence to maintain smoothness
-        float trapInfluence = smoothstep(0.5, 0.0, minDist);
-        t = mix(t, t * (1.0 + minDist * 0.05), trapInfluence * 0.1);
-        
-        // Keep t monotonic (0 to 1) to avoid creating repeating bands
-        // The gradient sampling handles color shifts internally
-        t = clamp(t, 0.0, 1.0);
-        
-        // Sample gradient
-        vec3 color = sampleGradient(t);
-        
-        // Apply intensity
-        color = color * (0.5 + intensity * 0.5);
-        
-        // Wet paint effect: glossy specular highlights
-        if (iterations < float(MAX_ITERATIONS)) {
-          // Simple specular for testing
-          vec3 normal = normalize(vec3(zFinal.x, zFinal.y, 1.0));
-          float theta = u_time * 0.4;
-          vec3 lightDir = normalize(vec3(sin(theta), cos(theta), 0.8));
-          float spec = pow(max(dot(normal, lightDir), 0.0), 32.0);
-          color += vec3(spec * 0.5);
-        }
-        
-        // Subtle depth darkening to maintain brightness
-        float depthFactor = 1.0 - t * 0.05;
-        color *= depthFactor;
-        
-        gl_FragColor = vec4(color, 1.0);
+        gl_FragColor = vec4(finalColor, 1.0);
       }
     `;
 
