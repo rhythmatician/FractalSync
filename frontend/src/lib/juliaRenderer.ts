@@ -153,23 +153,33 @@ export class JuliaRenderer {
         vec2 trapPoint = vec2(0.0, 0.0);  // Orbit trap center
         
         float iterations = 0.0;
-        vec2 zFinal = z;  // Store final z value for lighting calculation
+        vec2 zFinal = z;
+        vec2 dz = vec2(1.0, 0.0);  // Derivative
+        vec2 dzFinal = dz;
         
         for (int i = 0; i < MAX_ITERATIONS; i++) {
           float zMagnitude = dot(z, z);
           if (zMagnitude > 4.0) {
-            // Smooth coloring using normalized iteration count
-            // This completely eliminates banding
+            // Smooth coloring
             float log_zn = log(zMagnitude) / 2.0;
             float nu = log(log_zn / log(2.0)) / log(2.0);
             iterations = float(i) + 1.0 - nu;
+            
             zFinal = z;
+            dzFinal = dz;
             break;
           }
           
-          // Orbit trap: track minimum distance to trap point
+          // Orbit trap
           float dist = length(z - trapPoint);
           minDist = min(minDist, dist);
+          
+          // Derivative update: dz = 2*z*dz
+          vec2 dz_new = vec2(
+            2.0 * (z.x * dz.x - z.y * dz.y),
+            2.0 * (z.x * dz.y + z.y * dz.x)
+          );
+          dz = dz_new;
           
           z = vec2(
             z.x * z.x - z.y * z.y + c.x,
@@ -181,6 +191,7 @@ export class JuliaRenderer {
         if (iterations == 0.0) {
           iterations = float(MAX_ITERATIONS);
           zFinal = z;
+          dzFinal = dz;
         }
         
         // Normalize to [0, 1] range for color mapping
@@ -208,28 +219,14 @@ export class JuliaRenderer {
         // Apply intensity
         color = color * (0.5 + intensity * 0.5);
         
-        // Wet paint effect: glossy specular highlights with anti-banding jitter
+        // Wet paint effect: glossy specular highlights
         if (iterations < float(MAX_ITERATIONS)) {
-          // Calculate normal from potential
-          float h = 0.002;
-          vec2 zPlusX = zFinal + vec2(h, 0.0);
-          vec2 zPlusY = zFinal + vec2(0.0, h);
-          
-          float potCenter = log(length(zFinal) + 1.0);
-          float potX = log(length(zPlusX) + 1.0);
-          float potY = log(length(zPlusY) + 1.0);
-          
-          vec2 grad = vec2(potX - potCenter, potY - potCenter) / h;
-          vec3 normal = normalize(vec3(grad.x, grad.y, 0.4));
-          
-          // Animated light direction
-          vec3 lightDir = normalize(vec3(sin(u_time * 0.4), cos(u_time * 0.3), 0.8));
-          
-          // Sharp specular highlight
-          float specular = pow(max(dot(normal, lightDir), 0.0), 32.0) * 0.9;
-          
-          // Add glossy shine
-          color += vec3(specular);
+          // Simple specular for testing
+          vec3 normal = normalize(vec3(zFinal.x, zFinal.y, 1.0));
+          float theta = u_time * 0.4;
+          vec3 lightDir = normalize(vec3(sin(theta), cos(theta), 0.8));
+          float spec = pow(max(dot(normal, lightDir), 0.0), 32.0);
+          color += vec3(spec * 0.5);
         }
         
         // Subtle depth darkening to maintain brightness
