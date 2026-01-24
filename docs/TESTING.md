@@ -21,8 +21,8 @@ pytest backend/tests/ -v
 
 **Test Coverage:**
 - ✅ End-to-end workflow tests
-- ✅ Feature extraction parity (Python vs Rust)
 - ✅ Integration tests (runtime-core via PyO3)
+- ✅ Feature extractor correctness (via `make_feature_extractor` bridge)
 - ✅ Song analyzer tests
 - ✅ Visual metrics tests
 
@@ -56,7 +56,6 @@ cargo test --lib --release
 **Test Coverage:**
 - ✅ Feature extraction (empty, small, normal audio)
 - ✅ Orbit synthesis and geometry
-- ✅ Parity extraction (for Python comparison)
 
 **Total: 4 tests** (unit tests only, integration via backend)
 
