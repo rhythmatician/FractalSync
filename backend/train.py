@@ -5,7 +5,6 @@ Usage:
     python train.py --data-dir data/audio --epochs 100 --use-curriculum
 """
 
-# TODO: remove model_type and remove stale model types
 import argparse
 import os
 import sys
@@ -24,7 +23,9 @@ from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
-from src.flight_recorder import FlightRecorder  # Optional flight recorder for logging
+from src.flight_recorder import (  # noqa: E402
+    FlightRecorder,  # Optional flight recorder for logging
+)
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
@@ -428,7 +429,7 @@ def main():
                 else None
             ),
             metadata={
-                    "output_dim": model.output_dim,
+                "output_dim": model.output_dim,
                 "k_bands": args.k_bands,
                 "epoch": args.epochs,
                 "window_frames": args.window_frames,

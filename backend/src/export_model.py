@@ -115,8 +115,10 @@ def export_to_onnx(
 
     if provided_param_names is not None:
         parameter_names = provided_param_names
-        output_dim = provided_output_dim if provided_output_dim is not None else len(
-            provided_param_names
+        output_dim = (
+            provided_output_dim
+            if provided_output_dim is not None
+            else len(provided_param_names)
         )
         parameter_ranges = md.get("parameter_ranges", {})
     else:
@@ -131,7 +133,13 @@ def export_to_onnx(
                 "alpha_hit",
             ] + [f"gate_logits_{i}" for i in range(k)]
             output_dim = provided_output_dim
-            parameter_ranges = {"u_x": [-1.0, 1.0], "u_y": [-1.0, 1.0], "delta_s": [-0.5, 0.5], "delta_omega": [-1.0, 1.0], "alpha_hit": [0.0, 2.0]}
+            parameter_ranges = {
+                "u_x": [-1.0, 1.0],
+                "u_y": [-1.0, 1.0],
+                "delta_s": [-0.5, 0.5],
+                "delta_omega": [-1.0, 1.0],
+                "alpha_hit": [0.0, 2.0],
+            }
             for i in range(k):
                 parameter_ranges[f"gate_logits_{i}"] = [-5.0, 5.0]
         else:
@@ -141,8 +149,14 @@ def export_to_onnx(
                 parameter_names = ["s_target", "alpha", "omega_scale"] + [
                     f"band_gate_{i}" for i in range(k)
                 ]
-                output_dim = provided_output_dim if provided_output_dim is not None else 3 + k
-                parameter_ranges = {"s_target": [0.2, 3.0], "alpha": [0.0, 1.0], "omega_scale": [0.1, 5.0]}
+                output_dim = (
+                    provided_output_dim if provided_output_dim is not None else 3 + k
+                )
+                parameter_ranges = {
+                    "s_target": [0.2, 3.0],
+                    "alpha": [0.0, 1.0],
+                    "omega_scale": [0.1, 5.0],
+                }
                 for i in range(k):
                     parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
             else:

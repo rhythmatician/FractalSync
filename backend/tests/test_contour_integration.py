@@ -4,11 +4,11 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from src.control_trainer import ControlTrainer
-from src.control_model import AudioToControlModel
-from src.visual_metrics import VisualMetrics
-from src.runtime_core_bridge import make_feature_extractor
-from src.flight_recorder import FlightRecorder
+from src.control_trainer import ControlTrainer  # noqa: E402
+from src.control_model import AudioToControlModel  # noqa: E402
+from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
+from src.flight_recorder import FlightRecorder  # noqa: E402
 
 
 def test_trainer_records_transient_h(tmp_path):
@@ -29,7 +29,13 @@ def test_trainer_records_transient_h(tmp_path):
     res = 4
     field = np.arange(res * res, dtype=np.float32).reshape((res, res))
     np.save(str(df_base.with_suffix(".npy")), field)
-    meta = {"resolution": res, "real_range": (-1.5, 1.5), "imag_range": (-1.5, 1.5), "max_distance": 1.0, "slowdown_threshold": 0.05}
+    meta = {
+        "resolution": res,
+        "real_range": (-1.5, 1.5),
+        "imag_range": (-1.5, 1.5),
+        "max_distance": 1.0,
+        "slowdown_threshold": 0.05,
+    }
     with open(str(df_base.with_suffix(".json")), "w") as f:
         _json.dump(meta, f)
 

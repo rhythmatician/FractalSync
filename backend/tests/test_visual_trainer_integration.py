@@ -16,7 +16,13 @@ def test_trainer_instantiates_visual_components():
     res = 4
     field = np.arange(res * res, dtype=np.float32).reshape((res, res))
     np.save(str(df_base.with_suffix(".npy")), field)
-    meta = {"resolution": res, "real_range": (-1.5, 1.5), "imag_range": (-1.5, 1.5), "max_distance": 1.0, "slowdown_threshold": 0.05}
+    meta = {
+        "resolution": res,
+        "real_range": (-1.5, 1.5),
+        "imag_range": (-1.5, 1.5),
+        "max_distance": 1.0,
+        "slowdown_threshold": 0.05,
+    }
     with open(str(df_base.with_suffix(".json")), "w") as f:
         _json.dump(meta, f)
 

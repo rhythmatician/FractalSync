@@ -1,8 +1,6 @@
 import json
-import tempfile
 from pathlib import Path
 
-import torch
 import torch.nn as nn
 
 from src.export_model import export_to_onnx
@@ -18,7 +16,6 @@ class DummyPolicy(nn.Module):
 
 
 def test_export_policy_metadata(tmp_path):
-    # TODO: remove model_type and stale model types
     input_dim = 39
     k = 6
     output_dim = 5 + k
