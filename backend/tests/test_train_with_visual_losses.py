@@ -29,6 +29,18 @@ def test_train_with_visual_losses_smoke(tmp_path):
     wav_path = data_dir / "sample.wav"
     _write_sine_wav(wav_path, duration_s=0.6, sr=22050)
 
+    # Write small precomputed distance field required by training (in backend/data)
+    import numpy as np
+    import json as _json
+    df_base = Path(__file__).resolve().parents[1] / "data" / "mandelbrot_distance_field"
+    df_base.parent.mkdir(parents=True, exist_ok=True)
+    res = 8
+    field = np.zeros((res, res), dtype=np.float32)
+    np.save(str(df_base.with_suffix('.npy')), field)
+    meta = {"resolution": res, "real_range": (-2.5, 1.0), "imag_range": (-1.5, 1.5), "max_distance": 0.5, "slowdown_threshold": 0.02}
+    with open(str(df_base.with_suffix('.json')), 'w') as f:
+        _json.dump(meta, f)
+
     save_dir = tmp_path / "checkpoints"
 
     cmd = [

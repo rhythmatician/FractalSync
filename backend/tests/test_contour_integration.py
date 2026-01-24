@@ -19,6 +19,20 @@ def test_trainer_records_transient_h(tmp_path):
     visual_metrics = VisualMetrics()
     feature_extractor = make_feature_extractor()
 
+    # Ensure required precomputed distance field exists for this test
+    import numpy as np
+    import json as _json
+    from pathlib import Path as _Path
+
+    df_base = _Path("data") / "mandelbrot_distance_field"
+    df_base.parent.mkdir(parents=True, exist_ok=True)
+    res = 4
+    field = np.arange(res * res, dtype=np.float32).reshape((res, res))
+    np.save(str(df_base.with_suffix(".npy")), field)
+    meta = {"resolution": res, "real_range": (-1.5, 1.5), "imag_range": (-1.5, 1.5), "max_distance": 1.0, "slowdown_threshold": 0.05}
+    with open(str(df_base.with_suffix(".json")), "w") as f:
+        _json.dump(meta, f)
+
     # Use flight recorder with no image writes for speed
     fr = FlightRecorder(
         run_id="test_run", base_dir=str(tmp_path / "logs"), save_images=False

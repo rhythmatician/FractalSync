@@ -27,8 +27,26 @@ def _make_torch_df_from_py(py_df):
 
 
 def test_single_step_parity():
-    df = load_distance_field()
-    tdf = _make_torch_df_from_py(df)
+    # Create a small test distance field (grid) and use runtime sampler for Torch
+    res = 32
+    xs = np.linspace(-1.5, 1.5, res)
+    ys = np.linspace(-1.5, 1.5, res)
+    X, Y = np.meshgrid(xs, ys)
+    R = np.sqrt(X**2 + Y**2)
+    field = np.clip(1.0 - R / R.max(), 0.0, 1.0).astype(np.float32)
+
+    # torch distance field using runtime sampler (non-diff)
+    td_field = torch.from_numpy(field)
+    tdf = di.TorchDistanceField(
+        td_field,
+        real_min=-1.5,
+        real_max=1.5,
+        imag_min=-1.5,
+        imag_max=1.5,
+        max_distance=1.0,
+        slowdown_threshold=0.05,
+        use_runtime_sampler=True,
+    )
 
     rng = random.Random(123)
     for _ in range(10):
@@ -40,14 +58,14 @@ def test_single_step_parity():
         h = rng.choice([0.0, 1.0])
 
         # Use runtime-core DistanceField to compute the reference step
-        flat = list(np.array(df.field, dtype=np.float32).ravel())
+        flat = list(field.ravel())
         rc_df = rc.DistanceField(
             flat,
-            df.res,
-            (df.real_min, df.real_max),
-            (df.imag_min, df.imag_max),
-            df.max_distance,
-            df.slowdown_threshold,
+            res,
+            (-1.5, 1.5),
+            (-1.5, 1.5),
+            1.0,
+            0.05,
         )
         out_py = rc.contour_biased_step(real, imag, u_real, u_imag, h, 0.5, 0.05, rc_df)
 

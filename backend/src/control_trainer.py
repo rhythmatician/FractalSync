@@ -398,23 +398,14 @@ class ControlTrainer:
         self.sequence_unroll_steps = int(sequence_unroll_steps)
         self.sequence_stride = int(sequence_stride)
 
-        # Load numpy distance field for slowdown loss (fallback independent of runtime_core)
-        self.df_numpy = None
-        self.df_meta = None
-        try:
-            import json as _json
-            from pathlib import Path as _Path
+        # Load numpy distance field for slowdown loss (required; no fallback)
+        from pathlib import Path as _Path
 
-            df_base = _Path("data") / "mandelbrot_distance_field"
-            npy_path = df_base.with_suffix(".npy")
-            json_path = df_base.with_suffix(".json")
-            if npy_path.exists() and json_path.exists():
-                self.df_numpy = np.load(str(npy_path))
-                with open(json_path, "r", encoding="utf-8") as f:
-                    self.df_meta = _json.load(f)
-                logger.info("Loaded numpy distance field for slowdown loss")
-        except Exception as e:
-            logger.warning(f"Failed to load numpy distance field: {e}")
+        df_base = _Path("data") / "mandelbrot_distance_field"
+        # This will raise a FileNotFoundError if the precomputed field is not present
+        df = load_distance_field_for_runtime(str(df_base))
+        self.distance_field = df
+        logger.info("Loaded numpy distance field for slowdown loss")
 
         # Default correlation weights
         default_weights = {

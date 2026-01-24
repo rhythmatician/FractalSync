@@ -140,22 +140,22 @@ def load_distance_field_for_runtime(path: str) -> DistanceField:
     imag_range = (-1.5, 1.5)
     slowdown_threshold = 0.02
 
-    if npy_path.exists() and json_path.exists():
-        try:
-            arr = np.load(str(npy_path))
-            with open(json_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            real_range = tuple(meta.get("real_range", real_range))
-            imag_range = tuple(meta.get("imag_range", imag_range))
-            slowdown_threshold = meta.get("slowdown_threshold", slowdown_threshold)
-        except Exception:
-            # Fall back to synthetic behavior on any read error
-            arr = None
+    if not (npy_path.exists() and json_path.exists()):
+        raise FileNotFoundError(
+            "Precomputed mandelbrot distance field not found. Generate it with: 'python -m mandelbrot_distance_field'"
+        )
+
+    arr = np.load(str(npy_path))
+    with open(json_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    real_range = tuple(meta.get("real_range", real_range))
+    imag_range = tuple(meta.get("imag_range", imag_range))
+    slowdown_threshold = meta.get("slowdown_threshold", slowdown_threshold)
 
     # Return a wrapper object usable both from Python tests and runtime binding
     return DistanceField(
         arr=arr,
-        real_range=real_range,
-        imag_range=imag_range,
-        slowdown_threshold=slowdown_threshold,
+        real_range=tuple(meta.get("real_range", real_range)),
+        imag_range=tuple(meta.get("imag_range", imag_range)),
+        slowdown_threshold=meta.get("slowdown_threshold", slowdown_threshold),
     )
