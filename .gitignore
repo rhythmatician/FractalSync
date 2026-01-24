@@ -50,3 +50,4 @@ backend/experimental/
 
 # Tuning logs
 logs/*
+tmp/
