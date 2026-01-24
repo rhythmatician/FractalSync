@@ -711,8 +711,13 @@ class ControlTrainer:
         batch_size: int = 32,
         save_dir: Optional[str] = None,
         curriculum_decay: float = 0.95,
+        start_epoch: int = 0,
     ):
         """Train model on dataset.
+
+        Args:
+            start_epoch: Epoch number to resume from (default 0 for new training).
+                         Training will run from start_epoch to start_epoch + epochs.
 
         Returns:
             Path to the final checkpoint if saved, else None.
@@ -749,11 +754,20 @@ class ControlTrainer:
             num_workers=self.num_workers,
         )
 
-        # Initialize learning rate scheduler
-        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=epochs, eta_min=1e-6)
+        # Initialize learning rate scheduler (total epochs includes start_epoch)
+        total_epochs = start_epoch + epochs
+        self.scheduler = CosineAnnealingLR(
+            self.optimizer, T_max=total_epochs, eta_min=1e-6
+        )
+
+        # Fast-forward scheduler to start_epoch if resuming
+        if start_epoch > 0:
+            for _ in range(start_epoch):
+                self.scheduler.step()
 
         logger.info(
-            f"Starting control signal training for {epochs} epochs... (total frames: {all_features_tensor.shape[0]})"
+            f"Starting control signal training for {epochs} epochs (from epoch {start_epoch} to {total_epochs})... "
+            f"(total frames: {all_features_tensor.shape[0]})"
         )
         logger.info(
             f"Optimizations: AMP={self.use_amp}, GradClip={self.max_grad_norm}, "
@@ -761,7 +775,11 @@ class ControlTrainer:
         )
 
         for epoch in tqdm(
-            range(epochs), desc="Epochs", total=epochs, leave=True, mininterval=0.5
+            range(start_epoch, total_epochs),
+            desc="Epochs",
+            total=epochs,
+            leave=True,
+            mininterval=0.5,
         ):
             avg_losses = self.train_epoch(dataloader, epoch, curriculum_decay)
 
@@ -769,14 +787,14 @@ class ControlTrainer:
                 self.history[key].append(value)
 
             logger.info(
-                f"Epoch {epoch + 1}/{epochs}: "
+                f"Epoch {epoch + 1}/{total_epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
                 f'Boundary: {avg_losses["boundary_exploration_loss"]:.4f}, '
                 f'Continuity: {avg_losses["visual_continuity_loss"]:.4f}, '
                 f'Complexity: {avg_losses["complexity_correlation_loss"]:.4f}'
             )
 
-            if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
+            if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == total_epochs):
                 self.save_checkpoint(save_dir, epoch + 1)
 
         logger.info("Training complete!")

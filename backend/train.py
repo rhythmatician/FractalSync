@@ -130,6 +130,12 @@ def main():
         default=None,
         help="Maximum number of audio files to load (for quick runs)",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Path to checkpoint to resume training from",
+    )
 
     args = parser.parse_args()
 
@@ -219,9 +225,31 @@ def main():
         k_residuals=args.k_bands,
     )
 
+    # Load checkpoint if resuming
+    start_epoch = 0
+    if args.resume:
+        print(f"[6.5/7] Loading checkpoint from {args.resume}...")
+        checkpoint = torch.load(args.resume, map_location=args.device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        trainer.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        trainer.history = checkpoint["history"]
+        start_epoch = checkpoint["epoch"]
+
+        # Load normalization stats if available
+        if "feature_mean" in checkpoint and "feature_std" in checkpoint:
+            feature_extractor.feature_mean = checkpoint["feature_mean"]
+            feature_extractor.feature_std = checkpoint["feature_std"]
+
+        print(f"  Resumed from epoch {start_epoch}")
+        print(f"  Previous loss: {checkpoint['history']['loss'][-1]:.4f}")
+
     print("[7/7] Starting training...")
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
+    if args.resume:
+        print(
+            f"Resuming from epoch {start_epoch}, training for {args.epochs} more epochs"
+        )
     print("\nArchitecture overview:")
     print("  - Model predicts control signals: s, alpha, omega_scale, band_gates")
     print("  - Orbit synthesizer generates deterministic c(t) from controls")
@@ -235,6 +263,7 @@ def main():
         batch_size=args.batch_size,
         save_dir=args.save_dir,
         curriculum_decay=args.curriculum_decay,
+        start_epoch=start_epoch,
     )
 
     print("\n" + "=" * 60)
