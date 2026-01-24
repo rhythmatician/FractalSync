@@ -24,10 +24,9 @@ def compute_escape_time_estimate(
 ) -> float:
     """Rudimentary escape-time estimator returning a normalized escape time in [0, 1].
 
-    This is a fallback used when no precomputed .npy field is available. It is
-    intentionally inexpensive (low iterations) and coarse, but sufficient for tests
-    and for providing reasonable velocity scale behaviour.
-    """
+    This is an inexpensive analytic estimator used by small tests and utilities
+    when a precomputed distance field is not required. It is intentionally
+    inexpensive (low iterations) and coarse."""
     z_r, z_i = 0.0, 0.0
     for i in range(max_iter):
         z_r2 = z_r * z_r

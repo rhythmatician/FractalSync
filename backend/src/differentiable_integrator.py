@@ -164,9 +164,9 @@ def contour_biased_step_torch(
     gx, gy = df.gradient(c_real, c_imag)
     grad_norm = torch.hypot(gx, gy)
 
-    # where grad_norm <= eps, fallback to scaled u
+    # where grad_norm <= eps, treat as near-zero gradient and use scaled u as a safe path
     eps = 1e-12
-    fallback_mask = grad_norm <= eps
+    near_zero_mask = grad_norm <= eps
 
     # Compute normal and tangent
     nx = gx / (grad_norm + eps)
@@ -201,13 +201,13 @@ def contour_biased_step_torch(
     next_real = c_real + dx
     next_imag = c_imag + dy
 
-    # apply fallback for near-zero gradient cases
-    if fallback_mask.any():
+    # Handle near-zero gradient cases by using scaled u as a safe path
+    if near_zero_mask.any():
         u_mag = torch.hypot(u_real, u_imag)
         scale2 = torch.where(
             (u_mag > max_step) & (u_mag > 0.0), max_step / u_mag, torch.ones_like(u_mag)
         )
-        next_real = torch.where(fallback_mask, c_real + u_real * scale2, next_real)
-        next_imag = torch.where(fallback_mask, c_imag + u_imag * scale2, next_imag)
+        next_real = torch.where(near_zero_mask, c_real + u_real * scale2, next_real)
+        next_imag = torch.where(near_zero_mask, c_imag + u_imag * scale2, next_imag)
 
     return next_real, next_imag
