@@ -254,4 +254,25 @@ mod tests {
         // smoothstep(0.5) = 0.5² × (3 - 2×0.5) = 0.25 × 2.0 = 0.5
         assert!((scale - 0.5).abs() < 0.01);
     }
+
+    #[test]
+    fn test_sample_bilinear_values() {
+        // Field 4x4 values 0..15
+        let field: Vec<f32> = (0..16).map(|i| i as f32).collect();
+        let df = DistanceField::new(field.clone(), 4, (0.0, 4.0), (0.0, 4.0), 1.0, 0.05);
+
+        // Points to test
+        let pts = vec![
+            (0.5, 0.5, 2.5f32),
+            (1.25, 2.75, 12.25f32),
+            (3.0, 3.0, 15.0f32),
+            (0.0, 0.0, 0.0f32),
+            (3.999, 3.999, 1.0f32),
+        ];
+
+        for (r, i, expected) in pts {
+            let val = df.sample_bilinear(Complex::new(r, i));
+            assert!((val - expected).abs() < 1e-4, "val {} != expected {} at ({},{})", val, expected, r, i);
+        }
+    }
 }
