@@ -49,8 +49,10 @@ def export_to_onnx(
     input_name = "audio_features"
     output_name = "visual_parameters"
 
-    # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
+    # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes
+    # and prefer a newer opset to avoid automatic version conversion.
     try:
+        # Dynamo-friendly kwargs
         torch.onnx.export(
             model,
             (dummy_input,),
@@ -58,11 +60,11 @@ def export_to_onnx(
             export_params=True,
             input_names=[input_name],
             output_names=[output_name],
-            dynamic_axes={
+            dynamic_shapes={
                 input_name: {0: "batch_size"},
                 output_name: {0: "batch_size"},
             },
-            opset_version=11,
+            opset_version=18,
             do_constant_folding=True,
             verbose=False,
             dynamo=True,

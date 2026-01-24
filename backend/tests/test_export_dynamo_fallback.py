@@ -68,4 +68,6 @@ def test_export_falls_back_from_dynamo(monkeypatch, tmp_path, caplog):
 
     # Warning about dynamo fallback should be present
     found = any("ONNX dynamo export failed" in r.message for r in caplog.records)
-    assert found, "Expected a warning about ONNX dynamo export falling back to legacy exporter"
+    assert (
+        found
+    ), "Expected a warning about ONNX dynamo export falling back to legacy exporter"
