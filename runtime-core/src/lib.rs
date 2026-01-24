@@ -27,6 +27,7 @@ pub mod geometry;
 pub mod controller;
 pub mod features;
 pub mod distance_field;
+pub mod lobe_state;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
 // corresponding feature flag has been enabled.

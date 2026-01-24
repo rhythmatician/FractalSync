@@ -258,6 +258,32 @@ class VisualContinuityLoss(nn.Module):
         return self.weight * loss
 
 
+class SwitchCostLoss(nn.Module):
+    """Penalize rapid changes in soft lobe weights across consecutive steps.
+
+    This encourages the model to produce smooth, stable lobe preferences over time.
+    """
+
+    def __init__(self, weight: float = 0.1):
+        super().__init__()
+        self.weight = weight
+
+    def forward(self, lobe_logits_seq: List[torch.Tensor]) -> torch.Tensor:
+        """lobe_logits_seq: list of (B, K) tensors for each timestep.
+
+        Returns mean squared difference between consecutive softmaxed vectors.
+        """
+        if not lobe_logits_seq:
+            return torch.tensor(0.0, dtype=torch.float32)
+        # Stack to (T, B, K)
+        stacked = torch.stack(lobe_logits_seq, dim=0)
+        # Softmax across K (last dim)
+        soft = torch.softmax(stacked, dim=-1)
+        diffs = soft[1:] - soft[:-1]
+        sq = diffs.pow(2).mean()
+        return self.weight * sq
+
+
 class BoundaryExplorationLoss(nn.Module):
     """Encourage c to explore near Mandelbrot boundary (not deep inside)."""
 
@@ -399,6 +425,7 @@ class ControlTrainer:
             "boundary_exploration": 1.5,  # New: encourage boundary exploration
             "complexity_correlation": 10.0,  # Increased to make correlation more visible
             "trajectory_slowdown": 1.0,  # Penalize velocity near boundary
+            "switch_cost": 0.1,  # Penalize rapid lobe switching
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -430,6 +457,11 @@ class ControlTrainer:
         self.slowdown_loss_fn = TrajectorySlowdownLoss(
             weight=self.correlation_weights.get("trajectory_slowdown", 1.0),
             threshold=0.02,
+        )
+
+        # Lobe switch cost loss (encourages stable soft-lobe weights)
+        self.switch_cost_loss = SwitchCostLoss(
+            weight=self.correlation_weights.get("switch_cost", 0.1)
         )
 
         # Optional differentiable visual losses (fast proxy renderer + lightweight losses)
@@ -726,6 +758,8 @@ class ControlTrainer:
 
                 # Accumulate L2 jump loss across steps
                 total_step_loss = torch.tensor(0.0, device=device, dtype=torch.float32)
+                # Collect per-step lobe logits when present for switch-cost loss
+                lobe_logits_seq: List[torch.Tensor] = []
 
                 for t in range(T):
                     features_t = batch_seq[:, t, :]
@@ -742,6 +776,11 @@ class ControlTrainer:
                     u = decoded_t["u"]  # (B,2)
                     u_r = u[:, 0]
                     u_i = u[:, 1]
+
+                    # Collect lobe logits if present for switch-cost regularization
+                    l_logits = decoded_t.get("lobe_logits", None)
+                    if l_logits is not None:
+                        lobe_logits_seq.append(l_logits)
 
                     # Integrator step (differentiable)
                     next_r, next_i = di.contour_biased_step_torch(
@@ -872,6 +911,12 @@ class ControlTrainer:
                 complexity_correlation_loss_val = torch.tensor(0.0, device=device)
                 trajectory_slowdown_loss_val = torch.tensor(0.0, device=device)
 
+                # Switch cost regularization for lobe logits sequences
+                if len(lobe_logits_seq) >= 2:
+                    switch_cost_val = self.switch_cost_loss(lobe_logits_seq)
+                else:
+                    switch_cost_val = torch.tensor(0.0, device=device)
+
                 # Total loss: include regularization term on predicted_controls to keep grad path
                 total_batch_loss = (
                     self.correlation_weights["timbre_color"] * timbre_color_loss
@@ -885,6 +930,7 @@ class ControlTrainer:
                     * complexity_correlation_loss_val
                     + self.correlation_weights["trajectory_slowdown"]
                     * trajectory_slowdown_loss_val
+                    + self.correlation_weights.get("switch_cost", 0.0) * switch_cost_val
                     + current_curriculum_weight * control_loss_val
                     + self.regularization_weight * torch.mean(predicted_controls**2)
                     + avg_step_loss
@@ -1041,7 +1087,52 @@ class ControlTrainer:
                     trajectory_c_values = []
                     gates_list = band_gates[i].detach().cpu().tolist()
 
-                    if epoch == 0:
+                    # Soft-lobe single-step interpolation: if the policy produced lobe logits,
+                    # synthesize a c for each possible lobe and mix them according to softmax
+                    try:
+                        decoded_batch = policy_output_decoder_torch(
+                            predicted_controls, self.k_residuals
+                        )
+                        lobe_logits_batch = decoded_batch.get("lobe_logits", None)
+                    except Exception:
+                        lobe_logits_batch = None
+
+                    if lobe_logits_batch is not None and epoch == 0:
+                        # Compute per-sample mixed c using soft weights (static epoch)
+                        weights = (
+                            torch.softmax(lobe_logits_batch[i], dim=-1)
+                            .detach()
+                            .cpu()
+                            .numpy()
+                        )
+                        # Synthesize per-lobe coordinates and mix
+                        c_mixed_real = 0.0
+                        c_mixed_imag = 0.0
+                        for l_idx, w in enumerate(weights.tolist()):
+                            orb_l = make_orbit_state(
+                                lobe=int(l_idx),
+                                sub_lobe=0,
+                                theta=float(i * 2 * np.pi / batch_size),
+                                omega=float(
+                                    DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()
+                                ),
+                                s=float(s_target[i].detach().item()),
+                                alpha=float(alpha[i].detach().item()),
+                                k_residuals=self.k_residuals,
+                                residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                                seed=int(DEFAULT_ORBIT_SEED + i),
+                            )
+                            c_l = synthesize(orb_l, self.residual_params, gates_list)
+                            c_mixed_real += float(w) * float(c_l.real)
+                            c_mixed_imag += float(w) * float(c_l.imag)
+
+                        c_norm = np.sqrt(c_mixed_real**2 + c_mixed_imag**2)
+                        max_magnitude = 2.0
+                        divisor = max(c_norm, max_magnitude) / max_magnitude
+                        c_real = c_mixed_real / divisor
+                        c_imag = c_mixed_imag / divisor
+                        trajectory_c_values.append([c_real, c_imag])
+                    elif epoch == 0:
                         # Static synthesis: single c
                         c = synthesize(orbit, self.residual_params, gates_list)
                         c_norm = np.sqrt(c.real**2 + c.imag**2)
