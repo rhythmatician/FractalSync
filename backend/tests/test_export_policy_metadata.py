@@ -39,3 +39,15 @@ def test_export_policy_metadata(tmp_path):
     assert md["output_dim"] == output_dim
     assert md["parameter_names"][0] == "u_x"
     assert md["parameter_names"][5].startswith("gate_logits_")
+
+    # Model and controller hashes are present and well-formed (sha256 hex)
+    assert (
+        "model_hash" in md
+        and isinstance(md["model_hash"], str)
+        and len(md["model_hash"]) == 64
+    )
+    assert (
+        "controller_hash" in md
+        and isinstance(md["controller_hash"], str)
+        and len(md["controller_hash"]) == 64
+    )

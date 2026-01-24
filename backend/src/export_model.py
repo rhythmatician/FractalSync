@@ -10,6 +10,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 import onnx
 import torch
+import hashlib
+from pathlib import Path as _Path  # local alias for internal path ops
 
 
 def export_to_onnx(
@@ -199,6 +201,35 @@ def export_to_onnx(
     # ranges provided by the caller are preserved.
     if md:
         metadata_dict.update(md)
+
+    # Compute model hash (SHA256) from the exported ONNX file
+    try:
+        with open(output_path, "rb") as onnx_f:
+            onnx_bytes = onnx_f.read()
+            model_hash = hashlib.sha256(onnx_bytes).hexdigest()
+            metadata_dict["model_hash"] = model_hash
+    except Exception:
+        logging.warning("Could not compute model hash for ONNX file: %s", output_path)
+
+    # Compute controller hash from canonical controller sources (if present)
+    # Files considered: backend/src/control_model.py, backend/src/control_trainer.py,
+    # and runtime-core/src/controller.rs (if the runtime-core crate exists alongside repo).
+    try:
+        repo_root = _Path(__file__).resolve().parents[1]
+        candidate_paths = [
+            _Path(__file__).resolve().parent / "control_model.py",
+            _Path(__file__).resolve().parent / "control_trainer.py",
+            repo_root / "runtime-core" / "src" / "controller.rs",
+        ]
+        existing = [p for p in candidate_paths if p.exists()]
+        if existing:
+            h = hashlib.sha256()
+            for p in existing:
+                with open(p, "rb") as pf:
+                    h.update(pf.read())
+            metadata_dict["controller_hash"] = h.hexdigest()
+    except Exception:
+        logging.warning("Could not compute controller hash (one or more files missing)")
 
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)
