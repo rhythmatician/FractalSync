@@ -1,13 +1,26 @@
 """
-Mandelbrot distance field generator for velocity scaling.
+Mandelbrot distance field generator (GPU-accelerated via OpenGL compute shaders).
 
-Pre-computes a high-resolution distance estimation map of the Mandelbrot set
-that can be used to slow down orbit synthesis near the boundary.
+Pre-computes a high-resolution escape-time map of the Mandelbrot set that can
+be used to slow down orbit synthesis near the boundary.
+
+Semantics of the escape-time field `E`:
+- `E = i / max_iter` for points that escape at iteration `i` (fast escape → small E)
+- `E = 1.0` for points that never escape within `max_iter` (inside/near boundary)
+
+This convention (1.0 near/inside, ~0 far outside) matches the runtime-core
+velocity scaling that slows down near the boundary.
 """
 
 import numpy as np
 from pathlib import Path
 import logging
+from typing import Tuple
+
+try:
+    import moderngl
+except ImportError:  # pragma: no cover
+    moderngl = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +29,9 @@ def mandelbrot_escape_time(c: complex, max_iter: int = 256) -> float:
     """
     Compute escape time for Mandelbrot iteration.
 
-    Returns normalized escape time:
-    - 1.0 = escaped immediately (far from boundary)
-    - 0.0 = didn't escape (inside/on boundary)
+    Returns normalized escape time E in [0, 1]:
+    - E = i / max_iter if the point escapes at iteration i (fast escape → small E)
+    - E = 1.0 if the point doesn't escape (inside/on boundary)
 
     This is much simpler than distance estimation and works well
     for velocity scaling: slow down near the boundary where escape
@@ -36,20 +49,131 @@ def mandelbrot_escape_time(c: complex, max_iter: int = 256) -> float:
     return 1.0
 
 
+def _generate_distance_field_opengl(
+    resolution: int,
+    real_range: Tuple[float, float],
+    imag_range: Tuple[float, float],
+    max_iter: int,
+) -> np.ndarray:
+    """
+    GPU-accelerated escape-time field using OpenGL compute shaders.
+
+    Produces the same semantics as `mandelbrot_escape_time` for each grid point.
+    """
+    assert moderngl is not None, "ModernGL is required for GPU generation"
+
+    # Create headless OpenGL context
+    ctx = moderngl.create_standalone_context()
+    logger.info(f"  Using OpenGL: {ctx.info['GL_RENDERER']}")
+
+    real_min, real_max = real_range
+    imag_min, imag_max = imag_range
+
+    # Compute shader source
+    compute_shader = """
+    #version 430
+    
+    layout(local_size_x = 16, local_size_y = 16) in;
+    
+    layout(std430, binding = 0) buffer OutputBuffer {
+        float escape_times[];
+    };
+    
+    uniform int resolution;
+    uniform float real_min;
+    uniform float real_max;
+    uniform float imag_min;
+    uniform float imag_max;
+    uniform int max_iter;
+    
+    void main() {
+        ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+        
+        if (pixel.x >= resolution || pixel.y >= resolution) {
+            return;
+        }
+        
+        // Map pixel to complex plane
+        float real = real_min + (real_max - real_min) * float(pixel.x) / float(resolution - 1);
+        float imag = imag_min + (imag_max - imag_min) * float(pixel.y) / float(resolution - 1);
+        
+        vec2 c = vec2(real, imag);
+        vec2 z = vec2(0.0, 0.0);
+        
+        int iter = 0;
+        for (iter = 0; iter < max_iter; iter++) {
+            // z = z^2 + c
+            float z_real = z.x * z.x - z.y * z.y + c.x;
+            float z_imag = 2.0 * z.x * z.y + c.y;
+            z = vec2(z_real, z_imag);
+            
+            // Check escape: |z|^2 > 4.0
+            if (dot(z, z) > 4.0) {
+                break;
+            }
+        }
+        
+        // Normalize: escaped points get iter/max_iter, non-escaped get 1.0
+        float escape_time;
+        if (iter < max_iter) {
+            escape_time = float(iter) / float(max_iter);
+        } else {
+            escape_time = 1.0;
+        }
+        
+        int index = pixel.y * resolution + pixel.x;
+        escape_times[index] = escape_time;
+    }
+    """
+
+    # Create compute shader program
+    compute_prog = ctx.compute_shader(compute_shader)
+
+    # Create output buffer
+    buffer_size = resolution * resolution * 4  # 4 bytes per float32
+    output_buffer = ctx.buffer(reserve=buffer_size)
+
+    # Bind buffer and set uniforms
+    output_buffer.bind_to_storage_buffer(0)
+    compute_prog["resolution"].value = resolution
+    compute_prog["real_min"].value = real_min
+    compute_prog["real_max"].value = real_max
+    compute_prog["imag_min"].value = imag_min
+    compute_prog["imag_max"].value = imag_max
+    compute_prog["max_iter"].value = max_iter
+
+    # Dispatch compute shader
+    # Work groups of 16x16 threads each
+    groups_x = (resolution + 15) // 16
+    groups_y = (resolution + 15) // 16
+    compute_prog.run(groups_x, groups_y, 1)
+
+    # Read back results
+    result_data = np.frombuffer(output_buffer.read(), dtype=np.float32)
+    distance_field = result_data.reshape((resolution, resolution))
+
+    # Cleanup
+    output_buffer.release()
+    ctx.release()
+
+    return distance_field
+
+
 def generate_distance_field(
     resolution: int = 2048,
-    real_range: tuple[float, float] = (-2.5, 1.0),
-    imag_range: tuple[float, float] = (-1.5, 1.5),
+    real_range: Tuple[float, float] = (-2.5, 1.0),
+    imag_range: Tuple[float, float] = (-1.5, 1.5),
     max_iter: int = 1024,
     max_distance: float = 0.5,
     slowdown_threshold: float = 0.02,
+    use_gpu: bool = True,
 ) -> tuple[np.ndarray, dict]:
     """
     Generate an escape-time field for the Mandelbrot set.
 
-    Uses simple escape time iteration - no complex derivatives needed.
-    Points that escape quickly are far from boundary, points that escape
-    slowly are near boundary.
+    Uses simple escape time iteration (vectorized). Points that escape quickly
+    are far from boundary (small value), and points that do not escape are near
+    or inside the boundary (value 1.0).
 
     Args:
         resolution: Image resolution (will be resolution × resolution)
@@ -63,28 +187,35 @@ def generate_distance_field(
         - distance_field: 2D array of normalized escape times [0, 1]
         - metadata: dict with generation parameters
     """
-    logger.info(f"Generating {resolution}×{resolution} Mandelbrot escape-time field...")
+    logger.info(
+        f"Generating {resolution}×{resolution} Mandelbrot escape-time field..."
+    )
 
     real_min, real_max = real_range
     imag_min, imag_max = imag_range
 
-    # Create coordinate grids
-    real_vals = np.linspace(real_min, real_max, resolution)
-    imag_vals = np.linspace(imag_min, imag_max, resolution)
+    # Prefer OpenGL GPU when available
+    use_opengl = use_gpu and (moderngl is not None)
+    if use_opengl:
+        try:
+            distance_field = _generate_distance_field_opengl(
+                resolution, (real_min, real_max), (imag_min, imag_max), max_iter
+            )
+        except Exception as e:
+            logger.warning(f"OpenGL generation failed ({e}), falling back to numpy")
+            use_opengl = False
 
-    distance_field = np.zeros((resolution, resolution), dtype=np.float32)
-    non_escape_count = 0
-
-    for i, imag in enumerate(imag_vals):
-        if i % 100 == 0:
-            logger.info(f"  Row {i}/{resolution}")
-        for j, real in enumerate(real_vals):
-            c = complex(real, imag)
-            # Escape time already normalized to [0, 1]
-            et = mandelbrot_escape_time(c, max_iter)
-            if et >= 1.0:
-                non_escape_count += 1
-            distance_field[i, j] = et
+    if not use_opengl:
+        # CPU fallback using numpy loops (slower but reliable)
+        real_vals = np.linspace(real_min, real_max, resolution)
+        imag_vals = np.linspace(imag_min, imag_max, resolution)
+        distance_field = np.zeros((resolution, resolution), dtype=np.float32)
+        for i, imag in enumerate(imag_vals):
+            if i % 250 == 0:
+                logger.info(f"  Row {i}/{resolution}")
+            for j, real in enumerate(real_vals):
+                et = mandelbrot_escape_time(complex(real, imag), max_iter)
+                distance_field[i, j] = et
 
     # Already normalized by escape time function
 
@@ -98,7 +229,7 @@ def generate_distance_field(
     }
 
     # Diagnostic logging
-    frac_non_escape = float((distance_field == 1.0).sum()) / float(
+    frac_non_escape = float(np.sum(distance_field == 1.0)) / float(
         resolution * resolution
     )
     logger.info(
@@ -154,9 +285,9 @@ def save_distance_field(
             from PIL import Image
 
             # Convert to uint8 for PNG
-            # For visualization clarity, invert so far outside is bright.
-            # escape_time in [0,1]: 0 = boundary/inside, 1 = far outside
-            img_data = ((1.0 - distance_field) * 255).astype(np.uint8)
+            # We want boundary/inside (1.0) to be black and far outside (~0) white.
+            # So we map E → (1 - E) for visualization.
+            img_data = ((1.0 - distance_field) * 255.0).astype(np.uint8)
             img = Image.fromarray(img_data, mode="L")
             png_path = out_path.with_suffix(".png")
             img.save(png_path)
@@ -210,8 +341,7 @@ class MandelbrotDistanceField:
         Look up distance at complex point c.
 
         Returns:
-            Distance estimate (0.0 to 1.0, normalized by max_distance)
-            Returns 1.0 if c is outside the field bounds.
+            Escape-time value (0.0..1.0). Returns 1.0 if c is outside the field bounds.
         """
         # Convert complex to pixel coordinates
         real_idx = int((c.real - self.real_min) / self.real_scale)
@@ -269,15 +399,16 @@ def generate_and_save_default_field(output_dir: str = "data"):
         format="[%(levelname)s] %(message)s",
     )
 
-    logger.info("Generating default Mandelbrot escape-time field...")
-    logger.info("This may take a few minutes...")
+    logger.info("Generating default Mandelbrot escape-time field (GPU if available)...")
+    logger.info("This may take a minute depending on resolution...")
 
     distance_field, metadata = generate_distance_field(
         resolution=2048,
         real_range=(-2.5, 1.0),
         imag_range=(-1.5, 1.5),
-        max_iter=128,  # Lower is fine for escape time
+        max_iter=512,  # higher for better dynamic range; still quick on GPU
         max_distance=0.5,  # Unused but kept for compatibility
+        use_gpu=True,
     )
 
     save_distance_field(distance_field, metadata, str(output_path), save_png=True)
