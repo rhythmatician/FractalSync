@@ -41,15 +41,11 @@ def export_to_onnx(
     else:
         dummy_input = torch.zeros(*input_shape)
 
-    # Select input/output names based on model_type metadata
-    # TODO: Dry this up by removing the option
-    model_type = metadata.get("model_type") if metadata else None
-    if model_type == "orbit_policy":
-        input_name = "policy_input"
-        output_name = "policy_output"
-    else:
-        input_name = "audio_features"
-        output_name = "visual_parameters"
+    # Select input/output names. We no longer use a "model_type" field - prefer
+    # explicit metadata (e.g., 'output_dim', 'k_bands', 'parameter_names') when
+    # available. Default input/output names are for audio feature -> visual param models.
+    input_name = "audio_features"
+    output_name = "visual_parameters"
 
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
@@ -106,65 +102,70 @@ def export_to_onnx(
     # Save metadata
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
 
-    # Determine parameter names and ranges based on metadata
-    if (
-        metadata and metadata.get("model_type") == "orbit_control"
-    ):  # TODO: Eliminate stale model type, and remove model_type field altogether
-        # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
-        k_bands = metadata.get("k_bands", 6)
-        output_dim = metadata.get("output_dim", 3 + k_bands)
-        parameter_names = ["s_target", "alpha", "omega_scale"] + [
-            f"band_gate_{i}" for i in range(k_bands)
-        ]
-        parameter_ranges = {
-            "s_target": [0.2, 3.0],
-            "alpha": [0.0, 1.0],
-            "omega_scale": [0.1, 5.0],
-        }
-        for i in range(k_bands):
-            parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
-    elif metadata and metadata.get("model_type") == "orbit_policy":
-        # Policy outputs: u_x,u_y,delta_s,delta_omega,alpha_hit,gate_logits[k]
-        k_bands = metadata.get("k_bands", 6)
-        parameter_names = [
-            "u_x",
-            "u_y",
-            "delta_s",
-            "delta_omega",
-            "alpha_hit",
-        ] + [f"gate_logits_{i}" for i in range(k_bands)]
-        output_dim = metadata.get("output_dim", 5 + k_bands)
-        # Reasonable ranges described here - application code clamps further
-        parameter_ranges = {
-            "u_x": [-1.0, 1.0],
-            "u_y": [-1.0, 1.0],
-            "delta_s": [-0.5, 0.5],
-            "delta_omega": [-1.0, 1.0],
-            "alpha_hit": [0.0, 2.0],
-        }
-        for i in range(k_bands):
-            parameter_ranges[f"gate_logits_{i}"] = [-5.0, 5.0]
+    # Create a safe copy of metadata (drop stale 'model_type' if present)
+    md = dict(metadata) if metadata else {}
+    md.pop("model_type", None)  # Remove stale field if callers left it in
+
+    # Determine parameter names and ranges.
+    # Prefer explicit `parameter_names` provided by callers. Otherwise use
+    # heuristics based on `k_bands` and `output_dim` when possible.
+    k_bands = md.get("k_bands")
+    provided_param_names = md.get("parameter_names")
+    provided_output_dim = md.get("output_dim")
+
+    if provided_param_names is not None:
+        parameter_names = provided_param_names
+        output_dim = provided_output_dim if provided_output_dim is not None else len(
+            provided_param_names
+        )
+        parameter_ranges = md.get("parameter_ranges", {})
     else:
-        # Default: physics/visual parameter model (legacy)
-        output_dim = 7
-        parameter_names = [
-            "julia_real",
-            "julia_imag",
-            "color_hue",
-            "color_sat",
-            "color_bright",
-            "zoom",
-            "speed",
-        ]
-        parameter_ranges = {
-            "julia_real": [-2.0, 2.0],
-            "julia_imag": [-2.0, 2.0],
-            "color_hue": [0.0, 1.0],
-            "color_sat": [0.0, 1.0],
-            "color_bright": [0.0, 1.0],
-            "zoom": [0.1, 10.0],
-            "speed": [0.0, 1.0],
-        }
+        # Try policy-like (u_x,...,gate_logits) if output_dim matches 5+k
+        if k_bands is not None and provided_output_dim == 5 + int(k_bands):
+            k = int(k_bands)
+            parameter_names = [
+                "u_x",
+                "u_y",
+                "delta_s",
+                "delta_omega",
+                "alpha_hit",
+            ] + [f"gate_logits_{i}" for i in range(k)]
+            output_dim = provided_output_dim
+            parameter_ranges = {"u_x": [-1.0, 1.0], "u_y": [-1.0, 1.0], "delta_s": [-0.5, 0.5], "delta_omega": [-1.0, 1.0], "alpha_hit": [0.0, 2.0]}
+            for i in range(k):
+                parameter_ranges[f"gate_logits_{i}"] = [-5.0, 5.0]
+        else:
+            # Default to orbit-control style when k_bands present or fall back to legacy
+            if k_bands is not None:
+                k = int(k_bands)
+                parameter_names = ["s_target", "alpha", "omega_scale"] + [
+                    f"band_gate_{i}" for i in range(k)
+                ]
+                output_dim = provided_output_dim if provided_output_dim is not None else 3 + k
+                parameter_ranges = {"s_target": [0.2, 3.0], "alpha": [0.0, 1.0], "omega_scale": [0.1, 5.0]}
+                for i in range(k):
+                    parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
+            else:
+                # Legacy default
+                output_dim = 7
+                parameter_names = [
+                    "julia_real",
+                    "julia_imag",
+                    "color_hue",
+                    "color_sat",
+                    "color_bright",
+                    "zoom",
+                    "speed",
+                ]
+                parameter_ranges = {
+                    "julia_real": [-2.0, 2.0],
+                    "julia_imag": [-2.0, 2.0],
+                    "color_hue": [0.0, 1.0],
+                    "color_sat": [0.0, 1.0],
+                    "color_bright": [0.0, 1.0],
+                    "zoom": [0.1, 10.0],
+                    "speed": [0.0, 1.0],
+                }
 
     metadata_dict = {
         "input_shape": (
@@ -180,8 +181,10 @@ def export_to_onnx(
     if feature_std is not None:
         metadata_dict["feature_std"] = feature_std.tolist()
 
-    if metadata:
-        metadata_dict.update(metadata)
+    # Merge the (sanitized) caller metadata last so explicit parameter names or
+    # ranges provided by the caller are preserved.
+    if md:
+        metadata_dict.update(md)
 
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)

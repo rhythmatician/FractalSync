@@ -18,13 +18,16 @@ class DummyPolicy(nn.Module):
 
 
 def test_export_policy_metadata(tmp_path):
+    # TODO: remove model_type and stale model types
     input_dim = 39
     k = 6
     output_dim = 5 + k
     model = DummyPolicy(input_dim, output_dim)
 
     onnx_path = str(Path(tmp_path) / "policy.onnx")
-    metadata = {"model_type": "orbit_policy", "k_bands": k}
+    # Provide `k_bands` and `output_dim` and let the exporter derive
+    # policy-like parameter names (u_x, u_y, delta_s, delta_omega, alpha_hit, gate_logits_k)
+    metadata = {"k_bands": k, "output_dim": output_dim}
 
     metadata_path = export_to_onnx(
         model=model,
@@ -36,7 +39,6 @@ def test_export_policy_metadata(tmp_path):
     with open(metadata_path, "r", encoding="utf-8") as f:
         md = json.load(f)
 
-    assert md["model_type"] == "orbit_policy"
     assert md["output_dim"] == output_dim
     assert md["parameter_names"][0] == "u_x"
     assert md["parameter_names"][5].startswith("gate_logits_")
