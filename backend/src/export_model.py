@@ -42,6 +42,7 @@ def export_to_onnx(
         dummy_input = torch.zeros(*input_shape)
 
     # Select input/output names based on model_type metadata
+    # TODO: Dry this up by removing the option
     model_type = metadata.get("model_type") if metadata else None
     if model_type == "orbit_policy":
         input_name = "policy_input"
@@ -106,7 +107,9 @@ def export_to_onnx(
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
 
     # Determine parameter names and ranges based on metadata
-    if metadata and metadata.get("model_type") == "orbit_control":
+    if (
+        metadata and metadata.get("model_type") == "orbit_control"
+    ):  # TODO: Eliminate stale model type, and remove model_type field altogether
         # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
         k_bands = metadata.get("k_bands", 6)
         output_dim = metadata.get("output_dim", 3 + k_bands)

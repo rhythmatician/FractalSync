@@ -128,7 +128,7 @@ class DistanceField:
 def load_distance_field_for_runtime(path: str) -> DistanceField:
     """Load a distance field from `path` (without extension) and return a DistanceField.
 
-    Accepts either a directory/prefix like `data/mandelbrot_distance_field` or a
+    Accepts either a directory/prefix like `mandelbrot_distance_field/data` or a
     path that includes `.npy`/`.json` suffixes.
     """
     p = Path(path)
@@ -148,9 +148,6 @@ def load_distance_field_for_runtime(path: str) -> DistanceField:
     arr = np.load(str(npy_path))
     with open(json_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
-    real_range = tuple(meta.get("real_range", real_range))
-    imag_range = tuple(meta.get("imag_range", imag_range))
-    slowdown_threshold = meta.get("slowdown_threshold", slowdown_threshold)
 
     # Return a wrapper object usable both from Python tests and runtime binding
     return DistanceField(

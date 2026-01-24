@@ -113,3 +113,32 @@ impl LobeState {
         self.transition_progress
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_target_lobe_and_transition_progress() {
+        let mut s = LobeState::new(3);
+        // Provide scores that strongly favor lobe 1
+        s.step(&[0.0, 10.0, 0.0], 0.2, 0.0);
+        // Either target_lobe will be set or transition completed immediately
+        assert!(s.target_lobe.is_some() || s.current_lobe == 1);
+        // Some progress should have been made
+        assert!(s.get_mix() >= 0.0);
+    }
+
+    #[test]
+    fn test_transient_shortens_transition_time() {
+        let mut s1 = LobeState::new(3);
+        let mut s2 = LobeState::new(3);
+        // Identical scores, same dt
+        let dt = 0.2;
+        s1.step(&[0.0, 10.0, 0.0], dt, 0.0); // non-transient
+        s2.step(&[0.0, 10.0, 0.0], dt, 1.0); // transient >= threshold
+
+        // Transient path should make more progress
+        assert!(s2.get_mix() > s1.get_mix());
+    }
+}

@@ -5,6 +5,7 @@ Usage:
     python train.py --data-dir data/audio --epochs 100 --use-curriculum
 """
 
+# TODO: remove model_type and remove stale model types
 import argparse
 import os
 import sys
