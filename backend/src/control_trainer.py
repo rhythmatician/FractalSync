@@ -13,6 +13,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
@@ -59,8 +61,13 @@ def compute_mandelbrot_distance(
         if z_mag_sq > 256.0:  # Escaped
             z_mag = np.sqrt(z_mag_sq)
             dz_mag = np.sqrt(dz_real * dz_real + dz_imag * dz_imag)
-            # Distance estimate using derivative
-            distance = 0.5 * z_mag * np.log(z_mag) / dz_mag if dz_mag > 0 else 0.0
+            # Distance estimate using derivative (clamped to avoid huge values)
+            if dz_mag > 0:
+                distance = 0.5 * z_mag * np.log(z_mag) / dz_mag
+                # Clamp to reasonable range: [0, 2.0]
+                distance = min(distance, 2.0)
+            else:
+                distance = 2.0  # Far outside
             return distance
 
         # dz = 2 * z * dz + 1
@@ -144,7 +151,8 @@ class VisualContinuityLoss(nn.Module):
         # Normalize transient strengths to [0, 1]
         transient_norm = torch.sigmoid(transient_strengths)
         # Penalize visual changes that occur without transients
-        loss = torch.mean(visual_changes * (1.0 - transient_norm))
+        # Scale by 100 to make comparable to boundary loss (temporal_change is typically 0.0-0.1)
+        loss = torch.mean(visual_changes * (1.0 - transient_norm)) * 100.0
         return self.weight * loss
 
 
@@ -183,6 +191,8 @@ class ControlTrainer:
         use_curriculum: bool = True,
         curriculum_weight: float = 1.0,
         correlation_weights: Optional[Dict[str, float]] = None,
+        max_grad_norm: float = 1.0,
+        use_amp: bool = True,
         julia_renderer: Optional[Any] = None,
         julia_resolution: int = 128,
         julia_max_iter: int = 100,
@@ -201,6 +211,8 @@ class ControlTrainer:
             use_curriculum: Use curriculum learning
             curriculum_weight: Weight for curriculum loss
             correlation_weights: Weights for correlation losses
+            max_grad_norm: Maximum gradient norm for clipping (0 = no clipping)
+            use_amp: Use automatic mixed precision for faster training
             julia_renderer: Optional GPU renderer
             julia_resolution: Julia set resolution
             julia_max_iter: Julia set max iterations
@@ -225,9 +237,9 @@ class ControlTrainer:
             "timbre_color": 0.5,  # Reduced
             "transient_impact": 0.5,  # Reduced
             "control_loss": 1.0,
-            "visual_continuity": 2.0,  # New: prioritize smooth visuals
+            "visual_continuity": 1.0,  # Scaled internally by 100x
             "boundary_exploration": 1.5,  # New: encourage boundary exploration
-            "complexity_correlation": 1.0,  # New: match visual/musical complexity
+            "complexity_correlation": 10.0,  # Increased to make correlation more visible
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -249,6 +261,20 @@ class ControlTrainer:
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
+        # Learning rate scheduler (cosine annealing)
+        self.scheduler: Optional[CosineAnnealingLR] = (
+            None  # Set in train() with total epochs
+        )
+
+        # Gradient clipping
+        self.max_grad_norm = max_grad_norm
+
+        # Mixed precision training
+        self.use_amp = use_amp and torch.cuda.is_available()
+        self.scaler = GradScaler() if self.use_amp else None
+        if self.use_amp:
+            logger.info("Mixed precision training enabled (AMP)")
 
         # Curriculum data
         self.curriculum_positions: Optional[torch.Tensor] = None
@@ -407,8 +433,9 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
-            # Forward pass
-            predicted_controls = self.model(features)
+            # Forward pass with mixed precision
+            with autocast(enabled=self.use_amp):
+                predicted_controls = self.model(features)
 
             # Parse control signals
             parsed = self.model.parse_output(predicted_controls)
@@ -568,10 +595,29 @@ class ControlTrainer:
                 + current_curriculum_weight * control_loss_val
             )
 
-            # Backward pass
+            # Backward pass with mixed precision and gradient clipping
             self.optimizer.zero_grad()
-            total_batch_loss.backward()
-            self.optimizer.step()
+
+            if self.use_amp:
+                self.scaler.scale(total_batch_loss).backward()
+                if self.max_grad_norm > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), self.max_grad_norm
+                    )
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                total_batch_loss.backward()
+                if self.max_grad_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), self.max_grad_norm
+                    )
+                self.optimizer.step()
+
+            # Step learning rate scheduler
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             # Accumulate losses
             total_loss += total_batch_loss.item()
@@ -589,9 +635,9 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
-            "visual_continuity_loss": 0.0,  # Computed but not tracked separately yet
-            "boundary_exploration_loss": 0.0,  # Computed but not tracked separately yet
-            "complexity_correlation_loss": 0.0,  # Computed but not tracked separately yet
+            "visual_continuity_loss": total_visual_continuity / n_batches,
+            "boundary_exploration_loss": total_boundary_exploration / n_batches,
+            "complexity_correlation_loss": total_complexity_correlation / n_batches,
         }
 
         return avg_losses
@@ -641,8 +687,15 @@ class ControlTrainer:
             num_workers=self.num_workers,
         )
 
+        # Initialize learning rate scheduler
+        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=epochs, eta_min=1e-6)
+
         logger.info(
             f"Starting control signal training for {epochs} epochs... (total frames: {all_features_tensor.shape[0]})"
+        )
+        logger.info(
+            f"Optimizations: AMP={self.use_amp}, GradClip={self.max_grad_norm}, "
+            f"LR Schedule=Cosine(eta_min=1e-6)"
         )
 
         for epoch in tqdm(
