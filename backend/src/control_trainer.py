@@ -56,6 +56,12 @@ from .runtime_core_bridge import (
 )
 import runtime_core as rc
 
+# Torch DistanceField helper
+try:
+    from .differentiable_integrator import TorchDistanceField
+except Exception:
+    TorchDistanceField = None
+
 # Visual proxy and losses (optional, light-weight differentiable components)
 try:
     from .visual_proxy import ProxyRenderer
@@ -309,6 +315,8 @@ class ControlTrainer:
         visual_loss_weights: Optional[dict] = None,
         visual_proxy_resolution: int = 64,
         visual_proxy_max_iter: int = 20,
+        use_surrogate: bool = False,
+        surrogate_path: Optional[str] = None,
     ):
         """
         Initialize control trainer.
@@ -447,6 +455,22 @@ class ControlTrainer:
             self.speed_loss = None
             self.hit_loss = None
             self.coverage_loss = None
+
+        # Surrogate model (optional)
+        self.use_surrogate = bool(use_surrogate)
+        self.surrogate = None
+        if self.use_surrogate and surrogate_path is not None:
+            try:
+                from .visual_surrogate import SurrogateDeltaV
+
+                self.surrogate = SurrogateDeltaV.load_checkpoint(
+                    surrogate_path, device=self.device
+                )
+                self.surrogate.to(self.device)
+                self.surrogate.eval()
+            except Exception as e:
+                logger.warning(f"Failed to load surrogate model: {e}")
+                self.surrogate = None
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -735,8 +759,46 @@ class ControlTrainer:
                     step_loss = torch.mean(u_r**2 + u_i**2)
                     total_step_loss = total_step_loss + step_loss
 
-                    # Optional differentiable visual losses (ΔV and speed bound)
-                    if self.enable_visual_losses and self.proxy_renderer is not None:
+                    # Visual continuity: prefer surrogate predictor when available for speed
+                    if self.use_surrogate and self.surrogate is not None:
+                        try:
+                            cp = torch.stack([c_real, c_imag], dim=1)
+                            cn = torch.stack([next_r, next_i], dim=1)
+
+                            # DF features
+                            if hasattr(self, "df_numpy") and self.df_numpy is not None:
+                                df_torch = getattr(self, "_torch_df", None)
+                                if df_torch is None:
+                                    df_torch = TorchDistanceField(
+                                        torch.tensor(self.df_numpy, device=device)
+                                    )
+                                    self._torch_df = df_torch
+                                d_prev_t = df_torch.sample_bilinear(c_real, c_imag)
+                                gx, gy = df_torch.gradient(c_real, c_imag)
+                                grad_prev_t = torch.stack([gx, gy], dim=1)
+                            else:
+                                d_prev_t = torch.ones(B, device=device)
+                                grad_prev_t = torch.zeros((B, 2), device=device)
+
+                            pred_dv = self.surrogate.predict(
+                                cp, cn, d_prev_t, grad_prev_t
+                            )
+
+                            base_B = 0.02
+                            B_t = base_B * (1.0 + 2.0 * spectral_flux_t)
+                            try:
+                                sens = df_torch.get_velocity_scale(c_real, c_imag)
+                            except Exception:
+                                sens = torch.zeros_like(B_t)
+                            B_t = B_t * (1.0 - 0.5 * sens)
+
+                            L_cont = torch.mean(torch.relu(pred_dv - B_t) ** 2)
+                            visual_continuity_loss_val = (
+                                visual_continuity_loss_val + L_cont
+                            )
+                        except Exception as e:
+                            logger.warning(f"Surrogate continuity skipped: {e}")
+                    elif self.enable_visual_losses and self.proxy_renderer is not None:
                         try:
                             prev_frames = self.proxy_renderer.render(c_real, c_imag)
                             curr_frames = self.proxy_renderer.render(next_r, next_i)
@@ -783,7 +845,11 @@ class ControlTrainer:
                     c_imag = next_i
 
                 # Optional coverage loss from c_history
-                if self.enable_visual_losses and self.coverage_loss is not None and len(c_history) > 0:
+                if (
+                    self.enable_visual_losses
+                    and self.coverage_loss is not None
+                    and len(c_history) > 0
+                ):
                     try:
                         # c_history is list of (B,2) tensors for each step -> stack to (B, T, 2)
                         c_seq = torch.stack(c_history, dim=1)

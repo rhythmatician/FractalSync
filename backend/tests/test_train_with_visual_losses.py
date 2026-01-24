@@ -1,4 +1,5 @@
 """Smoke test: run the training entrypoint with visual losses enabled."""
+
 from pathlib import Path
 import sys
 import subprocess
@@ -60,7 +61,9 @@ def test_train_with_visual_losses_smoke(tmp_path):
         "8",
     ]
 
-    res = subprocess.run(cmd, cwd=str(backend_dir), capture_output=True, text=True, timeout=180)
+    res = subprocess.run(
+        cmd, cwd=str(backend_dir), capture_output=True, text=True, timeout=180
+    )
     print(res.stdout)
     print(res.stderr)
     assert res.returncode == 0, f"train.py failed: {res.stderr}"

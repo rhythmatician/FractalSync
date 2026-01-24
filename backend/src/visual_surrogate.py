@@ -2,6 +2,7 @@
 
 Provides a small MLP-based model and dataset wrapper for training/prediction.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -53,7 +54,13 @@ class SurrogateDeltaV(nn.Module):
             nn.Sigmoid(),  # ΔV normalized to [0,1]
         )
 
-    def forward(self, c_prev: torch.Tensor, c_next: torch.Tensor, d_prev: Optional[torch.Tensor] = None, grad_prev: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        c_prev: torch.Tensor,
+        c_next: torch.Tensor,
+        d_prev: Optional[torch.Tensor] = None,
+        grad_prev: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         # c_prev, c_next: (N,2)
         N = c_prev.shape[0]
         if d_prev is None:
@@ -61,7 +68,9 @@ class SurrogateDeltaV(nn.Module):
         if grad_prev is None:
             grad_prev = torch.zeros((N, 2), dtype=c_prev.dtype, device=c_prev.device)
 
-        x = torch.cat([c_prev, c_next, d_prev.view(-1, 1), grad_prev], dim=1).to(dtype=c_prev.dtype)
+        x = torch.cat([c_prev, c_next, d_prev.view(-1, 1), grad_prev], dim=1).to(
+            dtype=c_prev.dtype
+        )
         out = self.net(x).view(-1)
         return out
 

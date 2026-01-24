@@ -16,7 +16,16 @@ def test_train_and_use_surrogate(tmp_path):
     delta_v = torch.rand(N) * 0.1
 
     dp = tmp_path / "samples.pt"
-    torch.save({"c_prev": c_prev, "c_next": c_next, "d_prev": d_prev, "grad_prev": grad_prev, "delta_v": delta_v}, str(dp))
+    torch.save(
+        {
+            "c_prev": c_prev,
+            "c_next": c_next,
+            "d_prev": d_prev,
+            "grad_prev": grad_prev,
+            "delta_v": delta_v,
+        },
+        str(dp),
+    )
 
     # Train a tiny surrogate (in-process)
     ds = SurrogateDataset(str(dp))
@@ -77,7 +86,9 @@ def test_train_and_use_surrogate(tmp_path):
     ]
 
     # It's enough that the trainer starts and attempts to load surrogate; run with timeout
-    res = subprocess.run(cmd, cwd=str(backend_dir), capture_output=True, text=True, timeout=120)
+    res = subprocess.run(
+        cmd, cwd=str(backend_dir), capture_output=True, text=True, timeout=120
+    )
     # Trainer may fail because no audio files; we just check surrogate loading message if present
     out = res.stdout + res.stderr
     assert res.returncode == 0 or "Failed to load surrogate model" not in out

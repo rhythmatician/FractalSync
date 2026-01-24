@@ -11,6 +11,7 @@ Produces a torch .pt file containing tensors:
 Usage (example):
   python scripts/generate_surrogate_data.py --out data/surrogate/samples_small.pt --n 5000
 """
+
 from __future__ import annotations
 
 import argparse
@@ -75,7 +76,14 @@ def main():
         df = None
 
     # If no DF, we still sample uniformly
-    pts = sample_points_near_boundary(args.n, df) if df is not None else [((random.random() * 4.0) - 2.0, (random.random() * 4.0) - 2.0) for _ in range(args.n)]
+    pts = (
+        sample_points_near_boundary(args.n, df)
+        if df is not None
+        else [
+            ((random.random() * 4.0) - 2.0, (random.random() * 4.0) - 2.0)
+            for _ in range(args.n)
+        ]
+    )
 
     c_prev = []
     c_next = []
@@ -83,7 +91,7 @@ def main():
     grad_prev = []
     delta_v = []
 
-    for (r, i) in pts:
+    for r, i in pts:
         # sample small delta direction and magnitude
         theta = random.random() * 2 * math.pi
         mag = random.random() * args.max_step
@@ -96,8 +104,12 @@ def main():
         c2i = i + di
 
         # compute frames and ΔV
-        f1 = renderer.render(torch.tensor([c1r], device=device), torch.tensor([c1i], device=device))[0]
-        f2 = renderer.render(torch.tensor([c2r], device=device), torch.tensor([c2i], device=device))[0]
+        f1 = renderer.render(
+            torch.tensor([c1r], device=device), torch.tensor([c1i], device=device)
+        )[0]
+        f2 = renderer.render(
+            torch.tensor([c2r], device=device), torch.tensor([c2i], device=device)
+        )[0]
         dv = float(frame_diff(f1.unsqueeze(0), f2.unsqueeze(0))[0].item())
 
         c_prev.append([c1r, c1i])
@@ -105,8 +117,15 @@ def main():
         delta_v.append(dv)
 
         if df is not None:
-            dval = float(df.sample_bilinear(torch.tensor([c1r], device=device), torch.tensor([c1i], device=device))[0].item())
-            gx, gy = df.gradient(torch.tensor([c1r], device=device), torch.tensor([c1i], device=device))
+            dval = float(
+                df.sample_bilinear(
+                    torch.tensor([c1r], device=device),
+                    torch.tensor([c1i], device=device),
+                )[0].item()
+            )
+            gx, gy = df.gradient(
+                torch.tensor([c1r], device=device), torch.tensor([c1i], device=device)
+            )
             d_prev.append(dval)
             grad_prev.append([float(gx[0].item()), float(gy[0].item())])
         else:

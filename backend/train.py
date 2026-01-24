@@ -192,6 +192,17 @@ def main():
         help='Optional comma-separated weights, e.g. "multiscale_delta=0.1,speed_bound=0.05"',
     )
     parser.add_argument(
+        "--use-surrogate",
+        action="store_true",
+        help="Use trained surrogate predictor for ΔV instead of rendering proxy frames",
+    )
+    parser.add_argument(
+        "--surrogate-path",
+        type=str,
+        default=None,
+        help="Path to surrogate model checkpoint (.pt)",
+    )
+    parser.add_argument(
         "--max-files",
         type=int,
         default=None,
@@ -326,6 +337,8 @@ def main():
         visual_loss_weights=visual_weights,
         visual_proxy_resolution=args.visual_proxy_resolution,
         visual_proxy_max_iter=args.visual_proxy_iter,
+        use_surrogate=args.use_surrogate,
+        surrogate_path=args.surrogate_path,
     )
 
     # Load checkpoint if resuming

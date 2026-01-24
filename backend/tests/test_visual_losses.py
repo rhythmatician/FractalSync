@@ -48,9 +48,13 @@ def test_coverage_loss_basic():
     from src.visual_losses import CoverageLoss
 
     # N=1, T=4 concentrated at angle 0
-    c_seq_bad = torch.tensor([[[1.0, 0.0], [1.0, 0.0], [1.1, 0.0], [0.9, 0.0]]], dtype=torch.float32)
+    c_seq_bad = torch.tensor(
+        [[[1.0, 0.0], [1.0, 0.0], [1.1, 0.0], [0.9, 0.0]]], dtype=torch.float32
+    )
     # spread across quadrants
-    c_seq_good = torch.tensor([[[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]]], dtype=torch.float32)
+    c_seq_good = torch.tensor(
+        [[[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]]], dtype=torch.float32
+    )
     loss_fn = CoverageLoss(weight=1.0, bins=8)
     L_bad = loss_fn(c_seq_bad)
     L_good = loss_fn(c_seq_good)

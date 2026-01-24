@@ -3,6 +3,7 @@
 Usage:
   python scripts/train_surrogate.py --data data/surrogate/samples_small.pt --out models/surrogate.pt --epochs 20
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,7 +54,9 @@ def main():
             opt.step()
             epoch_loss += float(loss.item()) * c_prev.shape[0]
         epoch_loss = epoch_loss / len(ds)
-        print(f"Epoch {epoch+1}/{args.epochs}: loss={epoch_loss:.6f} time={time.time()-t0:.2f}s")
+        print(
+            f"Epoch {epoch+1}/{args.epochs}: loss={epoch_loss:.6f} time={time.time()-t0:.2f}s"
+        )
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     SurrogateDeltaV.save_checkpoint(model, args.out)
