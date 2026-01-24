@@ -463,7 +463,18 @@ class ControlTrainer:
                     residual_params=self.residual_params,
                     band_gates=band_gates[i].detach().cpu().tolist(),
                 )
-                c_values.append([c.real, c.imag])
+
+                # Calculate ||c|| and scale down if needed
+                c_norm = np.sqrt(c.real**2 + c.imag**2)
+                max_magnitude = 2.0
+                divisor = max(c_norm, max_magnitude) / max_magnitude
+
+                # SAFETY: Scale c values to reasonable range for Julia sets
+                # The orbit synthesis can produce values outside [-2, 2] which are not useful
+                # This preserves direction while constraining magnitude
+                c_real = c.real / divisor
+                c_imag = c.imag / divisor
+                c_values.append([c_real, c_imag])
 
             c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
             julia_real = c_tensor[:, 0]

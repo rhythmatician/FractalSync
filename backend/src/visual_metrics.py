@@ -31,7 +31,9 @@ class VisualMetrics:
         """
         # Normalize image to [0, 1] if needed
         if image.max() > 1.0:
-            image = image.astype(np.float32) / 255.0
+            # Normalize by actual max value, not fixed 255
+            # This handles cases where max_iter is low
+            image = image.astype(np.float32) / (image.max() + 1e-8)
 
         # Convert to grayscale for some metrics
         if len(image.shape) == 3:
