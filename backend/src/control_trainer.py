@@ -28,19 +28,12 @@ from .flight_recorder import (
 # Policy helpers for orbit_policy models
 from .policy_interface import (
     policy_state_encoder,
-    policy_output_decoder,
-    apply_policy_deltas,
     policy_output_decoder_torch,
     apply_policy_deltas_torch,
 )
 
-# Distance field loader is experimental; import if available (keeps repo clean if absent)
-try:
-    from .distance_field_loader import load_distance_field_for_runtime
-except Exception:  # pragma: no cover - optional experimental module
-
-    def load_distance_field_for_runtime(path: str):
-        raise ImportError("distance_field_loader is experimental and not installed")
+# Require distance field loader (precomputed distance-field support is expected)
+from .distance_field_loader import load_distance_field_for_runtime
 
 
 from .runtime_core_bridge import (
