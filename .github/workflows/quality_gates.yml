@@ -1,0 +1,49 @@
+name: Quality Gates
+
+on:
+    pull_request:
+    push:
+        branches: [main, refactor-everything]
+
+jobs:
+    test-and-gates:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.11"
+
+            - name: Install system deps
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential pkg-config libsndfile1
+
+            - name: Install Python deps
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r backend/requirements.txt
+                  pip install maturin
+
+            - name: Set up Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+                  components: clippy
+
+            - name: Build & install runtime-core (maturin)
+              working-directory: runtime-core
+              run: |
+                  python -m pip install --upgrade maturin
+                  maturin develop --release
+
+            - name: Run Python tests
+              run: |
+                  python -m pytest backend -q
+
+            - name: Run quality gates
+              run: |
+                  python backend/scripts/quality_gates/run_gates.py
