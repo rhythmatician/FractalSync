@@ -69,6 +69,8 @@ def run_policy_step(
     d_c: float = 1.0,
     grad: Tuple[float, float] = (0.0, 0.0),
     directional_probes: Optional[Sequence[float]] = None,
+    lobe_state: Optional[object] = None,
+    dt: float = 1.0,
 ) -> dict:
     """Run a single policy inference and apply deltas to return new orbit/c.
 
@@ -108,7 +110,8 @@ def run_policy_step(
         decoded = policy_output_decoder(out[0].tolist(), k_bands=len(band_energies))
     else:
         # Expect a PyTorch model or callable
-        if torch is not None and hasattr(model, "to"):
+        # Detect a torch nn.Module by presence of "eval" and a callable
+        if torch is not None and hasattr(model, "eval") and hasattr(model, "__call__"):
             model.eval()
             with torch.no_grad():
                 t = torch.tensor(inp, dtype=torch.float32).unsqueeze(0)

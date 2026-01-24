@@ -21,6 +21,9 @@ def test_compute_directional_probes_shape():
 
 
 def test_run_policy_step_with_dummy():
+    from src.lobe_state import LobeState
+
+    ls = LobeState(current_lobe=0, n_lobes=2)
     res = run_policy_step(
         dummy_model,
         s=1.02,
@@ -32,9 +35,12 @@ def test_run_policy_step_with_dummy():
         tonalness=0.0,
         noisiness=0.0,
         band_energies=[0.0] * 6,
+        lobe_state=ls,
     )
     assert "decoded" in res and "c_new" in res
     assert isinstance(res["c_new"][0], float)
+    # dummy_model returns no lobe logits so LobeState should remain unchanged
+    assert ls.current_lobe == 0
 
 
 def test_run_policy_step_with_onnx(tmp_path):
@@ -72,6 +78,9 @@ def test_run_policy_step_with_onnx(tmp_path):
         model, example_in, str(onnx_path), input_names=["input"], opset_version=14
     )
 
+    from src.lobe_state import LobeState
+
+    ls = LobeState(current_lobe=0, n_lobes=2)
     res = run_policy_step(
         str(onnx_path),
         s=1.02,
@@ -83,6 +92,9 @@ def test_run_policy_step_with_onnx(tmp_path):
         tonalness=0.0,
         noisiness=0.0,
         band_energies=[0.0] * k,
+        lobe_state=ls,
     )
     assert "decoded" in res and "c_new" in res
     assert isinstance(res["c_new"][0], float)
+    # ONNX model output included lobe logits: ensure we return them
+    assert "lobe_logits" in res["decoded"] or "lobe_logits" in res["decoded"]

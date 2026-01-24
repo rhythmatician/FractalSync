@@ -78,8 +78,12 @@ def policy_output_decoder(
 
     `output` is a flat sequence (u_x, u_y, delta_s, delta_omega, alpha_hit, gate_logits[0..k-1])
     """
-    if len(output) != 5 + k_bands:
-        raise ValueError(f"Expected output length {5 + k_bands}, got {len(output)}")
+    # Allow optional trailing lobe logits (soft-lobe outputs). If present, they
+    # will be returned under the "lobe_logits" key as a numpy array.
+    if len(output) < 5 + k_bands:
+        raise ValueError(
+            f"Expected output length at least {5 + k_bands}, got {len(output)}"
+        )
 
     arr = np.asarray(output, dtype=np.float32)
     u = arr[0:2].copy()
@@ -87,6 +91,10 @@ def policy_output_decoder(
     delta_omega = float(arr[3])
     alpha_hit = float(arr[4])
     gate_logits = arr[5 : 5 + k_bands].copy()
+
+    lobe_logits = None
+    if len(arr) > 5 + k_bands:
+        lobe_logits = arr[5 + k_bands :].copy()
 
     # Clamps
     defaults = {
@@ -107,13 +115,18 @@ def policy_output_decoder(
     delta_omega = apply_clamp("delta_omega", delta_omega)
     alpha_hit = apply_clamp("alpha_hit", alpha_hit)
 
-    return {
+    result = {
         "u": u,
         "delta_s": delta_s,
         "delta_omega": delta_omega,
         "alpha_hit": alpha_hit,
         "gate_logits": gate_logits,
     }
+
+    if lobe_logits is not None:
+        result["lobe_logits"] = lobe_logits
+
+    return result
 
 
 # -------------------- Torch helpers (batched) --------------------
@@ -128,9 +141,11 @@ def policy_output_decoder_torch(
         raise RuntimeError("torch is required for policy_output_decoder_torch")
     # Satisfy type checkers
     assert torch is not None
-    if output.dim() != 2 or output.size(1) != 5 + k_bands:
+    # Allow trailing lobe logits in the batched output. If provided, the
+    # per-batch trailing values will be returned under "lobe_logits".
+    if output.dim() != 2 or output.size(1) < 5 + k_bands:
         raise ValueError(
-            f"Expected output shape (N, {5 + k_bands}), got {tuple(output.shape)}"
+            f"Expected output shape (N, >={5 + k_bands}), got {tuple(output.shape)}"
         )
 
     arr = output.to(dtype=torch.float32)
@@ -139,6 +154,10 @@ def policy_output_decoder_torch(
     delta_omega = arr[:, 3].clone()
     alpha_hit = arr[:, 4].clone()
     gate_logits = arr[:, 5 : 5 + k_bands].clone()
+
+    lobe_logits = None
+    if output.size(1) > 5 + k_bands:
+        lobe_logits = arr[:, 5 + k_bands :].clone()
 
     # Clamps
     defaults = {
@@ -158,13 +177,18 @@ def policy_output_decoder_torch(
     delta_omega = apply_clamp_t("delta_omega", delta_omega)
     alpha_hit = apply_clamp_t("alpha_hit", alpha_hit)
 
-    return {
+    result = {
         "u": u,
         "delta_s": delta_s,
         "delta_omega": delta_omega,
         "alpha_hit": alpha_hit,
         "gate_logits": gate_logits,
     }
+
+    if lobe_logits is not None:
+        result["lobe_logits"] = lobe_logits
+
+    return result
 
 
 def apply_policy_deltas_torch(
