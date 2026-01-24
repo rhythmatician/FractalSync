@@ -187,9 +187,7 @@ def generate_distance_field(
         - distance_field: 2D array of normalized escape times [0, 1]
         - metadata: dict with generation parameters
     """
-    logger.info(
-        f"Generating {resolution}×{resolution} Mandelbrot escape-time field..."
-    )
+    logger.info(f"Generating {resolution}×{resolution} Mandelbrot escape-time field...")
 
     real_min, real_max = real_range
     imag_min, imag_max = imag_range
@@ -403,7 +401,7 @@ def generate_and_save_default_field(output_dir: str = "data"):
     logger.info("This may take a minute depending on resolution...")
 
     distance_field, metadata = generate_distance_field(
-        resolution=2048,
+        resolution=8192,
         real_range=(-2.5, 1.0),
         imag_range=(-1.5, 1.5),
         max_iter=512,  # higher for better dynamic range; still quick on GPU
