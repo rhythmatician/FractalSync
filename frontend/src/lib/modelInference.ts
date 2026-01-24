@@ -177,6 +177,9 @@ export class ModelInference {
         bandGates: params.slice(3)
       };
       
+      // Store last control signals for external inspection / flight recorder
+      (this as any).lastControlSignals = controlSignals;
+
       console.debug('Raw model output (control signals):', {
         s: controlSignals.sTarget,
         alpha: controlSignals.alpha,
@@ -331,6 +334,13 @@ export class ModelInference {
    */
   getMetadata(): ModelMetadata | null {
     return this.metadata;
+  }
+
+  /**
+   * Return last control signals (if orbit model). Useful for flight recorder.
+   */
+  getLastControlSignals(): any | null {
+    return (this as any).lastControlSignals || null;
   }
 
   /**
