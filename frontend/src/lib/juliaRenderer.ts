@@ -1,15 +1,23 @@
 /**
  * WebGL-based Julia set renderer for real-time visualization.
+ *
+ * This is a full rewrite that ports the *working* Mandelbrot shading logic from `mandelbrot.py`
+ * (smooth escape count + stripe average coloring + distance estimator + Blinn-Phong + overlay blending),
+ * but iterates the **Julia** recurrence: z_{n+1} = z_n^2 + c, where c is the user-controlled seed.
+ *
+ * Key differences vs your previous renderer:
+ * - Color is driven by the same cyclic post-transform used in `mandelbrot.py`:
+ *     t = fract( sqrt(niter) / sqrt(ncycle) )
+ *   so you don't get "outer rings" tied to MAX_ITERATIONS.
+ * - Distance estimate + Blinn-Phong + optional stripe/step shading match the python logic closely.
  */
-
-import { getGradientByHue, flattenGradient, Gradient, MAX_GRADIENT_STOPS, DEFAULT_HUE } from './toolGradients';
 
 export interface VisualParameters {
   juliaReal: number;
   juliaImag: number;
-  colorHue: number;
-  colorSat: number;
-  colorBright: number;
+  colorHue: number;    // treated as palette phase shift in [0,1)
+  colorSat: number;    // treated as saturation mix [0,1]
+  colorBright: number; // treated as light intensity mix [0,1]
   zoom: number;
   speed: number;
 }
@@ -18,53 +26,87 @@ export class JuliaRenderer {
   private gl: WebGLRenderingContext;
   private program!: WebGLProgram;
   private canvas: HTMLCanvasElement;
+
   private currentParams: VisualParameters;
   private targetParams: VisualParameters;
+
   private animationFrameId: number | null = null;
-  private time: number = 0;
-  private frameCount: number = 0;
+  private time = 0;
+  private lastTimestamp: number | null = null;
 
   // Uniform locations
   private uJuliaSeedLocation: WebGLUniformLocation | null = null;
-  private uZoomLocation: WebGLUniformLocation | null = null;
-  private uColorLocation: WebGLUniformLocation | null = null;
-  private uTimeLocation: WebGLUniformLocation | null = null;
   private uResolutionLocation: WebGLUniformLocation | null = null;
-  private uGradientCountLocation: WebGLUniformLocation | null = null;
-  
-  // Cached gradient uniform locations for performance
-  private gradientUniformLocations: (WebGLUniformLocation | null)[] = [];
-  
-  private currentGradient: Gradient | null = null;
+  private uTimeLocation: WebGLUniformLocation | null = null;
+
+  private uZoomLocation: WebGLUniformLocation | null = null;
+  private uHueLocation: WebGLUniformLocation | null = null;
+  private uSatLocation: WebGLUniformLocation | null = null;
+
+  private uMaxIterLocation: WebGLUniformLocation | null = null;
+  private uNCycleLocation: WebGLUniformLocation | null = null;
+
+  private uStripeSLocation: WebGLUniformLocation | null = null;
+  private uStripeSigLocation: WebGLUniformLocation | null = null;
+  private uStepSLocation: WebGLUniformLocation | null = null;
+
+  private uLightAnglesLocation: WebGLUniformLocation | null = null; // vec2 (az, el) in radians
+  private uLightParamsLocation: WebGLUniformLocation | null = null; // vec4 (intensity, kA, kD, kS)
+  private uShininessLocation: WebGLUniformLocation | null = null;   // float
+
+  // Tunables: these are the knobs you were effectively using in mandelbrot.py
+  // You can expose them later if you want UI controls.
+  private readonly MAX_ITER_DEFAULT = 500;
+  private readonly NCYCLE_DEFAULT = 32.0;
+
+  private readonly STRIPE_S_DEFAULT = 0.0;   // 0 disables stripes (match mandelbrot.py default)
+  private readonly STRIPE_SIG_DEFAULT = 0.9;
+
+  private readonly STEP_S_DEFAULT = 0.0;     // 0 disables steps (match mandelbrot.py default)
+
+  // Light defaults from mandelbrot.py: (45°,45°,0.75, 0.2,0.5,0.5, 20)
+  // We keep the same, but we *also* modulate intensity with colorBright.
+  private readonly LIGHT_AZ_DEG = 45.0;
+  private readonly LIGHT_EL_DEG = 45.0;
+  private readonly LIGHT_INTENSITY_BASE = 0.75;
+  private readonly LIGHT_KA = 0.2;
+  private readonly LIGHT_KD = 0.5;
+  private readonly LIGHT_KS = 0.5;
+  private readonly LIGHT_SHININESS = 20.0;
+
+  // View defaults: your old code effectively showed ~2.7 span (square) at zoom=1
+  private readonly BASE_SPAN = 2.7;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl');
-    if (!gl) {
-      throw new Error('WebGL not supported');
-    }
+    const gl = canvas.getContext('webgl', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: false
+    });
+    if (!gl) throw new Error('WebGL not supported');
     this.gl = gl;
 
-    // Initialize default parameters (using shared constant for hue)
     this.currentParams = {
       juliaReal: -0.7269,
       juliaImag: 0.1889,
-      colorHue: DEFAULT_HUE,
-      colorSat: 0.8,
+      colorHue: 0.0,
+      colorSat: 0.85,
       colorBright: 0.9,
       zoom: 1.0,
       speed: 0.5
     };
     this.targetParams = { ...this.currentParams };
 
-    // Initialize WebGL
     this.initWebGL();
   }
 
   private initWebGL(): void {
     const gl = this.gl;
 
-    // Vertex shader (simple full-screen quad)
     const vertexShaderSource = `
       attribute vec2 a_position;
       void main() {
@@ -72,280 +114,312 @@ export class JuliaRenderer {
       }
     `;
 
-    // Fragment shader - Frax-style rendering with 5 stages
+    // Fragment shader: port of mandelbrot.py logic, adapted for Julia (z0 = pixel, c = seed).
+    // Notes:
+    // - We keep ESC_RADIUS^2 = 1e10 like python.
+    // - We compute t = fract(sqrt(niter)/sqrt(ncycle)) like python's post-transform.
+    // - Palette is the sinusoidal colormap (continuous, no table/rounding needed).
     const fragmentShaderSource = `
       precision highp float;
-      
-      uniform vec2 u_juliaSeed;
-      uniform float u_zoom;
-      uniform vec3 u_color;  // x=hue, y=intensity, z=contrast
+
+      uniform vec2  u_juliaSeed;
+      uniform vec2  u_resolution;
       uniform float u_time;
-      uniform vec2 u_resolution;
-      uniform int u_gradientCount;
-      
-      // Gradient stops
-      uniform vec4 u_gradient0;
-      uniform vec4 u_gradient1;
-      uniform vec4 u_gradient2;
-      uniform vec4 u_gradient3;
-      uniform vec4 u_gradient4;
-      uniform vec4 u_gradient5;
-      uniform vec4 u_gradient6;
-      uniform vec4 u_gradient7;
-      
-      const int MAX_ITERATIONS = 128;
-      const float ESCAPE_RADIUS = 2.0;
-      
-      // Height mapping parameters (the "art knobs")
-      const float HEIGHT_K = 240.0;
-      const float HEIGHT_P = 0.9;
-      
-      // Lighting parameters
-      const float SPEC_EXPONENT = 110.0;
-      const float FRESNEL_F0 = 0.12;
-      const float AMBIENT = 0.15;
-      const float DIFFUSE_STRENGTH = 0.6;
-      const float SPEC_STRENGTH = 0.8;
-      const float REFLECTION_STRENGTH = 0.5;
-      
-      vec4 getGradientStop(int index) {
-        if (index == 0) return u_gradient0;
-        if (index == 1) return u_gradient1;
-        if (index == 2) return u_gradient2;
-        if (index == 3) return u_gradient3;
-        if (index == 4) return u_gradient4;
-        if (index == 5) return u_gradient5;
-        if (index == 6) return u_gradient6;
-        if (index == 7) return u_gradient7;
-        return vec4(0.0);
+
+      uniform float u_zoom;
+      uniform float u_hue;   // [0,1) palette phase shift
+      uniform float u_sat;   // [0,1] saturation mix (0 -> gray, 1 -> full palette)
+
+      uniform int   u_maxIter;
+      uniform float u_ncycle;
+
+      uniform float u_stripe_s;
+      uniform float u_stripe_sig;
+      uniform float u_step_s;
+
+      uniform vec2  u_lightAngles; // (az, el) radians
+      uniform vec4  u_lightParams; // (intensity, kA, kD, kS)
+      uniform float u_shininess;
+
+      const float PI = 3.141592653589793;
+      const float ESC_RADIUS_2 = 1.0e10;
+
+      // --- Complex helpers (vec2 = (re, im)) ---
+      vec2 cMul(vec2 a, vec2 b) {
+        return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
       }
-      
-      vec3 sampleGradient(float t) {
-        t = clamp(t, 0.0, 1.0);
-        vec4 lowerStop = getGradientStop(0);
-        vec4 upperStop = getGradientStop(u_gradientCount - 1);
-        
-        for (int i = 0; i < 7; i++) {
-          if (i >= u_gradientCount - 1) break;
-          vec4 stop1 = getGradientStop(i);
-          vec4 stop2 = getGradientStop(i + 1);
-          if (t >= stop1.w && t <= stop2.w) {
-            lowerStop = stop1;
-            upperStop = stop2;
-            break;
-          }
-        }
-        
-        float range = upperStop.w - lowerStop.w;
-        float localT = range > 0.0 ? (t - lowerStop.w) / range : 0.0;
-        return mix(lowerStop.rgb, upperStop.rgb, localT);
+      vec2 cDiv(vec2 a, vec2 b) {
+        float d = dot(b,b);
+        // avoid divide-by-zero; if d==0 the value is meaningless anyway
+        if (d < 1.0e-30) return vec2(0.0);
+        return vec2((a.x*b.x + a.y*b.y)/d, (a.y*b.x - a.x*b.y)/d);
       }
-      
-      // Complex multiplication
-      vec2 cmul(vec2 a, vec2 b) {
-        return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+
+      float overlay(float x, float y, float gamma) {
+        // Clamp because downstream assumes [0,1]
+        x = clamp(x, 0.0, 1.0);
+        y = clamp(y, 0.0, 1.0);
+        float outv = (2.0*y < 1.0) ? (2.0*x*y) : (1.0 - 2.0*(1.0-x)*(1.0-y));
+        return outv * gamma + x * (1.0 - gamma);
       }
-      
-      // Stage 1 & 2: Iterate Julia set with derivative tracking
-      // Returns: (smoothIter, escaped, distance)
-      vec3 juliaIterate(vec2 c, vec2 z0) {
+
+      float blinnPhong(vec2 normalC) {
+        // Port of mandelbrot.py blinn_phong(normal, light)
+        // normalC is complex; python normalizes complex magnitude and uses z=1 for 3D normal.
+        float az = u_lightAngles.x;
+        float el = u_lightAngles.y;
+
+        // normalize complex part
+        float nlen = length(normalC);
+        vec2 n = (nlen > 1.0e-30) ? (normalC / nlen) : vec2(0.0, 0.0);
+
+        // Diffuse: dot(light, normal3), normalized like python
+        float ldiff =
+          n.x * cos(az) * cos(el) +
+          n.y * sin(az) * cos(el) +
+          1.0 * sin(el);
+
+        ldiff = ldiff / (1.0 + 1.0 * sin(el));
+
+        // Specular (Blinn-Phong): phi_half = (pi/2 + el)/2
+        float phi_half = (PI/2.0 + el) / 2.0;
+        float lspec =
+          n.x * cos(az) * sin(phi_half) +
+          n.y * sin(az) * sin(phi_half) +
+          1.0 * cos(phi_half);
+
+        lspec = lspec / (1.0 + 1.0 * cos(phi_half));
+        lspec = max(lspec, 0.0);           // avoid NaNs from pow on negative
+        lspec = pow(lspec, u_shininess);   // shininess
+
+        float intensity = u_lightParams.x;
+        float kA = u_lightParams.y;
+        float kD = u_lightParams.z;
+        float kS = u_lightParams.w;
+
+        float bright = kA + kD * ldiff + kS * lspec;
+        bright = bright * intensity + (1.0 - intensity) / 2.0;
+        return clamp(bright, 0.0, 1.0);
+      }
+
+      vec3 sinPalette(float x, vec3 rgb_thetas) {
+        // x in [0,1), rgb_thetas are phase offsets
+        vec3 ang = (x + rgb_thetas) * (2.0 * PI);
+        return 0.5 + 0.5 * sin(ang);
+      }
+
+      // Returns:
+      //   out_niter  : smooth escape iteration (0 if bounded)
+      //   out_stripe : stripe average [0,1]
+      //   out_dem    : distance estimate (un-normalized; caller normalizes by diag)
+      //   out_normal : complex normal for lighting
+      void smoothIterJulia(
+        vec2 z0,
+        vec2 c,
+        int maxIter,
+        float stripe_s,
+        float stripe_sig,
+        out float out_niter,
+        out float out_stripe,
+        out float out_dem,
+        out vec2  out_normal
+      ) {
+        // Julia: z starts at pixel coordinate; c is fixed seed.
         vec2 z = z0;
-        vec2 dz = vec2(0.0, 0.0);  // Derivative z'_0 = 0
-        
-        float n = 0.0;
-        bool escaped = false;
-        
-        for (int i = 0; i < MAX_ITERATIONS; i++) {
-          n = float(i);
-          float zMag2 = dot(z, z);
-          
-          if (zMag2 > ESCAPE_RADIUS * ESCAPE_RADIUS) {
-            // Smooth iteration count
-            float nu = n + 1.0 - log(log(sqrt(zMag2))) / log(2.0);
-            
-            // Distance estimator: d ≈ |z|ln|z| / |z'|
-            float zMag = sqrt(zMag2);
-            float dzMag = length(dz);
-            float dist = (dzMag > 0.0) ? (zMag * log(zMag)) / dzMag : 0.0;
-            
-            return vec3(nu, 1.0, dist);
+
+        // Derivative dz/dz0 for Julia distance estimate:
+        // dz0 = 1
+        vec2 dz = vec2(1.0, 0.0);
+
+        bool stripeEnabled = (stripe_s > 0.0) && (stripe_sig > 0.0);
+        float stripe_a = 0.0;
+        float stripe_t = 0.0;
+
+        out_niter = 0.0;
+        out_stripe = 0.0;
+        out_dem = 0.0;
+        out_normal = vec2(0.0);
+
+        const int MAX_ITER_CAP = 1024;
+        int maxIterCapped = (maxIter < MAX_ITER_CAP) ? maxIter : MAX_ITER_CAP;
+
+        for (int i = 0; i < MAX_ITER_CAP; i++) {
+          if (i >= maxIterCapped) break;
+
+          // dz = 2*z*dz (use z_n)
+          dz = cMul(cMul(vec2(2.0, 0.0), z), dz);
+
+          // z = z^2 + c
+          z = cMul(z, z) + c;
+
+          if (stripeEnabled) {
+            // stripe_t = (sin(stripe_s * atan2(im, re)) + 1)/2
+            stripe_t = (sin(stripe_s * atan(z.y, z.x)) + 1.0) * 0.5;
           }
-          
-          // Update derivative: z'_{n+1} = 2*z_n*z'_n + 1
-          dz = cmul(vec2(2.0, 0.0) * z, dz) + vec2(1.0, 0.0);
-          
-          // Update z: z_{n+1} = z_n^2 + c
-          z = cmul(z, z) + c;
-        }
-        
-        return vec3(float(MAX_ITERATIONS), 0.0, 0.0);
-      }
-      
-      // Stage 3: Map distance to height with nonlinear curve
-      float distanceToHeight(float d) {
-        float kd = HEIGHT_K * d;
-        return 1.0 / (1.0 + pow(kd, HEIGHT_P));
-      }
-      
-      // Sample height at offset (for normal calculation with smoothing)
-      float sampleHeight(vec2 uv, vec2 offset, vec2 c) {
-        vec3 result = juliaIterate(c, uv + offset);
-        if (result.y < 0.5) return 0.0;  // Inside set
-        return distanceToHeight(result.z);
-      }
-      
-      // Stage 3d/e: Calculate normals from height field with box blur smoothing
-      vec3 calculateNormal(vec2 uv, vec2 c, float pixelSize) {
-        // Box blur radius for smoothing
-        float blur = pixelSize * 2.0;
-        
-        // Sample heights in a small neighborhood (3x3 box blur approximation)
-        float h = 0.0;
-        float hx = 0.0;
-        float hy = 0.0;
-        
-        // Center samples
-        for (int dy = -1; dy <= 1; dy++) {
-          for (int dx = -1; dx <= 1; dx++) {
-            vec2 offset = vec2(float(dx), float(dy)) * blur;
-            float hSample = sampleHeight(uv, offset, c);
-            h += hSample;
-            
-            // Accumulate for gradients
-            if (dx != 0) hx += float(dx) * hSample;
-            if (dy != 0) hy += float(dy) * hSample;
+
+          float r2 = dot(z, z);
+
+          if (r2 > ESC_RADIUS_2) {
+            float modz = sqrt(r2);
+
+            // Smooth iteration count:
+            // log_ratio = 2*log(|z|)/log(esc_radius_2)
+            float log_ratio = (2.0 * log(modz)) / log(ESC_RADIUS_2);
+            log_ratio = max(log_ratio, 1.0e-30);
+            float smooth_i = 1.0 - log(log_ratio) / log(2.0);
+
+            float niter = float(i) + smooth_i;
+
+            if (stripeEnabled) {
+              // stripe smoothing + linear interpolation, ported from python
+              stripe_a = stripe_a * (1.0 + smooth_i * (stripe_sig - 1.0))
+                       + stripe_t * smooth_i * (1.0 - stripe_sig);
+
+              float initWeight = pow(stripe_sig, float(i)) * (1.0 + smooth_i * (stripe_sig - 1.0));
+              float denom = max(1.0 - initWeight, 1.0e-9);
+              stripe_a = stripe_a / denom;
+            }
+
+            // Normal vector for lighting: u = z/dz
+            vec2 u = cDiv(z, dz);
+
+            // Milton distance estimator:
+            // dem = |z|*log(|z|) / |dz| / 2
+            float dzAbs = max(length(dz), 1.0e-30);
+            float dem = modz * log(modz) / dzAbs / 2.0;
+
+            out_niter = niter;
+            out_stripe = stripe_a;
+            out_dem = dem;
+            out_normal = u;
+            return;
+          }
+
+          if (stripeEnabled) {
+            stripe_a = stripe_a * stripe_sig + stripe_t * (1.0 - stripe_sig);
           }
         }
-        
-        // Average
-        h /= 9.0;
-        hx /= 6.0;  // 6 samples contribute to x gradient
-        hy /= 6.0;
-        
-        // Gradients
-        float dhx = hx / blur;
-        float dhy = hy / blur;
-        
-        // Normal: normalize(-∂h/∂x, -∂h/∂y, 1)
-        return normalize(vec3(-dhx, -dhy, 1.0));
+
+        // bounded: leave outputs at 0 (black)
       }
-      
-      // Stage 5b: Fresnel (Schlick approximation)
-      float fresnel(vec3 normal, vec3 view) {
-        float cosTheta = max(dot(normal, view), 0.0);
-        return FRESNEL_F0 + (1.0 - FRESNEL_F0) * pow(1.0 - cosTheta, 5.0);
-      }
-      
-      // Stage 5c: Procedural environment map (studio window)
-      vec3 sampleEnvironment(vec3 reflectDir) {
-        // Warm gradient background
-        float y = reflectDir.z * 0.5 + 0.5;
-        vec3 bg = mix(vec3(0.3, 0.25, 0.2), vec3(0.6, 0.7, 0.8), y);
-        
-        // Add two rectangular "window" highlights (softbox reflections)
-        vec2 dir2d = reflectDir.xy;
-        
-        // Window 1 (rotated by time)
-        float angle1 = u_time * 0.1;
-        vec2 rot1 = vec2(
-          dir2d.x * cos(angle1) - dir2d.y * sin(angle1),
-          dir2d.x * sin(angle1) + dir2d.y * cos(angle1)
+
+      vec3 shadePixel(vec2 fragCoord) {
+        float minRes = min(u_resolution.x, u_resolution.y);
+
+        // Map pixel to complex plane like your original: normalized by min dimension,
+        // then scaled by BASE_SPAN / zoom (handled via u_zoom)
+        vec2 uv = (fragCoord - 0.5 * u_resolution) / minRes;
+
+        float span = ${this.BASE_SPAN.toFixed(6)} / max(u_zoom, 1.0e-6);
+        vec2 z0 = uv * span;
+
+        // Frame diagonal in complex-plane units (used to normalize dem like python)
+        float spanX = span * (u_resolution.x / minRes);
+        float spanY = span * (u_resolution.y / minRes);
+        float diag = sqrt(spanX*spanX + spanY*spanY);
+
+        float niter;
+        float stripe_a;
+        float dem;
+        vec2  normal;
+
+        smoothIterJulia(
+          z0,
+          u_juliaSeed,
+          u_maxIter,
+          u_stripe_s,
+          u_stripe_sig,
+          niter,
+          stripe_a,
+          dem,
+          normal
         );
-        float window1 = smoothstep(0.3, 0.2, abs(rot1.x)) * smoothstep(0.5, 0.4, abs(rot1.y));
-        
-        // Window 2 (opposite rotation)
-        float angle2 = -u_time * 0.15 + 1.5;
-        vec2 rot2 = vec2(
-          dir2d.x * cos(angle2) - dir2d.y * sin(angle2),
-          dir2d.x * sin(angle2) + dir2d.y * cos(angle2)
-        );
-        float window2 = smoothstep(0.4, 0.3, abs(rot2.x)) * smoothstep(0.3, 0.2, abs(rot2.y));
-        
-        return bg + vec3(2.0) * window1 + vec3(1.8, 1.9, 2.0) * window2;
+
+        // Inside set => black (same behavior as mandelbrot.py compute_set)
+        if (niter <= 0.0) return vec3(0.0);
+
+        // Port of color_pixel():
+        // niter = sqrt(niter) % sqrt(ncycle) / sqrt(ncycle)
+        float cycle = sqrt(max(u_ncycle, 1.0e-9));
+        float t = fract(sqrt(niter) / cycle);
+
+        // Optional step coloring (quantizes the palette phase like python's col_i update)
+        float tColor = t;
+        if (u_step_s > 0.0) {
+          float stepSize = 1.0 / u_step_s;
+          tColor = tColor - mod(tColor, stepSize);
+        }
+
+        // Palette phase offsets: python default rgb_thetas=(0.0,0.15,0.25)
+        // We add u_hue as a global phase shift, plus a tiny time drift (optional).
+        float hueShift = u_hue + 0.02 * u_time; // if you want zero animation, set 0.0 * u_time
+        vec3 rgb_thetas = vec3(hueShift, hueShift + 0.15, hueShift + 0.25);
+
+        vec3 base = sinPalette(tColor, rgb_thetas);
+
+        // Saturation control (not in python; keeps your UI meaningful)
+        base = mix(vec3(0.5), base, clamp(u_sat, 0.0, 1.0));
+
+        // Brightness with Blinn-Phong
+        float bright = blinnPhong(normal);
+
+        // dem normalization by diag + python's log+sigmoid shaping
+        float demN = max(dem / max(diag, 1.0e-30), 1.0e-30);
+        float demT = -log(demN) / 12.0;
+        float demSig = 1.0 / (1.0 + exp(-10.0 * (demT - 0.5)));
+
+        // Shaders: stripes and/or steps (affect brightness like python)
+        float nshader = 0.0;
+        float shader = 0.0;
+
+        bool stripeEnabled = (u_stripe_s > 0.0) && (u_stripe_sig > 0.0);
+        if (stripeEnabled) {
+          nshader += 1.0;
+          shader += stripe_a;
+        }
+
+        if (u_step_s > 0.0) {
+          float stepSize = 1.0 / u_step_s;
+
+          // Major step
+          float x = mod(t, stepSize) / stepSize;
+          float light_step = 6.0 * (1.0 - pow(x, 5.0) - pow(1.0 - x, 100.0)) / 10.0;
+
+          // Minor step
+          float stepSize2 = stepSize / 8.0;
+          float x2 = mod(t, stepSize2) / stepSize2;
+          float light_step2 = 6.0 * (1.0 - pow(x2, 5.0) - pow(1.0 - x2, 30.0)) / 10.0;
+
+          // Overlay merge
+          light_step = overlay(light_step2, light_step, 1.0);
+
+          nshader += 1.0;
+          shader += light_step;
+        }
+
+        if (nshader > 0.0) {
+          bright = overlay(bright, shader / nshader, 1.0) * (1.0 - demSig) + demSig * bright;
+          bright = clamp(bright, 0.0, 1.0);
+        }
+
+        // Apply brightness via overlay mode per channel
+        base.r = overlay(base.r, bright, 1.0);
+        base.g = overlay(base.g, bright, 1.0);
+        base.b = overlay(base.b, bright, 1.0);
+
+        return clamp(base, 0.0, 1.0);
       }
-      
+
       void main() {
-        vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / min(u_resolution.x, u_resolution.y);
-        uv *= 2.7;
-        float pixelSize = 2.7 / min(u_resolution.x, u_resolution.y);
-        
-        vec2 c = u_juliaSeed;
-        
-        // Stage 1 & 2: Compute fractal with smooth iteration count
-        vec3 fractalData = juliaIterate(c, uv);
-        float smoothIter = fractalData.x;
-        float escaped = fractalData.y;
-        float distance = fractalData.z;
-        
-        // Stage 2: Normalize smooth iteration to [0,1]
-        // Using percentile-like normalization (clamped)
-        float t = clamp(smoothIter / float(MAX_ITERATIONS), 0.0, 1.0);
-        t = pow(t, 0.7);  // Adjust distribution
-        
-        // Stage 4: Color from gradient
-        float paletteCoord = fract(t * 4.2 * u_color.z);  // Palette cycling
-        vec3 baseColor = sampleGradient(paletteCoord);
-        
-        // Inside set: dark
-        if (escaped < 0.5) {
-          gl_FragColor = vec4(baseColor * 0.05, 1.0);
-          return;
-        }
-        
-        // Stage 3: Calculate height and normal
-        float height = distanceToHeight(distance);
-        vec3 normal = calculateNormal(uv, c, pixelSize);
-        
-        // Stage 5: Glossy 3D lighting
-        vec3 viewDir = vec3(0.0, 0.0, 1.0);  // Straight down
-        
-        // Animated light direction
-        float lightAngle = u_time * 0.3;
-        vec3 lightDir = normalize(vec3(
-          cos(lightAngle) * 0.6,
-          sin(lightAngle) * 0.4,
-          0.8
-        ));
-        
-        // Stage 5a: Diffuse lighting
-        float diffuse = max(dot(normal, lightDir), 0.0);
-        
-        // Stage 5a: Specular (Blinn-Phong)
-        vec3 halfVec = normalize(lightDir + viewDir);
-        float specular = pow(max(dot(normal, halfVec), 0.0), SPEC_EXPONENT);
-        
-        // Stage 5b: Fresnel
-        float F = fresnel(normal, viewDir);
-        
-        // Stage 5c: Reflection
-        vec3 reflectDir = reflect(-viewDir, normal);
-        vec3 envColor = sampleEnvironment(reflectDir);
-        
-        // Stage 5d: Final composite
-        vec3 pigment = baseColor * (AMBIENT + DIFFUSE_STRENGTH * diffuse);
-        vec3 gloss = vec3(1.0) * SPEC_STRENGTH * specular;
-        vec3 reflection = envColor * REFLECTION_STRENGTH * F;
-        
-        vec3 finalColor = pigment + gloss + reflection;
-        
-        // Apply intensity from controls
-        finalColor *= (0.5 + u_color.y * 0.5);
-        
-        // Subtle bloom approximation (brighten bright areas)
-        float brightness = dot(finalColor, vec3(0.299, 0.587, 0.114));
-        if (brightness > 1.0) {
-          finalColor += vec3(brightness - 1.0) * 0.3;
-        }
-        
-        gl_FragColor = vec4(finalColor, 1.0);
+        // No supersampling by default (keep it fast); if you want AA, you can expand this to 4 taps.
+        vec3 col = shadePixel(gl_FragCoord.xy);
+        gl_FragColor = vec4(col, 1.0);
       }
     `;
 
-    // Compile shaders
     const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
 
-    // Create program
     this.program = gl.createProgram()!;
     gl.attachShader(this.program, vertexShader);
     gl.attachShader(this.program, fragmentShader);
@@ -355,41 +429,43 @@ export class JuliaRenderer {
       throw new Error('Failed to link program: ' + gl.getProgramInfoLog(this.program));
     }
 
-    // Get uniform locations
+    // Uniform locations
     this.uJuliaSeedLocation = gl.getUniformLocation(this.program, 'u_juliaSeed');
-    this.uZoomLocation = gl.getUniformLocation(this.program, 'u_zoom');
-    this.uColorLocation = gl.getUniformLocation(this.program, 'u_color');
-    this.uTimeLocation = gl.getUniformLocation(this.program, 'u_time');
     this.uResolutionLocation = gl.getUniformLocation(this.program, 'u_resolution');
-    this.uGradientCountLocation = gl.getUniformLocation(this.program, 'u_gradientCount');
-    
-    // Cache gradient uniform locations for performance
-    for (let i = 0; i < MAX_GRADIENT_STOPS; i++) {
-      this.gradientUniformLocations[i] = gl.getUniformLocation(this.program, `u_gradient${i}`);
-    }
-    
-    // Initialize with the continuous gradient (single gradient for all hue values)
-    this.updateGradient(DEFAULT_HUE);
+    this.uTimeLocation = gl.getUniformLocation(this.program, 'u_time');
 
-    // Create full-screen quad
+    this.uZoomLocation = gl.getUniformLocation(this.program, 'u_zoom');
+    this.uHueLocation = gl.getUniformLocation(this.program, 'u_hue');
+    this.uSatLocation = gl.getUniformLocation(this.program, 'u_sat');
+
+    this.uMaxIterLocation = gl.getUniformLocation(this.program, 'u_maxIter');
+    this.uNCycleLocation = gl.getUniformLocation(this.program, 'u_ncycle');
+
+    this.uStripeSLocation = gl.getUniformLocation(this.program, 'u_stripe_s');
+    this.uStripeSigLocation = gl.getUniformLocation(this.program, 'u_stripe_sig');
+    this.uStepSLocation = gl.getUniformLocation(this.program, 'u_step_s');
+
+    this.uLightAnglesLocation = gl.getUniformLocation(this.program, 'u_lightAngles');
+    this.uLightParamsLocation = gl.getUniformLocation(this.program, 'u_lightParams');
+    this.uShininessLocation = gl.getUniformLocation(this.program, 'u_shininess');
+
+    // Fullscreen quad
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    const positions = [
+    const positions = new Float32Array([
       -1, -1,
        1, -1,
       -1,  1,
       -1,  1,
        1, -1,
-       1,  1,
-    ];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+       1,  1
+    ]);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 
-    // Set up vertex attributes
     const positionLocation = gl.getAttribLocation(this.program, 'a_position');
     gl.enableVertexAttribArray(positionLocation);
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Set viewport
     this.resize();
   }
 
@@ -400,20 +476,23 @@ export class JuliaRenderer {
     gl.compileShader(shader);
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      throw new Error('Failed to compile shader: ' + gl.getShaderInfoLog(shader));
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compilation failed:', log);
+      console.error('Shader source:', source);
+      throw new Error('Failed to compile shader: ' + log);
     }
-
     return shader;
   }
 
   resize(): void {
     const gl = this.gl;
     const canvas = this.canvas;
-    
-    // Set canvas size to match display size with device pixel ratio
-    const displayWidth = canvas.clientWidth;
-    const displayHeight = canvas.clientHeight;
-    
+
+    // Use DPR for sharper output (your old code effectively ignored DPR).
+    const dpr = Math.min(window.devicePixelRatio || 1, 2); // clamp for perf
+    const displayWidth = Math.floor(canvas.clientWidth * dpr);
+    const displayHeight = Math.floor(canvas.clientHeight * dpr);
+
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
       canvas.width = displayWidth;
       canvas.height = displayHeight;
@@ -423,121 +502,114 @@ export class JuliaRenderer {
 
   updateParameters(params: VisualParameters): void {
     this.targetParams = { ...params };
-    
-    // Update gradient only on first call (continuous gradient doesn't change)
-    if (!this.currentGradient) {
-      this.updateGradient(params.colorHue);
-    }
   }
-  
+
   getCurrentParameters(): VisualParameters {
     return { ...this.currentParams };
   }
-  
-  private updateGradient(hue: number): void {
-    const gradient = getGradientByHue(hue);
-    
-    // Only update once (we use a single continuous gradient)
-    if (this.currentGradient) {
-      return;
-    }
-    
-    this.currentGradient = gradient;
-    const gl = this.gl;
-    
-    // Flatten gradient for WebGL uniform
-    const flatData = flattenGradient(gradient);
-    
-    // Upload to GPU as individual vec4 uniforms (WebGL 1.0 compatible)
-    // Note: This changes the active WebGL program state. Callers should be aware
-    // that the program will be active after this call (typically called before rendering).
-    gl.useProgram(this.program);
-    
-    // Set gradient count
-    gl.uniform1i(this.uGradientCountLocation!, gradient.stops.length);
-    
-    // Set gradient stops using cached uniform locations (performance optimization)
-    for (let i = 0; i < Math.min(gradient.stops.length, MAX_GRADIENT_STOPS); i++) {
-      const baseIdx = i * 4;
-      const location = this.gradientUniformLocations[i];
-      if (location) {
-        gl.uniform4f(
-          location,
-          flatData[baseIdx],     // r
-          flatData[baseIdx + 1], // g
-          flatData[baseIdx + 2], // b
-          flatData[baseIdx + 3]  // position
-        );
-      }
-    }
-    
-    // Fill remaining slots with black if gradient has fewer stops
-    for (let i = gradient.stops.length; i < MAX_GRADIENT_STOPS; i++) {
-      const location = this.gradientUniformLocations[i];
-      if (location) {
-        gl.uniform4f(location, 0.0, 0.0, 0.0, 1.0);
-      }
-    }
-    
-    console.log(`🎨 Gradient loaded: ${gradient.name} (continuous smooth transitions)`);
+
+  private wrap01(x: number): number {
+    const y = x % 1;
+    return y < 0 ? y + 1 : y;
+  }
+
+  private lerpHue(current: number, target: number, alpha: number): number {
+    // shortest wrap-around interpolation in [0,1)
+    const c = this.wrap01(current);
+    const t = this.wrap01(target);
+    let d = t - c;
+    if (d > 0.5) d -= 1;
+    if (d < -0.5) d += 1;
+    return this.wrap01(c + d * alpha);
   }
 
   private interpolateParams(_dt: number): void {
-    const smoothing = 0.1; // Smoothing factor
-    
+    const smoothing = 0.12;
+
     this.currentParams.juliaReal += (this.targetParams.juliaReal - this.currentParams.juliaReal) * smoothing;
     this.currentParams.juliaImag += (this.targetParams.juliaImag - this.currentParams.juliaImag) * smoothing;
-    this.currentParams.colorHue += (this.targetParams.colorHue - this.currentParams.colorHue) * smoothing;
+
+    this.currentParams.colorHue = this.lerpHue(this.currentParams.colorHue, this.targetParams.colorHue, smoothing);
+
     this.currentParams.colorSat += (this.targetParams.colorSat - this.currentParams.colorSat) * smoothing;
     this.currentParams.colorBright += (this.targetParams.colorBright - this.currentParams.colorBright) * smoothing;
+
     this.currentParams.zoom += (this.targetParams.zoom - this.currentParams.zoom) * smoothing;
     this.currentParams.speed += (this.targetParams.speed - this.currentParams.speed) * smoothing;
   }
 
   render(): void {
+    this.resize();
     const gl = this.gl;
-    
-    // Clear
+
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    
-    // Use program
+
     gl.useProgram(this.program);
-    
-    // Set uniforms
+
+    // Core uniforms
     gl.uniform2f(this.uJuliaSeedLocation!, this.currentParams.juliaReal, this.currentParams.juliaImag);
-    gl.uniform1f(this.uZoomLocation!, this.currentParams.zoom);
-    gl.uniform3f(
-      this.uColorLocation!,
-      this.currentParams.colorHue,
-      this.currentParams.colorSat,
-      this.currentParams.colorBright
-    );
-    gl.uniform1f(this.uTimeLocation!, this.time);
     gl.uniform2f(this.uResolutionLocation!, this.canvas.width, this.canvas.height);
-    
-    // Debug log every 100 frames for deterministic logging
-    this.frameCount++;
-    if (this.frameCount % 100 === 0) {
-      console.log('🎨 Rendering with:', this.currentParams, 'gradient:', this.currentGradient?.name, 'canvas:', this.canvas.width, 'x', this.canvas.height);
+    gl.uniform1f(this.uTimeLocation!, this.time);
+
+    gl.uniform1f(this.uZoomLocation!, Math.max(this.currentParams.zoom, 1e-6));
+    gl.uniform1f(this.uHueLocation!, this.wrap01(this.currentParams.colorHue));
+    gl.uniform1f(this.uSatLocation!, Math.max(0, Math.min(1, this.currentParams.colorSat)));
+
+    // Ported parameters (defaults from mandelbrot.py)
+    gl.uniform1i(this.uMaxIterLocation!, this.MAX_ITER_DEFAULT);
+    gl.uniform1f(this.uNCycleLocation!, this.NCYCLE_DEFAULT);
+
+    gl.uniform1f(this.uStripeSLocation!, this.STRIPE_S_DEFAULT);
+    gl.uniform1f(this.uStripeSigLocation!, this.STRIPE_SIG_DEFAULT);
+    gl.uniform1f(this.uStepSLocation!, this.STEP_S_DEFAULT);
+
+    // Light: convert degrees to radians like mandelbrot.py does.
+    const az = (2 * Math.PI) * (this.LIGHT_AZ_DEG / 360.0);
+    const el = (Math.PI / 2) * (this.LIGHT_EL_DEG / 90.0);
+
+    // Modulate intensity with your "brightness" control, so the UI still matters.
+    const bright = Math.max(0, Math.min(1, this.currentParams.colorBright));
+    const intensity = Math.max(
+      0,
+      Math.min(1, this.LIGHT_INTENSITY_BASE * (0.35 + 0.65 * bright))
+    );
+
+    gl.uniform2f(this.uLightAnglesLocation!, az, el);
+    gl.uniform4f(this.uLightParamsLocation!, intensity, this.LIGHT_KA, this.LIGHT_KD, this.LIGHT_KS);
+    gl.uniform1f(this.uShininessLocation!, this.LIGHT_SHININESS);
+
+    // Debug: log first frame
+    if (this.time === 0) {
+      console.log('First render:', {
+        seed: [this.currentParams.juliaReal, this.currentParams.juliaImag],
+        resolution: [this.canvas.width, this.canvas.height],
+        zoom: this.currentParams.zoom,
+        maxIter: this.MAX_ITER_DEFAULT,
+        uniforms: {
+          uJuliaSeedLocation: this.uJuliaSeedLocation,
+          uResolutionLocation: this.uResolutionLocation,
+          uMaxIterLocation: this.uMaxIterLocation
+        }
+      });
     }
-    
-    // Draw
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
   start(): void {
-    if (this.animationFrameId !== null) {
-      return; // Already running
-    }
+    if (this.animationFrameId !== null) return;
 
-    const animate = (_timestamp: number) => {
-      const dt = 0.016; // ~60 FPS
+    const animate = (timestamp: number) => {
+      if (this.lastTimestamp === null) this.lastTimestamp = timestamp;
+      const dt = Math.min(0.05, (timestamp - this.lastTimestamp) / 1000);
+      this.lastTimestamp = timestamp;
+
       this.time += dt * this.currentParams.speed;
-      
+
       this.interpolateParams(dt);
       this.render();
-      
+
       this.animationFrameId = requestAnimationFrame(animate);
     };
 
@@ -548,6 +620,7 @@ export class JuliaRenderer {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
+      this.lastTimestamp = null;
     }
   }
 
