@@ -41,6 +41,15 @@ def export_to_onnx(
     else:
         dummy_input = torch.zeros(*input_shape)
 
+    # Select input/output names based on model_type metadata
+    model_type = metadata.get("model_type") if metadata else None
+    if model_type == "orbit_policy":
+        input_name = "policy_input"
+        output_name = "policy_output"
+    else:
+        input_name = "audio_features"
+        output_name = "visual_parameters"
+
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
         torch.onnx.export(
@@ -48,11 +57,11 @@ def export_to_onnx(
             (dummy_input,),
             output_path,
             export_params=True,
-            input_names=["audio_features"],
-            output_names=["visual_parameters"],
+            input_names=[input_name],
+            output_names=[output_name],
             dynamic_axes={
-                "audio_features": {0: "batch_size"},
-                "visual_parameters": {0: "batch_size"},
+                input_name: {0: "batch_size"},
+                output_name: {0: "batch_size"},
             },
             opset_version=11,
             do_constant_folding=True,
@@ -70,11 +79,11 @@ def export_to_onnx(
                 (dummy_input,),
                 output_path,
                 export_params=True,
-                input_names=["audio_features"],
-                output_names=["visual_parameters"],
+                input_names=[input_name],
+                output_names=[output_name],
                 dynamic_axes={
-                    "audio_features": {0: "batch_size"},
-                    "visual_parameters": {0: "batch_size"},
+                    input_name: {0: "batch_size"},
+                    output_name: {0: "batch_size"},
                 },
                 opset_version=11,
                 do_constant_folding=True,
@@ -111,6 +120,27 @@ def export_to_onnx(
         }
         for i in range(k_bands):
             parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
+    elif metadata and metadata.get("model_type") == "orbit_policy":
+        # Policy outputs: u_x,u_y,delta_s,delta_omega,alpha_hit,gate_logits[k]
+        k_bands = metadata.get("k_bands", 6)
+        parameter_names = [
+            "u_x",
+            "u_y",
+            "delta_s",
+            "delta_omega",
+            "alpha_hit",
+        ] + [f"gate_logits_{i}" for i in range(k_bands)]
+        output_dim = metadata.get("output_dim", 5 + k_bands)
+        # Reasonable ranges described here - application code clamps further
+        parameter_ranges = {
+            "u_x": [-1.0, 1.0],
+            "u_y": [-1.0, 1.0],
+            "delta_s": [-0.5, 0.5],
+            "delta_omega": [-1.0, 1.0],
+            "alpha_hit": [0.0, 2.0],
+        }
+        for i in range(k_bands):
+            parameter_ranges[f"gate_logits_{i}"] = [-5.0, 5.0]
     else:
         # Default: physics/visual parameter model (legacy)
         output_dim = 7

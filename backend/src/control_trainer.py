@@ -25,6 +25,13 @@ from .flight_recorder import (
     compute_delta_v,
 )  # optional recording utilities
 
+# Policy helpers for orbit_policy models
+from .policy_interface import (
+    policy_state_encoder,
+    policy_output_decoder,
+    apply_policy_deltas,
+)
+
 # Distance field loader is experimental; import if available (keeps repo clean if absent)
 try:
     from .distance_field_loader import load_distance_field_for_runtime
@@ -276,6 +283,7 @@ class ControlTrainer:
         flight_recorder: Optional[FlightRecorder] = None,
         contour_d_star: float = 0.3,
         contour_max_step: float = 0.03,
+        policy_mode: bool = False,
     ):
         """
         Initialize control trainer.
@@ -323,6 +331,9 @@ class ControlTrainer:
         # Contour integrator parameters (tunable)
         self.contour_d_star = contour_d_star
         self.contour_max_step = contour_max_step
+
+        # Policy mode (if True, expects a PolicyModel and uses the policy I/O contract)
+        self.policy_mode = policy_mode
 
         # Load numpy distance field for slowdown loss (fallback independent of runtime_core)
         self.df_numpy = None
@@ -558,29 +569,6 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
-            # Forward pass with mixed precision
-            with autocast(enabled=self.use_amp):
-                predicted_controls = self.model(features)
-
-            # Parse control signals
-            parsed = self.model.parse_output(predicted_controls)
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
-
-            # Debug: log control signal ranges
-            if batch_idx == 0:
-                logger.debug(
-                    f"Debug - s_target range: [{s_target.min():.4f}, {s_target.max():.4f}], mean: {s_target.mean():.4f}"
-                )
-                logger.debug(
-                    f"Debug - alpha range: [{alpha.min():.4f}, {alpha.max():.4f}], mean: {alpha.mean():.4f}"
-                )
-                logger.debug(
-                    f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
-                )
-
             # Extract audio features early so transient proxy is available during stepping
             n_features_per_frame = self.feature_extractor.num_features_per_frame()
             window_frames = features.shape[1] // n_features_per_frame
@@ -592,6 +580,123 @@ class ControlTrainer:
             spectral_centroid = avg_features[:, 0]
             spectral_flux = avg_features[:, 1]
 
+            # Forward pass with mixed precision
+            with autocast(enabled=self.use_amp):
+                # Policy mode: model expects the policy_input vector instead of raw audio features
+                if self.policy_mode:
+                    # Build policy inputs per sample
+                    import math
+
+                    policy_inputs = []
+                    for i in range(batch_size):
+                        # Base orbit state used as encoding seed
+                        s0 = 1.02
+                        alpha0 = 0.3
+                        omega0 = float(DEFAULT_BASE_OMEGA)
+                        theta0 = float(i * 2 * math.pi / batch_size)
+
+                        h_t_val = float(spectral_flux[i].detach().item())
+                        loudness = 0.0
+                        tonalness = 0.0
+                        noisiness = 0.0
+
+                        band_energies = [0.0] * self.k_residuals
+                        band_deltas = [0.0] * self.k_residuals
+
+                        # geometry minimap: synthesize a seed c and sample distance field if available
+                        try:
+                            orbit0 = make_orbit_state(
+                                lobe=1,
+                                sub_lobe=0,
+                                theta=theta0,
+                                omega=omega0,
+                                s=s0,
+                                alpha=alpha0,
+                                k_residuals=self.k_residuals,
+                                residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                                seed=int(DEFAULT_ORBIT_SEED + i),
+                            )
+                            c0 = synthesize(orbit0, self.residual_params, None)
+                            if self.distance_field is not None:
+                                d_c = float(
+                                    self.distance_field.lookup(
+                                        float(c0.real), float(c0.imag)
+                                    )
+                                )
+                                gx, gy = self.distance_field.gradient(
+                                    float(c0.real), float(c0.imag)
+                                )
+                                # directional probes (8 directions × 2 radii)
+                                probes = []
+                                radii = [0.005, 0.02]
+                                for d_idx in range(8):
+                                    ang = 2 * math.pi * d_idx / 8.0
+                                    dir_x = math.cos(ang)
+                                    dir_y = math.sin(ang)
+                                    for r in radii:
+                                        rx = float(c0.real) + r * dir_x
+                                        ry = float(c0.imag) + r * dir_y
+                                        probes.append(
+                                            float(self.distance_field.lookup(rx, ry))
+                                        )
+                            else:
+                                d_c = 1.0
+                                gx, gy = (0.0, 0.0)
+                                probes = [0.0] * 16
+                        except Exception:
+                            d_c = 1.0
+                            gx, gy = (0.0, 0.0)
+                            probes = [0.0] * 16
+
+                        inp = policy_state_encoder(
+                            s=s0,
+                            alpha=alpha0,
+                            omega=omega0,
+                            theta=theta0,
+                            h_t=h_t_val,
+                            loudness=loudness,
+                            tonalness=tonalness,
+                            noisiness=noisiness,
+                            band_energies=band_energies,
+                            band_deltas=band_deltas,
+                            d_c=d_c,
+                            grad=(gx, gy),
+                            directional_probes=probes,
+                        )
+                        policy_inputs.append(inp)
+
+                    # Stack into batch tensor
+                    batch_inp = torch.tensor(
+                        np.stack(policy_inputs, axis=0),
+                        dtype=torch.float32,
+                        device=self.device,
+                    )
+                    predicted_controls = self.model(batch_inp)
+                else:
+                    predicted_controls = self.model(features)
+
+            # Parse control signals or policy outputs
+            if self.policy_mode:
+                # We'll decode per-sample later in the stepping loop
+                parsed = None
+            else:
+                parsed = self.model.parse_output(predicted_controls)
+                s_target = parsed["s_target"]
+                alpha = parsed["alpha"]
+                omega_scale = parsed["omega_scale"]
+                band_gates = parsed["band_gates"]
+
+                # Debug: log control signal ranges
+                if batch_idx == 0:
+                    logger.debug(
+                        f"Debug - s_target range: [{s_target.min():.4f}, {s_target.max():.4f}], mean: {s_target.mean():.4f}"
+                    )
+                    logger.debug(
+                        f"Debug - alpha range: [{alpha.min():.4f}, {alpha.max():.4f}], mean: {alpha.mean():.4f}"
+                    )
+                    logger.debug(
+                        f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
+                    )
             # Generate orbit trajectories with distance field slowdown
             c_values = []
             all_trajectories: List[List[List[float]]] = []

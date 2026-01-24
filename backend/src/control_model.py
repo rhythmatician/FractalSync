@@ -197,3 +197,102 @@ class AudioToControlModel(nn.Module):
             "omega_scale": output[:, 2],
             "band_gates": output[:, 3:],
         }
+
+
+class PolicyModel(nn.Module):
+    """Policy model predicting bounded deltas and gate logits from audio features.
+
+    Outputs (per sample):
+      - u_x, u_y (2 floats)
+      - delta_s (1 float)
+      - delta_omega (1 float)
+      - alpha_hit (1 float)
+      - gate_logits[k] (k floats)
+    """
+
+    def __init__(
+        self,
+        window_frames: int = 10,
+        n_features_per_frame: int = 6,
+        hidden_dims: list[int] = [128, 256, 128],
+        k_bands: int = 6,
+        dropout: float = 0.2,
+        include_delta: bool = False,
+        include_delta_delta: bool = False,
+    ):
+        super().__init__()
+        features_multiplier = 1
+        if include_delta:
+            features_multiplier += 1
+        if include_delta_delta:
+            features_multiplier += 1
+
+        self.input_dim = n_features_per_frame * features_multiplier * window_frames
+        self.k_bands = k_bands
+        self.output_dim = 5 + k_bands
+
+        # Build shared encoder (similar to AudioToControlModel)
+        encoder_layers = []
+        prev_dim = self.input_dim
+        for hidden_dim in hidden_dims:
+            encoder_layers.extend(
+                [
+                    nn.Linear(prev_dim, hidden_dim),
+                    nn.BatchNorm1d(hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                ]
+            )
+            prev_dim = hidden_dim
+        self.encoder = nn.Sequential(*encoder_layers)
+
+        # Heads
+        self.u_head = nn.Sequential(
+            nn.Linear(prev_dim, 32), nn.ReLU(), nn.Linear(32, 2), nn.Tanh()
+        )
+        self.delta_s_head = nn.Sequential(
+            nn.Linear(prev_dim, 32), nn.ReLU(), nn.Linear(32, 1)
+        )
+        self.delta_omega_head = nn.Sequential(
+            nn.Linear(prev_dim, 32), nn.ReLU(), nn.Linear(32, 1)
+        )
+        self.alpha_hit_head = nn.Sequential(
+            nn.Linear(prev_dim, 32), nn.ReLU(), nn.Linear(32, 1), nn.Softplus()
+        )
+        self.gate_logits_head = nn.Sequential(
+            nn.Linear(prev_dim, 32), nn.ReLU(), nn.Linear(32, k_bands)
+        )
+
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        """Initialize model weights (same scheme used by AudioToControlModel)."""
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[1] != self.input_dim:
+            raise ValueError(f"Expected input dim {self.input_dim}, got {x.shape[1]}")
+        encoded = self.encoder(x)
+        u = self.u_head(encoded)  # in [-1,1]
+        ds = self.delta_s_head(encoded)
+        domega = self.delta_omega_head(encoded)
+        alpha_hit = self.alpha_hit_head(encoded)
+        gate_logits = self.gate_logits_head(encoded)
+        output = torch.cat([u, ds, domega, alpha_hit, gate_logits], dim=1)
+        return output
+
+    def parse_output(self, output: torch.Tensor) -> dict:
+        return {
+            "u": output[:, 0:2],
+            "delta_s": output[:, 2],
+            "delta_omega": output[:, 3],
+            "alpha_hit": output[:, 4],
+            "gate_logits": output[:, 5:],
+        }
