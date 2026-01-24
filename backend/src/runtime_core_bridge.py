@@ -12,6 +12,43 @@ from typing import Iterable, Optional, Sequence
 import logging
 
 import runtime_core as rc
+import numpy as np
+
+
+class FeatureExtractorAdapter:
+    """Adapter to present the same interface as PythonFeatureExtractor while
+    delegating to the Rust-backed `rc.FeatureExtractor` for heavy lifting.
+    """
+
+    def __init__(self, inner: rc.FeatureExtractor):
+        self._inner = inner
+        self.feature_mean = None
+        self.feature_std = None
+
+    def num_features_per_frame(self) -> int:
+        return self._inner.num_features_per_frame()
+
+    def extract_windowed_features(self, audio, window_frames: int):
+        # Rust binding returns nested lists; convert to numpy array
+        windows = self._inner.extract_windowed_features(list(audio), window_frames)
+        if len(windows) == 0:
+            return np.empty(
+                (0, self.num_features_per_frame() * window_frames), dtype=np.float64
+            )
+        return np.array(windows, dtype=np.float64)
+
+    def compute_normalization_stats(self, all_features: list[np.ndarray]):
+        if not all_features:
+            return
+        concatenated = np.concatenate(all_features, axis=0)
+        self.feature_mean = np.mean(concatenated, axis=0)
+        self.feature_std = np.std(concatenated, axis=0) + 1e-8
+
+    def normalize_features(self, features: np.ndarray) -> np.ndarray:
+        if self.feature_mean is None or self.feature_std is None:
+            return features
+        return (features - self.feature_mean) / self.feature_std
+
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +66,21 @@ DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
 def make_feature_extractor(
     include_delta: bool = False,
     include_delta_delta: bool = False,
-) -> rc.FeatureExtractor:
+) -> FeatureExtractorAdapter:
     """Create a FeatureExtractor configured with the shared defaults.
 
-    NOTE: the previous Python fallback was removed; the Rust implementation
-    is now the single source of truth. If the runtime_core bindings fail to
-    build or the feature extractor is broken, tests/CI will fail so we can
-    address the root cause promptly.
+    This returns an adapter exposing the same Python-friendly API as the
+    original `PythonFeatureExtractor` (notably `compute_normalization_stats`) but
+    delegates the heavy-lifting to the Rust implementation.
     """
-    return rc.FeatureExtractor(
+    inner = rc.FeatureExtractor(
         SAMPLE_RATE,
         HOP_LENGTH,
         N_FFT,
         include_delta,
         include_delta_delta,
     )
+    return FeatureExtractorAdapter(inner)
 
 
 def make_residual_params(
