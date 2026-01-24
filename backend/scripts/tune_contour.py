@@ -133,52 +133,6 @@ def load_distance_field() -> PyDistanceField:
     )
 
 
-def contour_biased_step_py(c_cur, u_real, u_imag, h, d_star, max_step, df):
-    # Mirror the Rust `contour_biased_step` behavior in Python for environments
-    # where the Rust binding isn't available.
-    gx, gy = df.gradient(float(c_cur.real), float(c_cur.imag))
-    grad_norm = math.hypot(gx, gy)
-
-    if grad_norm <= 1e-12:
-        u_mag = math.hypot(u_real, u_imag)
-        scale = (max_step / u_mag) if (u_mag > max_step and u_mag > 0) else 1.0
-        return type(
-            "C",
-            (),
-            {"real": c_cur.real + u_real * scale, "imag": c_cur.imag + u_imag * scale},
-        )()
-
-    nx = gx / grad_norm
-    ny = gy / grad_norm
-    tx = -gy / grad_norm
-    ty = gx / grad_norm
-
-    proj_t = u_real * tx + u_imag * ty
-    proj_n = u_real * nx + u_imag * ny
-
-    normal_scale_no_hit = 0.05
-    normal_scale_hit = 1.0
-    tangential_scale = 1.0
-    normal_scale = normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * max(
-        0.0, min(1.0, h)
-    )
-
-    servo_gain = 0.2
-    d = df.sample_bilinear(float(c_cur.real), float(c_cur.imag))
-    servo = servo_gain * (d_star - d)
-
-    dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo)
-    dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo)
-
-    mag = math.hypot(dx, dy)
-    if mag > max_step and mag > 0.0:
-        s = max_step / mag
-        dx *= s
-        dy *= s
-
-    return type("C", (), {"real": c_cur.real + dx, "imag": c_cur.imag + dy})()
-
-
 def run_trial(
     df: PyDistanceField,
     d_star: float,
@@ -225,28 +179,17 @@ def run_trial(
         # transient hit
         h = 1.0 if rng.random() < hit_prob else 0.0
 
-        # apply contour integrator: prefer runtime_core binding if available
-        if hasattr(rc, "contour_biased_step"):
-            # runtime_core binding may not be available in this environment; fall back to Python version
-            try:
-                c_next = rc.contour_biased_step(
-                    float(c_cur.real),
-                    float(c_cur.imag),
-                    u_real,
-                    u_imag,
-                    h,
-                    d_star,
-                    max_step,
-                    None,
-                )
-            except Exception:
-                c_next = contour_biased_step_py(
-                    c_cur, u_real, u_imag, h, d_star, max_step, df
-                )
-        else:
-            c_next = contour_biased_step_py(
-                c_cur, u_real, u_imag, h, d_star, max_step, df
-            )
+        # Apply the runtime-core contour integrator (no Python fallback allowed)
+        c_next = rc.contour_biased_step(
+            float(c_cur.real),
+            float(c_cur.imag),
+            u_real,
+            u_imag,
+            h,
+            d_star,
+            max_step,
+            None,
+        )
 
         # render proxy frame small
         img = vm.render_julia_set(

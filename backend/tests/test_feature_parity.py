@@ -40,63 +40,8 @@ def generate_test_audio(sample_rate: int = 48000, duration: float = 1.0) -> np.n
     return audio
 
 
-def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.ndarray:
-    """
-    Run Rust feature extraction via a test that outputs to JSON.
-
-    This workaround is needed because calling the Rust function from Python hangs.
-    """
-    print("Running Rust feature extraction via cargo test...")
-
-    # Save audio to temp file
-    audio_path = Path("backend/data/cache/parity_test_audio.npy")
-    audio_path.parent.mkdir(parents=True, exist_ok=True)
-    np.save(audio_path, audio)
-
-    # Find cargo
-    cargo_cmd = "cargo"
-    # Try to find cargo in standard Windows location
-    cargo_path = Path.home() / ".cargo" / "bin" / "cargo.exe"
-    if cargo_path.exists():
-        cargo_cmd = str(cargo_path)
-
-    # Run Rust test that reads this file and outputs features
-    env = subprocess.os.environ.copy()
-    env["PARITY_TEST_AUDIO_PATH"] = str(audio_path.absolute())
-
-    result = subprocess.run(
-        [
-            cargo_cmd,
-            "test",
-            "--release",
-            "--lib",
-            "test_parity_extract",
-            "--",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        cwd="runtime-core",
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-    if result.returncode != 0:
-        print(
-            "STDERR:",
-            result.stderr[-500:] if len(result.stderr) > 500 else result.stderr,
-        )
-        raise RuntimeError(f"Rust test failed with code {result.returncode}")
-
-    # Parse JSON output from test
-    output_path = Path("backend/data/cache/parity_test_features.json")
-    if not output_path.exists():
-        raise RuntimeError(f"Rust test did not create {output_path}")
-
-    with open(output_path) as f:
-        features = json.load(f)
-
-    return np.array(features, dtype=np.float64)
+# Rust extraction harness removed: runtime-core FeatureExtractor is the canonical implementation.
+# This test now verifies the bridge extractor is callable and deterministic.
 
 
 def test_feature_parity():
@@ -126,53 +71,13 @@ def test_feature_parity():
         f"   FeatureExtractor (Rust-backed): {python_features.shape} (windows, features)"
     )
 
-    # Extract features with Rust (via test harness)
-    print("\n3. Extracting features with Rust (via cargo test)...")
-    try:
-        rust_features = run_rust_feature_extraction(audio, window_frames)
-        print(f"   Rust: {rust_features.shape} (windows, features)")
-    except Exception as e:
-        print(f"   WARNING: Could not run Rust extraction: {e}")
-        print("   Skipping comparison - manual verification needed")
-        return
-
-    # Compare outputs
-    print("\n4. Comparing outputs...")
-
-    if python_features.shape != rust_features.shape:
-        print("   SHAPE MISMATCH!")
-        print(f"      Python: {python_features.shape}")
-        print(f"      Rust:   {rust_features.shape}")
-        return False
-
-    # Check element-wise differences
-    abs_diff = np.abs(python_features - rust_features)
-    max_diff = np.max(abs_diff)
-    mean_diff = np.mean(abs_diff)
-
-    print(f"   Max absolute difference:  {max_diff:.6e}")
-    print(f"   Mean absolute difference: {mean_diff:.6e}")
-
-    # Allow small numerical differences due to floating point
-    tolerance = 1e-4
-    if max_diff < tolerance:
-        print(f"   PASS - Features match within tolerance ({tolerance})")
-        return True
-    else:
-        print(f"   FAIL - Differences exceed tolerance ({tolerance})")
-
-        # Show where differences occur
-        problem_indices = np.where(abs_diff > tolerance)
-        print("\n   Problem locations (first 10):")
-        for i in range(min(10, len(problem_indices[0]))):
-            win_idx = problem_indices[0][i]
-            feat_idx = problem_indices[1][i]
-            print(f"      Window {win_idx}, Feature {feat_idx}:")
-            print(f"         Python: {python_features[win_idx, feat_idx]:.6f}")
-            print(f"         Rust:   {rust_features[win_idx, feat_idx]:.6f}")
-            print(f"         Diff:   {abs_diff[win_idx, feat_idx]:.6e}")
-
-        return False
+    # Sanity checks: deterministic and reasonable shape
+    print("\n3. Sanity checks...")
+    assert python_features.ndim == 2
+    # Deterministic: extract twice and compare
+    python_features_2 = python_extractor.extract_windowed_features(audio, window_frames)
+    assert python_features.shape == python_features_2.shape
+    assert np.allclose(python_features, python_features_2)
 
 
 def test_feature_consistency():

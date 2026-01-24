@@ -150,16 +150,8 @@ def step_orbit(
     rp = residual_params or make_residual_params()
     gates = list(band_gates) if band_gates is not None else None
 
-    # Try the full signature first
-    try:
-        return state.step(dt, rp, gates, distance_field, h, d_star, max_step)
-    except TypeError:
-        # Old bindings: try without integrator args
-        try:
-            return state.step(dt, rp, gates, distance_field)
-        except TypeError:
-            # Fallback to older signature without distance_field
-            return state.step(dt, rp, gates)
+    # Call runtime-core's OrbitState.step with the full, canonical signature.
+    return state.step(dt, rp, gates, distance_field, h, d_star, max_step)
 
 
 def synthesize(
