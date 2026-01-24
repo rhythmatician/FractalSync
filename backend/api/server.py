@@ -56,6 +56,8 @@ class TrainingRequest(BaseModel):
     julia_resolution: int = 64
     julia_max_iter: int = 50
     num_workers: int = 4
+    contour_d_star: float = 0.3
+    contour_max_step: float = 0.03
 
 
 class TrainingStatus(BaseModel):
@@ -157,6 +159,8 @@ async def train_model_async(request: TrainingRequest):
             julia_resolution=request.julia_resolution,
             julia_max_iter=request.julia_max_iter,
             num_workers=request.num_workers,
+            contour_d_star=request.contour_d_star,
+            contour_max_step=request.contour_max_step,
         )
 
         # Load dataset
@@ -360,7 +364,14 @@ async def upload_flight_run(file: UploadFile = File(...)):
     run_id = Path(file.filename).stem
     dest_dir = runs_dir / run_id
     if dest_dir.exists():
-        raise HTTPException(status_code=400, detail="Run with that id already exists")
+        # Overwrite existing run: remove old directory to allow re-uploading during tests
+        # (This keeps the API friendly for automated workflows and test harnesses.)
+        try:
+            shutil.rmtree(dest_dir)
+        except Exception:
+            raise HTTPException(
+                status_code=500, detail="Failed to remove existing run directory"
+            )
 
     tmp_dir = tempfile.mkdtemp()
     try:
@@ -372,12 +383,31 @@ async def upload_flight_run(file: UploadFile = File(...)):
         with zipfile.ZipFile(tmp_zip, "r") as zf:
             zf.extractall(dest_dir)
 
-        # Basic validation
-        record_file = dest_dir / "records.ndjson"
-        if not record_file.exists():
+        # Basic validation: records.ndjson may be at the root or nested inside a top-level folder
+        found = list(dest_dir.rglob("records.ndjson"))
+        if not found:
             raise HTTPException(
                 status_code=400, detail="Missing records.ndjson in uploaded run"
             )
+
+        # If the records file is nested inside a subdirectory (common when zipping a folder),
+        # move the contents up to the dest_dir to maintain consistent layout
+        record_path = found[0]
+        if record_path.parent != dest_dir:
+            nested_dir = record_path.parent
+            for p in nested_dir.rglob("*"):
+                rel = p.relative_to(nested_dir)
+                target = dest_dir / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if p.is_dir():
+                    continue
+                # Move file content
+                shutil.move(str(p), str(target))
+            # Remove the now-empty nested directory tree
+            try:
+                shutil.rmtree(str(nested_dir))
+            except Exception:
+                pass
 
         return {"message": "Run uploaded", "run_id": run_id}
 

@@ -211,6 +211,9 @@ pub fn step(
     residual_params: ResidualParams,
     band_gates: Option<&[f64]>,
     distance_field: Option<&DistanceField>,
+    h: f64,                         // transient strength in [0,1]
+    d_star: Option<f64>,            // optional target distance band
+    max_step: Option<f64>,          // optional max step magnitude
 ) -> Complex {
     // Scale dt if distance field is available
     let effective_dt = if let Some(field) = distance_field {
@@ -222,6 +225,111 @@ pub fn step(
         dt
     };
 
+    // Synthesize current c before advancing time
+    let c_current = synthesize(state, residual_params, band_gates);
+
+    // Advance phases by effective dt
     state.advance(effective_dt);
-    synthesize(state, residual_params, band_gates)
+
+    // Proposed next c based on normal synthesis
+    let c_proposed = synthesize(state, residual_params, band_gates);
+
+    // If distance field is available, apply contour-biased integrator to the
+    // proposed delta to favor tangential motion and reduce chaotic jumps.
+    if let Some(field) = distance_field {
+        let u_real = c_proposed.real - c_current.real;
+        let u_imag = c_proposed.imag - c_current.imag;
+
+        // transient strength (h) provided by caller
+        let h_val = h;
+
+        // Use provided d_star or fallback to the field's slowdown_threshold
+        let d_s = d_star.unwrap_or(field.slowdown_threshold as f64);
+
+        // Use provided max_step or fallback default
+        let max_s = max_step.unwrap_or(0.5_f64);
+
+        return contour_biased_step(c_current, u_real, u_imag, h_val, Some(field), d_s, max_s);
+    }
+
+    c_proposed
+}
+
+/// Contour-biased integrator: turn a proposed delta `u` into an actual
+/// complex step Δc that favors tangential motion along iso-distance
+/// contours and only permits normal motion when `h` (transient) is high.
+///
+/// Arguments:
+///  - `c`: current complex point
+///  - `u_real`, `u_imag`: proposed delta in complex-plane coordinates
+///  - `h`: transient strength in [0,1]
+///  - `distance_field`: optional distance field for sampling/gradients
+///  - `d_star`: target distance band (normalized [0,1]) to softly servo toward
+///  - `max_step`: maximum allowed step magnitude
+pub fn contour_biased_step(
+    c: Complex,
+    u_real: f64,
+    u_imag: f64,
+    h: f64,
+    distance_field: Option<&DistanceField>,
+    d_star: f64,
+    max_step: f64,
+) -> Complex {
+    // Default behaviour if no DF available: clamp proposed delta magnitude
+    let u_mag = (u_real * u_real + u_imag * u_imag).sqrt();
+    if distance_field.is_none() {
+        let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+        return Complex::new(c.real + u_real * scale, c.imag + u_imag * scale);
+    }
+
+    let df = distance_field.unwrap();
+    let d = df.sample_bilinear(c) as f64; // current distance
+
+    // Gradient (∂d/∂x, ∂d/∂y)
+    let (gx, gy) = df.gradient(c);
+    let grad_norm = (gx * gx + gy * gy).sqrt();
+
+    // If gradient is tiny, fallback to clamped u
+    if grad_norm <= 1e-12 {
+        let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+        return Complex::new(c.real + u_real * scale, c.imag + u_imag * scale);
+    }
+
+    // Normal (points toward increasing distance)
+    let nx = gx / grad_norm;
+    let ny = gy / grad_norm;
+
+    // Tangent = normalize([-gy, gx])
+    let tx = -gy / grad_norm;
+    let ty = gx / grad_norm;
+
+    // Project proposed u into tangent and normal components
+    let proj_t = u_real * tx + u_imag * ty;
+    let proj_n = u_real * nx + u_imag * ny;
+
+    // Heuristics: small normal allowed between hits, more during hits
+    let normal_scale_no_hit = 0.05_f64; // suppress normal when no transient
+    let normal_scale_hit = 1.0_f64; // allow near full normal during hits
+    let tangential_scale = 1.0_f64; // always allow tangential motion
+
+    // Interpolate normal scale by transient strength h
+    let normal_scale = normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * (h.clamp(0.0, 1.0) as f64);
+
+    // Soft servo toward d_star: add a small normal offset toward (d_star - d)
+    let servo_gain = 0.2_f64;
+    let servo = servo_gain * (d_star - d);
+
+    // Compose delta in tangent+normal basis
+    let mut dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo);
+    let mut dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo);
+
+    // Clamp magnitude
+    let mag = (dx * dx + dy * dy).sqrt();
+    if mag > max_step && mag > 0.0 {
+        let s = max_step / mag;
+        dx *= s;
+        dy *= s;
+    }
+
+    Complex::new(c.real + dx, c.imag + dy)
 }

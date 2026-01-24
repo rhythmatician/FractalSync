@@ -34,8 +34,8 @@ fn test_deterministic_stepping() {
     let mut state2 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 1.0, 42);
     
     for _ in 0..20 {
-        let c1 = step(&mut state1, 0.01, params, None);
-        let c2 = step(&mut state2, 0.01, params, None);
+        let c1 = step(&mut state1, 0.01, params, None, None, 0.0, None, None);
+        let c2 = step(&mut state2, 0.01, params, None, None, 0.0, None, None);
         
         assert_eq!(c1.real, c2.real);
         assert_eq!(c1.imag, c2.imag);
@@ -126,7 +126,7 @@ fn test_step_advances_theta() {
     let mut state = OrbitState::new_with_seed(1, 0, 0.0, 2.0, 1.0, 0.5, 6, 1.0, 123);
     
     let initial_theta = state.theta;
-    step(&mut state, 0.1, params, None);
+    step(&mut state, 0.1, params, None, None, 0.0, None, None);
     
     assert!(
         (state.theta - initial_theta).abs() > 1e-6,
@@ -140,12 +140,12 @@ fn test_step_with_dt_consistency() {
     
     // Step with large dt
     let mut state1 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 1.0, 42);
-    step(&mut state1, 1.0, params, None);
+    step(&mut state1, 1.0, params, None, None, 0.0, None, None);
     
     // Step with small dt multiple times
     let mut state2 = OrbitState::new_with_seed(1, 0, 0.0, 1.0, 1.0, 0.5, 6, 1.0, 42);
     for _ in 0..10 {
-        step(&mut state2, 0.1, params, None);
+        step(&mut state2, 0.1, params, None, None, 0.0, None, None);
     }
     
     // Should end up at approximately the same theta

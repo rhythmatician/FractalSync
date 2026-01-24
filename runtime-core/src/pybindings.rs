@@ -224,14 +224,19 @@ impl OrbitState {
 
     /// Advance time by dt and return the next c(t).  The band gates
     /// are applied to each residual. Optionally accepts a DistanceField
-    /// for velocity-based slowdown near the Mandelbrot boundary.
-    #[pyo3(signature = (dt, residual_params, band_gates=None, distance_field=None))]
+    /// for velocity-based slowdown near the Mandelbrot boundary.  New
+    /// parameters `h`, `d_star`, and `max_step` control the contour
+    /// integrator behaviour.
+    #[pyo3(signature = (dt, residual_params, band_gates=None, distance_field=None, h=0.0, d_star=None, max_step=None))]
     fn step(
         &mut self,
         dt: f64,
         residual_params: ResidualParams,
         band_gates: Option<Vec<f64>>,
         distance_field: Option<&DistanceField>,
+        h: f64,
+        d_star: Option<f64>,
+        max_step: Option<f64>,
     ) -> Complex {
         let rust_field = distance_field.map(|df| &df.inner);
         rust_step(
@@ -240,6 +245,9 @@ impl OrbitState {
             residual_params.into(),
             band_gates.as_deref(),
             rust_field,
+            h,
+            d_star,
+            max_step,
         )
         .into()
     }
@@ -293,6 +301,16 @@ impl DistanceField {
     /// Get velocity scale factor for a complex point.
     fn get_velocity_scale(&self, real: f64, imag: f64) -> f32 {
         self.inner.get_velocity_scale(RustComplex::new(real, imag))
+    }
+
+    /// Bilinear sample at arbitrary coordinates (returns [0,1])
+    fn sample_bilinear(&self, real: f64, imag: f64) -> f32 {
+        self.inner.sample_bilinear(RustComplex::new(real, imag))
+    }
+
+    /// Gradient (∂d/∂x, ∂d/∂y) at point in complex plane. Returns tuple (gx, gy).
+    fn gradient(&self, real: f64, imag: f64) -> (f64, f64) {
+        self.inner.gradient(RustComplex::new(real, imag))
     }
 }
 
@@ -366,5 +384,33 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<DistanceField>()?;
     m.add_class::<FeatureExtractor>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
+
+    // Contour-biased integrator helper
+    #[pyfunction]
+    #[pyo3(signature=(real, imag, u_real, u_imag, h, d_star, max_step, distance_field))]
+    fn contour_biased_step(
+        real: f64,
+        imag: f64,
+        u_real: f64,
+        u_imag: f64,
+        h: f64,
+        d_star: f64,
+        max_step: f64,
+        distance_field: Option<&DistanceField>,
+    ) -> PyResult<Complex> {
+        let rust_field = distance_field.map(|df| &df.inner);
+        let c = crate::controller::contour_biased_step(
+            RustComplex::new(real, imag),
+            u_real,
+            u_imag,
+            h,
+            rust_field,
+            d_star,
+            max_step,
+        );
+        Ok(c.into())
+    }
+    m.add_function(wrap_pyfunction!(contour_biased_step, m)?)?;
+
     Ok(())
 }

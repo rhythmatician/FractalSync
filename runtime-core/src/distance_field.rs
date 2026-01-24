@@ -72,6 +72,7 @@ impl DistanceField {
     ///
     /// Uses nearest-neighbor lookup for speed.
     pub fn lookup(&self, c: Complex) -> f32 {
+        // Nearest-neighbor lookup for speed (existing behaviour)
         // Convert to pixel coordinates
         let real_scale = (self.real_max - self.real_min) / (self.resolution as f64);
         let imag_scale = (self.imag_max - self.imag_min) / (self.resolution as f64);
@@ -93,6 +94,61 @@ impl DistanceField {
         self.field[idx]
     }
 
+    /// Bilinear sample at arbitrary (non-integer) coordinates.
+    /// Returns interpolated escape-time in [0,1]. Out-of-bounds -> 1.0
+    pub fn sample_bilinear(&self, c: Complex) -> f32 {
+        let real_scale = (self.real_max - self.real_min) / (self.resolution as f64);
+        let imag_scale = (self.imag_max - self.imag_min) / (self.resolution as f64);
+
+        let col_f = (c.real - self.real_min) / real_scale;
+        let row_f = (c.imag - self.imag_min) / imag_scale;
+
+        // If out of range, return far-out value
+        if col_f < 0.0 || col_f > (self.resolution as f64 - 1.0) || row_f < 0.0 || row_f > (self.resolution as f64 - 1.0) {
+            return 1.0;
+        }
+
+        let col0 = col_f.floor() as usize;
+        let row0 = row_f.floor() as usize;
+        let col1 = (col0 + 1).min(self.resolution - 1);
+        let row1 = (row0 + 1).min(self.resolution - 1);
+
+        let dx = (col_f - col0 as f64) as f32;
+        let dy = (row_f - row0 as f64) as f32;
+
+        let v00 = self.field[row0 * self.resolution + col0];
+        let v10 = self.field[row0 * self.resolution + col1];
+        let v01 = self.field[row1 * self.resolution + col0];
+        let v11 = self.field[row1 * self.resolution + col1];
+
+        // Bilinear interpolation
+        let top = v00 * (1.0 - dx) + v10 * dx;
+        let bottom = v01 * (1.0 - dx) + v11 * dx;
+        let val = top * (1.0 - dy) + bottom * dy;
+
+        val
+    }
+
+    /// Estimate gradient (∂d/∂x, ∂d/∂y) at point c using central differences
+    /// on the bilinearly sampled field. Returned gradients are in units of
+    /// (escape_time / complex-plane unit)
+    pub fn gradient(&self, c: Complex) -> (f64, f64) {
+        // Use one grid cell in world units as finite difference step
+        let dx = (self.real_max - self.real_min) / (self.resolution as f64);
+        let dy = (self.imag_max - self.imag_min) / (self.resolution as f64);
+
+        // Sample left/right and up/down
+        let left = self.sample_bilinear(Complex::new(c.real - dx, c.imag));
+        let right = self.sample_bilinear(Complex::new(c.real + dx, c.imag));
+        let down = self.sample_bilinear(Complex::new(c.real, c.imag - dy));
+        let up = self.sample_bilinear(Complex::new(c.real, c.imag + dy));
+
+        let gx = ((right as f64) - (left as f64)) / (2.0 * dx);
+        let gy = ((up as f64) - (down as f64)) / (2.0 * dy);
+
+        (gx, gy)
+    }
+
     /// Compute velocity scale factor based on escape time.
     ///
     /// Semantics:
@@ -104,15 +160,15 @@ impl DistanceField {
     /// decrease to 0 as escape_time → 1.
     pub fn velocity_scale(&self, escape_time: f32) -> f32 {
         let th = self.slowdown_threshold as f32;
-        if escape_time <= th {
-            return 1.0; // No slowdown when far from boundary
+        // If at or above threshold, we are safely outside and run at full speed
+        if escape_time >= th {
+            return 1.0;
         }
 
-        // Map [threshold, 1] → [0, 1] for smoothstep
-        let t = ((escape_time - th) / (1.0 - th)).clamp(0.0, 1.0);
-        // Smoothstep down: 1 - smoothstep(t)
+        // Otherwise map [0, th] -> [0, 1] using smoothstep
+        let t = (escape_time / th).clamp(0.0, 1.0);
         let s = t * t * (3.0 - 2.0 * t);
-        1.0 - s
+        s
     }
 
     /// Combined lookup and velocity scale computation.
@@ -123,6 +179,7 @@ impl DistanceField {
         let distance = self.lookup(c);
         self.velocity_scale(distance)
     }
+
 }
 
 #[cfg(test)]

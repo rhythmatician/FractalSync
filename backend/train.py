@@ -138,6 +138,18 @@ def main():
         help="Optional run id for flight recorder (default timestamp)",
     )
     parser.add_argument(
+        "--contour-d-star",
+        type=float,
+        default=0.3,
+        help="Target distance d* for contour-biased integrator (default: 0.3)",
+    )
+    parser.add_argument(
+        "--contour-max-step",
+        type=float,
+        default=0.03,
+        help="Maximum step size per contour-biased integrator step (default: 0.03)",
+    )
+    parser.add_argument(
         "--max-files",
         type=int,
         default=None,
@@ -251,6 +263,8 @@ def main():
         num_workers=args.num_workers,
         k_residuals=args.k_bands,
         flight_recorder=flight_recorder,
+        contour_d_star=args.contour_d_star,
+        contour_max_step=args.contour_max_step,
     )
 
     # Load checkpoint if resuming

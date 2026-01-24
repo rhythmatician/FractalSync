@@ -104,22 +104,30 @@ def step_orbit(
     residual_params: Optional[rc.ResidualParams] = None,
     band_gates: Optional[Sequence[float]] = None,
     distance_field: Optional[object] = None,
+    h: float = 0.0,
+    d_star: Optional[float] = None,
+    max_step: Optional[float] = None,
 ) -> rc.Complex:
     """
     Step the orbit forward by dt, passing band gates and optionally a distance field
-    if supported by the installed runtime_core extension.
+    and contour integrator options.
 
-    This wrapper tries the 4-arg form first (with distance_field) and falls back to
-    the 3-arg form if the extension doesn't accept the extra parameter.
+    This wrapper adapts to whichever binding signature is available on the installed
+    runtime_core extension (backwards compatible).
     """
     rp = residual_params or make_residual_params()
     gates = list(band_gates) if band_gates is not None else None
+
+    # Try the full signature first
     try:
-        # Prefer signature with distance_field if available
-        return state.step(dt, rp, gates, distance_field)  # type: ignore[arg-type]
+        return state.step(dt, rp, gates, distance_field, h, d_star, max_step)
     except TypeError:
-        # Fallback to older signature without distance_field
-        return state.step(dt, rp, gates)
+        # Old bindings: try without integrator args
+        try:
+            return state.step(dt, rp, gates, distance_field)
+        except TypeError:
+            # Fallback to older signature without distance_field
+            return state.step(dt, rp, gates)
 
 
 def synthesize(

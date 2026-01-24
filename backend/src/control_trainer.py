@@ -274,6 +274,8 @@ class ControlTrainer:
         render_fraction: float = 0.25,
         regularization_weight: float = 1e-4,
         flight_recorder: Optional[FlightRecorder] = None,
+        contour_d_star: float = 0.3,
+        contour_max_step: float = 0.03,
     ):
         """
         Initialize control trainer.
@@ -317,6 +319,10 @@ class ControlTrainer:
 
         # Optional flight recorder for per-timestep logging
         self.flight_recorder: Optional[FlightRecorder] = flight_recorder
+
+        # Contour integrator parameters (tunable)
+        self.contour_d_star = contour_d_star
+        self.contour_max_step = contour_max_step
 
         # Load numpy distance field for slowdown loss (fallback independent of runtime_core)
         self.df_numpy = None
@@ -575,7 +581,18 @@ class ControlTrainer:
                     f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
                 )
 
-                # Generate orbit trajectories with distance field slowdown
+            # Extract audio features early so transient proxy is available during stepping
+            n_features_per_frame = self.feature_extractor.num_features_per_frame()
+            window_frames = features.shape[1] // n_features_per_frame
+            features_reshaped = features.view(
+                batch_size, window_frames, n_features_per_frame
+            )
+            avg_features = features_reshaped.mean(dim=1)
+
+            spectral_centroid = avg_features[:, 0]
+            spectral_flux = avg_features[:, 1]
+
+            # Generate orbit trajectories with distance field slowdown
             c_values = []
             all_trajectories: List[List[List[float]]] = []
             for i in range(batch_size):
@@ -607,12 +624,21 @@ class ControlTrainer:
                 else:
                     # Trajectory synthesis via runtime_core
                     for step in range(self.trajectory_steps):
+                        # transient strength for this sample: use spectral flux as proxy
+                        h_val = (
+                            float(spectral_flux[i].detach().item())
+                            if i < spectral_flux.shape[0]
+                            else 0.0
+                        )
                         c = step_orbit(
                             orbit,
                             self.trajectory_dt,
                             self.residual_params,
                             gates_list,
                             distance_field=self.distance_field,
+                            h=h_val,
+                            d_star=self.contour_d_star,
+                            max_step=self.contour_max_step,
                         )
                         c_norm = np.sqrt(c.real**2 + c.imag**2)
                         max_magnitude = 2.0
@@ -628,17 +654,7 @@ class ControlTrainer:
             julia_real = c_tensor[:, 0]
             julia_imag = c_tensor[:, 1]
 
-            # Extract audio features for correlation
-            n_features_per_frame = self.feature_extractor.num_features_per_frame()
-            window_frames = features.shape[1] // n_features_per_frame
-            features_reshaped = features.view(
-                batch_size, window_frames, n_features_per_frame
-            )
-            avg_features = features_reshaped.mean(dim=1)
-
-            spectral_centroid = avg_features[:, 0]
-            spectral_flux = avg_features[:, 1]
-
+            # Audio features were computed earlier for transient proxy (spectral_centroid, spectral_flux)
             # Render Julia sets for visual metrics (subset of samples/steps)
             images = []
             color_hues = []

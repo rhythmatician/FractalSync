@@ -766,8 +766,14 @@ class OrbitStateMachine:
         self.orbit_state.s = smoothed_s
         self.orbit_state.alpha = residual_alpha
 
-        # Advance state and synthesize
-        c = step_orbit(self.orbit_state, self.dt)
+        # Advance state and synthesize - pass transient strength and contour params
+        c = step_orbit(
+            self.orbit_state,
+            self.dt,
+            h=impact_envelope_value,
+            d_star=self.contour_d_star,
+            max_step=self.contour_max_step,
+        )
 
         return complex(c.re, c.im)
 
@@ -800,6 +806,8 @@ class LiveController:
         render_rate: float = 60.0,
         control_rate: float = 10.0,
         fast_feature_rate: float = 100.0,
+        contour_d_star: float = 0.3,
+        contour_max_step: float = 0.03,
     ):
         """
         Initialize live controller.
@@ -834,6 +842,10 @@ class LiveController:
 
         # Latest features
         self.latest_slow_features: Optional[SlowFeatures] = None
+
+        # Contour integrator params (tunable)
+        self.contour_d_star = contour_d_star
+        self.contour_max_step = contour_max_step
 
     def process_audio_frame(self, audio_chunk: np.ndarray, timestamp: float) -> complex:
         """

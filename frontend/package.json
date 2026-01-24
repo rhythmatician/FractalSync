@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "smoke": "npm run build --silent && node ./scripts/check-dist.cjs"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -25,7 +26,6 @@
     "jsdom": "^23.0.0",
     "typescript": "^5.2.0",
     "vite": "^5.0.0",
-    "vitest": "^1.0.0",
-    "@types/jszip": "^3.10.0"
+    "vitest": "^1.0.0"
   }
 }
