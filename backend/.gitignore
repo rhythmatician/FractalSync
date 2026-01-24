@@ -32,6 +32,7 @@ checkpoints_orbit/training_history.json
 data/audio/*
 data/cache/*
 data/supervised/*
+data/mandelbrot_distance_field.*
 
 # Test output
 tests/fixtures/*.json
