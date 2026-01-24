@@ -444,6 +444,18 @@ class ControlTrainer:
             omega_scale = parsed["omega_scale"]
             band_gates = parsed["band_gates"]
 
+            # Debug: log control signal ranges
+            if batch_idx == 0:
+                logger.debug(
+                    f"Debug - s_target range: [{s_target.min():.4f}, {s_target.max():.4f}], mean: {s_target.mean():.4f}"
+                )
+                logger.debug(
+                    f"Debug - alpha range: [{alpha.min():.4f}, {alpha.max():.4f}], mean: {alpha.mean():.4f}"
+                )
+                logger.debug(
+                    f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
+                )
+
             # Synthesize c(t) using runtime_core (cardioid lobe)
             c_values = []
             for i in range(batch_size):
@@ -538,6 +550,15 @@ class ControlTrainer:
                 # Visual complexity from connectedness and edge density
                 visual_complexity = metrics["connectedness"] * metrics["edge_density"]
 
+                # Debug: log first sample metrics
+                if batch_idx == 0 and i == 0:
+                    logger.debug(
+                        f"Debug - First sample metrics: "
+                        f"edge_density={metrics['edge_density']:.6f}, "
+                        f"connectedness={metrics['connectedness']:.6f}, "
+                        f"temporal_change={metrics['temporal_change']:.6f}"
+                    )
+
                 images.append(image)
                 # Use s_target as proxy for color hue (example correlation)
                 color_hues.append(s_target[i])
@@ -585,6 +606,36 @@ class ControlTrainer:
             complexity_correlation_loss_val = self.correlation_loss(
                 musical_complexity, visual_complexity_tensor
             )
+
+            # Debug: log once per epoch to check values
+            if batch_idx == 0:
+                logger.debug(
+                    f"Debug - c_values range: real=[{julia_real.min():.4f}, {julia_real.max():.4f}], "
+                    f"imag=[{julia_imag.min():.4f}, {julia_imag.max():.4f}]"
+                )
+                if len(images) > 0:
+                    sample_image = images[0]
+                    logger.debug(
+                        f"Debug - image shape: {sample_image.shape}, "
+                        f"range: [{sample_image.min():.4f}, {sample_image.max():.4f}], "
+                        f"mean: {sample_image.mean():.4f}"
+                    )
+                logger.debug(
+                    f"Debug - temporal_change range: [{temporal_change_tensor.min():.4f}, {temporal_change_tensor.max():.4f}], "
+                    f"mean: {temporal_change_tensor.mean():.4f}"
+                )
+                logger.debug(
+                    f"Debug - visual_complexity range: [{visual_complexity_tensor.min():.4f}, {visual_complexity_tensor.max():.4f}], "
+                    f"mean: {visual_complexity_tensor.mean():.4f}"
+                )
+                logger.debug(
+                    f"Debug - musical_complexity range: [{musical_complexity.min():.4f}, {musical_complexity.max():.4f}], "
+                    f"mean: {musical_complexity.mean():.4f}"
+                )
+                logger.debug(
+                    f"Debug - continuity_loss: {visual_continuity_loss_val.item():.6f}, "
+                    f"complexity_loss: {complexity_correlation_loss_val.item():.6f}"
+                )
 
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
