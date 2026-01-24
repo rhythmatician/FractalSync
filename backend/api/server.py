@@ -98,11 +98,20 @@ async def root():
 
 @app.post("/api/train/start")
 async def start_training(request: TrainingRequest, background_tasks: BackgroundTasks):
-    """Start a training job."""
+    """Start a training job.
+
+    NOTE: The training API is deprecated in favor of the CLI `python train.py`.
+    This endpoint will remain available for now but may be removed in a future release.
+    """
     global training_state, training_task
 
     if training_state.status == "training":
         raise HTTPException(status_code=400, detail="Training already in progress")
+
+    # Emit deprecation warning to logs
+    logging.warning(
+        "/api/train/start is deprecated. Please use the CLI (python train.py) for training."
+    )
 
     # Reset state
     training_state = TrainingStatus(
@@ -117,7 +126,11 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
     # Start training in background
     training_task = asyncio.create_task(train_model_async(request))
 
-    return {"message": "Training started", "status": "training"}
+    return {
+        "message": "Training started (deprecated API). Prefer CLI: python train.py",
+        "status": "training",
+        "warning": "This training API is deprecated; use the CLI instead.",
+    }
 
 
 async def train_model_async(request: TrainingRequest):

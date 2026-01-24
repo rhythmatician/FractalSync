@@ -11,6 +11,14 @@ import numpy as np
 
 import runtime_core as rc
 
+# Optional torch helpers for batched tensor operations
+try:
+    import torch
+except (
+    Exception
+):  # pragma: no cover - torch may not be available in some test environments
+    torch = None
+
 
 def policy_state_encoder(
     s: float,
@@ -70,8 +78,8 @@ def policy_output_decoder(
 
     `output` is a flat sequence (u_x, u_y, delta_s, delta_omega, alpha_hit, gate_logits[0..k-1])
     """
-    if len(output) != 6 + k_bands:
-        raise ValueError(f"Expected output length {6 + k_bands}, got {len(output)}")
+    if len(output) != 5 + k_bands:
+        raise ValueError(f"Expected output length {5 + k_bands}, got {len(output)}")
 
     arr = np.asarray(output, dtype=np.float32)
     u = arr[0:2].copy()
@@ -106,6 +114,127 @@ def policy_output_decoder(
         "alpha_hit": alpha_hit,
         "gate_logits": gate_logits,
     }
+
+
+# -------------------- Torch helpers (batched) --------------------
+def policy_output_decoder_torch(
+    output, k_bands: int, clamp: Optional[Dict[str, Tuple[float, float]]] = None
+):
+    """Decode batched policy outputs (N, 6 + k_bands) into named tensors.
+
+    Returns dict of tensors: u (N,2), delta_s (N,), delta_omega (N,), alpha_hit (N,), gate_logits (N,k)
+    """
+    if torch is None:
+        raise RuntimeError("torch is required for policy_output_decoder_torch")
+    # Satisfy type checkers
+    assert torch is not None
+    if output.dim() != 2 or output.size(1) != 5 + k_bands:
+        raise ValueError(
+            f"Expected output shape (N, {5 + k_bands}), got {tuple(output.shape)}"
+        )
+
+    arr = output.to(dtype=torch.float32)
+    u = arr[:, 0:2].clone()
+    delta_s = arr[:, 2].clone()
+    delta_omega = arr[:, 3].clone()
+    alpha_hit = arr[:, 4].clone()
+    gate_logits = arr[:, 5 : 5 + k_bands].clone()
+
+    # Clamps
+    defaults = {
+        "delta_s": (-0.5, 0.5),
+        "delta_omega": (-1.0, 1.0),
+        "u": (-1.0, 1.0),
+        "alpha_hit": (0.0, 2.0),
+    }
+    clamp = clamp or {}
+
+    def apply_clamp_t(name: str, t):
+        lo, hi = clamp.get(name, defaults.get(name, (-float("inf"), float("inf"))))
+        return torch.clamp(t, min=lo, max=hi)
+
+    u = apply_clamp_t("u", u)
+    delta_s = apply_clamp_t("delta_s", delta_s)
+    delta_omega = apply_clamp_t("delta_omega", delta_omega)
+    alpha_hit = apply_clamp_t("alpha_hit", alpha_hit)
+
+    return {
+        "u": u,
+        "delta_s": delta_s,
+        "delta_omega": delta_omega,
+        "alpha_hit": alpha_hit,
+        "gate_logits": gate_logits,
+    }
+
+
+def apply_policy_deltas_torch(
+    s,
+    alpha,
+    omega,
+    theta,
+    deltas: Dict[str, object],
+    h_t=None,
+    max_delta_s: float = 0.5,
+    max_delta_omega: float = 1.0,
+):
+    """Apply deltas (batched) to primitive state tensors and return updated tensors.
+
+    s, alpha, omega, theta are (N,) tensors. deltas contains tensors from decoder.
+    Returns dict with keys 's', 'alpha', 'omega' (all (N,) tensors).
+    """
+    if torch is None:
+        raise RuntimeError("torch is required for apply_policy_deltas_torch")
+    assert torch is not None
+    """Apply deltas (batched) to primitive state tensors and return updated tensors.
+
+    s, alpha, omega, theta are (N,) tensors. deltas contains tensors from decoder.
+    Returns dict with keys 's', 'alpha', 'omega' (all (N,) tensors).
+    """
+    if torch is None:
+        raise RuntimeError("torch is required for apply_policy_deltas_torch")
+
+    # Ensure floats
+    s = s.to(dtype=torch.float32)
+    alpha = alpha.to(dtype=torch.float32)
+    omega = omega.to(dtype=torch.float32)
+    theta = theta.to(dtype=torch.float32)
+
+    ds = deltas.get("delta_s", None)
+    domega = deltas.get("delta_omega", None)
+
+    if ds is None:
+        ds = torch.zeros_like(s)
+    else:
+        ds = torch.as_tensor(ds, dtype=torch.float32, device=s.device)
+
+    if domega is None:
+        domega = torch.zeros_like(s)
+    else:
+        domega = torch.as_tensor(domega, dtype=torch.float32, device=s.device)
+
+    s_new = torch.clamp(
+        s + torch.clamp(ds, -max_delta_s, max_delta_s), min=0.1, max=10.0
+    )
+    omega_new = torch.clamp(
+        omega + torch.clamp(domega, -max_delta_omega, max_delta_omega),
+        min=-10.0,
+        max=10.0,
+    )
+
+    alpha_hit = deltas.get("alpha_hit", None)
+    if alpha_hit is None:
+        alpha_hit = torch.zeros_like(s)
+    else:
+        alpha_hit = torch.as_tensor(alpha_hit, dtype=torch.float32, device=s.device)
+
+    if h_t is None:
+        h_t = torch.zeros_like(s)
+    else:
+        h_t = torch.as_tensor(h_t, dtype=torch.float32, device=s.device)
+
+    alpha_new = torch.clamp(alpha + h_t * alpha_hit, min=0.0, max=5.0)
+
+    return {"s": s_new, "alpha": alpha_new, "omega": omega_new}
 
 
 def apply_policy_deltas(

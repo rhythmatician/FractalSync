@@ -29,7 +29,7 @@ def test_policy_encode_shape_and_roundtrip():
     assert arr.shape == (27 + 2 * k,)
 
     # Fake policy output
-    out = np.zeros(6 + k, dtype=np.float32)
+    out = np.zeros(5 + k, dtype=np.float32)
     out[0:2] = [0.01, -0.02]
     out[2] = 0.05
     out[3] = -0.1

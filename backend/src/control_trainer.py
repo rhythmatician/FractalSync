@@ -30,6 +30,8 @@ from .policy_interface import (
     policy_state_encoder,
     policy_output_decoder,
     apply_policy_deltas,
+    policy_output_decoder_torch,
+    apply_policy_deltas_torch,
 )
 
 # Distance field loader is experimental; import if available (keeps repo clean if absent)
@@ -284,6 +286,9 @@ class ControlTrainer:
         contour_d_star: float = 0.3,
         contour_max_step: float = 0.03,
         policy_mode: bool = False,
+        sequence_training: bool = False,
+        sequence_unroll_steps: int = 5,
+        sequence_stride: int = 1,
     ):
         """
         Initialize control trainer.
@@ -334,6 +339,10 @@ class ControlTrainer:
 
         # Policy mode (if True, expects a PolicyModel and uses the policy I/O contract)
         self.policy_mode = policy_mode
+        # Sequence training (closed-loop unroll) options
+        self.sequence_training = bool(sequence_training)
+        self.sequence_unroll_steps = int(sequence_unroll_steps)
+        self.sequence_stride = int(sequence_stride)
 
         # Load numpy distance field for slowdown loss (fallback independent of runtime_core)
         self.df_numpy = None
@@ -569,111 +578,261 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
-            # Extract audio features early so transient proxy is available during stepping
-            n_features_per_frame = self.feature_extractor.num_features_per_frame()
-            window_frames = features.shape[1] // n_features_per_frame
-            features_reshaped = features.view(
-                batch_size, window_frames, n_features_per_frame
+            # Detect sequence batches (batch, seq_len, feat_dim) for sequence training
+            is_sequence_batch = (
+                (features.ndim == 3) and self.sequence_training and self.policy_mode
             )
-            avg_features = features_reshaped.mean(dim=1)
 
-            spectral_centroid = avg_features[:, 0]
-            spectral_flux = avg_features[:, 1]
+            if not is_sequence_batch:
+                # Extract audio features early so transient proxy is available during stepping
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = features.shape[1] // n_features_per_frame
+                features_reshaped = features.view(
+                    batch_size, window_frames, n_features_per_frame
+                )
+                avg_features = features_reshaped.mean(dim=1)
 
-            # Forward pass with mixed precision
-            with autocast(enabled=self.use_amp):
-                # Policy mode: model expects the policy_input vector instead of raw audio features
-                if self.policy_mode:
-                    # Build policy inputs per sample
-                    import math
+                spectral_centroid = avg_features[:, 0]
+                spectral_flux = avg_features[:, 1]
+            else:
+                # Sequence batch; defer per-step spectral_flux computation inside sequence loop
+                B, T, D = features.shape
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = D // n_features_per_frame
+                spectral_centroid = None
+                spectral_flux = None
 
-                    policy_inputs = []
-                    for i in range(batch_size):
-                        # Base orbit state used as encoding seed
-                        s0 = 1.02
-                        alpha0 = 0.3
-                        omega0 = float(DEFAULT_BASE_OMEGA)
-                        theta0 = float(i * 2 * math.pi / batch_size)
+            # Sequence training + policy mode: run closed-loop unrolled rollouts
+            if self.policy_mode and self.sequence_training:
+                # Expect `features` shape (batch, seq_len, feat_dim)
+                import math
+                from . import differentiable_integrator as di
 
-                        h_t_val = float(spectral_flux[i].detach().item())
-                        loudness = 0.0
-                        tonalness = 0.0
-                        noisiness = 0.0
+                batch_seq = features  # (B, T, D)
+                B, T, D = batch_seq.shape
+                device = self.device
 
-                        band_energies = [0.0] * self.k_residuals
-                        band_deltas = [0.0] * self.k_residuals
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = D // n_features_per_frame
 
-                        # geometry minimap: synthesize a seed c and sample distance field if available
-                        try:
-                            orbit0 = make_orbit_state(
-                                lobe=1,
-                                sub_lobe=0,
-                                theta=theta0,
-                                omega=omega0,
-                                s=s0,
-                                alpha=alpha0,
-                                k_residuals=self.k_residuals,
-                                residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                                seed=int(DEFAULT_ORBIT_SEED + i),
-                            )
-                            c0 = synthesize(orbit0, self.residual_params, None)
-                            if self.distance_field is not None:
-                                d_c = float(
-                                    self.distance_field.lookup(
+                # Initial primitive states
+                s = torch.full((B,), 1.02, device=device, dtype=torch.float32)
+                alpha = torch.full((B,), 0.3, device=device, dtype=torch.float32)
+                omega = torch.full(
+                    (B,), float(DEFAULT_BASE_OMEGA), device=device, dtype=torch.float32
+                )
+                theta = torch.tensor(
+                    [float(i * 2 * math.pi / B) for i in range(B)],
+                    device=device,
+                    dtype=torch.float32,
+                )
+
+                # Initial c computed via synthesize (non-differentiable anchor)
+                c_real = torch.zeros(B, device=device, dtype=torch.float32)
+                c_imag = torch.zeros(B, device=device, dtype=torch.float32)
+                for i in range(B):
+                    try:
+                        orbit0 = make_orbit_state(
+                            lobe=1,
+                            sub_lobe=0,
+                            theta=float(theta[i].item()),
+                            omega=float(omega[i].item()),
+                            s=float(s[i].item()),
+                            alpha=float(alpha[i].item()),
+                            k_residuals=self.k_residuals,
+                            residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                            seed=int(DEFAULT_ORBIT_SEED + i),
+                        )
+                        c0 = synthesize(orbit0, self.residual_params, None)
+                        c_norm = np.sqrt(c0.real**2 + c0.imag**2)
+                        max_magnitude = 2.0
+                        divisor = c_norm if c_norm > max_magnitude else max_magnitude
+                        c_real[i] = float(c0.real) / divisor
+                        c_imag[i] = float(c0.imag) / divisor
+                    except Exception:
+                        c_real[i] = 0.0
+                        c_imag[i] = 0.0
+
+                # Accumulate L2 jump loss across steps
+                total_step_loss = torch.tensor(0.0, device=device, dtype=torch.float32)
+
+                for t in range(T):
+                    features_t = batch_seq[:, t, :]
+
+                    # Compute spectral_flux transient proxy for this step
+                    reshaped = features_t.view(B, window_frames, n_features_per_frame)
+                    avg_f = reshaped.mean(dim=1)
+                    spectral_flux_t = avg_f[:, 1]
+
+                    # Predict policy outputs for this step
+                    predicted = self.model(features_t)
+                    # Decode with torch helper
+                    decoded_t = policy_output_decoder_torch(predicted, self.k_residuals)
+                    u = decoded_t["u"]  # (B,2)
+                    u_r = u[:, 0]
+                    u_i = u[:, 1]
+
+                    # Integrator step (differentiable)
+                    next_r, next_i = di.contour_biased_step_torch(
+                        c_real,
+                        c_imag,
+                        u_r,
+                        u_i,
+                        spectral_flux_t,
+                        self.contour_d_star,
+                        self.contour_max_step,
+                        None,
+                    )
+
+                    # L2 jump loss (encourages small, smooth motions)
+                    step_loss = torch.mean(u_r**2 + u_i**2)
+                    total_step_loss = total_step_loss + step_loss
+
+                    # Update primitive states (s,alpha,omega)
+                    deltas = {
+                        "delta_s": decoded_t.get("delta_s"),
+                        "delta_omega": decoded_t.get("delta_omega"),
+                        "alpha_hit": decoded_t.get("alpha_hit"),
+                    }
+                    updated = apply_policy_deltas_torch(
+                        s, alpha, omega, theta, deltas, h_t=spectral_flux_t
+                    )
+                    s = updated["s"]
+                    alpha = updated["alpha"]
+                    omega = updated["omega"]
+
+                    # Update c for next step
+                    c_real = next_r
+                    c_imag = next_i
+
+                # Average step loss across steps
+                avg_step_loss = total_step_loss / float(T)
+                # Fill in losses and predicted_controls so later code can proceed uniformly
+                predicted_controls = torch.zeros(
+                    (B, self.model.output_dim), device=device
+                )
+                control_loss_val = torch.zeros(1, device=device)
+                timbre_color_loss = torch.tensor(0.0, device=device)
+                transient_impact_loss = torch.tensor(0.0, device=device)
+                visual_continuity_loss_val = torch.tensor(0.0, device=device)
+                boundary_loss_val = torch.tensor(0.0, device=device)
+                complexity_correlation_loss_val = torch.tensor(0.0, device=device)
+                trajectory_slowdown_loss_val = torch.tensor(0.0, device=device)
+
+                # Total loss: include regularization term on predicted_controls to keep grad path
+                total_batch_loss = (
+                    self.correlation_weights["timbre_color"] * timbre_color_loss
+                    + self.correlation_weights["transient_impact"]
+                    * transient_impact_loss
+                    + self.correlation_weights["visual_continuity"]
+                    * visual_continuity_loss_val
+                    + self.correlation_weights["boundary_exploration"]
+                    * boundary_loss_val
+                    + self.correlation_weights["complexity_correlation"]
+                    * complexity_correlation_loss_val
+                    + self.correlation_weights["trajectory_slowdown"]
+                    * trajectory_slowdown_loss_val
+                    + current_curriculum_weight * control_loss_val
+                    + self.regularization_weight * torch.mean(predicted_controls**2)
+                    + avg_step_loss
+                )
+            else:
+                # Forward pass with mixed precision for single-step training
+                with autocast(enabled=self.use_amp):
+                    # Policy mode: model expects the policy_input vector instead of raw audio features
+                    if self.policy_mode:
+                        # Build policy inputs per sample
+                        import math
+
+                        policy_inputs = []
+                        for i in range(batch_size):
+                            # Base orbit state used as encoding seed
+                            s0 = 1.02
+                            alpha0 = 0.3
+                            omega0 = float(DEFAULT_BASE_OMEGA)
+                            theta0 = float(i * 2 * math.pi / batch_size)
+
+                            h_t_val = float(spectral_flux[i].detach().item())
+                            loudness = 0.0
+                            tonalness = 0.0
+                            noisiness = 0.0
+
+                            band_energies = [0.0] * self.k_residuals
+                            band_deltas = [0.0] * self.k_residuals
+
+                            # geometry minimap: synthesize a seed c and sample distance field if available
+                            try:
+                                orbit0 = make_orbit_state(
+                                    lobe=1,
+                                    sub_lobe=0,
+                                    theta=theta0,
+                                    omega=omega0,
+                                    s=s0,
+                                    alpha=alpha0,
+                                    k_residuals=self.k_residuals,
+                                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                                    seed=int(DEFAULT_ORBIT_SEED + i),
+                                )
+                                c0 = synthesize(orbit0, self.residual_params, None)
+                                if self.distance_field is not None:
+                                    d_c = float(
+                                        self.distance_field.lookup(
+                                            float(c0.real), float(c0.imag)
+                                        )
+                                    )
+                                    gx, gy = self.distance_field.gradient(
                                         float(c0.real), float(c0.imag)
                                     )
-                                )
-                                gx, gy = self.distance_field.gradient(
-                                    float(c0.real), float(c0.imag)
-                                )
-                                # directional probes (8 directions × 2 radii)
-                                probes = []
-                                radii = [0.005, 0.02]
-                                for d_idx in range(8):
-                                    ang = 2 * math.pi * d_idx / 8.0
-                                    dir_x = math.cos(ang)
-                                    dir_y = math.sin(ang)
-                                    for r in radii:
-                                        rx = float(c0.real) + r * dir_x
-                                        ry = float(c0.imag) + r * dir_y
-                                        probes.append(
-                                            float(self.distance_field.lookup(rx, ry))
-                                        )
-                            else:
+                                    # directional probes (8 directions × 2 radii)
+                                    probes = []
+                                    radii = [0.005, 0.02]
+                                    for d_idx in range(8):
+                                        ang = 2 * math.pi * d_idx / 8.0
+                                        dir_x = math.cos(ang)
+                                        dir_y = math.sin(ang)
+                                        for r in radii:
+                                            rx = float(c0.real) + r * dir_x
+                                            ry = float(c0.imag) + r * dir_y
+                                            probes.append(
+                                                float(
+                                                    self.distance_field.lookup(rx, ry)
+                                                )
+                                            )
+                                else:
+                                    d_c = 1.0
+                                    gx, gy = (0.0, 0.0)
+                                    probes = [0.0] * 16
+                            except Exception:
                                 d_c = 1.0
                                 gx, gy = (0.0, 0.0)
                                 probes = [0.0] * 16
-                        except Exception:
-                            d_c = 1.0
-                            gx, gy = (0.0, 0.0)
-                            probes = [0.0] * 16
 
-                        inp = policy_state_encoder(
-                            s=s0,
-                            alpha=alpha0,
-                            omega=omega0,
-                            theta=theta0,
-                            h_t=h_t_val,
-                            loudness=loudness,
-                            tonalness=tonalness,
-                            noisiness=noisiness,
-                            band_energies=band_energies,
-                            band_deltas=band_deltas,
-                            d_c=d_c,
-                            grad=(gx, gy),
-                            directional_probes=probes,
+                            inp = policy_state_encoder(
+                                s=s0,
+                                alpha=alpha0,
+                                omega=omega0,
+                                theta=theta0,
+                                h_t=h_t_val,
+                                loudness=loudness,
+                                tonalness=tonalness,
+                                noisiness=noisiness,
+                                band_energies=band_energies,
+                                band_deltas=band_deltas,
+                                d_c=d_c,
+                                grad=(gx, gy),
+                                directional_probes=probes,
+                            )
+                            policy_inputs.append(inp)
+
+                        # Stack into batch tensor
+                        batch_inp = torch.tensor(
+                            np.stack(policy_inputs, axis=0),
+                            dtype=torch.float32,
+                            device=self.device,
                         )
-                        policy_inputs.append(inp)
-
-                    # Stack into batch tensor
-                    batch_inp = torch.tensor(
-                        np.stack(policy_inputs, axis=0),
-                        dtype=torch.float32,
-                        device=self.device,
-                    )
-                    predicted_controls = self.model(batch_inp)
-                else:
-                    predicted_controls = self.model(features)
+                        predicted_controls = self.model(batch_inp)
+                    else:
+                        predicted_controls = self.model(features)
 
             # Parse control signals or policy outputs
             if self.policy_mode:
@@ -700,60 +859,72 @@ class ControlTrainer:
             # Generate orbit trajectories with distance field slowdown
             c_values = []
             all_trajectories: List[List[List[float]]] = []
-            for i in range(batch_size):
-                # Initialize orbit state with model-predicted control signals
-                orbit = make_orbit_state(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
-                )
 
-                trajectory_c_values = []
-                gates_list = band_gates[i].detach().cpu().tolist()
+            # If sequence training with policy mode, we already computed c_real/c_imag using differentiable integrator.
+            if self.policy_mode and self.sequence_training:
+                # Use final c from sequence unroll as trajectory endpoints
+                for i in range(batch_size):
+                    cr = float(c_real[i].detach().cpu().item())
+                    ci = float(c_imag[i].detach().cpu().item())
+                    c_values.append([cr, ci])
+                    all_trajectories.append([[cr, ci]])
+            else:
+                for i in range(batch_size):
+                    # Initialize orbit state with model-predicted control signals
+                    orbit = make_orbit_state(
+                        lobe=1,
+                        sub_lobe=0,
+                        theta=float(i * 2 * np.pi / batch_size),
+                        omega=float(
+                            DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()
+                        ),
+                        s=float(s_target[i].detach().item()),
+                        alpha=float(alpha[i].detach().item()),
+                        k_residuals=self.k_residuals,
+                        residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                        seed=int(DEFAULT_ORBIT_SEED + i),
+                    )
 
-                if epoch == 0:
-                    # Static synthesis: single c
-                    c = synthesize(orbit, self.residual_params, gates_list)
-                    c_norm = np.sqrt(c.real**2 + c.imag**2)
-                    max_magnitude = 2.0
-                    divisor = max(c_norm, max_magnitude) / max_magnitude
-                    c_real = c.real / divisor
-                    c_imag = c.imag / divisor
-                    trajectory_c_values.append([c_real, c_imag])
-                else:
-                    # Trajectory synthesis via runtime_core
-                    for step in range(self.trajectory_steps):
-                        # transient strength for this sample: use spectral flux as proxy
-                        h_val = (
-                            float(spectral_flux[i].detach().item())
-                            if i < spectral_flux.shape[0]
-                            else 0.0
-                        )
-                        c = step_orbit(
-                            orbit,
-                            self.trajectory_dt,
-                            self.residual_params,
-                            gates_list,
-                            distance_field=self.distance_field,
-                            h=h_val,
-                            d_star=self.contour_d_star,
-                            max_step=self.contour_max_step,
-                        )
+                    trajectory_c_values = []
+                    gates_list = band_gates[i].detach().cpu().tolist()
+
+                    if epoch == 0:
+                        # Static synthesis: single c
+                        c = synthesize(orbit, self.residual_params, gates_list)
                         c_norm = np.sqrt(c.real**2 + c.imag**2)
                         max_magnitude = 2.0
                         divisor = max(c_norm, max_magnitude) / max_magnitude
                         c_real = c.real / divisor
                         c_imag = c.imag / divisor
                         trajectory_c_values.append([c_real, c_imag])
+                    else:
+                        # Trajectory synthesis via runtime_core
+                        for step in range(self.trajectory_steps):
+                            # transient strength for this sample: use spectral flux as proxy
+                            h_val = (
+                                float(spectral_flux[i].detach().item())
+                                if i < spectral_flux.shape[0]
+                                else 0.0
+                            )
+                            c = step_orbit(
+                                orbit,
+                                self.trajectory_dt,
+                                self.residual_params,
+                                gates_list,
+                                distance_field=self.distance_field,
+                                h=h_val,
+                                d_star=self.contour_d_star,
+                                max_step=self.contour_max_step,
+                            )
+                            c_norm = np.sqrt(c.real**2 + c.imag**2)
+                            max_magnitude = 2.0
+                            divisor = max(c_norm, max_magnitude) / max_magnitude
+                            c_real = c.real / divisor
+                            c_imag = c.imag / divisor
+                            trajectory_c_values.append([c_real, c_imag])
 
-                c_values.append(trajectory_c_values[-1])
-                all_trajectories.append(trajectory_c_values)
+                    c_values.append(trajectory_c_values[-1])
+                    all_trajectories.append(trajectory_c_values)
 
             c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
             julia_real = c_tensor[:, 0]
@@ -761,31 +932,49 @@ class ControlTrainer:
 
             # Audio features were computed earlier for transient proxy (spectral_centroid, spectral_flux)
             # Render Julia sets for visual metrics (subset of samples/steps)
+            render_sample_count = max(1, int(batch_size * self.render_fraction))
+            render_sample_indices = list(range(render_sample_count))
+
             images = []
             color_hues = []
             temporal_changes = []
             visual_complexities = []
             mandelbrot_distances = []
-            render_sample_count = max(1, int(batch_size * self.render_fraction))
-            render_sample_indices = list(range(render_sample_count))
 
-            for i in render_sample_indices:
-                prev_image = None
-                traj = all_trajectories[i]
-                sample_temporal_changes: List[torch.Tensor] = []
-                sample_visual_complexities: List[torch.Tensor] = []
-                # Render all steps for selected samples to preserve per-step continuity
-                prev_proxy = None
-                for step_idx, (seed_r, seed_i) in enumerate(traj):
-                    if self.julia_renderer is not None:
-                        try:
-                            image = self.julia_renderer.render(
-                                seed_real=float(seed_r),
-                                seed_imag=float(seed_i),
-                                max_iter=self.julia_max_iter,
-                            )
-                        except Exception as e:
-                            logger.warning(f"GPU rendering failed: {e}")
+            if self.policy_mode and self.sequence_training:
+                # In sequence training PoC, skip expensive rendering and provide placeholders
+                for i in render_sample_indices:
+                    images.append(None)
+                    temporal_changes.append(torch.tensor(0.0, device=self.device))
+                    visual_complexities.append(torch.tensor(0.0, device=self.device))
+                    mandelbrot_distances.append(1.0)
+                    color_hues.append(torch.tensor(0.0, device=self.device))
+            else:
+                for i in render_sample_indices:
+                    prev_image = None
+                    traj = all_trajectories[i]
+                    sample_temporal_changes: List[torch.Tensor] = []
+                    sample_visual_complexities: List[torch.Tensor] = []
+                    # Render all steps for selected samples to preserve per-step continuity
+                    prev_proxy = None
+                    for step_idx, (seed_r, seed_i) in enumerate(traj):
+                        if self.julia_renderer is not None:
+                            try:
+                                image = self.julia_renderer.render(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    max_iter=self.julia_max_iter,
+                                )
+                            except Exception as e:
+                                logger.warning(f"GPU rendering failed: {e}")
+                                image = self.visual_metrics.render_julia_set(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    width=self.julia_resolution,
+                                    height=self.julia_resolution,
+                                    max_iter=self.julia_max_iter,
+                                )
+                        else:
                             image = self.visual_metrics.render_julia_set(
                                 seed_real=float(seed_r),
                                 seed_imag=float(seed_i),
@@ -793,112 +982,106 @@ class ControlTrainer:
                                 height=self.julia_resolution,
                                 max_iter=self.julia_max_iter,
                             )
-                    else:
-                        image = self.visual_metrics.render_julia_set(
-                            seed_real=float(seed_r),
-                            seed_imag=float(seed_i),
-                            width=self.julia_resolution,
-                            height=self.julia_resolution,
-                            max_iter=self.julia_max_iter,
+
+                        metrics = self.visual_metrics.compute_all_metrics(
+                            image, prev_image=prev_image
                         )
 
-                    metrics = self.visual_metrics.compute_all_metrics(
-                        image, prev_image=prev_image
-                    )
+                        # Optional flight recorder: record per-step proxy frame and controller state
+                        if self.flight_recorder is not None:
+                            try:
+                                proxy = self.visual_metrics.render_julia_set(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    width=64,
+                                    height=64,
+                                    max_iter=min(40, self.julia_max_iter),
+                                )
+                                proxy_gray = (
+                                    np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
+                                )
+                                delta_v = compute_delta_v(proxy_gray, prev_proxy)
+                            except Exception:  # pragma: no cover - best-effort logging
+                                proxy = None
+                                proxy_gray = None
+                                delta_v = None
 
-                    # Optional flight recorder: record per-step proxy frame and controller state
-                    if self.flight_recorder is not None:
-                        try:
-                            proxy = self.visual_metrics.render_julia_set(
-                                seed_real=float(seed_r),
-                                seed_imag=float(seed_i),
-                                width=64,
-                                height=64,
-                                max_iter=min(40, self.julia_max_iter),
+                            controller_state = {
+                                "s": float(s_target[i].detach().item()),
+                                "alpha": float(alpha[i].detach().item()),
+                                "omega_scale": float(omega_scale[i].detach().item()),
+                                "band_gates": band_gates[i].detach().cpu().tolist(),
+                            }
+
+                            audio_feats = (
+                                features_reshaped[i].detach().cpu().flatten().tolist()
                             )
-                            proxy_gray = (
-                                np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
+
+                            h_val = float(spectral_flux[i].detach().item())
+
+                            # Record step (t, c, controller, h, band_energies, audio_features, proxy_frame, delta_v)
+                            self.flight_recorder.record_step(
+                                t=step_idx,
+                                c=[seed_r, seed_i],
+                                controller=controller_state,
+                                h=h_val,
+                                band_energies=band_gates[i].detach().cpu().tolist(),
+                                audio_features=audio_feats,
+                                proxy_frame=proxy,
+                                delta_v=delta_v,
                             )
-                            delta_v = compute_delta_v(proxy_gray, prev_proxy)
-                        except Exception:  # pragma: no cover - best-effort logging
-                            proxy = None
-                            proxy_gray = None
-                            delta_v = None
 
-                        controller_state = {
-                            "s": float(s_target[i].detach().item()),
-                            "alpha": float(alpha[i].detach().item()),
-                            "omega_scale": float(omega_scale[i].detach().item()),
-                            "band_gates": band_gates[i].detach().cpu().tolist(),
-                        }
+                            prev_proxy = proxy_gray
 
-                        audio_feats = (
-                            features_reshaped[i].detach().cpu().flatten().tolist()
+                        # Visual complexity from connectedness and edge density
+                        visual_complexity = (
+                            metrics["connectedness"] * metrics["edge_density"]
                         )
 
-                        h_val = float(spectral_flux[i].detach().item())
+                        if batch_idx == 0 and i == 0 and step_idx == 0:
+                            logger.debug(
+                                f"Debug - First sample metrics: "
+                                f"edge_density={metrics['edge_density']:.6f}, "
+                                f"connectedness={metrics['connectedness']:.6f}, "
+                                f"temporal_change={metrics['temporal_change']:.6f}"
+                            )
 
-                        # Record step (t, c, controller, h, band_energies, audio_features, proxy_frame, delta_v)
-                        self.flight_recorder.record_step(
-                            t=step_idx,
-                            c=[seed_r, seed_i],
-                            controller=controller_state,
-                            h=h_val,
-                            band_energies=band_gates[i].detach().cpu().tolist(),
-                            audio_features=audio_feats,
-                            proxy_frame=proxy,
-                            delta_v=delta_v,
+                        sample_temporal_changes.append(
+                            torch.tensor(
+                                metrics["temporal_change"],
+                                device=self.device,
+                                dtype=torch.float32,
+                            )
+                        )
+                        sample_visual_complexities.append(
+                            torch.tensor(
+                                visual_complexity,
+                                device=self.device,
+                                dtype=torch.float32,
+                            )
                         )
 
-                        prev_proxy = proxy_gray
+                        prev_image = image
 
-                    # Visual complexity from connectedness and edge density
-                    visual_complexity = (
-                        metrics["connectedness"] * metrics["edge_density"]
+                    # Aggregate per-sample metrics across trajectory
+                    # Aggregate per-sample metrics across rendered trajectory subset
+                    temporal_changes.append(torch.stack(sample_temporal_changes).mean())
+                    visual_complexities.append(
+                        torch.stack(sample_visual_complexities).mean()
                     )
 
-                    if batch_idx == 0 and i == 0 and step_idx == 0:
-                        logger.debug(
-                            f"Debug - First sample metrics: "
-                            f"edge_density={metrics['edge_density']:.6f}, "
-                            f"connectedness={metrics['connectedness']:.6f}, "
-                            f"temporal_change={metrics['temporal_change']:.6f}"
-                        )
+                    # Use last image for debug display
+                    images.append(image)
 
-                    sample_temporal_changes.append(
-                        torch.tensor(
-                            metrics["temporal_change"],
-                            device=self.device,
-                            dtype=torch.float32,
-                        )
+                    # Mandelbrot distance: use final c for boundary proximity
+                    final_c_r, final_c_i = traj[-1]
+                    mb_dist = compute_mandelbrot_distance(
+                        final_c_r, final_c_i, max_iter=256
                     )
-                    sample_visual_complexities.append(
-                        torch.tensor(
-                            visual_complexity, device=self.device, dtype=torch.float32
-                        )
-                    )
+                    mandelbrot_distances.append(mb_dist)
 
-                    prev_image = image
-
-                # Aggregate per-sample metrics across trajectory
-                # Aggregate per-sample metrics across rendered trajectory subset
-                temporal_changes.append(torch.stack(sample_temporal_changes).mean())
-                visual_complexities.append(
-                    torch.stack(sample_visual_complexities).mean()
-                )
-
-                # Use last image for debug display
-                images.append(image)
-
-                # Mandelbrot distance: use final c for boundary proximity
-                final_c_r, final_c_i = traj[-1]
-                mb_dist = compute_mandelbrot_distance(
-                    final_c_r, final_c_i, max_iter=256
-                )
-                mandelbrot_distances.append(mb_dist)
-
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
+                    # Use s_target as proxy for color hue (example correlation)
+                    color_hues.append(s_target[i])
 
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
@@ -909,8 +1092,13 @@ class ControlTrainer:
 
             # Compute correlation losses
             # Subset audio features to rendered samples
-            sc_subset = spectral_centroid[render_sample_indices]
-            sf_subset = spectral_flux[render_sample_indices]
+            if self.policy_mode and self.sequence_training:
+                sc_subset = torch.zeros(render_sample_count, device=self.device)
+                sf_subset = torch.zeros(render_sample_count, device=self.device)
+            else:
+                sc_subset = spectral_centroid[render_sample_indices]
+                sf_subset = spectral_flux[render_sample_indices]
+
             timbre_color_loss = self.correlation_loss(sc_subset, color_hue_tensor)
             transient_impact_loss = self.correlation_loss(
                 sf_subset, temporal_change_tensor
@@ -928,9 +1116,14 @@ class ControlTrainer:
             boundary_loss_val = self.boundary_loss(c_subset, mandelbrot_dist_tensor)
 
             # Complexity correlation: match musical and visual complexity
-            musical_complexity = compute_musical_complexity(
-                features_reshaped[render_sample_indices]
-            )
+            if self.policy_mode and self.sequence_training:
+                musical_complexity = torch.zeros(
+                    render_sample_count, device=self.device
+                )
+            else:
+                musical_complexity = compute_musical_complexity(
+                    features_reshaped[render_sample_indices]
+                )
             complexity_correlation_loss_val = self.correlation_loss(
                 musical_complexity, visual_complexity_tensor
             )
@@ -993,11 +1186,16 @@ class ControlTrainer:
                 )
                 if len(images) > 0:
                     sample_image = images[0]
-                    logger.debug(
-                        f"Debug - image shape: {sample_image.shape}, "
-                        f"range: [{sample_image.min():.4f}, {sample_image.max():.4f}], "
-                        f"mean: {sample_image.mean():.4f}"
-                    )
+                    if sample_image is not None:
+                        logger.debug(
+                            f"Debug - image shape: {sample_image.shape}, "
+                            f"range: [{sample_image.min():.4f}, {sample_image.max():.4f}], "
+                            f"mean: {sample_image.mean():.4f}"
+                        )
+                    else:
+                        logger.debug(
+                            "Debug - image: None (skipped rendering in sequence training)"
+                        )
                 logger.debug(
                     f"Debug - temporal_change range: [{temporal_change_tensor.min():.4f}, {temporal_change_tensor.max():.4f}], "
                     f"mean: {temporal_change_tensor.mean():.4f}"
@@ -1067,6 +1265,14 @@ class ControlTrainer:
 
             # Backward pass with mixed precision and gradient clipping
             self.optimizer.zero_grad()
+
+            # If loss has no grad path (shouldn't happen), add tiny model-dependent fix
+            if not total_batch_loss.requires_grad:
+                fix = torch.tensor(0.0, device=self.device)
+                for p in self.model.parameters():
+                    if p.requires_grad:
+                        fix = fix + 1e-6 * torch.sum(p * p)
+                total_batch_loss = total_batch_loss + fix
 
             if self.use_amp:
                 self.scaler.scale(total_batch_loss).backward()
@@ -1152,9 +1358,24 @@ class ControlTrainer:
         except Exception as e:
             logger.error(f"Failed to concatenate features: {e}")
             raise
-        all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
 
-        tensor_dataset = TensorDataset(all_features_tensor)
+        # If sequence training is enabled and policy_mode, build a sequence dataset view
+        if self.sequence_training and self.policy_mode:
+            from .data_loader import SequenceAudioDataset
+
+            seq_ds = SequenceAudioDataset(
+                features_list=normalized_features,
+                seq_len=self.sequence_unroll_steps,
+                stride=self.sequence_stride,
+            )
+            tensor_dataset = seq_ds.to_tensor_dataset()
+            logger.info(
+                f"Sequence training enabled: seq_len={self.sequence_unroll_steps}, stride={self.sequence_stride}, sequences={len(seq_ds)}"
+            )
+        else:
+            all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
+            tensor_dataset = TensorDataset(all_features_tensor)
+
         dataloader = DataLoader(
             tensor_dataset,
             batch_size=batch_size,

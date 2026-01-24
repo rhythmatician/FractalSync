@@ -149,6 +149,24 @@ def main():
         default=0.03,
         help="Maximum step size per contour-biased integrator step (default: 0.03)",
     )
+
+    parser.add_argument(
+        "--sequence-training",
+        action="store_true",
+        help="Enable sequence (unrolled) training in policy_mode",
+    )
+    parser.add_argument(
+        "--sequence-unroll-steps",
+        type=int,
+        default=5,
+        help="Number of steps to unroll during sequence training (default: 5)",
+    )
+    parser.add_argument(
+        "--sequence-stride",
+        type=int,
+        default=1,
+        help="Stride when building sequences from per-file features (default: 1)",
+    )
     parser.add_argument(
         "--max-files",
         type=int,
@@ -265,6 +283,9 @@ def main():
         flight_recorder=flight_recorder,
         contour_d_star=args.contour_d_star,
         contour_max_step=args.contour_max_step,
+        sequence_training=args.sequence_training,
+        sequence_unroll_steps=args.sequence_unroll_steps,
+        sequence_stride=args.sequence_stride,
     )
 
     # Load checkpoint if resuming
