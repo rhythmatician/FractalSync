@@ -71,6 +71,32 @@ These instructions make AI agents immediately productive in this repo.
 - Batch formatting: ensure DataLoader returns `(tensor,)`; extract `batch[0]` to keep shape `(batch_size, input_dim)`.
 - Gradients: avoid `.item()` on tensors used in loss; stack and slice tensors to the minimal common length.
 
+## Code style & exporter guidance
+
+- **Prefer guard clauses (early exit) over nested if/else.** Keep the main code path unindented; use concise checks like:
+
+  ```py
+  if not condition:
+      raise ValueError("explain why")
+  # main flow continues here at top level
+  ```
+
+rather than:
+
+  ```py
+  if condition:
+      # main flow indented here
+  else:
+      raise ValueError("explain why")
+  ```
+
+- **ONNX exporter policy:** prefer deterministic, non-dynamo exports by default to keep CI and developer workflows stable. If a dynamo-based export or a dynamo->fallback shim is temporarily required:
+  - Make it explicit and documented with a short justification comment in the code.
+  - Add an **expiration PR** (targeted removal within 1-2 sprints) referenced in the comment or issue tracker.
+  - Add tests and CI coverage that exercise the fallback so regressions are visible and the shim can safely be removed later.
+
+These rules align with the NO BLOAT policy: prefer replacing or fixing the canonical implementation rather than adding long-lived fallbacks.
+
 ## Examples
 - Start server then train:
   - Server: `cd backend && python api/server.py`
@@ -80,3 +106,13 @@ These instructions make AI agents immediately productive in this repo.
   - `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":100,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":true,"include_delta_delta":false}'`
 
 If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
+
+## NO BLOAT / REMOVAL POLICY ⚠️
+
+- Philosophy: During active experimentation, **remove** stale, duplicate, or fallback code rather than adding optional fallback branches. Bloat confuses parity and slows iteration.
+- Rule: All runtime logic (geometry, sampling, integrator, Lobe FSM, Feature extraction) is canonical in **runtime-core** (Rust). Python should call into runtime-core and not reimplement runtime logic.
+- New features: Prefer replacing or improving existing implementations instead of adding an option that creates a second, diverging code path. If a feature must be added as an option, include a clear deprecation plan and a removal date.
+- Fallbacks: Avoid long-lived fallbacks. If a fallback is temporarily required, mark it with a short justification comment and an **expiration PR** that removes it within 1-2 sprints.
+- Tests & CI: Add checks to detect leftover fallbacks, legacy shims, or orphaned code; PRs that add a fallback must also add a plan to remove it and a test that ensures the fallback will be removed before merging.
+
+This enforces a strict 'replace, don't duplicate' workflow and helps keep the codebase small and auditable. If you want, I can add an automated detector to fail CI when fallback/legacy markers are detected — I will add a first draft test that scans for "fallback" occurrences in `backend/src` and `runtime-core/src` so we can iterate on any false positives.
