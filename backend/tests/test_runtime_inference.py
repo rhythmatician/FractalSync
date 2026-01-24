@@ -43,6 +43,38 @@ def test_run_policy_step_with_dummy():
     assert ls.current_lobe == 0
 
 
+def test_run_policy_step_with_lobe_logits_callable():
+    from src.lobe_state import LobeState
+
+    k = 6
+
+    # Make a callable model that returns lobe logits favoring lobe 1
+    def call_model(inp):
+        out = [0.0] * (5 + k + 2)
+        out[-2] = -1.0
+        out[-1] = 10.0
+        return out
+
+    ls = LobeState(current_lobe=0, n_lobes=2)
+    res = run_policy_step(
+        call_model,
+        s=1.02,
+        alpha=0.3,
+        omega=0.5,
+        theta=0.0,
+        h_t=0.1,
+        loudness=0.0,
+        tonalness=0.0,
+        noisiness=0.0,
+        band_energies=[0.0] * k,
+        lobe_state=ls,
+        dt=1.0,
+    )
+    assert "decoded" in res and "c_new" in res
+    assert "lobe_logits" in res["decoded"]
+    assert ls.current_lobe == 1
+
+
 def test_run_policy_step_with_onnx(tmp_path):
     pytest.importorskip("onnxruntime")
     import torch
@@ -81,6 +113,18 @@ def test_run_policy_step_with_onnx(tmp_path):
     from src.lobe_state import LobeState
 
     ls = LobeState(current_lobe=0, n_lobes=2)
+    # Export a model that includes trailing lobe logits (2 lobes)
+    model = TinyPolicy(input_dim, 5 + k + 2)
+    # Bias the lobe logits (last two outputs) so lobe 1 is favored
+    with torch.no_grad():
+        model.fc.bias[-2:] = torch.tensor([-1.0, 10.0])
+
+    onnx_path = tmp_path / "tiny_policy.onnx"
+    example_in = torch.randn(1, input_dim)
+    torch.onnx.export(
+        model, example_in, str(onnx_path), input_names=["input"], opset_version=14
+    )
+
     res = run_policy_step(
         str(onnx_path),
         s=1.02,
@@ -93,8 +137,10 @@ def test_run_policy_step_with_onnx(tmp_path):
         noisiness=0.0,
         band_energies=[0.0] * k,
         lobe_state=ls,
+        dt=1.0,
     )
     assert "decoded" in res and "c_new" in res
     assert isinstance(res["c_new"][0], float)
-    # ONNX model output included lobe logits: ensure we return them
-    assert "lobe_logits" in res["decoded"] or "lobe_logits" in res["decoded"]
+    assert "lobe_logits" in res["decoded"]
+    # Given the biased logits and dt=1.0, the LobeState should transition to lobe 1
+    assert ls.current_lobe == 1

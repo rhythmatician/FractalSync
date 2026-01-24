@@ -84,9 +84,20 @@ class LobeState:
             and self.hold_timer <= 0.0
         ):
             if cand_score >= self.threshold_on:
-                # Start transition
+                # Start transition and immediately progress using available dt
                 self.target_lobe = cand
                 self.transition_progress = 0.0
+                eff_time = self.transition_time * (
+                    0.25 if transient >= self.transient_threshold else 1.0
+                )
+                self.transition_progress += dt / max(1e-6, eff_time)
+                if self.transition_progress >= 1.0:
+                    # Finish transition immediately
+                    self.current_lobe = self.target_lobe
+                    self.target_lobe = None
+                    self.transition_progress = 0.0
+                    self.cooldown_timer = self.cooldown
+                    self.hold_timer = self.min_hold
                 return
 
         # Optionally allow falling back if candidate score drops below off threshold

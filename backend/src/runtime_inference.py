@@ -127,6 +127,13 @@ def run_policy_step(
                 out_arr.tolist(), k_bands=len(band_energies)
             )
 
+    # If policy returned lobe_logits and a LobeState was supplied, update it
+    lobe_logits = decoded.get("lobe_logits", None)
+    if lobe_logits is not None and lobe_state is not None:
+        # Ensure a simple list of floats for the FSM
+        scores = list(np.asarray(lobe_logits, dtype=float))
+        lobe_state.step(scores=scores, dt=dt, transient=float(h_t))
+
     # Apply deltas to produce new orbit state and synthesize c
     # Use make_orbit_state and synthesize (non-differentiable deterministic)
     deltas = decoded
@@ -138,9 +145,17 @@ def run_policy_step(
     alpha_hit = float(deltas.get("alpha_hit", 0.0))
     alpha_new = float(max(0.0, min(5.0, alpha + float(h_t) * alpha_hit)))
 
+    # Choose lobe from LobeState if provided, else default to 1 (legacy)
+    lobe_used = lobe_state.current_lobe if lobe_state is not None else 1
+
     # Build orbit state and synthesize c
     orbit = make_orbit_state(
-        lobe=1, sub_lobe=0, theta=theta, omega=omega_new, s=s_new, alpha=alpha_new
+        lobe=lobe_used,
+        sub_lobe=0,
+        theta=theta,
+        omega=omega_new,
+        s=s_new,
+        alpha=alpha_new,
     )
     c_new = synthesize(orbit, None, None)
 
