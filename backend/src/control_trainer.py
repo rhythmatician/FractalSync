@@ -33,6 +33,70 @@ import runtime_core as rc
 logger = logging.getLogger(__name__)
 
 
+def compute_mandelbrot_distance(
+    c_real: float, c_imag: float, max_iter: int = 256
+) -> float:
+    """Compute approximate distance to Mandelbrot set boundary.
+
+    Uses escape-time distance estimation. Returns:
+    - Negative values: inside the set
+    - ~0: near boundary
+    - Positive values: outside the set
+
+    Args:
+        c_real: Real part of c
+        c_imag: Imaginary part of c
+        max_iter: Maximum iterations
+
+    Returns:
+        Approximate distance to boundary (0 = on boundary)
+    """
+    z_real, z_imag = 0.0, 0.0
+    dz_real, dz_imag = 1.0, 0.0
+
+    for i in range(max_iter):
+        z_mag_sq = z_real * z_real + z_imag * z_imag
+        if z_mag_sq > 256.0:  # Escaped
+            z_mag = np.sqrt(z_mag_sq)
+            dz_mag = np.sqrt(dz_real * dz_real + dz_imag * dz_imag)
+            # Distance estimate using derivative
+            distance = 0.5 * z_mag * np.log(z_mag) / dz_mag if dz_mag > 0 else 0.0
+            return distance
+
+        # dz = 2 * z * dz + 1
+        temp = 2.0 * (z_real * dz_real - z_imag * dz_imag) + 1.0
+        dz_imag = 2.0 * (z_real * dz_imag + z_imag * dz_real)
+        dz_real = temp
+
+        # z = z^2 + c
+        temp = z_real * z_real - z_imag * z_imag + c_real
+        z_imag = 2.0 * z_real * z_imag + c_imag
+        z_real = temp
+
+    # Inside the set
+    return -1.0
+
+
+def compute_musical_complexity(features: torch.Tensor) -> torch.Tensor:
+    """Compute musical complexity from audio features.
+
+    Uses variance of spectral flux as a proxy for musical complexity.
+
+    Args:
+        features: Feature tensor of shape (batch_size, window_frames, n_features)
+
+    Returns:
+        Complexity score per sample (batch_size,)
+    """
+    # Spectral flux is at index 1
+    spectral_flux = features[:, :, 1]  # (batch_size, window_frames)
+    # Compute variance across time window
+    complexity = torch.var(spectral_flux, dim=1) + torch.mean(
+        torch.abs(spectral_flux), dim=1
+    )
+    return complexity
+
+
 class ControlLoss(nn.Module):
     """Loss for control signal prediction."""
 
@@ -62,6 +126,48 @@ class CorrelationLoss(nn.Module):
         denominator = torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2))
         correlation = numerator / (denominator + 1e-8)
         return -correlation
+
+
+class VisualContinuityLoss(nn.Module):
+    """Penalize visual discontinuities that don't align with audio transients."""
+
+    def __init__(self, weight: float = 1.0):
+        super().__init__()
+        self.weight = weight
+
+    def forward(
+        self, visual_changes: torch.Tensor, transient_strengths: torch.Tensor
+    ) -> torch.Tensor:
+        """Loss = visual_change * (1 - transient_strength).
+        High visual change is OK during transients, penalized otherwise.
+        """
+        # Normalize transient strengths to [0, 1]
+        transient_norm = torch.sigmoid(transient_strengths)
+        # Penalize visual changes that occur without transients
+        loss = torch.mean(visual_changes * (1.0 - transient_norm))
+        return self.weight * loss
+
+
+class BoundaryExplorationLoss(nn.Module):
+    """Encourage c to explore near Mandelbrot boundary (not deep inside)."""
+
+    def __init__(self, weight: float = 1.0, target_distance: float = 0.1):
+        super().__init__()
+        self.weight = weight
+        self.target_distance = target_distance
+
+    def forward(
+        self, c_values: torch.Tensor, mandelbrot_distances: torch.Tensor
+    ) -> torch.Tensor:
+        """Penalize being too far from target distance (slightly outside boundary).
+
+        Args:
+            c_values: Complex values as (batch_size, 2) tensor
+            mandelbrot_distances: Distance to Mandelbrot set for each c
+        """
+        # Penalize deviation from target distance
+        distance_error = torch.abs(mandelbrot_distances - self.target_distance)
+        return self.weight * torch.mean(distance_error)
 
 
 class ControlTrainer:
@@ -116,9 +222,12 @@ class ControlTrainer:
 
         # Default correlation weights
         default_weights = {
-            "timbre_color": 1.0,
-            "transient_impact": 1.0,
+            "timbre_color": 0.5,  # Reduced
+            "transient_impact": 0.5,  # Reduced
             "control_loss": 1.0,
+            "visual_continuity": 2.0,  # New: prioritize smooth visuals
+            "boundary_exploration": 1.5,  # New: encourage boundary exploration
+            "complexity_correlation": 1.0,  # New: match visual/musical complexity
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -129,6 +238,13 @@ class ControlTrainer:
         self.correlation_loss = CorrelationLoss()
         self.control_loss = ControlLoss(
             weight=self.correlation_weights.get("control_loss", 1.0)
+        )
+        self.visual_continuity_loss = VisualContinuityLoss(
+            weight=self.correlation_weights.get("visual_continuity", 2.0)
+        )
+        self.boundary_loss = BoundaryExplorationLoss(
+            weight=self.correlation_weights.get("boundary_exploration", 1.5),
+            target_distance=0.05,  # Stay close to boundary
         )
 
         # Optimizer
@@ -144,6 +260,9 @@ class ControlTrainer:
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "visual_continuity_loss": [],
+            "boundary_exploration_loss": [],
+            "complexity_correlation_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -233,6 +352,9 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_visual_continuity = 0.0
+        total_boundary_exploration = 0.0
+        total_complexity_correlation = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -335,6 +457,8 @@ class ControlTrainer:
             images = []
             color_hues = []
             temporal_changes = []
+            visual_complexities = []
+            mandelbrot_distances = []
 
             prev_image = None
             for i in range(batch_size):
@@ -367,6 +491,15 @@ class ControlTrainer:
                     image, prev_image=prev_image
                 )
 
+                # Compute Mandelbrot distance
+                c_real = julia_real[i].detach().item()
+                c_imag = julia_imag[i].detach().item()
+                mb_dist = compute_mandelbrot_distance(c_real, c_imag, max_iter=256)
+                mandelbrot_distances.append(mb_dist)
+
+                # Visual complexity from connectedness and edge density
+                visual_complexity = metrics["connectedness"] * metrics["edge_density"]
+
                 images.append(image)
                 # Use s_target as proxy for color hue (example correlation)
                 color_hues.append(s_target[i])
@@ -377,11 +510,20 @@ class ControlTrainer:
                         dtype=torch.float32,
                     )
                 )
+                visual_complexities.append(
+                    torch.tensor(
+                        visual_complexity, device=self.device, dtype=torch.float32
+                    )
+                )
 
                 prev_image = image
 
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
+            visual_complexity_tensor = torch.stack(visual_complexities)
+            mandelbrot_dist_tensor = torch.tensor(
+                mandelbrot_distances, device=self.device, dtype=torch.float32
+            )
 
             # Compute correlation losses
             timbre_color_loss = self.correlation_loss(
@@ -389,6 +531,21 @@ class ControlTrainer:
             )
             transient_impact_loss = self.correlation_loss(
                 spectral_flux, temporal_change_tensor
+            )
+
+            # Visual continuity loss: penalize visual changes without audio transients
+            # Use spectral flux as transient strength indicator
+            visual_continuity_loss_val = self.visual_continuity_loss(
+                temporal_change_tensor, spectral_flux
+            )
+
+            # Boundary exploration loss: encourage c to stay near Mandelbrot boundary
+            boundary_loss_val = self.boundary_loss(c_tensor, mandelbrot_dist_tensor)
+
+            # Complexity correlation: match musical and visual complexity
+            musical_complexity = compute_musical_complexity(features_reshaped)
+            complexity_correlation_loss_val = self.correlation_loss(
+                musical_complexity, visual_complexity_tensor
             )
 
             # Control loss (curriculum learning)
@@ -399,10 +556,15 @@ class ControlTrainer:
             else:
                 control_loss_val = torch.zeros(1, device=self.device)
 
-            # Total loss
+            # Total loss with new components
             total_batch_loss = (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
+                + self.correlation_weights["visual_continuity"]
+                * visual_continuity_loss_val
+                + self.correlation_weights["boundary_exploration"] * boundary_loss_val
+                + self.correlation_weights["complexity_correlation"]
+                * complexity_correlation_loss_val
                 + current_curriculum_weight * control_loss_val
             )
 
@@ -416,6 +578,9 @@ class ControlTrainer:
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_visual_continuity += visual_continuity_loss_val.item()
+            total_boundary_exploration += boundary_loss_val.item()
+            total_complexity_correlation += complexity_correlation_loss_val.item()
             n_batches += 1
 
         # Average losses
@@ -424,6 +589,9 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "visual_continuity_loss": 0.0,  # Computed but not tracked separately yet
+            "boundary_exploration_loss": 0.0,  # Computed but not tracked separately yet
+            "complexity_correlation_loss": 0.0,  # Computed but not tracked separately yet
         }
 
         return avg_losses
@@ -488,7 +656,9 @@ class ControlTrainer:
             logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
-                f'Control: {avg_losses["control_loss"]:.4f}'
+                f'Boundary: {avg_losses["boundary_exploration_loss"]:.4f}, '
+                f'Continuity: {avg_losses["visual_continuity_loss"]:.4f}, '
+                f'Complexity: {avg_losses["complexity_correlation_loss"]:.4f}'
             )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
