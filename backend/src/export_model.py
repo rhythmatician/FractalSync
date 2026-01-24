@@ -69,32 +69,13 @@ def export_to_onnx(
             verbose=False,
             dynamo=True,
         )
-    except Exception as dynamo_error:  # pragma: no cover - fallback path
-        logging.warning(
-            "ONNX dynamo export failed (%s); falling back to legacy exporter.",
-            dynamo_error,
-        )
-        try:
-            torch.onnx.export(
-                model,
-                (dummy_input,),
-                output_path,
-                export_params=True,
-                input_names=[input_name],
-                output_names=[output_name],
-                dynamic_axes={
-                    input_name: {0: "batch_size"},
-                    output_name: {0: "batch_size"},
-                },
-                opset_version=11,
-                do_constant_folding=True,
-                verbose=False,
-                dynamo=False,
-            )
-        except Exception as legacy_error:
-            raise RuntimeError(
-                f"ONNX export failed (dynamo and legacy): {legacy_error}"
-            ) from legacy_error
+    except Exception as dynamo_error:
+        # Fail fast: dynamo is the single supported export path. If it fails,
+        # surface the error so CI or callers notice and we can fix the exporter
+        # or fix model code instead of silently falling back.
+        raise RuntimeError(
+            f"ONNX dynamo export failed: {dynamo_error}"
+        ) from dynamo_error
 
     # Load and verify ONNX model structure (skip full validation due to compat issues)
     try:

@@ -5,7 +5,7 @@ Implements the new architecture with:
 - Fast impact detection (many per song)
 - Slow section boundary detection (occasional lobe switches)
 - Orbit state machine with carrier + residual
-- Deterministic fallback behavior
+- Deterministic behavior (no fallback)
 """
 
 import numpy as np
@@ -586,15 +586,15 @@ class LobeScheduler:
         ]
 
         if not candidates:
-            # All lobes used, reset history
+            # All lobes used, reset history and deterministically select default lobe
             self.lobe_history.clear()
             candidates = [
                 lobe for lobe in self.available_lobes if lobe != self.current_lobe
             ]
 
         if not candidates:
-            # Fallback
-            candidates = self.available_lobes
+            # No candidates available -- choose deterministic default (cardioid)
+            candidates = [(1, 0)]
 
         # Simple selection: random with slight bias toward period-2/3 for high energy
         if energy_level > 0.7 and novelty > 0.6:
