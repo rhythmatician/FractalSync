@@ -150,8 +150,29 @@ def step_orbit(
     rp = residual_params or make_residual_params()
     gates = list(band_gates) if band_gates is not None else None
 
+    # Convert Python DistanceField to runtime_core DistanceField if necessary
+    df_arg = None
+    if distance_field is not None:
+        # If already an rc.DistanceField, pass it through
+        try:
+            if isinstance(distance_field, rc.DistanceField):
+                df_arg = distance_field
+            else:
+                # Attempt conversion from Python DistanceField-like object
+                arr = getattr(distance_field, "arr", None)
+                real_range = getattr(distance_field, "real_range", None)
+                imag_range = getattr(distance_field, "imag_range", None)
+                slowdown = getattr(distance_field, "slowdown_threshold", None)
+                if arr is not None and real_range is not None and imag_range is not None:
+                    flat = arr.astype("float32").ravel().tolist()
+                    res = arr.shape[1] if arr.ndim == 2 else int(len(flat) ** 0.5)
+                    df_arg = rc.DistanceField(flat, res, tuple(real_range), tuple(imag_range), 1.0, float(slowdown or 0.02))
+        except Exception:
+            # If conversion fails, we just pass None to the Rust integrator
+            df_arg = None
+
     # Call runtime-core's OrbitState.step with the full, canonical signature.
-    return state.step(dt, rp, gates, distance_field, h, d_star, max_step)
+    return state.step(dt=dt, residual_params=rp, band_gates=gates, distance_field=df_arg, h=h, d_star=d_star, max_step=max_step)  # type: ignore[arg-type]
 
 
 def synthesize(

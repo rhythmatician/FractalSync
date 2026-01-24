@@ -15,8 +15,6 @@ This ensures the backend training uses identical features to what the
 frontend WASM will compute, preventing drift.
 """
 
-import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -52,8 +50,6 @@ def test_feature_parity():
 
     # Test parameters
     sample_rate = 48000
-    hop_length = 1024
-    n_fft = 4096
     window_frames = 10
 
     # Generate test audio

@@ -20,7 +20,7 @@ from src.quality_gates.metrics import (
     window_coverage_entropy,
     detect_transients,
 )
-from src.runtime_core_bridge import make_orbit_state, make_residual_params, synthesize
+from src.runtime_core_bridge import make_orbit_state, make_residual_params, synthesize, step_orbit
 
 # Gate thresholds (tunable)
 CONTINUITY_MEDIAN_THRESH = 0.02
@@ -91,7 +91,17 @@ def variety_gate(cs) -> bool:
 
 
 def parity_gate(cs) -> bool:
-    return True
+    # Minimal parity sanity check: ensure runtime_core synthesize and step are callable
+    try:
+        s1 = make_orbit_state(lobe=1, theta=0.0, s=1.02, alpha=0.3)
+        rp = make_residual_params()
+        c0 = synthesize(s1, rp, None)
+        # advance deterministically
+        step_orbit(s1, 0.1, rp, None, h=0.0, d_star=0.3, max_step=0.03)
+        c1 = synthesize(s1, rp, None)
+        return all([float(np.isfinite(c0.real)), float(np.isfinite(c0.imag)), float(np.isfinite(c1.real)), float(np.isfinite(c1.imag))])
+    except Exception:
+        return False
 
 
 def main():

@@ -6,7 +6,8 @@ import numpy as np
 import torch
 
 from src import differentiable_integrator as di
-from scripts.tune_contour import load_distance_field, contour_biased_step_py
+from scripts.tune_contour import load_distance_field
+import runtime_core as rc
 
 
 def _make_torch_df_from_py(py_df):
@@ -38,8 +39,10 @@ def test_single_step_parity():
         u_imag = rng.uniform(-0.05, 0.05)
         h = rng.choice([0.0, 1.0])
 
-        c_py = type("C", (), {"real": real, "imag": imag})
-        out_py = contour_biased_step_py(c_py, u_real, u_imag, h, 0.5, 0.05, df)
+        # Use runtime-core DistanceField to compute the reference step
+        flat = list(np.array(df.field, dtype=np.float32).ravel())
+        rc_df = rc.DistanceField(flat, df.res, (df.real_min, df.real_max), (df.imag_min, df.imag_max), df.max_distance, df.slowdown_threshold)
+        out_py = rc.contour_biased_step(real, imag, u_real, u_imag, h, 0.5, 0.05, rc_df)
 
         # torch inputs
         c_r = torch.tensor([real], dtype=torch.float32)
