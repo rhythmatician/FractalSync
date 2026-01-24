@@ -5,7 +5,7 @@ import numpy as np
 from src.control_trainer import ControlTrainer
 from src.control_model import AudioToControlModel
 from src.visual_metrics import VisualMetrics
-from src.python_feature_extractor import PythonFeatureExtractor
+from src.runtime_core_bridge import make_feature_extractor
 
 
 def test_epoch2_nan():
@@ -15,7 +15,7 @@ def test_epoch2_nan():
     device = "cpu"
     model = AudioToControlModel(window_frames=10, n_features_per_frame=6, k_bands=6)
     visual_metrics = VisualMetrics()
-    feature_extractor = PythonFeatureExtractor()
+    feature_extractor = make_feature_extractor()
 
     trainer = ControlTrainer(
         model=model,

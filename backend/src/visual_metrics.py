@@ -141,7 +141,8 @@ class VisualMetrics:
         self, current: np.ndarray, previous: np.ndarray
     ) -> float:
         """
-        Compute temporal change rate between frames.
+        Compute temporal change rate between frames using the canonical ΔV
+        computation (normalizes frames before computing mean absolute difference).
 
         Args:
             current: Current frame
@@ -152,17 +153,33 @@ class VisualMetrics:
         """
         # Ensure same shape
         if current.shape != previous.shape:
-            # Resize if needed
             h, w = current.shape[:2]
             prev_resized = cv2.resize(previous, (w, h))
         else:
             prev_resized = previous
 
-        # Compute difference
-        diff = np.abs(current - prev_resized)
-        change_rate = np.mean(diff)
+        # Convert to grayscale if needed
+        if len(current.shape) == 3:
+            curr_gray = np.mean(current, axis=2)
+        else:
+            curr_gray = current
+        if len(prev_resized.shape) == 3:
+            prev_gray = np.mean(prev_resized, axis=2)
+        else:
+            prev_gray = prev_resized
 
-        return float(change_rate)
+        # Use same normalization as proxy_delta_v logic: normalize by combined min/max
+        lo = float(min(float(curr_gray.min()), float(prev_gray.min())))
+        hi = float(max(float(curr_gray.max()), float(prev_gray.max())))
+        if hi - lo < 1e-12:
+            # constant image -> midpoint
+            p = np.full_like(prev_gray, 0.5)
+            c = np.full_like(curr_gray, 0.5)
+        else:
+            p = (prev_gray - lo) / (hi - lo)
+            c = (curr_gray - lo) / (hi - lo)
+
+        return float(np.mean(np.abs(c - p)))
 
     def _compute_connectedness(self, gray: np.ndarray) -> float:
         """
@@ -261,3 +278,26 @@ class VisualMetrics:
         image_rgb = np.stack([image, image, image], axis=2)
 
         return image_rgb
+
+
+# Canonical ΔV helper available for other modules
+def proxy_delta_v(prev: np.ndarray, curr: np.ndarray) -> float:
+    """Compute scalar ΔV between two proxy frames (canonical implementation).
+
+    Both frames are 2D arrays (H, W) or flattened. Returns normalized mean
+    absolute difference in [0, 1].
+    """
+    prev_arr = np.asarray(prev, dtype=np.float32)
+    curr_arr = np.asarray(curr, dtype=np.float32)
+    if prev_arr.shape != curr_arr.shape:
+        raise ValueError("proxy shapes must match")
+
+    lo = min(float(prev_arr.min()), float(curr_arr.min()))
+    hi = max(float(prev_arr.max()), float(curr_arr.max()))
+    if hi - lo < 1e-12:
+        p = np.full_like(prev_arr, 0.5)
+        c = np.full_like(curr_arr, 0.5)
+    else:
+        p = (prev_arr - lo) / (hi - lo)
+        c = (curr_arr - lo) / (hi - lo)
+    return float(np.mean(np.abs(c - p)))

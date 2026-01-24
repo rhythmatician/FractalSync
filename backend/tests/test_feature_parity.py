@@ -25,7 +25,7 @@ import numpy as np
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.python_feature_extractor import PythonFeatureExtractor
+from src.runtime_core_bridge import make_feature_extractor
 
 
 def generate_test_audio(sample_rate: int = 48000, duration: float = 1.0) -> np.ndarray:
@@ -116,17 +116,15 @@ def test_feature_parity():
     audio = generate_test_audio(sample_rate=sample_rate, duration=1.0)
     print(f"   Audio: {len(audio)} samples at {sample_rate} Hz")
 
-    # Extract features with Python
-    print("\n2. Extracting features with Python fallback...")
-    python_extractor = PythonFeatureExtractor(
-        sr=sample_rate,
-        hop_length=hop_length,
-        n_fft=n_fft,
-        include_delta=False,
-        include_delta_delta=False,
+    # Extract features with the canonical FeatureExtractor (Rust-backed)
+    print("\n2. Extracting features with canonical FeatureExtractor...")
+    python_extractor = make_feature_extractor(
+        include_delta=False, include_delta_delta=False
     )
     python_features = python_extractor.extract_windowed_features(audio, window_frames)
-    print(f"   Python: {python_features.shape} (windows, features)")
+    print(
+        f"   FeatureExtractor (Rust-backed): {python_features.shape} (windows, features)"
+    )
 
     # Extract features with Rust (via test harness)
     print("\n3. Extracting features with Rust (via cargo test)...")
@@ -189,13 +187,7 @@ def test_feature_consistency():
 
     audio = generate_test_audio(sample_rate=48000, duration=0.5)
 
-    extractor = PythonFeatureExtractor(
-        sr=48000,
-        hop_length=1024,
-        n_fft=4096,
-        include_delta=False,
-        include_delta_delta=False,
-    )
+    extractor = make_feature_extractor(include_delta=False, include_delta_delta=False)
 
     # Extract twice - should be identical
     features1 = extractor.extract_windowed_features(audio, window_frames=10)

@@ -9,29 +9,9 @@ from __future__ import annotations
 from typing import Iterable, List, Tuple
 import numpy as np
 
-
-def proxy_delta_v(prev: np.ndarray, curr: np.ndarray) -> float:
-    """Compute scalar ΔV between two proxy frames.
-
-    Both frames are expected to be 2D grayscale arrays (H, W) or flattened.
-    Returns a normalized mean absolute difference in [0, 1].
-    """
-    prev_arr = np.asarray(prev, dtype=np.float32)
-    curr_arr = np.asarray(curr, dtype=np.float32)
-    if prev_arr.shape != curr_arr.shape:
-        raise ValueError("proxy shapes must match")
-
-    def norm(a: np.ndarray, lo: float, hi: float) -> np.ndarray:
-        if hi - lo < 1e-12:
-            # constant image -> map to midpoint (0.5)
-            return np.full_like(a, 0.5)
-        return (a - lo) / (hi - lo)
-
-    lo = min(float(prev_arr.min()), float(curr_arr.min()))
-    hi = max(float(prev_arr.max()), float(curr_arr.max()))
-    p = norm(prev_arr, lo, hi)
-    c = norm(curr_arr, lo, hi)
-    return float(np.mean(np.abs(c - p)))
+# Use canonical ΔV implementation from visual_metrics to avoid duplicating
+# normalization semantics across the codebase.
+from src.visual_metrics import proxy_delta_v
 
 
 def window_coverage_entropy(
