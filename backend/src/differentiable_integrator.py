@@ -31,6 +31,7 @@ class TorchDistanceField:
         imag_max: float = 2.0,
         max_distance: float = 2.0,
         slowdown_threshold: float = 0.05,
+        use_runtime_sampler: bool = False,
     ):
         assert field.ndim == 2 or field.ndim == 4
         if field.ndim == 2:
@@ -46,6 +47,19 @@ class TorchDistanceField:
         self.max_distance = float(max_distance)
         self.slowdown_threshold = float(slowdown_threshold)
         _, _, self.H, self.W = self.field.shape
+        self.use_runtime_sampler = bool(use_runtime_sampler)
+        self._runtime_field_flat = None
+        if self.use_runtime_sampler:
+            # prepare flattened python list for runtime_core sampler (CPU only)
+            self._runtime_field_flat = (
+                self.field.detach()
+                .cpu()
+                .squeeze()
+                .numpy()
+                .astype("float32")
+                .ravel()
+                .tolist()
+            )
 
     def _normalize_to_grid(
         self, real: torch.Tensor, imag: torch.Tensor
@@ -67,12 +81,37 @@ class TorchDistanceField:
         # grid_sample expects input batch size == grid batch size. Repeat field across batch.
         N = g.shape[0]
         input_field = self.field.expand(N, -1, -1, -1)
-        out = F.grid_sample(
-            input_field, g, mode="bilinear", padding_mode="border", align_corners=True
+        if not self.use_runtime_sampler:
+            out = F.grid_sample(
+                input_field,
+                g,
+                mode="bilinear",
+                padding_mode="border",
+                align_corners=True,
+            )
+            # out shape (N,1,1,1) -> Squeeze to (N,)
+            out = out.view(-1)
+            return out
+        # else: use runtime_core exact sampling semantics (non-differentiable)
+        import runtime_core as rc
+
+        N = g.shape[0]
+        # extract real/imags as python lists
+        reals = real.detach().cpu().numpy().tolist()
+        imags = imag.detach().cpu().numpy().tolist()
+        vals = rc.sample_bilinear_batch(
+            self._runtime_field_flat,
+            self.W,
+            self.real_min,
+            self.real_max,
+            self.imag_min,
+            self.imag_max,
+            reals,
+            imags,
         )
-        # out shape (N,1,1,1) -> Squeeze to (N,)
-        out = out.view(-1)
-        return out
+        # convert back to tensor on same device/dtype
+        out_t = torch.tensor(vals, dtype=self.field.dtype, device=self.field.device)
+        return out_t
 
     def gradient(
         self, real: torch.Tensor, imag: torch.Tensor

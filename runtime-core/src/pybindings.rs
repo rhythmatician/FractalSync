@@ -366,6 +366,54 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
+/// Vectorized bilinear sampler using the same semantics as `DistanceField::sample_bilinear`.
+#[pyfunction]
+#[pyo3(signature = (field, resolution, real_min, real_max, imag_min, imag_max, reals, imags))]
+fn sample_bilinear_batch(
+    field: Vec<f32>,
+    resolution: usize,
+    real_min: f64,
+    real_max: f64,
+    imag_min: f64,
+    imag_max: f64,
+    reals: Vec<f64>,
+    imags: Vec<f64>,
+) -> PyResult<Vec<f32>> {
+    let mut out = Vec::with_capacity(reals.len());
+    let real_scale = (real_max - real_min) / (resolution as f64);
+    let imag_scale = (imag_max - imag_min) / (resolution as f64);
+
+    for (&r, &i) in reals.iter().zip(imags.iter()) {
+        let col_f = (r - real_min) / real_scale;
+        let row_f = (i - imag_min) / imag_scale;
+
+        if col_f < 0.0 || col_f > (resolution as f64 - 1.0) || row_f < 0.0 || row_f > (resolution as f64 - 1.0) {
+            out.push(1.0f32);
+            continue;
+        }
+
+        let col0 = col_f.floor() as usize;
+        let row0 = row_f.floor() as usize;
+        let col1 = (col0 + 1).min(resolution - 1);
+        let row1 = (row0 + 1).min(resolution - 1);
+
+        let dx = (col_f - col0 as f64) as f32;
+        let dy = (row_f - row0 as f64) as f32;
+
+        let v00 = field[row0 * resolution + col0];
+        let v10 = field[row0 * resolution + col1];
+        let v01 = field[row1 * resolution + col0];
+        let v11 = field[row1 * resolution + col1];
+
+        let top = v00 * (1.0 - dx) + v10 * dx;
+        let bottom = v01 * (1.0 - dx) + v11 * dx;
+        let val = top * (1.0 - dy) + bottom * dy;
+        out.push(val);
+    }
+
+    Ok(out)
+}
+
 // ---------------- LobeState bindings ----------------
 #[pyclass]
 #[derive(Clone, Debug)]
@@ -455,6 +503,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         Ok(c.into())
     }
     m.add_function(wrap_pyfunction!(contour_biased_step, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_bilinear_batch, m)?)?;
 
     Ok(())
 }

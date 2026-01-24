@@ -32,6 +32,7 @@ def test_contour_parity_with_distance_field():
         imag_max=1.5,
         max_distance=1.0,
         slowdown_threshold=0.05,
+        use_runtime_sampler=True,
     )
 
     rng = random.Random(1234)
