@@ -20,12 +20,20 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
+from .flight_recorder import (
+    FlightRecorder,
+    compute_delta_v,
+)  # optional recording utilities
+
 # Distance field loader is experimental; import if available (keeps repo clean if absent)
 try:
     from .distance_field_loader import load_distance_field_for_runtime
 except Exception:  # pragma: no cover - optional experimental module
+
     def load_distance_field_for_runtime(path: str):
-        raise ImportError('distance_field_loader is experimental and not installed')
+        raise ImportError("distance_field_loader is experimental and not installed")
+
+
 from .runtime_core_bridge import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -265,6 +273,7 @@ class ControlTrainer:
         trajectory_dt: float = 0.1,
         render_fraction: float = 0.25,
         regularization_weight: float = 1e-4,
+        flight_recorder: Optional[FlightRecorder] = None,
     ):
         """
         Initialize control trainer.
@@ -305,6 +314,9 @@ class ControlTrainer:
         self.render_fraction = max(0.05, min(1.0, render_fraction))
         self.regularization_weight = regularization_weight
         self.residual_params = make_residual_params(k_residuals=k_residuals)
+
+        # Optional flight recorder for per-timestep logging
+        self.flight_recorder: Optional[FlightRecorder] = flight_recorder
 
         # Load numpy distance field for slowdown loss (fallback independent of runtime_core)
         self.df_numpy = None
@@ -642,6 +654,7 @@ class ControlTrainer:
                 sample_temporal_changes: List[torch.Tensor] = []
                 sample_visual_complexities: List[torch.Tensor] = []
                 # Render all steps for selected samples to preserve per-step continuity
+                prev_proxy = None
                 for step_idx, (seed_r, seed_i) in enumerate(traj):
                     if self.julia_renderer is not None:
                         try:
@@ -671,6 +684,52 @@ class ControlTrainer:
                     metrics = self.visual_metrics.compute_all_metrics(
                         image, prev_image=prev_image
                     )
+
+                    # Optional flight recorder: record per-step proxy frame and controller state
+                    if self.flight_recorder is not None:
+                        try:
+                            proxy = self.visual_metrics.render_julia_set(
+                                seed_real=float(seed_r),
+                                seed_imag=float(seed_i),
+                                width=64,
+                                height=64,
+                                max_iter=min(40, self.julia_max_iter),
+                            )
+                            proxy_gray = (
+                                np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
+                            )
+                            delta_v = compute_delta_v(proxy_gray, prev_proxy)
+                        except Exception:  # pragma: no cover - best-effort logging
+                            proxy = None
+                            proxy_gray = None
+                            delta_v = None
+
+                        controller_state = {
+                            "s": float(s_target[i].detach().item()),
+                            "alpha": float(alpha[i].detach().item()),
+                            "omega_scale": float(omega_scale[i].detach().item()),
+                            "band_gates": band_gates[i].detach().cpu().tolist(),
+                        }
+
+                        audio_feats = (
+                            features_reshaped[i].detach().cpu().flatten().tolist()
+                        )
+
+                        h_val = float(spectral_flux[i].detach().item())
+
+                        # Record step (t, c, controller, h, band_energies, audio_features, proxy_frame, delta_v)
+                        self.flight_recorder.record_step(
+                            t=step_idx,
+                            c=[seed_r, seed_i],
+                            controller=controller_state,
+                            h=h_val,
+                            band_energies=band_gates[i].detach().cpu().tolist(),
+                            audio_features=audio_feats,
+                            proxy_frame=proxy,
+                            delta_v=delta_v,
+                        )
+
+                        prev_proxy = proxy_gray
 
                     # Visual complexity from connectedness and edge density
                     visual_complexity = (
@@ -855,7 +914,7 @@ class ControlTrainer:
                 + self.correlation_weights["trajectory_slowdown"]
                 * trajectory_slowdown_loss_val
                 + current_curriculum_weight * control_loss_val
-                + self.regularization_weight * torch.mean(predicted_controls ** 2)
+                + self.regularization_weight * torch.mean(predicted_controls**2)
             )
 
             # Guard against NaN in loss
@@ -873,12 +932,16 @@ class ControlTrainer:
                 # can proceed without crashing. This preserves training while we
                 # work on making more losses differentiable.
                 if not total_batch_loss.requires_grad:
-                    fix = torch.mean(predicted_controls ** 2) * 1e-6
+                    fix = torch.mean(predicted_controls**2) * 1e-6
                     total_batch_loss = total_batch_loss + fix
-                    logger.info("Added tiny differentiable fix to total loss to allow backward pass.")
+                    logger.info(
+                        "Added tiny differentiable fix to total loss to allow backward pass."
+                    )
                 else:
                     # If it does require grad but is NaN, skip the backward to be safe
-                    logger.warning("Total loss is NaN but has grad; skipping backward this batch.")
+                    logger.warning(
+                        "Total loss is NaN but has grad; skipping backward this batch."
+                    )
                     continue
 
             # Backward pass with mixed precision and gradient clipping

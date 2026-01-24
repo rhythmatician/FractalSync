@@ -23,6 +23,7 @@ from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.flight_recorder import FlightRecorder  # Optional flight recorder for logging
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
@@ -124,6 +125,18 @@ def main():
         default=4,
         help="Number of DataLoader workers",
     )
+
+    parser.add_argument(
+        "--enable-flight-recorder",
+        action="store_true",
+        help="Enable flight recorder logging to `logs/flight_recorder`",
+    )
+    parser.add_argument(
+        "--flight-run-id",
+        type=str,
+        default=None,
+        help="Optional run id for flight recorder (default timestamp)",
+    )
     parser.add_argument(
         "--max-files",
         type=int,
@@ -210,6 +223,20 @@ def main():
     print(f"Output dimension: {model.output_dim}")
 
     print("[6/7] Initializing control trainer...")
+
+    # Optional flight recorder
+    flight_recorder = None
+    if args.enable_flight_recorder:
+        flight_recorder = FlightRecorder(run_id=args.flight_run_id)
+        flight_recorder.start_run(
+            {
+                "data_dir": args.data_dir,
+                "julia_resolution": args.julia_resolution,
+                "julia_max_iter": args.julia_max_iter,
+                "timestamp": str(datetime.utcnow()),
+            }
+        )
+
     trainer = ControlTrainer(
         model=model,
         feature_extractor=feature_extractor,
@@ -223,6 +250,7 @@ def main():
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
         k_residuals=args.k_bands,
+        flight_recorder=flight_recorder,
     )
 
     # Load checkpoint if resuming
