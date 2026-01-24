@@ -1,6 +1,8 @@
 """
 GPU-accelerated Julia set renderer using ModernGL.
-Falls back to CPU rendering if OpenGL is unavailable.
+Requires a functioning ModernGL/OpenGL context; there is no CPU fallback.
+If GPU initialization fails an explicit error is raised so the caller can handle
+the absence of GPU support.
 """
 
 import numpy as np
@@ -55,10 +57,10 @@ class GPUJuliaRenderer:
                     self.ctx = moderngl.create_context()
                     self.glfw_window = window
                     logger.info("ModernGL initialized with hidden GLFW window")
-                except ImportError:
-                    logger.warning("GLFW not available, falling back to CPU rendering")
-                    self.ctx = None
-                    return
+                except ImportError as e:
+                    raise RuntimeError(
+                        f"GLFW not available or GPU context failed to initialize: {e}"
+                    ) from e
 
             # Vertex shader (simple fullscreen quad)
             vertex_shader = """
@@ -125,9 +127,7 @@ class GPUJuliaRenderer:
             logger.info(f"GPU Julia renderer ready ({self.width}x{self.height})")
 
         except ImportError as e:
-            logger.warning(f"ModernGL not available ({e}), will use CPU rendering")
-            self.ctx = None
-            self.use_gpu = False
+            raise RuntimeError(f"ModernGL not available: {e}") from e
 
     def render(
         self, seed_real: float, seed_imag: float, zoom: float = 1.0, max_iter: int = 50
@@ -145,60 +145,28 @@ class GPUJuliaRenderer:
             Rendered image array (H, W, 3) in [0, 255]
         """
         if not self.use_gpu or self.ctx is None:
-            return self._render_cpu(seed_real, seed_imag, zoom, max_iter)
+            raise RuntimeError("GPU renderer not initialized or unavailable")
 
-        try:
-            # Set uniforms
-            self.program["seed"] = (seed_real, seed_imag)
-            self.program["zoom"] = zoom
-            self.program["max_iter"] = max_iter
+        # Set uniforms
+        self.program["seed"] = (seed_real, seed_imag)
+        self.program["zoom"] = zoom
+        self.program["max_iter"] = max_iter
 
-            # Render to framebuffer
-            self.fbo.use()
-            self.ctx.viewport = (0, 0, self.width, self.height)
-            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-            # Use a fullscreen quad via triangle strip (4 verts)
-            self.vao.render(mode=self.ctx.TRIANGLE_STRIP, vertices=4)
+        # Render to framebuffer
+        self.fbo.use()
+        self.ctx.viewport = (0, 0, self.width, self.height)
+        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        # Use a fullscreen quad via triangle strip (4 verts)
+        self.vao.render(mode=self.ctx.TRIANGLE_STRIP, vertices=4)
 
-            # Read back as numpy array
-            data = self.fbo.read(components=4)
-            image = np.frombuffer(data, dtype=np.uint8).reshape(
-                (self.height, self.width, 4)
-            )
+        # Read back as numpy array
+        data = self.fbo.read(components=4)
+        image = np.frombuffer(data, dtype=np.uint8).reshape(
+            (self.height, self.width, 4)
+        )
 
-            # Convert RGBA to RGB and flip (OpenGL origin is bottom-left)
-            image_rgb = np.flip(image[:, :, :3], axis=0)
-
-            return image_rgb
-
-        except Exception as e:
-            logger.warning(f"GPU render failed ({e}), falling back to CPU")
-            self.use_gpu = False
-            return self._render_cpu(seed_real, seed_imag, zoom, max_iter)
-
-    def _render_cpu(
-        self, seed_real: float, seed_imag: float, zoom: float = 1.0, max_iter: int = 50
-    ) -> np.ndarray:
-        """CPU fallback Julia set renderer."""
-        x = np.linspace(-2.0 / zoom, 2.0 / zoom, self.width)
-        y = np.linspace(-2.0 / zoom, 2.0 / zoom, self.height)
-
-        X, Y = np.meshgrid(x, y)
-        C = X + 1j * Y
-
-        Z = C.copy()
-        iterations = np.zeros_like(C, dtype=np.int32)
-
-        c = seed_real + 1j * seed_imag
-
-        for i in range(max_iter):
-            mask = np.abs(Z) <= 2.0
-            Z[mask] = Z[mask] ** 2 + c
-            iterations[mask] = i + 1
-
-        normalized = iterations.astype(np.float32) / max_iter
-        image = (normalized * 255).astype(np.uint8)
-        image_rgb = np.stack([image, image, image], axis=2)
+        # Convert RGBA to RGB and flip (OpenGL origin is bottom-left)
+        image_rgb = np.flip(image[:, :, :3], axis=0)
 
         return image_rgb
 
@@ -209,14 +177,21 @@ class GPUJuliaRenderer:
             for attr in ["fbo", "texture", "vao", "program", "ctx"]:
                 resource = getattr(self, attr, None)
                 if resource is not None:
-                    resource.release()
+                    try:
+                        resource.release()
+                    except Exception:
+                        # Ignore release errors
+                        pass
 
             # Cleanup GLFW window
             if hasattr(self, "glfw_window"):
                 import glfw
 
-                glfw.destroy_window(self.glfw_window)
-                glfw.terminate()
+                try:
+                    glfw.destroy_window(self.glfw_window)
+                    glfw.terminate()
+                except Exception:
+                    pass
         except Exception:
             # Silently ignore cleanup errors during destruction
             pass

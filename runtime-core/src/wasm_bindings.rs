@@ -183,7 +183,14 @@ impl OrbitState {
     /// Advance by dt and return c(t). Mutates this OrbitState.
     #[wasm_bindgen]
     pub fn step(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref()).into()
+        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref(), None, 0.0, None, None).into()
+    }
+
+    /// Advance with transient and integrator options: h in [0,1], optional d_star, max_step.
+    #[wasm_bindgen]
+    pub fn step_advanced(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>, h: f64, d_star: Option<f64>, max_step: Option<f64>, distance_field: Option<&DistanceField>) -> Complex {
+        let rust_field = distance_field.map(|df| &df.inner);
+        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref(), rust_field, h, d_star, max_step).into()
     }
 }
 
@@ -283,4 +290,43 @@ pub fn default_base_omega() -> f64 {
 #[wasm_bindgen]
 pub fn default_orbit_seed() -> u64 {
     DEFAULT_ORBIT_SEED
+}
+/// Distance field wrapper and helpers for WASM
+#[wasm_bindgen]
+pub struct DistanceField {
+    inner: crate::distance_field::DistanceField,
+}
+
+#[wasm_bindgen]
+impl DistanceField {
+    #[wasm_bindgen(constructor)]
+    pub fn new(field: Vec<f32>, resolution: usize, real_range: (f64, f64), imag_range: (f64, f64), max_distance: f64, slowdown_threshold: f64) -> DistanceField {
+        DistanceField { inner: crate::distance_field::DistanceField::new(field, resolution, real_range, imag_range, max_distance, slowdown_threshold) }
+    }
+
+    #[wasm_bindgen]
+    pub fn lookup(&self, real: f64, imag: f64) -> f32 {
+        self.inner.lookup(RustComplex::new(real, imag))
+    }
+
+    #[wasm_bindgen]
+    pub fn sample_bilinear(&self, real: f64, imag: f64) -> f32 {
+        self.inner.sample_bilinear(RustComplex::new(real, imag))
+    }
+
+    #[wasm_bindgen]
+    pub fn gradient(&self, real: f64, imag: f64) -> js_sys::Array {
+        let (gx, gy) = self.inner.gradient(RustComplex::new(real, imag));
+        let arr = js_sys::Array::new();
+        arr.push(&JsValue::from_f64(gx));
+        arr.push(&JsValue::from_f64(gy));
+        arr
+    }
+}
+
+/// Contour-biased integrator exposed to JS
+#[wasm_bindgen]
+pub fn contour_biased_step(real: f64, imag: f64, u_real: f64, u_imag: f64, h: f64, d_star: f64, max_step: f64, distance_field: Option<&DistanceField>) -> Complex {
+    let rust_field = distance_field.map(|df| &df.inner);
+    crate::controller::contour_biased_step(RustComplex::new(real, imag), u_real, u_imag, h, rust_field, d_star, max_step).into()
 }

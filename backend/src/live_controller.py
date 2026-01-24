@@ -5,7 +5,7 @@ Implements the new architecture with:
 - Fast impact detection (many per song)
 - Slow section boundary detection (occasional lobe switches)
 - Orbit state machine with carrier + residual
-- Deterministic fallback behavior
+- Deterministic behavior (no fallback)
 """
 
 import numpy as np
@@ -586,15 +586,15 @@ class LobeScheduler:
         ]
 
         if not candidates:
-            # All lobes used, reset history
+            # All lobes used, reset history and deterministically select default lobe
             self.lobe_history.clear()
             candidates = [
                 lobe for lobe in self.available_lobes if lobe != self.current_lobe
             ]
 
         if not candidates:
-            # Fallback
-            candidates = self.available_lobes
+            # No candidates available -- choose deterministic default (cardioid)
+            candidates = [(1, 0)]
 
         # Simple selection: random with slight bias toward period-2/3 for high energy
         if energy_level > 0.7 and novelty > 0.6:
@@ -766,8 +766,14 @@ class OrbitStateMachine:
         self.orbit_state.s = smoothed_s
         self.orbit_state.alpha = residual_alpha
 
-        # Advance state and synthesize
-        c = step_orbit(self.orbit_state, self.dt)
+        # Advance state and synthesize - pass transient strength and contour params
+        c = step_orbit(
+            self.orbit_state,
+            self.dt,
+            h=impact_envelope_value,
+            d_star=self.contour_d_star,
+            max_step=self.contour_max_step,
+        )
 
         return complex(c.re, c.im)
 
@@ -800,6 +806,8 @@ class LiveController:
         render_rate: float = 60.0,
         control_rate: float = 10.0,
         fast_feature_rate: float = 100.0,
+        contour_d_star: float = 0.3,
+        contour_max_step: float = 0.03,
     ):
         """
         Initialize live controller.
@@ -834,6 +842,10 @@ class LiveController:
 
         # Latest features
         self.latest_slow_features: Optional[SlowFeatures] = None
+
+        # Contour integrator params (tunable)
+        self.contour_d_star = contour_d_star
+        self.contour_max_step = contour_max_step
 
     def process_audio_frame(self, audio_chunk: np.ndarray, timestamp: float) -> complex:
         """

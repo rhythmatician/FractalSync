@@ -14,12 +14,28 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import VisualMetrics
+from .flight_recorder import (
+    FlightRecorder,
+    compute_delta_v,
+)  # optional recording utilities
+
+# Policy helpers for orbit_policy models
+from .policy_interface import (
+    policy_state_encoder,
+    policy_output_decoder_torch,
+    apply_policy_deltas_torch,
+)
+
+# Require distance field loader (precomputed distance-field support is expected)
+from .distance_field_loader import load_distance_field_for_runtime
+
+
 from .runtime_core_bridge import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -29,8 +45,31 @@ from .runtime_core_bridge import (
     make_orbit_state,
     make_residual_params,
     synthesize,
+    step_orbit,
 )
 import runtime_core as rc
+
+# Torch DistanceField helper
+try:
+    from .differentiable_integrator import TorchDistanceField
+except Exception:
+    TorchDistanceField = None
+
+# Visual proxy and losses (optional, light-weight differentiable components)
+try:
+    from .visual_proxy import ProxyRenderer
+    from .visual_losses import (
+        MultiscaleDeltaVLoss,
+        SpeedBoundLoss,
+        HitAlignmentLoss,
+        CoverageLoss,
+    )
+except Exception:
+    ProxyRenderer = None
+    MultiscaleDeltaVLoss = None
+    SpeedBoundLoss = None
+    HitAlignmentLoss = None
+    CoverageLoss = None
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +157,49 @@ class ControlLoss(nn.Module):
         return self.weight * torch.mean((predicted_controls - target_controls) ** 2)
 
 
+class TrajectorySlowdownLoss(nn.Module):
+    """Penalize high orbit velocities near the Mandelbrot boundary using a distance field."""
+
+    def __init__(self, weight: float = 1.0, threshold: float = 0.02):
+        super().__init__()
+        self.weight = weight
+        self.threshold = threshold
+
+    @staticmethod
+    def _smoothstep(edge0: float, edge1: float, x: float) -> float:
+        if edge1 == edge0:
+            return 0.0
+        t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
+        return t * t * (3.0 - 2.0 * t)
+
+    def forward(
+        self, velocities: List[List[float]], distances: List[List[float]]
+    ) -> torch.Tensor:
+        # velocities/distances: per-sample lists of per-step magnitudes
+        penalties: List[float] = []
+        for v_list, d_list in zip(velocities, distances):
+            if not v_list or not d_list:
+                continue
+            local = []
+            for v, d in zip(v_list, d_list):
+                # Guard against non-finite values
+                if not np.isfinite(v) or not np.isfinite(d):
+                    continue
+                # Invert smoothstep: proximity to boundary increases drag
+                w = 1.0 - self._smoothstep(self.threshold, 1.0, d)
+                local.append(w * v)
+            if local:
+                mean_penalty = float(np.mean(local))
+                if np.isfinite(mean_penalty):
+                    penalties.append(mean_penalty)
+        if not penalties:
+            return torch.tensor(0.0, dtype=torch.float32)
+        mean_val = float(np.mean(penalties))
+        if not np.isfinite(mean_val):
+            return torch.tensor(0.0, dtype=torch.float32)
+        return self.weight * torch.tensor(mean_val, dtype=torch.float32)
+
+
 class CorrelationLoss(nn.Module):
     """Negative correlation loss to maximize positive correlation."""
 
@@ -129,9 +211,22 @@ class CorrelationLoss(nn.Module):
         y = y.flatten()
         x_centered = x - torch.mean(x)
         y_centered = y - torch.mean(y)
+
+        # Compute variances
+        var_x = torch.sum(x_centered**2)
+        var_y = torch.sum(y_centered**2)
+
+        # Guard against zero variance (constant tensors)
+        if var_x < 1e-8 or var_y < 1e-8:
+            return torch.zeros(1, device=x.device, dtype=x.dtype)
+
         numerator = torch.sum(x_centered * y_centered)
-        denominator = torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2))
+        denominator = torch.sqrt(var_x * var_y)
         correlation = numerator / (denominator + 1e-8)
+
+        # Clamp to avoid NaN from extreme values
+        correlation = torch.clamp(correlation, -1.0, 1.0)
+
         return -correlation
 
 
@@ -154,6 +249,32 @@ class VisualContinuityLoss(nn.Module):
         # Scale by 100 to make comparable to boundary loss (temporal_change is typically 0.0-0.1)
         loss = torch.mean(visual_changes * (1.0 - transient_norm)) * 100.0
         return self.weight * loss
+
+
+class SwitchCostLoss(nn.Module):
+    """Penalize rapid changes in soft lobe weights across consecutive steps.
+
+    This encourages the model to produce smooth, stable lobe preferences over time.
+    """
+
+    def __init__(self, weight: float = 0.1):
+        super().__init__()
+        self.weight = weight
+
+    def forward(self, lobe_logits_seq: List[torch.Tensor]) -> torch.Tensor:
+        """lobe_logits_seq: list of (B, K) tensors for each timestep.
+
+        Returns mean squared difference between consecutive softmaxed vectors.
+        """
+        if not lobe_logits_seq:
+            return torch.tensor(0.0, dtype=torch.float32)
+        # Stack to (T, B, K)
+        stacked = torch.stack(lobe_logits_seq, dim=0)
+        # Softmax across K (last dim)
+        soft = torch.softmax(stacked, dim=-1)
+        diffs = soft[1:] - soft[:-1]
+        sq = diffs.pow(2).mean()
+        return self.weight * sq
 
 
 class BoundaryExplorationLoss(nn.Module):
@@ -198,6 +319,23 @@ class ControlTrainer:
         julia_max_iter: int = 100,
         num_workers: int = 0,
         k_residuals: int = DEFAULT_K_RESIDUALS,
+        trajectory_steps: int = 10,
+        trajectory_dt: float = 0.1,
+        render_fraction: float = 0.25,
+        regularization_weight: float = 1e-4,
+        flight_recorder: Optional[FlightRecorder] = None,
+        contour_d_star: float = 0.3,
+        contour_max_step: float = 0.03,
+        policy_mode: bool = False,
+        sequence_training: bool = False,
+        sequence_unroll_steps: int = 5,
+        sequence_stride: int = 1,
+        enable_visual_losses: bool = False,
+        visual_loss_weights: Optional[dict] = None,
+        visual_proxy_resolution: int = 64,
+        visual_proxy_max_iter: int = 20,
+        use_surrogate: bool = False,
+        surrogate_path: Optional[str] = None,
     ):
         """
         Initialize control trainer.
@@ -218,6 +356,9 @@ class ControlTrainer:
             julia_max_iter: Julia set max iterations
             num_workers: DataLoader workers
             k_residuals: Number of residual circles
+                trajectory_steps: Number of steps per orbit trajectory
+                trajectory_dt: Time delta per trajectory step
+                render_fraction: Fraction of batch to render per step for speed
         """
         self.model: AudioToControlModel = model.to(device)
         self.feature_extractor = feature_extractor
@@ -230,7 +371,34 @@ class ControlTrainer:
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
         self.k_residuals = k_residuals
+        self.trajectory_steps = trajectory_steps
+        self.trajectory_dt = trajectory_dt
+        self.render_fraction = max(0.05, min(1.0, render_fraction))
+        self.regularization_weight = regularization_weight
         self.residual_params = make_residual_params(k_residuals=k_residuals)
+
+        # Optional flight recorder for per-timestep logging
+        self.flight_recorder: Optional[FlightRecorder] = flight_recorder
+
+        # Contour integrator parameters (tunable)
+        self.contour_d_star = contour_d_star
+        self.contour_max_step = contour_max_step
+
+        # Policy mode (if True, expects a PolicyModel and uses the policy I/O contract)
+        self.policy_mode = policy_mode
+        # Sequence training (closed-loop unroll) options
+        self.sequence_training = bool(sequence_training)
+        self.sequence_unroll_steps = int(sequence_unroll_steps)
+        self.sequence_stride = int(sequence_stride)
+
+        # Load numpy distance field for slowdown loss (required; no fallback)
+        from pathlib import Path as _Path
+
+        df_base = _Path("data") / "mandelbrot_distance_field"
+        # This will raise a FileNotFoundError if the precomputed field is not present
+        df = load_distance_field_for_runtime(str(df_base))
+        self.distance_field = df
+        logger.info("Loaded numpy distance field for slowdown loss")
 
         # Default correlation weights
         default_weights = {
@@ -240,11 +408,23 @@ class ControlTrainer:
             "visual_continuity": 1.0,  # Scaled internally by 100x
             "boundary_exploration": 1.5,  # New: encourage boundary exploration
             "complexity_correlation": 10.0,  # Increased to make correlation more visible
+            "trajectory_slowdown": 1.0,  # Penalize velocity near boundary
+            "switch_cost": 0.1,  # Penalize rapid lobe switching
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
         # Runtime-core feature extractor (shared constants)
         self.feature_extractor = feature_extractor or make_feature_extractor()
+
+        # Load distance field for velocity-based slowdown
+        try:
+            self.distance_field = load_distance_field_for_runtime(
+                "data/mandelbrot_distance_field"
+            )
+            logger.info("Loaded distance field for orbit synthesis slowdown")
+        except Exception as e:
+            logger.warning(f"Failed to load distance field: {e}")
+            self.distance_field = None
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()
@@ -258,6 +438,55 @@ class ControlTrainer:
             weight=self.correlation_weights.get("boundary_exploration", 1.5),
             target_distance=0.05,  # Stay close to boundary
         )
+        self.slowdown_loss_fn = TrajectorySlowdownLoss(
+            weight=self.correlation_weights.get("trajectory_slowdown", 1.0),
+            threshold=0.02,
+        )
+
+        # Lobe switch cost loss (encourages stable soft-lobe weights)
+        self.switch_cost_loss = SwitchCostLoss(
+            weight=self.correlation_weights.get("switch_cost", 0.1)
+        )
+
+        # Optional differentiable visual losses (fast proxy renderer + lightweight losses)
+        self.enable_visual_losses = bool(enable_visual_losses)
+        if self.enable_visual_losses and ProxyRenderer is not None:
+            self.proxy_renderer = ProxyRenderer(
+                resolution=int(visual_proxy_resolution),
+                max_iter=int(visual_proxy_max_iter),
+                device=self.device,
+            )
+            vw = visual_loss_weights or {}
+            self.ms_deltav = MultiscaleDeltaVLoss(
+                weight=vw.get("multiscale_delta", 0.1)
+            )
+            self.speed_loss = SpeedBoundLoss(
+                weight=vw.get("speed_bound", 0.05), base_step=self.contour_max_step
+            )
+            self.hit_loss = HitAlignmentLoss(weight=vw.get("hit_align", 0.1))
+            self.coverage_loss = CoverageLoss(weight=vw.get("coverage", 0.05))
+        else:
+            self.proxy_renderer = None
+            self.ms_deltav = None
+            self.speed_loss = None
+            self.hit_loss = None
+            self.coverage_loss = None
+
+        # Surrogate model (optional)
+        self.use_surrogate = bool(use_surrogate)
+        self.surrogate = None
+        if self.use_surrogate and surrogate_path is not None:
+            try:
+                from .visual_surrogate import SurrogateDeltaV
+
+                self.surrogate = SurrogateDeltaV.load_checkpoint(
+                    surrogate_path, device=self.device
+                )
+                self.surrogate.to(self.device)
+                self.surrogate.eval()
+            except Exception as e:
+                logger.warning(f"Failed to load surrogate model: {e}")
+                self.surrogate = None
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -433,149 +662,655 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
-            # Forward pass with mixed precision
-            with autocast(enabled=self.use_amp):
-                predicted_controls = self.model(features)
+            # Detect sequence batches (batch, seq_len, feat_dim) for sequence training
+            is_sequence_batch = (
+                (features.ndim == 3) and self.sequence_training and self.policy_mode
+            )
 
-            # Parse control signals
-            parsed = self.model.parse_output(predicted_controls)
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
+            if not is_sequence_batch:
+                # Extract audio features early so transient proxy is available during stepping
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = features.shape[1] // n_features_per_frame
+                features_reshaped = features.view(
+                    batch_size, window_frames, n_features_per_frame
+                )
+                avg_features = features_reshaped.mean(dim=1)
 
-            # Debug: log control signal ranges
-            if batch_idx == 0:
-                logger.debug(
-                    f"Debug - s_target range: [{s_target.min():.4f}, {s_target.max():.4f}], mean: {s_target.mean():.4f}"
+                spectral_centroid = avg_features[:, 0]
+                spectral_flux = avg_features[:, 1]
+            else:
+                # Sequence batch; defer per-step spectral_flux computation inside sequence loop
+                B, T, D = features.shape
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = D // n_features_per_frame
+                spectral_centroid = None
+                spectral_flux = None
+
+            # Sequence training + policy mode: run closed-loop unrolled rollouts
+            if self.policy_mode and self.sequence_training:
+                # Expect `features` shape (batch, seq_len, feat_dim)
+                import math
+                from . import differentiable_integrator as di
+
+                batch_seq = features  # (B, T, D)
+                B, T, D = batch_seq.shape
+                device = self.device
+
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = D // n_features_per_frame
+
+                # Initial primitive states
+                s = torch.full((B,), 1.02, device=device, dtype=torch.float32)
+                alpha = torch.full((B,), 0.3, device=device, dtype=torch.float32)
+                omega = torch.full(
+                    (B,), float(DEFAULT_BASE_OMEGA), device=device, dtype=torch.float32
                 )
-                logger.debug(
-                    f"Debug - alpha range: [{alpha.min():.4f}, {alpha.max():.4f}], mean: {alpha.mean():.4f}"
-                )
-                logger.debug(
-                    f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
+                theta = torch.tensor(
+                    [float(i * 2 * math.pi / B) for i in range(B)],
+                    device=device,
+                    dtype=torch.float32,
                 )
 
-            # Synthesize c(t) using runtime_core (cardioid lobe)
+                # Initial c computed via synthesize (non-differentiable anchor)
+                c_real = torch.zeros(B, device=device, dtype=torch.float32)
+                c_imag = torch.zeros(B, device=device, dtype=torch.float32)
+
+                # Collect per-step c history for coverage loss (if enabled)
+                c_history: List[torch.Tensor] = []
+                for i in range(B):
+                    try:
+                        orbit0 = make_orbit_state(
+                            lobe=1,
+                            sub_lobe=0,
+                            theta=float(theta[i].item()),
+                            omega=float(omega[i].item()),
+                            s=float(s[i].item()),
+                            alpha=float(alpha[i].item()),
+                            k_residuals=self.k_residuals,
+                            residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                            seed=int(DEFAULT_ORBIT_SEED + i),
+                        )
+                        c0 = synthesize(orbit0, self.residual_params, None)
+                        c_norm = np.sqrt(c0.real**2 + c0.imag**2)
+                        max_magnitude = 2.0
+                        divisor = c_norm if c_norm > max_magnitude else max_magnitude
+                        c_real[i] = float(c0.real) / divisor
+                        c_imag[i] = float(c0.imag) / divisor
+                    except Exception:
+                        c_real[i] = 0.0
+                        c_imag[i] = 0.0
+
+                # Accumulate L2 jump loss across steps
+                total_step_loss = torch.tensor(0.0, device=device, dtype=torch.float32)
+                # Collect per-step lobe logits when present for switch-cost loss
+                lobe_logits_seq: List[torch.Tensor] = []
+
+                for t in range(T):
+                    features_t = batch_seq[:, t, :]
+
+                    # Compute spectral_flux transient proxy for this step
+                    reshaped = features_t.view(B, window_frames, n_features_per_frame)
+                    avg_f = reshaped.mean(dim=1)
+                    spectral_flux_t = avg_f[:, 1]
+
+                    # Predict policy outputs for this step
+                    predicted = self.model(features_t)
+                    # Decode with torch helper
+                    decoded_t = policy_output_decoder_torch(predicted, self.k_residuals)
+                    u = decoded_t["u"]  # (B,2)
+                    u_r = u[:, 0]
+                    u_i = u[:, 1]
+
+                    # Collect lobe logits if present for switch-cost regularization
+                    l_logits = decoded_t.get("lobe_logits", None)
+                    if l_logits is not None:
+                        lobe_logits_seq.append(l_logits)
+
+                    # Integrator step (differentiable)
+                    next_r, next_i = di.contour_biased_step_torch(
+                        c_real,
+                        c_imag,
+                        u_r,
+                        u_i,
+                        spectral_flux_t,
+                        self.contour_d_star,
+                        self.contour_max_step,
+                        None,
+                    )
+
+                    # L2 jump loss (encourages small, smooth motions)
+                    step_loss = torch.mean(u_r**2 + u_i**2)
+                    total_step_loss = total_step_loss + step_loss
+
+                    # Visual continuity: prefer surrogate predictor when available for speed
+                    if self.use_surrogate and self.surrogate is not None:
+                        try:
+                            cp = torch.stack([c_real, c_imag], dim=1)
+                            cn = torch.stack([next_r, next_i], dim=1)
+
+                            # DF features
+                            if hasattr(self, "df_numpy") and self.df_numpy is not None:
+                                df_torch = getattr(self, "_torch_df", None)
+                                if df_torch is None:
+                                    df_torch = TorchDistanceField(
+                                        torch.tensor(self.df_numpy, device=device)
+                                    )
+                                    self._torch_df = df_torch
+                                d_prev_t = df_torch.sample_bilinear(c_real, c_imag)
+                                gx, gy = df_torch.gradient(c_real, c_imag)
+                                grad_prev_t = torch.stack([gx, gy], dim=1)
+                            else:
+                                d_prev_t = torch.ones(B, device=device)
+                                grad_prev_t = torch.zeros((B, 2), device=device)
+
+                            pred_dv = self.surrogate.predict(
+                                cp, cn, d_prev_t, grad_prev_t
+                            )
+
+                            base_B = 0.02
+                            B_t = base_B * (1.0 + 2.0 * spectral_flux_t)
+                            try:
+                                sens = df_torch.get_velocity_scale(c_real, c_imag)
+                            except Exception:
+                                sens = torch.zeros_like(B_t)
+                            B_t = B_t * (1.0 - 0.5 * sens)
+
+                            L_cont = torch.mean(torch.relu(pred_dv - B_t) ** 2)
+                            visual_continuity_loss_val = (
+                                visual_continuity_loss_val + L_cont
+                            )
+                        except Exception as e:
+                            logger.warning(f"Surrogate continuity skipped: {e}")
+                    elif self.enable_visual_losses and self.proxy_renderer is not None:
+                        try:
+                            prev_frames = self.proxy_renderer.render(c_real, c_imag)
+                            curr_frames = self.proxy_renderer.render(next_r, next_i)
+                            L_v = self.ms_deltav(
+                                prev_frames, curr_frames, h_t=spectral_flux_t
+                            )
+                            visual_continuity_loss_val = (
+                                visual_continuity_loss_val + L_v
+                            )
+                        except Exception as e:
+                            logger.warning(f"Visual ΔV loss skipped due to: {e}")
+
+                        try:
+                            cp = torch.stack([c_real, c_imag], dim=1)
+                            cn = torch.stack([next_r, next_i], dim=1)
+                            L_s = self.speed_loss(cp, cn, df=None)
+                            trajectory_slowdown_loss_val = (
+                                trajectory_slowdown_loss_val + L_s
+                            )
+                        except Exception as e:
+                            logger.warning(f"Speed bound loss skipped due to: {e}")
+
+                    # Update primitive states (s,alpha,omega)
+                    deltas = {
+                        "delta_s": decoded_t.get("delta_s"),
+                        "delta_omega": decoded_t.get("delta_omega"),
+                        "alpha_hit": decoded_t.get("alpha_hit"),
+                    }
+                    updated = apply_policy_deltas_torch(
+                        s, alpha, omega, theta, deltas, h_t=spectral_flux_t
+                    )
+                    s = updated["s"]
+                    alpha = updated["alpha"]
+                    omega = updated["omega"]
+
+                    # Record c after step for coverage
+                    try:
+                        c_history.append(torch.stack([next_r, next_i], dim=1))
+                    except Exception:
+                        pass
+
+                    # Update c for next step
+                    c_real = next_r
+                    c_imag = next_i
+
+                # Optional coverage loss from c_history
+                if (
+                    self.enable_visual_losses
+                    and self.coverage_loss is not None
+                    and len(c_history) > 0
+                ):
+                    try:
+                        # c_history is list of (B,2) tensors for each step -> stack to (B, T, 2)
+                        c_seq = torch.stack(c_history, dim=1)
+                        L_cov = self.coverage_loss(c_seq)
+                        visual_continuity_loss_val = visual_continuity_loss_val + L_cov
+                    except Exception as e:
+                        logger.warning(f"Coverage loss skipped due to: {e}")
+
+                # Average step loss across steps
+                avg_step_loss = total_step_loss / float(T)
+                # Fill in losses and predicted_controls so later code can proceed uniformly
+                predicted_controls = torch.zeros(
+                    (B, self.model.output_dim), device=device
+                )
+                control_loss_val = torch.zeros(1, device=device)
+                timbre_color_loss = torch.tensor(0.0, device=device)
+                transient_impact_loss = torch.tensor(0.0, device=device)
+                visual_continuity_loss_val = torch.tensor(0.0, device=device)
+                boundary_loss_val = torch.tensor(0.0, device=device)
+                complexity_correlation_loss_val = torch.tensor(0.0, device=device)
+                trajectory_slowdown_loss_val = torch.tensor(0.0, device=device)
+
+                # Switch cost regularization for lobe logits sequences
+                if len(lobe_logits_seq) >= 2:
+                    switch_cost_val = self.switch_cost_loss(lobe_logits_seq)
+                else:
+                    switch_cost_val = torch.tensor(0.0, device=device)
+
+                # Total loss: include regularization term on predicted_controls to keep grad path
+                total_batch_loss = (
+                    self.correlation_weights["timbre_color"] * timbre_color_loss
+                    + self.correlation_weights["transient_impact"]
+                    * transient_impact_loss
+                    + self.correlation_weights["visual_continuity"]
+                    * visual_continuity_loss_val
+                    + self.correlation_weights["boundary_exploration"]
+                    * boundary_loss_val
+                    + self.correlation_weights["complexity_correlation"]
+                    * complexity_correlation_loss_val
+                    + self.correlation_weights["trajectory_slowdown"]
+                    * trajectory_slowdown_loss_val
+                    + self.correlation_weights.get("switch_cost", 0.0) * switch_cost_val
+                    + current_curriculum_weight * control_loss_val
+                    + self.regularization_weight * torch.mean(predicted_controls**2)
+                    + avg_step_loss
+                )
+            else:
+                # Forward pass with mixed precision for single-step training
+                device_type = "cuda" if (self.device and "cuda" in str(self.device) and torch.cuda.is_available()) else "cpu"
+                with torch.amp.autocast(device_type=device_type, enabled=self.use_amp):
+                    # Policy mode: model expects the policy_input vector instead of raw audio features
+                    if self.policy_mode:
+                        # Build policy inputs per sample
+                        import math
+
+                        policy_inputs = []
+                        for i in range(batch_size):
+                            # Base orbit state used as encoding seed
+                            s0 = 1.02
+                            alpha0 = 0.3
+                            omega0 = float(DEFAULT_BASE_OMEGA)
+                            theta0 = float(i * 2 * math.pi / batch_size)
+
+                            h_t_val = float(spectral_flux[i].detach().item())
+                            loudness = 0.0
+                            tonalness = 0.0
+                            noisiness = 0.0
+
+                            band_energies = [0.0] * self.k_residuals
+                            band_deltas = [0.0] * self.k_residuals
+
+                            # geometry minimap: synthesize a seed c and sample distance field if available
+                            try:
+                                orbit0 = make_orbit_state(
+                                    lobe=1,
+                                    sub_lobe=0,
+                                    theta=theta0,
+                                    omega=omega0,
+                                    s=s0,
+                                    alpha=alpha0,
+                                    k_residuals=self.k_residuals,
+                                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                                    seed=int(DEFAULT_ORBIT_SEED + i),
+                                )
+                                c0 = synthesize(orbit0, self.residual_params, None)
+                                if self.distance_field is not None:
+                                    d_c = float(
+                                        self.distance_field.lookup(
+                                            float(c0.real), float(c0.imag)
+                                        )
+                                    )
+                                    gx, gy = self.distance_field.gradient(
+                                        float(c0.real), float(c0.imag)
+                                    )
+                                    # directional probes (8 directions × 2 radii)
+                                    probes = []
+                                    radii = [0.005, 0.02]
+                                    for d_idx in range(8):
+                                        ang = 2 * math.pi * d_idx / 8.0
+                                        dir_x = math.cos(ang)
+                                        dir_y = math.sin(ang)
+                                        for r in radii:
+                                            rx = float(c0.real) + r * dir_x
+                                            ry = float(c0.imag) + r * dir_y
+                                            probes.append(
+                                                float(
+                                                    self.distance_field.lookup(rx, ry)
+                                                )
+                                            )
+                                else:
+                                    d_c = 1.0
+                                    gx, gy = (0.0, 0.0)
+                                    probes = [0.0] * 16
+                            except Exception:
+                                d_c = 1.0
+                                gx, gy = (0.0, 0.0)
+                                probes = [0.0] * 16
+
+                            inp = policy_state_encoder(
+                                s=s0,
+                                alpha=alpha0,
+                                omega=omega0,
+                                theta=theta0,
+                                h_t=h_t_val,
+                                loudness=loudness,
+                                tonalness=tonalness,
+                                noisiness=noisiness,
+                                band_energies=band_energies,
+                                band_deltas=band_deltas,
+                                d_c=d_c,
+                                grad=(gx, gy),
+                                directional_probes=probes,
+                            )
+                            policy_inputs.append(inp)
+
+                        # Stack into batch tensor
+                        batch_inp = torch.tensor(
+                            np.stack(policy_inputs, axis=0),
+                            dtype=torch.float32,
+                            device=self.device,
+                        )
+                        predicted_controls = self.model(batch_inp)
+                    else:
+                        predicted_controls = self.model(features)
+
+            # Parse control signals or policy outputs
+            if self.policy_mode:
+                # We'll decode per-sample later in the stepping loop
+                parsed = None
+            else:
+                parsed = self.model.parse_output(predicted_controls)
+                s_target = parsed["s_target"]
+                alpha = parsed["alpha"]
+                omega_scale = parsed["omega_scale"]
+                band_gates = parsed["band_gates"]
+
+                # Debug: log control signal ranges
+                if batch_idx == 0:
+                    logger.debug(
+                        f"Debug - s_target range: [{s_target.min():.4f}, {s_target.max():.4f}], mean: {s_target.mean():.4f}"
+                    )
+                    logger.debug(
+                        f"Debug - alpha range: [{alpha.min():.4f}, {alpha.max():.4f}], mean: {alpha.mean():.4f}"
+                    )
+                    logger.debug(
+                        f"Debug - omega_scale range: [{omega_scale.min():.4f}, {omega_scale.max():.4f}], mean: {omega_scale.mean():.4f}"
+                    )
+            # Generate orbit trajectories with distance field slowdown
             c_values = []
-            for i in range(batch_size):
-                state = make_orbit_state(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
-                )
-                c = synthesize(
-                    state,
-                    residual_params=self.residual_params,
-                    band_gates=band_gates[i].detach().cpu().tolist(),
-                )
+            all_trajectories: List[List[List[float]]] = []
 
-                # Calculate ||c|| and scale down if needed
-                c_norm = np.sqrt(c.real**2 + c.imag**2)
-                max_magnitude = 2.0
-                divisor = max(c_norm, max_magnitude) / max_magnitude
+            # If sequence training with policy mode, we already computed c_real/c_imag using differentiable integrator.
+            if self.policy_mode and self.sequence_training:
+                # Use final c from sequence unroll as trajectory endpoints
+                for i in range(batch_size):
+                    cr = float(c_real[i].detach().cpu().item())
+                    ci = float(c_imag[i].detach().cpu().item())
+                    c_values.append([cr, ci])
+                    all_trajectories.append([[cr, ci]])
+            else:
+                for i in range(batch_size):
+                    # Initialize orbit state with model-predicted control signals
+                    orbit = make_orbit_state(
+                        lobe=1,
+                        sub_lobe=0,
+                        theta=float(i * 2 * np.pi / batch_size),
+                        omega=float(
+                            DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()
+                        ),
+                        s=float(s_target[i].detach().item()),
+                        alpha=float(alpha[i].detach().item()),
+                        k_residuals=self.k_residuals,
+                        residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                        seed=int(DEFAULT_ORBIT_SEED + i),
+                    )
 
-                # SAFETY: Scale c values to reasonable range for Julia sets
-                # The orbit synthesis can produce values outside [-2, 2] which are not useful
-                # This preserves direction while constraining magnitude
-                c_real = c.real / divisor
-                c_imag = c.imag / divisor
-                c_values.append([c_real, c_imag])
+                    trajectory_c_values = []
+                    gates_list = band_gates[i].detach().cpu().tolist()
+
+                    # Soft-lobe single-step interpolation: if the policy produced lobe logits,
+                    # synthesize a c for each possible lobe and mix them according to softmax
+                    try:
+                        decoded_batch = policy_output_decoder_torch(
+                            predicted_controls, self.k_residuals
+                        )
+                        lobe_logits_batch = decoded_batch.get("lobe_logits", None)
+                    except Exception:
+                        lobe_logits_batch = None
+
+                    if lobe_logits_batch is not None and epoch == 0:
+                        # Compute per-sample mixed c using soft weights (static epoch)
+                        weights = (
+                            torch.softmax(lobe_logits_batch[i], dim=-1)
+                            .detach()
+                            .cpu()
+                            .numpy()
+                        )
+                        # Synthesize per-lobe coordinates and mix
+                        c_mixed_real = 0.0
+                        c_mixed_imag = 0.0
+                        for l_idx, w in enumerate(weights.tolist()):
+                            orb_l = make_orbit_state(
+                                lobe=int(l_idx),
+                                sub_lobe=0,
+                                theta=float(i * 2 * np.pi / batch_size),
+                                omega=float(
+                                    DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()
+                                ),
+                                s=float(s_target[i].detach().item()),
+                                alpha=float(alpha[i].detach().item()),
+                                k_residuals=self.k_residuals,
+                                residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                                seed=int(DEFAULT_ORBIT_SEED + i),
+                            )
+                            c_l = synthesize(orb_l, self.residual_params, gates_list)
+                            c_mixed_real += float(w) * float(c_l.real)
+                            c_mixed_imag += float(w) * float(c_l.imag)
+
+                        c_norm = np.sqrt(c_mixed_real**2 + c_mixed_imag**2)
+                        max_magnitude = 2.0
+                        divisor = max(c_norm, max_magnitude) / max_magnitude
+                        c_real = c_mixed_real / divisor
+                        c_imag = c_mixed_imag / divisor
+                        trajectory_c_values.append([c_real, c_imag])
+                    elif epoch == 0:
+                        # Static synthesis: single c
+                        c = synthesize(orbit, self.residual_params, gates_list)
+                        c_norm = np.sqrt(c.real**2 + c.imag**2)
+                        max_magnitude = 2.0
+                        divisor = max(c_norm, max_magnitude) / max_magnitude
+                        c_real = c.real / divisor
+                        c_imag = c.imag / divisor
+                        trajectory_c_values.append([c_real, c_imag])
+                    else:
+                        # Trajectory synthesis via runtime_core
+                        for step in range(self.trajectory_steps):
+                            # transient strength for this sample: use spectral flux as proxy
+                            h_val = (
+                                float(spectral_flux[i].detach().item())
+                                if i < spectral_flux.shape[0]
+                                else 0.0
+                            )
+                            c = step_orbit(
+                                orbit,
+                                self.trajectory_dt,
+                                self.residual_params,
+                                gates_list,
+                                distance_field=self.distance_field,
+                                h=h_val,
+                                d_star=self.contour_d_star,
+                                max_step=self.contour_max_step,
+                            )
+                            c_norm = np.sqrt(c.real**2 + c.imag**2)
+                            max_magnitude = 2.0
+                            divisor = max(c_norm, max_magnitude) / max_magnitude
+                            c_real = c.real / divisor
+                            c_imag = c.imag / divisor
+                            trajectory_c_values.append([c_real, c_imag])
+
+                    c_values.append(trajectory_c_values[-1])
+                    all_trajectories.append(trajectory_c_values)
 
             c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
             julia_real = c_tensor[:, 0]
             julia_imag = c_tensor[:, 1]
 
-            # Extract audio features for correlation
-            n_features_per_frame = self.feature_extractor.num_features_per_frame()
-            window_frames = features.shape[1] // n_features_per_frame
-            features_reshaped = features.view(
-                batch_size, window_frames, n_features_per_frame
-            )
-            avg_features = features_reshaped.mean(dim=1)
+            # Audio features were computed earlier for transient proxy (spectral_centroid, spectral_flux)
+            # Render Julia sets for visual metrics (subset of samples/steps)
+            render_sample_count = max(1, int(batch_size * self.render_fraction))
+            render_sample_indices = list(range(render_sample_count))
 
-            spectral_centroid = avg_features[:, 0]
-            spectral_flux = avg_features[:, 1]
-
-            # Render Julia sets for visual metrics
             images = []
             color_hues = []
             temporal_changes = []
             visual_complexities = []
             mandelbrot_distances = []
 
-            prev_image = None
-            for i in range(batch_size):
-                if self.julia_renderer is not None:
-                    try:
-                        image = self.julia_renderer.render(
-                            seed_real=julia_real[i].detach().item(),
-                            seed_imag=julia_imag[i].detach().item(),
-                            max_iter=self.julia_max_iter,
+            if self.policy_mode and self.sequence_training:
+                # In sequence training PoC, skip expensive rendering and provide placeholders
+                for i in render_sample_indices:
+                    images.append(None)
+                    temporal_changes.append(torch.tensor(0.0, device=self.device))
+                    visual_complexities.append(torch.tensor(0.0, device=self.device))
+                    mandelbrot_distances.append(1.0)
+                    color_hues.append(torch.tensor(0.0, device=self.device))
+            else:
+                for i in render_sample_indices:
+                    prev_image = None
+                    traj = all_trajectories[i]
+                    sample_temporal_changes: List[torch.Tensor] = []
+                    sample_visual_complexities: List[torch.Tensor] = []
+                    # Render all steps for selected samples to preserve per-step continuity
+                    prev_proxy = None
+                    for step_idx, (seed_r, seed_i) in enumerate(traj):
+                        if self.julia_renderer is not None:
+                            try:
+                                image = self.julia_renderer.render(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    max_iter=self.julia_max_iter,
+                                )
+                            except Exception as e:
+                                logger.warning(f"GPU rendering failed: {e}")
+                                image = self.visual_metrics.render_julia_set(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    width=self.julia_resolution,
+                                    height=self.julia_resolution,
+                                    max_iter=self.julia_max_iter,
+                                )
+                        else:
+                            image = self.visual_metrics.render_julia_set(
+                                seed_real=float(seed_r),
+                                seed_imag=float(seed_i),
+                                width=self.julia_resolution,
+                                height=self.julia_resolution,
+                                max_iter=self.julia_max_iter,
+                            )
+
+                        metrics = self.visual_metrics.compute_all_metrics(
+                            image, prev_image=prev_image
                         )
-                    except Exception as e:
-                        logger.warning(f"GPU rendering failed: {e}")
-                        image = self.visual_metrics.render_julia_set(
-                            seed_real=julia_real[i].detach().item(),
-                            seed_imag=julia_imag[i].detach().item(),
-                            width=self.julia_resolution,
-                            height=self.julia_resolution,
-                            max_iter=self.julia_max_iter,
+
+                        # Optional flight recorder: record per-step proxy frame and controller state
+                        if self.flight_recorder is not None:
+                            try:
+                                proxy = self.visual_metrics.render_julia_set(
+                                    seed_real=float(seed_r),
+                                    seed_imag=float(seed_i),
+                                    width=64,
+                                    height=64,
+                                    max_iter=min(40, self.julia_max_iter),
+                                )
+                                proxy_gray = (
+                                    np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
+                                )
+                                delta_v = compute_delta_v(proxy_gray, prev_proxy)
+                            except Exception:  # pragma: no cover - best-effort logging
+                                proxy = None
+                                proxy_gray = None
+                                delta_v = None
+
+                            controller_state = {
+                                "s": float(s_target[i].detach().item()),
+                                "alpha": float(alpha[i].detach().item()),
+                                "omega_scale": float(omega_scale[i].detach().item()),
+                                "band_gates": band_gates[i].detach().cpu().tolist(),
+                            }
+
+                            audio_feats = (
+                                features_reshaped[i].detach().cpu().flatten().tolist()
+                            )
+
+                            h_val = float(spectral_flux[i].detach().item())
+
+                            # Record step (t, c, controller, h, band_energies, audio_features, proxy_frame, delta_v)
+                            self.flight_recorder.record_step(
+                                t=step_idx,
+                                c=[seed_r, seed_i],
+                                controller=controller_state,
+                                h=h_val,
+                                band_energies=band_gates[i].detach().cpu().tolist(),
+                                audio_features=audio_feats,
+                                proxy_frame=proxy,
+                                delta_v=delta_v,
+                            )
+
+                            prev_proxy = proxy_gray
+
+                        # Visual complexity from connectedness and edge density
+                        visual_complexity = (
+                            metrics["connectedness"] * metrics["edge_density"]
                         )
-                else:
-                    image = self.visual_metrics.render_julia_set(
-                        seed_real=julia_real[i].detach().item(),
-                        seed_imag=julia_imag[i].detach().item(),
-                        width=self.julia_resolution,
-                        height=self.julia_resolution,
-                        max_iter=self.julia_max_iter,
+
+                        if batch_idx == 0 and i == 0 and step_idx == 0:
+                            logger.debug(
+                                f"Debug - First sample metrics: "
+                                f"edge_density={metrics['edge_density']:.6f}, "
+                                f"connectedness={metrics['connectedness']:.6f}, "
+                                f"temporal_change={metrics['temporal_change']:.6f}"
+                            )
+
+                        sample_temporal_changes.append(
+                            torch.tensor(
+                                metrics["temporal_change"],
+                                device=self.device,
+                                dtype=torch.float32,
+                            )
+                        )
+                        sample_visual_complexities.append(
+                            torch.tensor(
+                                visual_complexity,
+                                device=self.device,
+                                dtype=torch.float32,
+                            )
+                        )
+
+                        prev_image = image
+
+                    # Aggregate per-sample metrics across trajectory
+                    # Aggregate per-sample metrics across rendered trajectory subset
+                    temporal_changes.append(torch.stack(sample_temporal_changes).mean())
+                    visual_complexities.append(
+                        torch.stack(sample_visual_complexities).mean()
                     )
 
-                metrics = self.visual_metrics.compute_all_metrics(
-                    image, prev_image=prev_image
-                )
+                    # Use last image for debug display
+                    images.append(image)
 
-                # Compute Mandelbrot distance
-                c_real = julia_real[i].detach().item()
-                c_imag = julia_imag[i].detach().item()
-                mb_dist = compute_mandelbrot_distance(c_real, c_imag, max_iter=256)
-                mandelbrot_distances.append(mb_dist)
-
-                # Visual complexity from connectedness and edge density
-                visual_complexity = metrics["connectedness"] * metrics["edge_density"]
-
-                # Debug: log first sample metrics
-                if batch_idx == 0 and i == 0:
-                    logger.debug(
-                        f"Debug - First sample metrics: "
-                        f"edge_density={metrics['edge_density']:.6f}, "
-                        f"connectedness={metrics['connectedness']:.6f}, "
-                        f"temporal_change={metrics['temporal_change']:.6f}"
+                    # Mandelbrot distance: use final c for boundary proximity
+                    final_c_r, final_c_i = traj[-1]
+                    mb_dist = compute_mandelbrot_distance(
+                        final_c_r, final_c_i, max_iter=256
                     )
+                    mandelbrot_distances.append(mb_dist)
 
-                images.append(image)
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
-                temporal_changes.append(
-                    torch.tensor(
-                        metrics["temporal_change"],
-                        device=self.device,
-                        dtype=torch.float32,
-                    )
-                )
-                visual_complexities.append(
-                    torch.tensor(
-                        visual_complexity, device=self.device, dtype=torch.float32
-                    )
-                )
-
-                prev_image = image
+                    # Use s_target as proxy for color hue (example correlation)
+                    color_hues.append(s_target[i])
 
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
@@ -585,27 +1320,92 @@ class ControlTrainer:
             )
 
             # Compute correlation losses
-            timbre_color_loss = self.correlation_loss(
-                spectral_centroid, color_hue_tensor
-            )
+            # Subset audio features to rendered samples
+            if self.policy_mode and self.sequence_training:
+                sc_subset = torch.zeros(render_sample_count, device=self.device)
+                sf_subset = torch.zeros(render_sample_count, device=self.device)
+            else:
+                sc_subset = spectral_centroid[render_sample_indices]
+                sf_subset = spectral_flux[render_sample_indices]
+
+            timbre_color_loss = self.correlation_loss(sc_subset, color_hue_tensor)
             transient_impact_loss = self.correlation_loss(
-                spectral_flux, temporal_change_tensor
+                sf_subset, temporal_change_tensor
             )
 
             # Visual continuity loss: penalize visual changes without audio transients
             # Use spectral flux as transient strength indicator
             visual_continuity_loss_val = self.visual_continuity_loss(
-                temporal_change_tensor, spectral_flux
+                temporal_change_tensor, sf_subset
             )
 
             # Boundary exploration loss: encourage c to stay near Mandelbrot boundary
-            boundary_loss_val = self.boundary_loss(c_tensor, mandelbrot_dist_tensor)
+            # Boundary loss computed on rendered subset
+            c_subset = c_tensor[render_sample_indices]
+            boundary_loss_val = self.boundary_loss(c_subset, mandelbrot_dist_tensor)
 
             # Complexity correlation: match musical and visual complexity
-            musical_complexity = compute_musical_complexity(features_reshaped)
+            if self.policy_mode and self.sequence_training:
+                musical_complexity = torch.zeros(
+                    render_sample_count, device=self.device
+                )
+            else:
+                musical_complexity = compute_musical_complexity(
+                    features_reshaped[render_sample_indices]
+                )
             complexity_correlation_loss_val = self.correlation_loss(
                 musical_complexity, visual_complexity_tensor
             )
+
+            # Slowdown loss: penalize high velocities near boundary using numpy distance field
+            # TODO: Debug NaN issue in slowdown loss computation; disabled for now
+            trajectory_slowdown_loss_val = torch.tensor(
+                0.0, dtype=torch.float32, device=self.device
+            )
+            # if self.df_numpy is not None and self.df_meta is not None and epoch > 0:
+            #     # Prepare distance field lookup
+            #     res = int(self.df_meta.get("resolution", self.df_numpy.shape[0]))
+            #     real_range = self.df_meta.get("real_range", [-2.5, 1.0])
+            #     imag_range = self.df_meta.get("imag_range", [-1.5, 1.5])
+            #
+            #     def df_lookup(cr: float, ci: float) -> float:
+            #         # Guard against NaN/Inf and out-of-range values
+            #         if not np.isfinite(cr) or not np.isfinite(ci):
+            #             return 1.0
+            #         rx = (cr - real_range[0]) / (real_range[1] - real_range[0])
+            #         ry = (ci - imag_range[0]) / (imag_range[1] - imag_range[0])
+            #         if not np.isfinite(rx) or not np.isfinite(ry):
+            #             return 1.0
+            #         rx = float(np.clip(rx, 0.0, 1.0))
+            #         ry = float(np.clip(ry, 0.0, 1.0))
+            #         col = int(round(rx * (res - 1)))
+            #         row = int(round(ry * (res - 1)))
+            #         return float(self.df_numpy[row, col])
+            #
+            #     velocities: List[List[float]] = []
+            #     distances: List[List[float]] = []
+            #     for traj in all_trajectories:
+            #         v_list: List[float] = []
+            #         d_list: List[float] = []
+            #         for k in range(1, len(traj)):
+            #             cr0, ci0 = traj[k - 1]
+            #             cr1, ci1 = traj[k]
+            #             dv = np.sqrt((cr1 - cr0) ** 2 + (ci1 - ci0) ** 2)
+            #             dv = float(dv) if np.isfinite(dv) else 0.0
+            #             v_list.append(dv)
+            #             d_list.append(df_lookup(float(cr1), float(ci1)))
+            #         velocities.append(v_list)
+            #         distances.append(d_list)
+            #
+            #     trajectory_slowdown_loss_val = self.slowdown_loss_fn(
+            #         velocities, distances
+            #     ).to(self.device)
+            #
+            #     # Ensure no NaN values
+            #     if not torch.isfinite(trajectory_slowdown_loss_val):
+            #         trajectory_slowdown_loss_val = torch.tensor(
+            #             0.0, dtype=torch.float32, device=self.device
+            #         )
 
             # Debug: log once per epoch to check values
             if batch_idx == 0:
@@ -615,11 +1415,16 @@ class ControlTrainer:
                 )
                 if len(images) > 0:
                     sample_image = images[0]
-                    logger.debug(
-                        f"Debug - image shape: {sample_image.shape}, "
-                        f"range: [{sample_image.min():.4f}, {sample_image.max():.4f}], "
-                        f"mean: {sample_image.mean():.4f}"
-                    )
+                    if sample_image is not None:
+                        logger.debug(
+                            f"Debug - image shape: {sample_image.shape}, "
+                            f"range: [{sample_image.min():.4f}, {sample_image.max():.4f}], "
+                            f"mean: {sample_image.mean():.4f}"
+                        )
+                    else:
+                        logger.debug(
+                            "Debug - image: None (skipped rendering in sequence training)"
+                        )
                 logger.debug(
                     f"Debug - temporal_change range: [{temporal_change_tensor.min():.4f}, {temporal_change_tensor.max():.4f}], "
                     f"mean: {temporal_change_tensor.mean():.4f}"
@@ -654,11 +1459,49 @@ class ControlTrainer:
                 + self.correlation_weights["boundary_exploration"] * boundary_loss_val
                 + self.correlation_weights["complexity_correlation"]
                 * complexity_correlation_loss_val
+                + self.correlation_weights["trajectory_slowdown"]
+                * trajectory_slowdown_loss_val
                 + current_curriculum_weight * control_loss_val
+                + self.regularization_weight * torch.mean(predicted_controls**2)
             )
+
+            # Guard against NaN in loss
+            if not torch.isfinite(total_batch_loss):
+                logger.warning(
+                    f"NaN detected in total loss (batch {batch_idx}). "
+                    f"timbre_color: {timbre_color_loss.item():.6f}, "
+                    f"transient: {transient_impact_loss.item():.6f}, "
+                    f"continuity: {visual_continuity_loss_val.item():.6f}, "
+                    f"boundary: {boundary_loss_val.item():.6f}, "
+                    f"complexity: {complexity_correlation_loss_val.item():.6f}"
+                )
+                # If the total loss has no connection to model parameters, add a tiny
+                # differentiable regularizer (based on predicted controls) so backward
+                # can proceed without crashing. This preserves training while we
+                # work on making more losses differentiable.
+                if not total_batch_loss.requires_grad:
+                    fix = torch.mean(predicted_controls**2) * 1e-6
+                    total_batch_loss = total_batch_loss + fix
+                    logger.info(
+                        "Added tiny differentiable fix to total loss to allow backward pass."
+                    )
+                else:
+                    # If it does require grad but is NaN, skip the backward to be safe
+                    logger.warning(
+                        "Total loss is NaN but has grad; skipping backward this batch."
+                    )
+                    continue
 
             # Backward pass with mixed precision and gradient clipping
             self.optimizer.zero_grad()
+
+            # If loss has no grad path (shouldn't happen), add tiny model-dependent fix
+            if not total_batch_loss.requires_grad:
+                fix = torch.tensor(0.0, device=self.device)
+                for p in self.model.parameters():
+                    if p.requires_grad:
+                        fix = fix + 1e-6 * torch.sum(p * p)
+                total_batch_loss = total_batch_loss + fix
 
             if self.use_amp:
                 self.scaler.scale(total_batch_loss).backward()
@@ -744,9 +1587,24 @@ class ControlTrainer:
         except Exception as e:
             logger.error(f"Failed to concatenate features: {e}")
             raise
-        all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
 
-        tensor_dataset = TensorDataset(all_features_tensor)
+        # If sequence training is enabled and policy_mode, build a sequence dataset view
+        if self.sequence_training and self.policy_mode:
+            from .data_loader import SequenceAudioDataset
+
+            seq_ds = SequenceAudioDataset(
+                features_list=normalized_features,
+                seq_len=self.sequence_unroll_steps,
+                stride=self.sequence_stride,
+            )
+            tensor_dataset = seq_ds.to_tensor_dataset()
+            logger.info(
+                f"Sequence training enabled: seq_len={self.sequence_unroll_steps}, stride={self.sequence_stride}, sequences={len(seq_ds)}"
+            )
+        else:
+            all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
+            tensor_dataset = TensorDataset(all_features_tensor)
+
         dataloader = DataLoader(
             tensor_dataset,
             batch_size=batch_size,

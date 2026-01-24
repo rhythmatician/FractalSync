@@ -189,3 +189,61 @@ class AudioDataset:
         audio_file = self.audio_files[idx]
         features = self._load_features(audio_file)
         return features, audio_file.name
+
+
+class SequenceAudioDataset:
+    """Dataset view that yields contiguous sequences (clips) of windowed features.
+
+    Can be constructed from an AudioDataset instance or from a preloaded list of
+    feature arrays for testing convenience.
+
+    Returns tuples: (sequence: np.ndarray shape (seq_len, feat_dim), file_index: int, start_idx: int)
+    """
+
+    def __init__(
+        self,
+        audio_dataset: Optional[AudioDataset] = None,
+        features_list: Optional[List[np.ndarray]] = None,
+        seq_len: int = 5,
+        stride: int = 1,
+    ):
+        if audio_dataset is None and features_list is None:
+            raise ValueError("Either audio_dataset or features_list must be provided")
+        self.seq_len = int(seq_len)
+        self.stride = int(stride)
+        self.features_list: List[np.ndarray] = (
+            features_list
+            if features_list is not None
+            else audio_dataset.load_all_features()
+        )
+
+        # Build index mapping: list of (file_idx, start_idx)
+        self.index_map: List[tuple[int, int]] = []
+        for fi, feats in enumerate(self.features_list):
+            n_frames = int(feats.shape[0])
+            max_start = n_frames - self.seq_len
+            if max_start < 0:
+                continue
+            for start in range(0, max_start + 1, self.stride):
+                self.index_map.append((fi, start))
+
+    def __len__(self) -> int:
+        return len(self.index_map)
+
+    def __getitem__(self, idx: int):
+        fi, start = self.index_map[idx]
+        seq = self.features_list[fi][start : start + self.seq_len].astype("float32")
+        return seq, fi, start
+
+    def to_tensor_dataset(self):
+        """Convert sequences to a TensorDataset of shape (N, seq_len, feat_dim).
+
+        Useful for DataLoader compatibility in training loops.
+        """
+        import torch
+
+        seqs = [self[i][0] for i in range(len(self))]
+        if not seqs:
+            return torch.utils.data.TensorDataset(torch.empty((0, self.seq_len, 0)))
+        arr = np.stack(seqs, axis=0)
+        return torch.utils.data.TensorDataset(torch.from_numpy(arr))

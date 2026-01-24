@@ -26,7 +26,7 @@ fn controller_alpha_zero_returns_carrier() {
     assert!((c.imag - carrier.imag).abs() < 1e-12);
 
     // stepping should still return carrier because alpha=0
-    let c2 = step(&mut state, 0.1, params, None);
+    let c2 = step(&mut state, 0.1, params, None, None, 0.0, None, None);
     let carrier2 = lobe_point_at_angle(1, 0, state.theta, state.s);
     assert!((c2.real - carrier2.real).abs() < 1e-12);
     assert!((c2.imag - carrier2.imag).abs() < 1e-12);
@@ -39,8 +39,8 @@ fn controller_seed_is_deterministic() {
     let mut b = OrbitState::new_with_seed(2, 0, 0.123, 0.5, 1.0, 0.9, 6, 1.0, 999);
 
     for _ in 0..10 {
-        let ca = step(&mut a, 0.01, p, None);
-        let cb = step(&mut b, 0.01, p, None);
+        let ca = step(&mut a, 0.01, p, None, None, 0.0, None, None);
+        let cb = step(&mut b, 0.01, p, None, None, 0.0, None, None);
         assert!((ca.real - cb.real).abs() < 1e-12);
         assert!((ca.imag - cb.imag).abs() < 1e-12);
     }

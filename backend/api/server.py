@@ -14,6 +14,10 @@ import torch
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+import zipfile
+import tempfile
+import shutil
+from pathlib import Path as _Path  # local alias to avoid shadowing earlier Path import
 from pydantic import BaseModel
 
 # Add parent directory to path
@@ -52,6 +56,8 @@ class TrainingRequest(BaseModel):
     julia_resolution: int = 64
     julia_max_iter: int = 50
     num_workers: int = 4
+    contour_d_star: float = 0.3
+    contour_max_step: float = 0.03
 
 
 class TrainingStatus(BaseModel):
@@ -92,11 +98,20 @@ async def root():
 
 @app.post("/api/train/start")
 async def start_training(request: TrainingRequest, background_tasks: BackgroundTasks):
-    """Start a training job."""
+    """Start a training job.
+
+    NOTE: The training API is deprecated in favor of the CLI `python train.py`.
+    This endpoint will remain available for now but may be removed in a future release.
+    """
     global training_state, training_task
 
     if training_state.status == "training":
         raise HTTPException(status_code=400, detail="Training already in progress")
+
+    # Emit deprecation warning to logs
+    logging.warning(
+        "/api/train/start is deprecated. Please use the CLI (python train.py) for training."
+    )
 
     # Reset state
     training_state = TrainingStatus(
@@ -111,7 +126,11 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
     # Start training in background
     training_task = asyncio.create_task(train_model_async(request))
 
-    return {"message": "Training started", "status": "training"}
+    return {
+        "message": "Training started (deprecated API). Prefer CLI: python train.py",
+        "status": "training",
+        "warning": "This training API is deprecated; use the CLI instead.",
+    }
 
 
 async def train_model_async(request: TrainingRequest):
@@ -153,6 +172,8 @@ async def train_model_async(request: TrainingRequest):
             julia_resolution=request.julia_resolution,
             julia_max_iter=request.julia_max_iter,
             num_workers=request.num_workers,
+            contour_d_star=request.contour_d_star,
+            contour_max_step=request.contour_max_step,
         )
 
         # Load dataset
@@ -285,6 +306,126 @@ async def get_model_metadata():
         metadata = json.load(f)
 
     return metadata
+
+
+# Flight recorder API
+@app.get("/api/flight_recorder/list")
+async def list_flight_runs():
+    """List available flight recorder runs with summary metadata."""
+    runs_dir = Path("logs/flight_recorder")
+    if not runs_dir.exists():
+        return {"runs": []}
+
+    runs = []
+    for run_dir in runs_dir.iterdir():
+        if not run_dir.is_dir():
+            continue
+        record_file = run_dir / "records.ndjson"
+        meta = None
+        try:
+            if record_file.exists():
+                with open(record_file, "r", encoding="utf-8") as f:
+                    first = f.readline().strip()
+                    if first:
+                        parsed = json.loads(first)
+                        if parsed.get("_meta"):
+                            meta = parsed.get("metadata")
+        except Exception:
+            meta = None
+
+        runs.append({"run_id": run_dir.name, "metadata": meta})
+
+    return {"runs": runs}
+
+
+@app.get("/api/flight_recorder/{run_id}/download")
+async def download_flight_run(run_id: str):
+    """Download a flight recorder run as a ZIP archive."""
+    runs_dir = Path("logs/flight_recorder")
+    run_dir = runs_dir / run_id
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # Create a temporary zip file
+    tmp_dir = tempfile.mkdtemp()
+    zip_path = Path(tmp_dir) / f"{run_id}.zip"
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for p in run_dir.rglob("*"):
+                rel = p.relative_to(run_dir)
+                zf.write(p, arcname=str(rel))
+
+        return FileResponse(
+            str(zip_path), media_type="application/zip", filename=f"{run_id}.zip"
+        )
+    finally:
+        # Clean up the tmp_dir after the response has been sent by the server
+        pass
+
+
+@app.post("/api/flight_recorder/upload")
+async def upload_flight_run(file: UploadFile = File(...)):
+    """Upload a flight run ZIP archive. Extracts into logs/flight_recorder/<run_id>.
+
+    The ZIP is expected to contain `records.ndjson` at the root and optional `proxy_frames/`.
+    """
+    runs_dir = Path("logs/flight_recorder")
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
+    assert file.filename
+    # Determine run id from filename (strip suffix) or use timestamp
+    run_id = Path(file.filename).stem
+    dest_dir = runs_dir / run_id
+    if dest_dir.exists():
+        # Overwrite existing run: remove old directory to allow re-uploading during tests
+        # (This keeps the API friendly for automated workflows and test harnesses.)
+        try:
+            shutil.rmtree(dest_dir)
+        except Exception:
+            raise HTTPException(
+                status_code=500, detail="Failed to remove existing run directory"
+            )
+
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        tmp_zip = Path(tmp_dir) / file.filename
+        with open(tmp_zip, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        with zipfile.ZipFile(tmp_zip, "r") as zf:
+            zf.extractall(dest_dir)
+
+        # Basic validation: records.ndjson may be at the root or nested inside a top-level folder
+        found = list(dest_dir.rglob("records.ndjson"))
+        if not found:
+            raise HTTPException(
+                status_code=400, detail="Missing records.ndjson in uploaded run"
+            )
+
+        # If the records file is nested inside a subdirectory (common when zipping a folder),
+        # move the contents up to the dest_dir to maintain consistent layout
+        record_path = found[0]
+        if record_path.parent != dest_dir:
+            nested_dir = record_path.parent
+            for p in nested_dir.rglob("*"):
+                rel = p.relative_to(nested_dir)
+                target = dest_dir / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if p.is_dir():
+                    continue
+                # Move file content
+                shutil.move(str(p), str(target))
+            # Remove the now-empty nested directory tree
+            try:
+                shutil.rmtree(str(nested_dir))
+            except Exception:
+                pass
+
+        return {"message": "Run uploaded", "run_id": run_id}
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.post("/api/model/upload")

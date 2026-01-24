@@ -23,6 +23,9 @@ from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.flight_recorder import (  # noqa: E402
+    FlightRecorder,  # Optional flight recorder for logging
+)
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
@@ -124,6 +127,83 @@ def main():
         default=4,
         help="Number of DataLoader workers",
     )
+
+    parser.add_argument(
+        "--enable-flight-recorder",
+        action="store_true",
+        help="Enable flight recorder logging to `logs/flight_recorder`",
+    )
+    parser.add_argument(
+        "--flight-run-id",
+        type=str,
+        default=None,
+        help="Optional run id for flight recorder (default timestamp)",
+    )
+    parser.add_argument(
+        "--contour-d-star",
+        type=float,
+        default=0.3,
+        help="Target distance d* for contour-biased integrator (default: 0.3)",
+    )
+    parser.add_argument(
+        "--contour-max-step",
+        type=float,
+        default=0.03,
+        help="Maximum step size per contour-biased integrator step (default: 0.03)",
+    )
+
+    parser.add_argument(
+        "--sequence-training",
+        action="store_true",
+        help="Enable sequence (unrolled) training in policy_mode",
+    )
+    parser.add_argument(
+        "--sequence-unroll-steps",
+        type=int,
+        default=5,
+        help="Number of steps to unroll during sequence training (default: 5)",
+    )
+    parser.add_argument(
+        "--sequence-stride",
+        type=int,
+        default=1,
+        help="Stride when building sequences from per-file features (default: 1)",
+    )
+
+    parser.add_argument(
+        "--enable-visual-losses",
+        action="store_true",
+        help="Enable differentiable visual proxy losses (experimental)",
+    )
+    parser.add_argument(
+        "--visual-proxy-resolution",
+        type=int,
+        default=64,
+        help="Resolution for proxy renderer (default: 64)",
+    )
+    parser.add_argument(
+        "--visual-proxy-iter",
+        type=int,
+        default=20,
+        help="Iterations for proxy renderer (default: 20)",
+    )
+    parser.add_argument(
+        "--visual-loss-weights",
+        type=str,
+        default=None,
+        help='Optional comma-separated weights, e.g. "multiscale_delta=0.1,speed_bound=0.05"',
+    )
+    parser.add_argument(
+        "--use-surrogate",
+        action="store_true",
+        help="Use trained surrogate predictor for ΔV instead of rendering proxy frames",
+    )
+    parser.add_argument(
+        "--surrogate-path",
+        type=str,
+        default=None,
+        help="Path to surrogate model checkpoint (.pt)",
+    )
     parser.add_argument(
         "--max-files",
         type=int,
@@ -210,6 +290,32 @@ def main():
     print(f"Output dimension: {model.output_dim}")
 
     print("[6/7] Initializing control trainer...")
+
+    # Optional flight recorder
+    flight_recorder = None
+    if args.enable_flight_recorder:
+        flight_recorder = FlightRecorder(run_id=args.flight_run_id)
+        flight_recorder.start_run(
+            {
+                "data_dir": args.data_dir,
+                "julia_resolution": args.julia_resolution,
+                "julia_max_iter": args.julia_max_iter,
+                "timestamp": str(datetime.utcnow()),
+            }
+        )
+
+    # Parse visual loss weights string into dict if provided
+    visual_weights = None
+    if args.visual_loss_weights:
+        visual_weights = {}
+        for kv in args.visual_loss_weights.split(","):
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                try:
+                    visual_weights[k.strip()] = float(v)
+                except Exception:
+                    pass
+
     trainer = ControlTrainer(
         model=model,
         feature_extractor=feature_extractor,
@@ -223,13 +329,27 @@ def main():
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
         k_residuals=args.k_bands,
+        flight_recorder=flight_recorder,
+        contour_d_star=args.contour_d_star,
+        contour_max_step=args.contour_max_step,
+        sequence_training=args.sequence_training,
+        sequence_unroll_steps=args.sequence_unroll_steps,
+        sequence_stride=args.sequence_stride,
+        enable_visual_losses=args.enable_visual_losses,
+        visual_loss_weights=visual_weights,
+        visual_proxy_resolution=args.visual_proxy_resolution,
+        visual_proxy_max_iter=args.visual_proxy_iter,
+        use_surrogate=args.use_surrogate,
+        surrogate_path=args.surrogate_path,
     )
 
     # Load checkpoint if resuming
     start_epoch = 0
     if args.resume:
         print(f"[6.5/7] Loading checkpoint from {args.resume}...")
-        checkpoint = torch.load(args.resume, map_location=args.device)
+        checkpoint = torch.load(
+            args.resume, map_location=args.device, weights_only=False
+        )
         model.load_state_dict(checkpoint["model_state_dict"])
         trainer.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         trainer.history = checkpoint["history"]
@@ -309,7 +429,6 @@ def main():
                 else None
             ),
             metadata={
-                "model_type": "orbit_control",
                 "output_dim": model.output_dim,
                 "k_bands": args.k_bands,
                 "epoch": args.epochs,

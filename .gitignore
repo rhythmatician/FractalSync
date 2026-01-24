@@ -46,3 +46,21 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+backend/experimental/
+
+# Tuning logs
+logs/*
+tmp/
+
+# Mandelbrot distance field data
+**/mandelbrot_distance_field.png
+**/mandelbrot_distance_field.json
+**/mandelbrot_distance_field.npy
+
+# Uncomment to track the files runtime-core depends on
+# !mandelbrot_distance_field/data/mandelbrot_distance_field.png
+# !mandelbrot_distance_field/data/mandelbrot_distance_field.json
+# !mandelbrot_distance_field/data/mandelbrot_distance_field.npy
+
+# Frontend run exports
+frontend_*/*

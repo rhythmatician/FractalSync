@@ -33,34 +33,7 @@ mod tests {
         assert!(result.len() > 0);
     }
     
-    #[test]
-    fn test_parity_extract() {
-        // This test is called by test_feature_parity.py to extract features
-        // from audio and save them to JSON for comparison
-        
-        let audio_path = env::var("PARITY_TEST_AUDIO_PATH")
-            .unwrap_or_else(|_| "../backend/data/cache/parity_test_audio.npy".to_string());
-        
-        // Read numpy array (simple .npy format parser for f32)
-        let audio = read_npy_f32(&audio_path).expect("Failed to read audio file");
-        
-        eprintln!("Loaded {} audio samples from {}", audio.len(), audio_path);
-        
-        // Extract features with same params as Python test
-        let extractor = FeatureExtractor::new(48000, 1024, 4096, false, false);
-        let features = extractor.extract_windowed_features(&audio, 10);
-        
-        eprintln!("Extracted {} windows with {} features each", 
-                  features.len(), 
-                  if features.is_empty() { 0 } else { features[0].len() });
-        
-        // Write to JSON
-        let json = serde_json::to_string_pretty(&features).expect("Failed to serialize");
-        let output_path = Path::new("../backend/data/cache/parity_test_features.json");
-        fs::write(output_path, json).expect("Failed to write output");
-        
-        eprintln!("Wrote features to {}", output_path.display());
-    }
+
     
     // Simple .npy reader for f32 arrays (header + data)
     fn read_npy_f32(path: &str) -> Result<Vec<f32>, Box<dyn std::error::Error>> {

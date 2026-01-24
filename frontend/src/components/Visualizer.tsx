@@ -8,6 +8,7 @@ import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 import { FullscreenToggle } from './FullscreenToggle';
+import { FrontendFlightRecorder } from '../lib/flightRecorder';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,6 +25,12 @@ export function Visualizer() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
   const metricsUpdateRef = useRef<number | null>(null);
+
+  // Flight recorder state
+  const recorderRef = useRef<FrontendFlightRecorder | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordCount, setRecordCount] = useState(0);
+  const prevProxyGrayRef = useRef<Float32Array | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
   const DEFAULT_PARAMS: VisualParameters = {
@@ -162,6 +169,68 @@ export function Visualizer() {
         
         // Update renderer
         rendererRef.current.updateParameters(params);
+
+        // If recording, capture proxy frame and record step
+        if (isRecording && recorderRef.current) {
+          try {
+            // Capture scaled 64x64 frame from main canvas
+            const canvas = canvasRef.current!;
+            const off = document.createElement('canvas');
+            off.width = 64;
+            off.height = 64;
+            const ctx = off.getContext('2d')!;
+            ctx.drawImage(canvas, 0, 0, off.width, off.height);
+
+            // Get grayscale pixels for deltaV
+            const imgData = ctx.getImageData(0, 0, off.width, off.height);
+            const px = imgData.data; // RGBA
+            const gray = new Float32Array(off.width * off.height);
+            for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+              // average RGB
+              gray[j] = (px[i] + px[i + 1] + px[i + 2]) / 3.0;
+            }
+
+            // compute deltaV
+            let deltaV = 0.0;
+            const prev = prevProxyGrayRef.current;
+            if (prev) {
+              let acc = 0.0;
+              for (let i = 0; i < gray.length; i++) {
+                acc += Math.abs(gray[i] - prev[i]);
+              }
+              deltaV = acc / (gray.length * 255.0);
+            }
+
+            // convert to blob (PNG)
+            const blob: Blob = await new Promise(resolve => off.toBlob(b => resolve(b as Blob), 'image/png'));
+
+            // controller state from model (if available)
+            const ctrl = modelRef.current.getLastControlSignals ? modelRef.current.getLastControlSignals() : null;
+
+            // transient strength proxy: spectral flux (index 1) averaged across window
+            const numFeatures = 6;
+            const windowFrames = Math.floor(features.length / numFeatures);
+            let avgFlux = 0;
+            for (let i = 0; i < windowFrames; i++) avgFlux += features[i * numFeatures + 1];
+            avgFlux /= windowFrames;
+
+            await recorderRef.current.recordStep({
+              c: [params.juliaReal, params.juliaImag],
+              controller: ctrl,
+              h: avgFlux,
+              band_energies: ctrl ? (ctrl.bandGates || null) : null,
+              audio_features: features,
+              deltaV: deltaV,
+              notes: null
+            }, blob);
+
+            prevProxyGrayRef.current = gray;
+            setRecordCount(recorderRef.current.getRecordCount());
+          } catch (e) {
+            console.warn('Recorder capture error:', e);
+          }
+        }
+
       } else {
         // Fallback: use default parameters if model not available
         rendererRef.current.updateParameters(DEFAULT_PARAMS);
@@ -289,6 +358,94 @@ export function Visualizer() {
               {inferenceFailures > 0 && (
                 <span style={{ color: '#ffaa00' }}>⚠️ {inferenceFailures} failures (fallback mode)</span>
               )}
+
+              {/* Flight recorder controls */}
+              <div style={{ display: 'inline-flex', gap: '8px', marginLeft: '12px', alignItems: 'center' }}>
+                <button
+                  onClick={async () => {
+                    if (!isRecording) {
+                      const runId = `frontend_${Date.now()}`;
+                      recorderRef.current = new FrontendFlightRecorder(runId);
+                      recorderRef.current.startRun({ timestamp: new Date().toISOString(), notes: 'Frontend recorded session' });
+                      setIsRecording(true);
+                      setRecordCount(0);
+                      prevProxyGrayRef.current = null;
+                      console.log('[recorder] started', runId);
+                    } else {
+                      setIsRecording(false);
+                      console.log('[recorder] stopped');
+                    }
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    background: isRecording ? '#ff4444' : '#444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  {isRecording ? '■ Recording' : '● Record Session'}
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (!recorderRef.current) return;
+                    const blob = await recorderRef.current.exportZip();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${recorderRef.current.getRunId()}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                  }}
+                  disabled={!recorderRef.current}
+                  style={{
+                    padding: '6px 10px',
+                    background: '#333',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: recorderRef.current ? 'pointer' : 'not-allowed',
+                    fontSize: '12px'
+                  }}
+                >
+                  ⬇️ Download
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (!recorderRef.current) return;
+                    try {
+                      const resp = await recorderRef.current.uploadToServer('/api/flight_recorder/upload');
+                      if (resp.ok) {
+                        alert('Upload successful');
+                      } else {
+                        alert('Upload failed: ' + resp.statusText);
+                      }
+                    } catch (e) {
+                      alert('Upload error: ' + e);
+                    }
+                  }}
+                  disabled={!recorderRef.current}
+                  style={{
+                    padding: '6px 10px',
+                    background: '#3355aa',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: recorderRef.current ? 'pointer' : 'not-allowed',
+                    fontSize: '12px'
+                  }}
+                >
+                  ⬆️ Upload
+                </button>
+
+                <div style={{ color: '#88ff88', fontSize: '12px' }}>{recordCount} steps</div>
+              </div>
             </div>
           </div>
           

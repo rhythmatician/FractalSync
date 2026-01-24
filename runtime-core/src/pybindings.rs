@@ -24,6 +24,8 @@ use crate::controller::{
     step as rust_step,
     synthesize as rust_synthesize,
 };
+use crate::lobe_state::LobeState as RustLobeState;
+use crate::distance_field::DistanceField as RustDistanceField;
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 
@@ -222,10 +224,94 @@ impl OrbitState {
     }
 
     /// Advance time by dt and return the next c(t).  The band gates
-    /// are applied to each residual.
-    #[pyo3(signature = (dt, residual_params, band_gates=None))]
-    fn step(&mut self, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref()).into()
+    /// are applied to each residual. Optionally accepts a DistanceField
+    /// for velocity-based slowdown near the Mandelbrot boundary.  New
+    /// parameters `h`, `d_star`, and `max_step` control the contour
+    /// integrator behaviour.
+    #[pyo3(signature = (dt, residual_params, band_gates=None, distance_field=None, h=0.0, d_star=None, max_step=None))]
+    fn step(
+        &mut self,
+        dt: f64,
+        residual_params: ResidualParams,
+        band_gates: Option<Vec<f64>>,
+        distance_field: Option<&DistanceField>,
+        h: f64,
+        d_star: Option<f64>,
+        max_step: Option<f64>,
+    ) -> Complex {
+        let rust_field = distance_field.map(|df| &df.inner);
+        rust_step(
+            &mut self.inner,
+            dt,
+            residual_params.into(),
+            band_gates.as_deref(),
+            rust_field,
+            h,
+            d_star,
+            max_step,
+        )
+        .into()
+    }
+}
+
+/// Python wrapper for DistanceField (Mandelbrot boundary proximity lookup).
+#[pyclass]
+#[derive(Clone)]
+pub struct DistanceField {
+    inner: RustDistanceField,
+}
+
+#[pymethods]
+impl DistanceField {
+    /// Create a DistanceField from numpy-like data.
+    ///
+    /// Args:
+    ///     field: Flattened 1D list of f32 values (row-major)
+    ///     resolution: Width/height of square field
+    ///     real_range: (min, max) tuple for real axis
+    ///     imag_range: (min, max) tuple for imaginary axis
+    ///     max_distance: Maximum distance for normalization
+    ///     slowdown_threshold: Escape-time threshold for velocity scaling
+    #[new]
+    #[pyo3(signature = (field, resolution, real_range, imag_range, max_distance, slowdown_threshold))]
+    fn py_new(
+        field: Vec<f32>,
+        resolution: usize,
+        real_range: (f64, f64),
+        imag_range: (f64, f64),
+        max_distance: f64,
+        slowdown_threshold: f64,
+    ) -> Self {
+        Self {
+            inner: RustDistanceField::new(
+                field,
+                resolution,
+                real_range,
+                imag_range,
+                max_distance,
+                slowdown_threshold,
+            ),
+        }
+    }
+
+    /// Look up escape time at a complex point.
+    fn lookup(&self, real: f64, imag: f64) -> f32 {
+        self.inner.lookup(RustComplex::new(real, imag))
+    }
+
+    /// Get velocity scale factor for a complex point.
+    fn get_velocity_scale(&self, real: f64, imag: f64) -> f32 {
+        self.inner.get_velocity_scale(RustComplex::new(real, imag))
+    }
+
+    /// Bilinear sample at arbitrary coordinates (returns [0,1])
+    fn sample_bilinear(&self, real: f64, imag: f64) -> f32 {
+        self.inner.sample_bilinear(RustComplex::new(real, imag))
+    }
+
+    /// Gradient (∂d/∂x, ∂d/∂y) at point in complex plane. Returns tuple (gx, gy).
+    fn gradient(&self, real: f64, imag: f64) -> (f64, f64) {
+        self.inner.gradient(RustComplex::new(real, imag))
     }
 }
 
@@ -280,6 +366,96 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
+/// Vectorized bilinear sampler using the same semantics as `DistanceField::sample_bilinear`.
+#[pyfunction]
+#[pyo3(signature = (field, resolution, real_min, real_max, imag_min, imag_max, reals, imags))]
+fn sample_bilinear_batch(
+    field: Vec<f32>,
+    resolution: usize,
+    real_min: f64,
+    real_max: f64,
+    imag_min: f64,
+    imag_max: f64,
+    reals: Vec<f64>,
+    imags: Vec<f64>,
+) -> PyResult<Vec<f32>> {
+    let mut out = Vec::with_capacity(reals.len());
+    let real_scale = (real_max - real_min) / (resolution as f64);
+    let imag_scale = (imag_max - imag_min) / (resolution as f64);
+
+    for (&r, &i) in reals.iter().zip(imags.iter()) {
+        let col_f = (r - real_min) / real_scale;
+        let row_f = (i - imag_min) / imag_scale;
+
+        if col_f < 0.0 || col_f > (resolution as f64 - 1.0) || row_f < 0.0 || row_f > (resolution as f64 - 1.0) {
+            out.push(1.0f32);
+            continue;
+        }
+
+        let col0 = col_f.floor() as usize;
+        let row0 = row_f.floor() as usize;
+        let col1 = (col0 + 1).min(resolution - 1);
+        let row1 = (row0 + 1).min(resolution - 1);
+
+        let dx = (col_f - col0 as f64) as f32;
+        let dy = (row_f - row0 as f64) as f32;
+
+        let v00 = field[row0 * resolution + col0];
+        let v10 = field[row0 * resolution + col1];
+        let v01 = field[row1 * resolution + col0];
+        let v11 = field[row1 * resolution + col1];
+
+        let top = v00 * (1.0 - dx) + v10 * dx;
+        let bottom = v01 * (1.0 - dx) + v11 * dx;
+        let val = top * (1.0 - dy) + bottom * dy;
+        out.push(val);
+    }
+
+    Ok(out)
+}
+
+// ---------------- LobeState bindings ----------------
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct LobeState {
+    inner: RustLobeState,
+}
+
+#[pymethods]
+impl LobeState {
+    #[new]
+    #[pyo3(signature = (n_lobes=2))]
+    fn py_new(n_lobes: usize) -> Self {
+        Self {
+            inner: RustLobeState::new(n_lobes),
+        }
+    }
+
+    #[pyo3(signature = (scores, dt=1.0, transient=0.0))]
+    fn step(&mut self, scores: Vec<f64>, dt: f64, transient: f64) {
+        self.inner.step(&scores, dt, transient);
+    }
+
+    #[getter]
+    fn current_lobe(&self) -> PyResult<u32> {
+        Ok(self.inner.current_lobe as u32)
+    }
+
+    #[getter]
+    fn target_lobe(&self) -> PyResult<Option<u32>> {
+        Ok(self.inner.target_lobe)
+    }
+
+    #[getter]
+    fn transition_progress(&self) -> PyResult<f64> {
+        Ok(self.inner.transition_progress)
+    }
+
+    fn get_mix(&self) -> PyResult<f64> {
+        Ok(self.inner.get_mix())
+    }
+}
+
 #[pymodule]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Shared constants
@@ -296,7 +472,38 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Complex>()?;
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
+    m.add_class::<DistanceField>()?;
     m.add_class::<FeatureExtractor>()?;
+    m.add_class::<LobeState>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
+
+    // Contour-biased integrator helper
+    #[pyfunction]
+    #[pyo3(signature=(real, imag, u_real, u_imag, h, d_star, max_step, distance_field))]
+    fn contour_biased_step(
+        real: f64,
+        imag: f64,
+        u_real: f64,
+        u_imag: f64,
+        h: f64,
+        d_star: f64,
+        max_step: f64,
+        distance_field: Option<&DistanceField>,
+    ) -> PyResult<Complex> {
+        let rust_field = distance_field.map(|df| &df.inner);
+        let c = crate::controller::contour_biased_step(
+            RustComplex::new(real, imag),
+            u_real,
+            u_imag,
+            h,
+            rust_field,
+            d_star,
+            max_step,
+        );
+        Ok(c.into())
+    }
+    m.add_function(wrap_pyfunction!(contour_biased_step, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_bilinear_batch, m)?)?;
+
     Ok(())
 }

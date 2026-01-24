@@ -76,6 +76,21 @@ class ResidualParams:
     residual_cap: float
     radius_scale: float
 
+    class DistanceField:
+        """Distance field for Mandelbrot boundary proximity lookup."""
+
+        def __init__(
+            self,
+            field: Sequence[float],
+            resolution: int,
+            real_range: tuple[float, float],
+            imag_range: tuple[float, float],
+            max_distance: float,
+            slowdown_threshold: float,
+        ) -> None: ...
+        def lookup(self, c: Complex) -> float: ...
+        def get_velocity_scale(self, c: Complex) -> float: ...
+
 class OrbitState:
     """Mandelbrot orbit state."""
 
@@ -106,6 +121,7 @@ class OrbitState:
         dt: float,
         residual_params: ResidualParams,
         band_gates: Optional[list[float]] = None,
+        distance_field: Optional[DistanceField] = None,
     ) -> Complex: ...
     def synthesize(
         self,

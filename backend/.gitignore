@@ -32,7 +32,6 @@ checkpoints_orbit/training_history.json
 data/audio/*
 data/cache/*
 data/supervised/*
-data/mandelbrot_distance_field.*
 
 # Test output
 tests/fixtures/*.json
@@ -40,3 +39,6 @@ tests/fixtures/*.json
 
 # Copilot's verbose markdown files
 docs/copilot/*
+
+# Sample run proxy frames
+logs/flight_recorder/*
