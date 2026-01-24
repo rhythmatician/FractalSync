@@ -21,9 +21,9 @@ def test_compute_directional_probes_shape():
 
 
 def test_run_policy_step_with_dummy():
-    from src.lobe_state import LobeState
+    from src.runtime_core_bridge import make_lobe_state
 
-    ls = LobeState(current_lobe=0, n_lobes=2)
+    ls = make_lobe_state(n_lobes=2)
     res = run_policy_step(
         dummy_model,
         s=1.02,
@@ -44,7 +44,7 @@ def test_run_policy_step_with_dummy():
 
 
 def test_run_policy_step_with_lobe_logits_callable():
-    from src.lobe_state import LobeState
+    from src.runtime_core_bridge import make_lobe_state
 
     k = 6
 
@@ -55,7 +55,7 @@ def test_run_policy_step_with_lobe_logits_callable():
         out[-1] = 10.0
         return out
 
-    ls = LobeState(current_lobe=0, n_lobes=2)
+    ls = make_lobe_state(n_lobes=2)
     res = run_policy_step(
         call_model,
         s=1.02,
@@ -110,9 +110,9 @@ def test_run_policy_step_with_onnx(tmp_path):
         model, example_in, str(onnx_path), input_names=["input"], opset_version=14
     )
 
-    from src.lobe_state import LobeState
+    from src.runtime_core_bridge import make_lobe_state
 
-    ls = LobeState(current_lobe=0, n_lobes=2)
+    ls = make_lobe_state(n_lobes=2)
     # Export a model that includes trailing lobe logits (2 lobes)
     model = TinyPolicy(input_dim, 5 + k + 2)
     # Bias the lobe logits (last two outputs) so lobe 1 is favored

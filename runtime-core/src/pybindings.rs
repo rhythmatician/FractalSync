@@ -24,6 +24,7 @@ use crate::controller::{
     step as rust_step,
     synthesize as rust_synthesize,
 };
+use crate::lobe_state::LobeState as RustLobeState;
 use crate::distance_field::DistanceField as RustDistanceField;
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
@@ -365,6 +366,48 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
+// ---------------- LobeState bindings ----------------
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct LobeState {
+    inner: RustLobeState,
+}
+
+#[pymethods]
+impl LobeState {
+    #[new]
+    #[pyo3(signature = (n_lobes=2))]
+    fn py_new(n_lobes: usize) -> Self {
+        Self {
+            inner: RustLobeState::new(n_lobes),
+        }
+    }
+
+    #[pyo3(signature = (scores, dt=1.0, transient=0.0))]
+    fn step(&mut self, scores: Vec<f64>, dt: f64, transient: f64) {
+        self.inner.step(&scores, dt, transient);
+    }
+
+    #[getter]
+    fn current_lobe(&self) -> PyResult<u32> {
+        Ok(self.inner.current_lobe as u32)
+    }
+
+    #[getter]
+    fn target_lobe(&self) -> PyResult<Option<u32>> {
+        Ok(self.inner.target_lobe)
+    }
+
+    #[getter]
+    fn transition_progress(&self) -> PyResult<f64> {
+        Ok(self.inner.transition_progress)
+    }
+
+    fn get_mix(&self) -> PyResult<f64> {
+        Ok(self.inner.get_mix())
+    }
+}
+
 #[pymodule]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Shared constants
@@ -383,6 +426,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<OrbitState>()?;
     m.add_class::<DistanceField>()?;
     m.add_class::<FeatureExtractor>()?;
+    m.add_class::<LobeState>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
 
     // Contour-biased integrator helper

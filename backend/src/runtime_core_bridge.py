@@ -8,11 +8,10 @@ matching values exposed by the wasm bindings.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence, Union
+from typing import Iterable, Optional, Sequence
 import logging
 
 import runtime_core as rc
-from .python_feature_extractor import PythonFeatureExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -30,33 +29,20 @@ DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
 def make_feature_extractor(
     include_delta: bool = False,
     include_delta_delta: bool = False,
-) -> Union[rc.FeatureExtractor, PythonFeatureExtractor]:
+) -> rc.FeatureExtractor:
     """Create a FeatureExtractor configured with the shared defaults.
 
-    TODO(CRITICAL): Fix Rust extractor hanging bug
-    Issue: runtime_core.FeatureExtractor.extract_windowed_features() hangs indefinitely
-    Root cause: Unknown - likely PyO3 parameter conversion or GIL deadlock
-    Tested: Hangs on inputs as small as 10 samples, all other Rust functions work
-    Workaround: Python fallback extractor (this function returns PythonFeatureExtractor)
-
-    To fix:
-    1. Debug PyO3 Vec<f32> parameter conversion (might need numpy integration)
-    2. Check for infinite loops in features.rs extract_features()
-    3. Verify GIL is properly released during computation
-    4. Test with minimal reproducible example in Rust unit tests
-
-    Once fixed, change this function to return rc.FeatureExtractor directly.
+    NOTE: the previous Python fallback was removed; the Rust implementation
+    is now the single source of truth. If the runtime_core bindings fail to
+    build or the feature extractor is broken, tests/CI will fail so we can
+    address the root cause promptly.
     """
-    logger.warning(
-        "Using Python fallback feature extractor due to Rust implementation bug. "
-        "Performance will be degraded. See TODO in runtime_core_bridge.py"
-    )
-    return PythonFeatureExtractor(
-        sr=SAMPLE_RATE,
-        hop_length=HOP_LENGTH,
-        n_fft=N_FFT,
-        include_delta=include_delta,
-        include_delta_delta=include_delta_delta,
+    return rc.FeatureExtractor(
+        SAMPLE_RATE,
+        HOP_LENGTH,
+        N_FFT,
+        include_delta,
+        include_delta_delta,
     )
 
 
@@ -70,6 +56,15 @@ def make_residual_params(
         residual_cap=residual_cap,
         radius_scale=radius_scale,
     )
+
+
+def make_lobe_state(n_lobes: int = 2) -> rc.LobeState:
+    """Construct a Rust-backed LobeState via runtime_core bindings.
+
+    This replaces the former Python fallback `src.lobe_state` so the
+    runtime-core implementation is the single source of truth.
+    """
+    return rc.LobeState(n_lobes)
 
 
 def make_orbit_state(
