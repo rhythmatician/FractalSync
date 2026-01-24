@@ -56,6 +56,22 @@ from .runtime_core_bridge import (
 )
 import runtime_core as rc
 
+# Visual proxy and losses (optional, light-weight differentiable components)
+try:
+    from .visual_proxy import ProxyRenderer
+    from .visual_losses import (
+        MultiscaleDeltaVLoss,
+        SpeedBoundLoss,
+        HitAlignmentLoss,
+        CoverageLoss,
+    )
+except Exception:
+    ProxyRenderer = None
+    MultiscaleDeltaVLoss = None
+    SpeedBoundLoss = None
+    HitAlignmentLoss = None
+    CoverageLoss = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -289,6 +305,10 @@ class ControlTrainer:
         sequence_training: bool = False,
         sequence_unroll_steps: int = 5,
         sequence_stride: int = 1,
+        enable_visual_losses: bool = False,
+        visual_loss_weights: Optional[dict] = None,
+        visual_proxy_resolution: int = 64,
+        visual_proxy_max_iter: int = 20,
     ):
         """
         Initialize control trainer.
@@ -403,6 +423,30 @@ class ControlTrainer:
             weight=self.correlation_weights.get("trajectory_slowdown", 1.0),
             threshold=0.02,
         )
+
+        # Optional differentiable visual losses (fast proxy renderer + lightweight losses)
+        self.enable_visual_losses = bool(enable_visual_losses)
+        if self.enable_visual_losses and ProxyRenderer is not None:
+            self.proxy_renderer = ProxyRenderer(
+                resolution=int(visual_proxy_resolution),
+                max_iter=int(visual_proxy_max_iter),
+                device=self.device,
+            )
+            vw = visual_loss_weights or {}
+            self.ms_deltav = MultiscaleDeltaVLoss(
+                weight=vw.get("multiscale_delta", 0.1)
+            )
+            self.speed_loss = SpeedBoundLoss(
+                weight=vw.get("speed_bound", 0.05), base_step=self.contour_max_step
+            )
+            self.hit_loss = HitAlignmentLoss(weight=vw.get("hit_align", 0.1))
+            self.coverage_loss = CoverageLoss(weight=vw.get("coverage", 0.05))
+        else:
+            self.proxy_renderer = None
+            self.ms_deltav = None
+            self.speed_loss = None
+            self.hit_loss = None
+            self.coverage_loss = None
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -630,6 +674,9 @@ class ControlTrainer:
                 # Initial c computed via synthesize (non-differentiable anchor)
                 c_real = torch.zeros(B, device=device, dtype=torch.float32)
                 c_imag = torch.zeros(B, device=device, dtype=torch.float32)
+
+                # Collect per-step c history for coverage loss (if enabled)
+                c_history: List[torch.Tensor] = []
                 for i in range(B):
                     try:
                         orbit0 = make_orbit_state(
@@ -688,6 +735,30 @@ class ControlTrainer:
                     step_loss = torch.mean(u_r**2 + u_i**2)
                     total_step_loss = total_step_loss + step_loss
 
+                    # Optional differentiable visual losses (ΔV and speed bound)
+                    if self.enable_visual_losses and self.proxy_renderer is not None:
+                        try:
+                            prev_frames = self.proxy_renderer.render(c_real, c_imag)
+                            curr_frames = self.proxy_renderer.render(next_r, next_i)
+                            L_v = self.ms_deltav(
+                                prev_frames, curr_frames, h_t=spectral_flux_t
+                            )
+                            visual_continuity_loss_val = (
+                                visual_continuity_loss_val + L_v
+                            )
+                        except Exception as e:
+                            logger.warning(f"Visual ΔV loss skipped due to: {e}")
+
+                        try:
+                            cp = torch.stack([c_real, c_imag], dim=1)
+                            cn = torch.stack([next_r, next_i], dim=1)
+                            L_s = self.speed_loss(cp, cn, df=None)
+                            trajectory_slowdown_loss_val = (
+                                trajectory_slowdown_loss_val + L_s
+                            )
+                        except Exception as e:
+                            logger.warning(f"Speed bound loss skipped due to: {e}")
+
                     # Update primitive states (s,alpha,omega)
                     deltas = {
                         "delta_s": decoded_t.get("delta_s"),
@@ -701,9 +772,25 @@ class ControlTrainer:
                     alpha = updated["alpha"]
                     omega = updated["omega"]
 
+                    # Record c after step for coverage
+                    try:
+                        c_history.append(torch.stack([next_r, next_i], dim=1))
+                    except Exception:
+                        pass
+
                     # Update c for next step
                     c_real = next_r
                     c_imag = next_i
+
+                # Optional coverage loss from c_history
+                if self.enable_visual_losses and self.coverage_loss is not None and len(c_history) > 0:
+                    try:
+                        # c_history is list of (B,2) tensors for each step -> stack to (B, T, 2)
+                        c_seq = torch.stack(c_history, dim=1)
+                        L_cov = self.coverage_loss(c_seq)
+                        visual_continuity_loss_val = visual_continuity_loss_val + L_cov
+                    except Exception as e:
+                        logger.warning(f"Coverage loss skipped due to: {e}")
 
                 # Average step loss across steps
                 avg_step_loss = total_step_loss / float(T)

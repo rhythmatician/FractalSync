@@ -167,6 +167,30 @@ def main():
         default=1,
         help="Stride when building sequences from per-file features (default: 1)",
     )
+
+    parser.add_argument(
+        "--enable-visual-losses",
+        action="store_true",
+        help="Enable differentiable visual proxy losses (experimental)",
+    )
+    parser.add_argument(
+        "--visual-proxy-resolution",
+        type=int,
+        default=64,
+        help="Resolution for proxy renderer (default: 64)",
+    )
+    parser.add_argument(
+        "--visual-proxy-iter",
+        type=int,
+        default=20,
+        help="Iterations for proxy renderer (default: 20)",
+    )
+    parser.add_argument(
+        "--visual-loss-weights",
+        type=str,
+        default=None,
+        help='Optional comma-separated weights, e.g. "multiscale_delta=0.1,speed_bound=0.05"',
+    )
     parser.add_argument(
         "--max-files",
         type=int,
@@ -267,6 +291,18 @@ def main():
             }
         )
 
+    # Parse visual loss weights string into dict if provided
+    visual_weights = None
+    if args.visual_loss_weights:
+        visual_weights = {}
+        for kv in args.visual_loss_weights.split(","):
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                try:
+                    visual_weights[k.strip()] = float(v)
+                except Exception:
+                    pass
+
     trainer = ControlTrainer(
         model=model,
         feature_extractor=feature_extractor,
@@ -286,6 +322,10 @@ def main():
         sequence_training=args.sequence_training,
         sequence_unroll_steps=args.sequence_unroll_steps,
         sequence_stride=args.sequence_stride,
+        enable_visual_losses=args.enable_visual_losses,
+        visual_loss_weights=visual_weights,
+        visual_proxy_resolution=args.visual_proxy_resolution,
+        visual_proxy_max_iter=args.visual_proxy_iter,
     )
 
     # Load checkpoint if resuming
