@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
@@ -921,7 +921,8 @@ class ControlTrainer:
                 )
             else:
                 # Forward pass with mixed precision for single-step training
-                with autocast(enabled=self.use_amp):
+                device_type = "cuda" if (self.device and "cuda" in str(self.device) and torch.cuda.is_available()) else "cpu"
+                with torch.amp.autocast(device_type=device_type, enabled=self.use_amp):
                     # Policy mode: model expects the policy_input vector instead of raw audio features
                     if self.policy_mode:
                         # Build policy inputs per sample

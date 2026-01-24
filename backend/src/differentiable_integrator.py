@@ -210,4 +210,31 @@ def contour_biased_step_torch(
         next_real = torch.where(near_zero_mask, c_real + u_real * scale2, next_real)
         next_imag = torch.where(near_zero_mask, c_imag + u_imag * scale2, next_imag)
 
+    # Optional debug guard to catch non-finite intermediate tensors in CI/local debugging.
+    # Enable by setting environment variable FRACTALSYNC_DEBUG_NAN=1 when running tests.
+    try:
+        import os
+
+        if os.getenv("FRACTALSYNC_DEBUG_NAN") == "1":
+            checks = [
+                ("gx", gx),
+                ("gy", gy),
+                ("grad_norm", grad_norm),
+                ("dx", dx),
+                ("dy", dy),
+                ("mag", mag),
+                ("next_real", next_real),
+                ("next_imag", next_imag),
+            ]
+            for name, tensor in checks:
+                if not torch.all(torch.isfinite(tensor)):
+                    # Raise with some diagnostics so we can capture shapes and small slices.
+                    raise RuntimeError(
+                        f"Non-finite detected in differentiable_integrator: {name}; "
+                        f"shape={tuple(tensor.shape)}; values={tensor.detach().cpu()[:8]}"
+                    )
+    except Exception:
+        # Important: don't let the debug check crash normal runs; re-raise only for debug mode
+        raise
+
     return next_real, next_imag

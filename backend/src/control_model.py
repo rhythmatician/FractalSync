@@ -133,10 +133,11 @@ class AudioToControlModel(nn.Module):
             Control signals of shape (batch_size, output_dim)
             Format: [s_target, alpha, omega_scale, band_gate_0, ..., band_gate_k-1]
         """
-        # Validate input shape
-        if x.shape[1] != self.input_dim:
+        # Validate input shape (only check when concrete integer shape is available)
+        dim1 = x.shape[1]
+        if isinstance(dim1, int) and dim1 != self.input_dim:
             raise ValueError(
-                f"Expected input dim {self.input_dim}, got {x.shape[1]}. "
+                f"Expected input dim {self.input_dim}, got {dim1}. "
                 f"Config: window_frames={self.window_frames}, "
                 f"n_features_per_frame={self.n_features_per_frame}, "
                 f"include_delta={self.include_delta}, "

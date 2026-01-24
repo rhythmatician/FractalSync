@@ -89,19 +89,29 @@ def test_single_step_parity():
 
 
 def test_autograd_flow():
+    """Run the autograd flow under several RNG seeds to catch intermittent NaNs or zero gradients."""
     df = load_distance_field()
     tdf = _make_torch_df_from_py(df)
 
-    # small batch of 4
-    u_r = torch.randn(4, requires_grad=True)
-    u_i = torch.randn(4, requires_grad=True)
-    c_r = torch.randn(4, requires_grad=False)
-    c_i = torch.randn(4, requires_grad=False)
-    h = torch.rand(4)
+    # Try multiple seeds to detect flaky NaN/zero-grad cases
+    for seed in [0, 7, 123, 999]:
+        torch.manual_seed(seed)
+        # small batch of 4
+        u_r = torch.randn(4, requires_grad=True)
+        u_i = torch.randn(4, requires_grad=True)
+        c_r = torch.randn(4, requires_grad=False)
+        c_i = torch.randn(4, requires_grad=False)
+        h = torch.rand(4)
 
-    nr, ni = di.contour_biased_step_torch(c_r, c_i, u_r, u_i, h, 0.5, 0.05, tdf)
-    loss = (nr**2 + ni**2).sum()
-    loss.backward()
+        nr, ni = di.contour_biased_step_torch(c_r, c_i, u_r, u_i, h, 0.5, 0.05, tdf)
 
-    assert u_r.grad is not None and u_i.grad is not None
-    assert torch.any(torch.abs(u_r.grad) > 0.0) or torch.any(torch.abs(u_i.grad) > 0.0)
+        # outputs and grads should be finite
+        assert torch.all(torch.isfinite(nr)) and torch.all(torch.isfinite(ni)), "Non-finite outputs"
+
+        loss = (nr**2 + ni**2).sum()
+        loss.backward()
+
+        assert u_r.grad is not None and u_i.grad is not None
+        # grads should be finite and at least one non-zero entry
+        assert torch.all(torch.isfinite(u_r.grad)) and torch.all(torch.isfinite(u_i.grad)), "Non-finite gradients"
+        assert torch.any(torch.abs(u_r.grad) > 0.0) or torch.any(torch.abs(u_i.grad) > 0.0)
