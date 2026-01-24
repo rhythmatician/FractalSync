@@ -163,10 +163,21 @@ def step_orbit(
                 real_range = getattr(distance_field, "real_range", None)
                 imag_range = getattr(distance_field, "imag_range", None)
                 slowdown = getattr(distance_field, "slowdown_threshold", None)
-                if arr is not None and real_range is not None and imag_range is not None:
+                if (
+                    arr is not None
+                    and real_range is not None
+                    and imag_range is not None
+                ):
                     flat = arr.astype("float32").ravel().tolist()
                     res = arr.shape[1] if arr.ndim == 2 else int(len(flat) ** 0.5)
-                    df_arg = rc.DistanceField(flat, res, tuple(real_range), tuple(imag_range), 1.0, float(slowdown or 0.02))
+                    df_arg = rc.DistanceField(
+                        flat,
+                        res,
+                        tuple(real_range),
+                        tuple(imag_range),
+                        1.0,
+                        float(slowdown or 0.02),
+                    )
         except Exception:
             # If conversion fails, we just pass None to the Rust integrator
             df_arg = None

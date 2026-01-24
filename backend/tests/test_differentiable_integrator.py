@@ -41,7 +41,14 @@ def test_single_step_parity():
 
         # Use runtime-core DistanceField to compute the reference step
         flat = list(np.array(df.field, dtype=np.float32).ravel())
-        rc_df = rc.DistanceField(flat, df.res, (df.real_min, df.real_max), (df.imag_min, df.imag_max), df.max_distance, df.slowdown_threshold)
+        rc_df = rc.DistanceField(
+            flat,
+            df.res,
+            (df.real_min, df.real_max),
+            (df.imag_min, df.imag_max),
+            df.max_distance,
+            df.slowdown_threshold,
+        )
         out_py = rc.contour_biased_step(real, imag, u_real, u_imag, h, 0.5, 0.05, rc_df)
 
         # torch inputs
