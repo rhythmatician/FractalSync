@@ -25,17 +25,69 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
+def mandelbrot_distance_hybrid(c: complex, max_iter: int = 256) -> float:
+    """
+    Compute distance metric for Mandelbrot set using hybrid approach.
+
+    For points outside: normalized escape time (fast escape → 0, slow escape → ~0.2)
+    For points inside: distance estimation using derivatives (near boundary → 0, deep inside → higher)
+
+    Returns normalized value in [0, 1]:
+    - 0.0 = far from boundary (either fast escape or deep interior)
+    - 1.0 = on/very near the boundary
+
+    This allows velocity scaling to work both inside and outside the set.
+    """
+    z = 0j
+    dz = 0j  # Derivative for distance estimation
+
+    for i in range(max_iter):
+        if abs(z) > 2.0:
+            # Escaped - use normalized iteration as distance proxy
+            # Lower iterations = farther from boundary
+            escape_time = i / max_iter
+            # Invert so boundary (slow escape) has high value
+            # Map escape times to emphasize boundary region
+            # Most points escape quickly (small i), boundary points escape slowly (large i)
+            return escape_time
+
+        # Update derivative: dz = 2*z*dz + 1
+        dz = 2.0 * z * dz + 1.0
+        # Mandelbrot iteration
+        z = z * z + c
+
+    # Didn't escape - use distance estimation
+    # Distance = |z| * ln(|z|) / |dz|
+    z_mag = abs(z)
+    dz_mag = abs(dz)
+
+    if z_mag < 1e-10 or dz_mag < 1e-10:
+        # On boundary or very close
+        return 1.0
+
+    # Distance estimation (smaller = closer to boundary)
+    distance = z_mag * np.log(z_mag) / dz_mag
+
+    # Normalize: clamp and map to [0, 1]
+    # Typical interior distances range from ~0 (boundary) to ~0.5 (deep inside)
+    # We want boundary (distance ≈ 0) → 1.0, deep inside (distance > 0.2) → 0
+    max_interior_dist = 0.3
+    normalized_dist = min(distance / max_interior_dist, 1.0)
+
+    # Invert: small distance (near boundary) → high value
+    return 1.0 - normalized_dist
+
+
 def mandelbrot_escape_time(c: complex, max_iter: int = 256) -> float:
     """
-    Compute escape time for Mandelbrot iteration.
+    Compute escape time for Mandelbrot iteration (deprecated - use hybrid version).
 
     Returns normalized escape time E in [0, 1]:
     - E = i / max_iter if the point escapes at iteration i (fast escape → small E)
     - E = 1.0 if the point doesn't escape (inside/on boundary)
 
-    This is much simpler than distance estimation and works well
-    for velocity scaling: slow down near the boundary where escape
-    time is high.
+    Note: This doesn't distinguish between points near boundary vs deep inside,
+    so velocity scaling stops completely inside the set. Use mandelbrot_distance_hybrid instead.
     """
     z = 0j
 
@@ -69,7 +121,7 @@ def _generate_distance_field_opengl(
     real_min, real_max = real_range
     imag_min, imag_max = imag_range
 
-    # Compute shader source
+    # Compute shader source - simple escape time
     compute_shader = """
     #version 430
     
@@ -102,15 +154,15 @@ def _generate_distance_field_opengl(
         
         int iter = 0;
         for (iter = 0; iter < max_iter; iter++) {
-            // z = z^2 + c
-            float z_real = z.x * z.x - z.y * z.y + c.x;
-            float z_imag = 2.0 * z.x * z.y + c.y;
-            z = vec2(z_real, z_imag);
-            
             // Check escape: |z|^2 > 4.0
             if (dot(z, z) > 4.0) {
                 break;
             }
+            
+            // Mandelbrot iteration: z = z^2 + c
+            float z_real = z.x * z.x - z.y * z.y + c.x;
+            float z_imag = 2.0 * z.x * z.y + c.y;
+            z = vec2(z_real, z_imag);
         }
         
         // Normalize: escaped points get iter/max_iter, non-escaped get 1.0
@@ -157,6 +209,49 @@ def _generate_distance_field_opengl(
     ctx.release()
 
     return distance_field
+
+
+def apply_interior_distance_transform(
+    field: np.ndarray, max_distance_pixels: int = 100
+) -> np.ndarray:
+    """
+    Apply distance transform to interior points (where field == 1.0).
+
+    For each interior pixel, find the distance to the nearest boundary pixel
+    and normalize to [0, 1] where:
+    - 0 = far from boundary (deep interior)
+    - 1 = on boundary
+
+    Args:
+        field: Input field where 1.0 = interior, <1.0 = exterior
+        max_distance_pixels: Maximum distance to search (normalizes result)
+
+    Returns:
+        Modified field with interior points having gradient based on distance to boundary
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    logger.info("  Applying distance transform to interior points...")
+
+    # Create binary mask: interior (1.0) vs exterior (<1.0)
+    interior_mask = field >= 0.99  # Threshold to handle floating point
+
+    # Compute distance transform: distance from each interior pixel to nearest exterior pixel
+    distances = distance_transform_edt(interior_mask)
+
+    # Normalize distances: [0, max_distance_pixels] → [1.0, 0.0]
+    # Near boundary → 1.0, deep inside → 0.0
+    normalized_distances = np.clip(distances / max_distance_pixels, 0.0, 1.0)
+    inverted_distances = 1.0 - normalized_distances
+
+    # Replace interior values with distance-based values
+    result = field.copy()
+    result[interior_mask] = inverted_distances[interior_mask]
+
+    interior_count = interior_mask.sum()
+    logger.info(f"  Processed {interior_count} interior pixels")
+
+    return result
 
 
 def generate_distance_field(
@@ -214,6 +309,11 @@ def generate_distance_field(
             for j, real in enumerate(real_vals):
                 et = mandelbrot_escape_time(complex(real, imag), max_iter)
                 distance_field[i, j] = et
+
+    # Apply distance transform to interior points
+    distance_field = apply_interior_distance_transform(
+        distance_field, max_distance_pixels=100
+    )
 
     # Already normalized by escape time function
 
