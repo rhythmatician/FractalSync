@@ -24,6 +24,7 @@ use crate::controller::{
     step as rust_step,
     synthesize as rust_synthesize,
 };
+use crate::distance_field::DistanceField as RustDistanceField;
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 
@@ -222,10 +223,76 @@ impl OrbitState {
     }
 
     /// Advance time by dt and return the next c(t).  The band gates
-    /// are applied to each residual.
-    #[pyo3(signature = (dt, residual_params, band_gates=None))]
-    fn step(&mut self, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref()).into()
+    /// are applied to each residual. Optionally accepts a DistanceField
+    /// for velocity-based slowdown near the Mandelbrot boundary.
+    #[pyo3(signature = (dt, residual_params, band_gates=None, distance_field=None))]
+    fn step(
+        &mut self,
+        dt: f64,
+        residual_params: ResidualParams,
+        band_gates: Option<Vec<f64>>,
+        distance_field: Option<&DistanceField>,
+    ) -> Complex {
+        let rust_field = distance_field.map(|df| &df.inner);
+        rust_step(
+            &mut self.inner,
+            dt,
+            residual_params.into(),
+            band_gates.as_deref(),
+            rust_field,
+        )
+        .into()
+    }
+}
+
+/// Python wrapper for DistanceField (Mandelbrot boundary proximity lookup).
+#[pyclass]
+#[derive(Clone)]
+pub struct DistanceField {
+    inner: RustDistanceField,
+}
+
+#[pymethods]
+impl DistanceField {
+    /// Create a DistanceField from numpy-like data.
+    ///
+    /// Args:
+    ///     field: Flattened 1D list of f32 values (row-major)
+    ///     resolution: Width/height of square field
+    ///     real_range: (min, max) tuple for real axis
+    ///     imag_range: (min, max) tuple for imaginary axis
+    ///     max_distance: Maximum distance for normalization
+    ///     slowdown_threshold: Escape-time threshold for velocity scaling
+    #[new]
+    #[pyo3(signature = (field, resolution, real_range, imag_range, max_distance, slowdown_threshold))]
+    fn py_new(
+        field: Vec<f32>,
+        resolution: usize,
+        real_range: (f64, f64),
+        imag_range: (f64, f64),
+        max_distance: f64,
+        slowdown_threshold: f64,
+    ) -> Self {
+        Self {
+            inner: RustDistanceField::new(
+                field,
+                resolution,
+                real_range,
+                imag_range,
+                max_distance,
+                slowdown_threshold,
+            ),
+        }
+    }
+
+    /// Look up escape time at a complex point.
+    fn lookup(&self, real: f64, imag: f64) -> f32 {
+        self.inner.lookup(RustComplex::new(real, imag))
+    }
+
+    /// Get velocity scale factor for a complex point.
+    fn get_velocity_scale(&self, real: f64, imag: f64) -> f32 {
+        self.inner.get_velocity_scale(RustComplex::new(real, imag))
     }
 }
 
@@ -296,6 +363,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Complex>()?;
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
+    m.add_class::<DistanceField>()?;
     m.add_class::<FeatureExtractor>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     Ok(())

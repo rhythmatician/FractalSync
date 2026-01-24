@@ -10,6 +10,7 @@
 //! each residual decays exponentially as 1/2^(k+1) and is modulated
 //! by the controller's `alpha` parameter and the band gate vector.
 
+use crate::distance_field::DistanceField;
 use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
@@ -200,12 +201,27 @@ pub fn synthesize(
 /// updated complex value.  This convenience function calls
 /// `advance()` on the state then `synthesize()`.  The state is
 /// mutated in place.
+///
+/// If a distance field is provided, dt is scaled based on proximity
+/// to the Mandelbrot boundary, creating a "potential well" that slows
+/// down the orbit near the boundary.
 pub fn step(
     state: &mut OrbitState,
     dt: f64,
     residual_params: ResidualParams,
     band_gates: Option<&[f64]>,
+    distance_field: Option<&DistanceField>,
 ) -> Complex {
-    state.advance(dt);
+    // Scale dt if distance field is available
+    let effective_dt = if let Some(field) = distance_field {
+        // Get current c position (before advance)
+        let c_current = synthesize(state, residual_params, band_gates);
+        let velocity_scale = field.get_velocity_scale(c_current) as f64;
+        dt * velocity_scale
+    } else {
+        dt
+    };
+
+    state.advance(effective_dt);
     synthesize(state, residual_params, band_gates)
 }

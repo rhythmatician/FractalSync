@@ -229,7 +229,9 @@ def main():
     start_epoch = 0
     if args.resume:
         print(f"[6.5/7] Loading checkpoint from {args.resume}...")
-        checkpoint = torch.load(args.resume, map_location=args.device)
+        checkpoint = torch.load(
+            args.resume, map_location=args.device, weights_only=False
+        )
         model.load_state_dict(checkpoint["model_state_dict"])
         trainer.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         trainer.history = checkpoint["history"]
