@@ -150,7 +150,7 @@ if (typeof (globalThis as any).Blob === 'undefined') {
 }
 
 if (!URL.createObjectURL) {
-  (URL as any).createObjectURL = (blob: any) => `blob:${Math.random()}`;
+  (URL as any).createObjectURL = (_blob: any) => `blob:${Math.random()}`;
   (URL as any).revokeObjectURL = () => {};
 }
 
