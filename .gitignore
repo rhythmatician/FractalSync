@@ -67,3 +67,4 @@ tmp/
 
 # Frontend run exports
 frontend_*/*
+frontend/public/mandelbrot_distance_field.bin
