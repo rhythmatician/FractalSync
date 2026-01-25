@@ -4,6 +4,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AudioFeatureExtractor } from '../lib/audioFeatures';
+import { USE_WASM_WORKER } from '../lib/config';
+import { WasmFeatureWorkerClient } from '../lib/wasm/wasm_feature_worker_client';
 
 interface AudioCaptureProps {
   onFeatures: (features: number[]) => void;
@@ -20,6 +22,11 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+  // Worker-backed wasm extractor (optional)
+  const wasmWorkerClientRef = useRef<WasmFeatureWorkerClient | null>(null);
+  const ringBufferRef = useRef<Float32Array | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (enabled && !isCapturing) {
@@ -72,27 +79,66 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
       source.connect(analyser);
       analyser.connect(audioContext.destination); // Connect to speakers
 
-      // Create feature extractor
-      const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
-      featureExtractorRef.current = featureExtractor;
+      // Create feature extractor or initialize wasm worker client depending on configuration
+      if (USE_WASM_WORKER && typeof Worker !== 'undefined') {
+        // Initialize worker-backed wasm extractor
+        const client = new WasmFeatureWorkerClient();
+        await client.init({ sr: audioContext.sampleRate, hop: 256, nfft: 1024, include_delta: false, include_delta_delta: false });
+        wasmWorkerClientRef.current = client;
 
-      // Start playback
-      await audio.play();
+        // prepare ring buffer length = (windowFrames - 1) * hop + nfft
+        const windowFrames = 10;
+        const hop = 256;
+        const nfft = 1024;
+        const rbLen = (windowFrames - 1) * hop + nfft;
+        ringBufferRef.current = new Float32Array(rbLen);
 
-      setIsCapturing(true);
-      setError(null);
+        // Fill initial buffer with zeros
+        ringBufferRef.current.fill(0);
 
-      // Start feature extraction loop
-      const extractLoop = () => {
-        if (!featureExtractorRef.current) return;
+        setIsCapturing(true);
+        setError(null);
 
-        const features = featureExtractorRef.current.extractWindowedFeatures(10);
-        onFeatures(features);
+        // Start periodic extraction aligned to hop interval
+        const hopMs = (hop / audioContext.sampleRate) * 1000;
+        intervalRef.current = window.setInterval(async () => {
+          if (!analyserRef.current || !wasmWorkerClientRef.current || !ringBufferRef.current) return;
+          const timeData = new Float32Array(analyserRef.current.fftSize);
+          analyserRef.current.getFloatTimeDomainData(timeData);
 
-        animationFrameRef.current = requestAnimationFrame(extractLoop);
-      };
+          // shift left by hop and append new timeData at end
+          const rb = ringBufferRef.current;
+          rb.copyWithin(0, timeData.length);
+          rb.set(timeData, rb.length - timeData.length);
 
-      extractLoop();
+          // send a copy to worker (so main thread retains rb)
+          const audioCopy = rb.slice();
+          try {
+            const featuresBuf = await wasmWorkerClientRef.current.extract(audioCopy, windowFrames);
+            // featuresBuf is Float64Array
+            const features = Array.from(featuresBuf);
+            onFeatures(features);
+          } catch (err) {
+            console.warn('WASM worker extract error', err);
+          }
+        }, Math.max(5, hopMs));
+      } else {
+        const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
+        featureExtractorRef.current = featureExtractor;
+
+        // Start feature extraction loop on RAF
+        const extractLoop = () => {
+          if (!featureExtractorRef.current) return;
+
+          const features = featureExtractorRef.current.extractWindowedFeatures(10);
+          onFeatures(features);
+
+          animationFrameRef.current = requestAnimationFrame(extractLoop);
+        };
+
+        extractLoop();
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load audio file';
       setError(errorMessage);
@@ -118,7 +164,7 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
 
-      // Create feature extractor
+      // Create feature extractor for microphone path (fallback)
       const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
       featureExtractorRef.current = featureExtractor;
 
@@ -150,6 +196,18 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
       animationFrameRef.current = null;
     }
 
+    // Stop interval for worker-based extraction
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Terminate worker if present
+    if (wasmWorkerClientRef.current) {
+      wasmWorkerClientRef.current.terminate();
+      wasmWorkerClientRef.current = null;
+    }
+
     // Stop audio element
     if (audioElementRef.current) {
       audioElementRef.current.pause();
@@ -171,6 +229,7 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
 
     analyserRef.current = null;
     featureExtractorRef.current = null;
+    ringBufferRef.current = null;
     setIsCapturing(false);
   };
 
