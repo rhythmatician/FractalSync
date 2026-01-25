@@ -92,6 +92,9 @@ export class ModelInference {
     postProcessingTime: 0
   };
 
+  // Counters for inference-level failures
+  private inferenceFailures: number = 0;
+
   /**
    * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
    * When enabled, mixes model outputs with raw audio features for dynamic visuals.
@@ -124,7 +127,7 @@ export class ModelInference {
         this.kBands = this.metadata.k_bands || DEFAULT_K_BANDS;
         if (this.isControlModel && this.metadata.parameter_names) {
           const expected = OUTPUT_NAMES.slice(0, 3 + this.kBands);
-          const matches = expected.every((name, idx) => this.metadata?.parameter_names?.[idx] === name);
+          const matches = expected.every((name: string, idx: number) => this.metadata?.parameter_names?.[idx] === name);
           if (!matches) {
             throw new Error(`[ModelInference] Output parameter names do not match model contract`);
           }
@@ -213,122 +216,153 @@ export class ModelInference {
    * Run inference on audio features with latency tracking.
    */
   async infer(features: number[]): Promise<VisualParameters> {
-    if (!this.session) {
-      throw new Error('Model not loaded');
-    }
+    // Outer guard: ensure any runtime or wasm error results in a safe fallback visual state
+    try {
+      if (!this.session) {
+        throw new Error('Model not loaded');
+      }
 
-    if (this.metadata?.input_dim && features.length !== this.metadata.input_dim) {
-      throw new Error(
-        `[ModelInference] Input feature length ${features.length} does not match model input_dim ${this.metadata.input_dim}`
+      if (this.metadata?.input_dim && features.length !== this.metadata.input_dim) {
+        throw new Error(
+          `[ModelInference] Input feature length ${features.length} does not match model input_dim ${this.metadata.input_dim}`
+        );
+      }
+      if (!this.metadata?.input_dim && features.length !== INPUT_DIM) {
+        console.warn(
+          `[ModelInference] Input feature length ${features.length} does not match contract ${INPUT_DIM}`
+        );
+      }
+
+      const totalStartTime = performance.now();
+      let normStartTime = performance.now();
+
+      // Normalize features if normalization stats are available
+      let normalizedFeatures = new Float32Array(features);
+      if (this.featureMean && this.featureStd) {
+        normalizedFeatures = new Float32Array(features.length);
+        for (let i = 0; i < features.length; i++) {
+          const mean = this.featureMean[i] || 0;
+          const std = this.featureStd[i] || 1;
+          normalizedFeatures[i] = (features[i] - mean) / (std + 1e-8);
+        }
+      }
+
+      const normTime = performance.now() - normStartTime;
+
+      // Prepare input tensor
+      const inputTensor = new ort.Tensor(
+        'float32',
+        normalizedFeatures,
+        [1, features.length]
       );
-    }
-    if (!this.metadata?.input_dim && features.length !== INPUT_DIM) {
-      console.warn(
-        `[ModelInference] Input feature length ${features.length} does not match contract ${INPUT_DIM}`
-      );
-    }
 
-    const totalStartTime = performance.now();
-    let normStartTime = performance.now();
+      // Run inference
+      const inferStartTime = performance.now();
+      const feeds = { [MODEL_INPUT_NAME]: inputTensor };
+      const results = await this.session.run(feeds);
+      const inferTime = performance.now() - inferStartTime;
 
-    // Normalize features if normalization stats are available
-    let normalizedFeatures = new Float32Array(features);
-    if (this.featureMean && this.featureStd) {
-      normalizedFeatures = new Float32Array(features.length);
-      for (let i = 0; i < features.length; i++) {
-        const mean = this.featureMean[i] || 0;
-        const std = this.featureStd[i] || 1;
-        normalizedFeatures[i] = (features[i] - mean) / (std + 1e-8);
+      const outputTensor = results[MODEL_OUTPUT_NAME] || results[Object.keys(results)[0]];
+      if (this.isControlModel && outputTensor.dims?.[1] !== 3 + this.kBands) {
+        throw new Error(
+          `[ModelInference] Output dim mismatch: expected ${3 + this.kBands}, got ${outputTensor.dims?.[1]}`
+        );
       }
-    }
+      const params = Array.from(outputTensor.data as Float32Array);
 
-    const normTime = performance.now() - normStartTime;
+      // Post-processing
+      const postStartTime = performance.now();
 
-    // Prepare input tensor
-    const inputTensor = new ort.Tensor(
-      'float32',
-      normalizedFeatures,
-      [1, features.length]
-    );
+      let visualParams: VisualParameters;
 
-    // Run inference
-    const inferStartTime = performance.now();
-    const feeds = { [MODEL_INPUT_NAME]: inputTensor };
-    const results = await this.session.run(feeds);
-    const inferTime = performance.now() - inferStartTime;
+      if (this.isControlModel && this.orbitRuntime) {
+        try {
+          // Orbit-based control model (runtime-core step_advanced)
+          const controlSignals = {
+            sTarget: params[0],
+            alpha: params[1],
+            omegaScale: params[2],
+            bandGates: params.slice(3, 3 + this.kBands)
+          };
 
-    const outputTensor = results[MODEL_OUTPUT_NAME] || results[Object.keys(results)[0]];
-    if (this.isControlModel && outputTensor.dims?.[1] !== 3 + this.kBands) {
-      throw new Error(
-        `[ModelInference] Output dim mismatch: expected ${3 + this.kBands}, got ${outputTensor.dims?.[1]}`
-      );
-    }
-    const params = Array.from(outputTensor.data as Float32Array);
+          // Store last control signals for external inspection / flight recorder
+          (this as any).lastControlSignals = controlSignals;
 
-    // Post-processing
-    const postStartTime = performance.now();
+          this.orbitRuntime.updateState({
+            s: controlSignals.sTarget,
+            alpha: controlSignals.alpha,
+            omega: this.baseOmega * controlSignals.omegaScale
+          });
 
-    let visualParams: VisualParameters;
+          const dt = 1.0 / 60.0; // Assume 60 FPS
 
-    if (this.isControlModel && this.orbitRuntime) {
-      // Orbit-based control model (runtime-core step_advanced)
-      const controlSignals = {
-        sTarget: params[0],
-        alpha: params[1],
-        omegaScale: params[2],
-        bandGates: params.slice(3, 3 + this.kBands)
-      };
+          // Transient strength proxy = spectral flux averaged across window
+          const numFeatures = 6;
+          const windowFrames = Math.floor(features.length / numFeatures);
+          let avgFlux = 0;
+          let avgRMS = 0;
+          for (let i = 0; i < windowFrames; i++) {
+            avgFlux += features[i * numFeatures + 1];
+            avgRMS += features[i * numFeatures + 2];
+          }
+          avgFlux /= windowFrames;
+          avgRMS /= windowFrames;
 
-      // Store last control signals for external inspection / flight recorder
-      (this as any).lastControlSignals = controlSignals;
+          const h = Math.max(0, Math.min(1, avgFlux));
 
-      this.orbitRuntime.updateState({
-        s: controlSignals.sTarget,
-        alpha: controlSignals.alpha,
-        omega: this.baseOmega * controlSignals.omegaScale
-      });
+          let c;
+          try {
+            c = this.orbitRuntime.step(dt, controlSignals.bandGates, h);
+          } catch (e) {
+            // If runtime stepping throws, count the failure and fall back to a safe default c
+            console.warn('[ModelInference] Orbit runtime step threw, using fallback c:', e);
+            this.inferenceFailures = (this.inferenceFailures || 0) + 1;
+            // Prefer runtime last-known c when available
+            c = (this.orbitRuntime as any).getLastC ? (this.orbitRuntime as any).getLastC() : { real: 0.0, imag: 0.0 };
+          }
 
-      const dt = 1.0 / 60.0; // Assume 60 FPS
+        // Extract audio features for color mapping
+        let avgOnset = 0;
+        for (let i = 0; i < windowFrames; i++) {
+          avgOnset += features[i * numFeatures + 4];
+        }
+        avgOnset /= windowFrames;
 
-      // Transient strength proxy = spectral flux averaged across window
-      const numFeatures = 6;
-      const windowFrames = Math.floor(features.length / numFeatures);
-      let avgFlux = 0;
-      let avgRMS = 0;
-      for (let i = 0; i < windowFrames; i++) {
-        avgFlux += features[i * numFeatures + 1];
-        avgRMS += features[i * numFeatures + 2];
+        // Map to visual parameters
+        const currentHue = (avgRMS * 2.0) % 1.0;
+        visualParams = {
+          juliaReal: c.real,
+          juliaImag: c.imag,
+          colorHue: currentHue,
+          colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
+          colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
+          zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
+          speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
+        };
+
+        // Color-based section detection for lobe switching (optional)
+        if (!this.deterministicMode) {
+          this.detectSectionChange(currentHue);
+        }
+
+        // expose inference-level failures for diagnostics/tests
+        (this as any).lastInferenceFailures = this.inferenceFailures;
+      } catch (e) {
+        // Top-level protection: any unexpected error during orbit-based postprocessing
+        // should not crash the app. Fall back to a safe visual state.
+        console.error('[ModelInference] Unexpected error during orbit postprocessing:', e);
+        this.inferenceFailures += 1;
+        visualParams = {
+          juliaReal: 0.0,
+          juliaImag: 0.0,
+          colorHue: 0.5,
+          colorSat: 0.8,
+          colorBright: 0.7,
+          zoom: 2.5,
+          speed: 0.5,
+        };
       }
-      avgFlux /= windowFrames;
-      avgRMS /= windowFrames;
 
-      const h = Math.max(0, Math.min(1, avgFlux));
-
-      const c = this.orbitRuntime.step(dt, controlSignals.bandGates, h);
-
-      // Extract audio features for color mapping
-      let avgOnset = 0;
-      for (let i = 0; i < windowFrames; i++) {
-        avgOnset += features[i * numFeatures + 4];
-      }
-      avgOnset /= windowFrames;
-
-      // Map to visual parameters
-      const currentHue = (avgRMS * 2.0) % 1.0;
-      visualParams = {
-        juliaReal: c.real,
-        juliaImag: c.imag,
-        colorHue: currentHue,
-        colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
-        colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
-        zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
-        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
-      };
-
-      // Color-based section detection for lobe switching (optional)
-      if (!this.deterministicMode) {
-        this.detectSectionChange(currentHue);
-      }
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -421,6 +455,21 @@ export class ModelInference {
     }
 
     return visualParams;
+    } catch (e) {
+      // Global inference-level safety net: never throw to callers (UI). Log and return safe fallback.
+      console.error('[ModelInference] Unhandled error during inference, returning safe fallback:', e);
+      this.inferenceFailures = (this.inferenceFailures || 0) + 1;
+      const fallback: VisualParameters = {
+        juliaReal: 0.0,
+        juliaImag: 0.0,
+        colorHue: 0.5,
+        colorSat: 0.8,
+        colorBright: 0.7,
+        zoom: 2.5,
+        speed: 0.5
+      };
+      return fallback;
+    }
   }
 
   /**
@@ -449,6 +498,10 @@ export class ModelInference {
   }
 
   getDistanceFieldError(): string | null {
+    // Prefer runtime diagnostics if orbit runtime is present
+    if (this.orbitRuntime && typeof (this.orbitRuntime as any).getDistanceFieldDiagnostics === 'function') {
+      return (this.orbitRuntime as any).getDistanceFieldDiagnostics();
+    }
     return this.dfLoadError;
   }
 

@@ -1,4 +1,5 @@
 """Compute deterministic SHA256 hash of contracts/model_io_contract.json excluding 'version' field."""
+
 from pathlib import Path
 import json
 import hashlib

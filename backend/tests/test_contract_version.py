@@ -7,7 +7,16 @@ CONTRACT = Path(__file__).resolve().parents[2] / "contracts" / "model_io_contrac
 
 def compute_hash():
     # reuse the script to compute
-    out = subprocess.check_output(["python", str(Path(__file__).resolve().parents[1] / "scripts" / "compute_contract_hash.py")])
+    out = subprocess.check_output(
+        [
+            "python",
+            str(
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "compute_contract_hash.py"
+            ),
+        ]
+    )
     return out.decode().strip()
 
 
@@ -16,4 +25,6 @@ def test_contract_version_matches_hash():
         cj = json.load(f)
     assert "version" in cj, "contract missing 'version' field"
     computed = compute_hash()
-    assert cj["version"] == computed, f"contract version mismatch: file={cj['version']} computed={computed}"
+    assert (
+        cj["version"] == computed
+    ), f"contract version mismatch: file={cj['version']} computed={computed}"

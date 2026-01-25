@@ -11,6 +11,20 @@ if (existsSync(wasmSource)) {
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Map bare import "wasm/..." to the local src/wasm folder for dev
+      'wasm': '/src/wasm'
+    }
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime'
+    ]
+  },
   server: {
     port: 3000,
     headers: {
@@ -32,6 +46,9 @@ export default defineConfig({
     }
   },
   build: {
+    commonjsOptions: {
+      include: [/node_modules/]
+    },
     rollupOptions: {
       external: ['wasm/orbit_synth_wasm.js', '/wasm/orbit_synth_wasm.js']
     }

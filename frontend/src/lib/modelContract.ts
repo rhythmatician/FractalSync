@@ -64,6 +64,11 @@ export const INPUT_NAMES = [
   "frame_9_spectral_rolloff",
 ];
 
+export const DEFAULT_K_BANDS = 6;
+export const INPUT_DIM = INPUT_NAMES.length;
+export const OUTPUT_NAMES = buildOutputNames(DEFAULT_K_BANDS);
+export const OUTPUT_DIM = OUTPUT_NAMES.length;
+
 export function buildOutputNames(kBands = 6) {
   const names = ["s_target", "alpha", "omega_scale"];
   for (let i = 0; i < kBands; i += 1) { names.push(`band_gate_${i}`); }

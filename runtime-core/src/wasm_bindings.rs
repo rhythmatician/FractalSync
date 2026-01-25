@@ -5,7 +5,9 @@
 //! bindings so both front-end and back-end can call the same logic.
 
 use wasm_bindgen::prelude::*;
-use js_sys::Array;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::JsValue;
+use js_sys::{Array, Function, Reflect};
 use serde::{Deserialize, Serialize};
 
 use crate::controller::{
@@ -188,9 +190,124 @@ impl OrbitState {
 
     /// Advance with transient and integrator options: h in [0,1], optional d_star, max_step.
     #[wasm_bindgen]
-    pub fn step_advanced(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>, h: f64, d_star: Option<f64>, max_step: Option<f64>, distance_field: Option<&DistanceField>) -> Complex {
-        let rust_field = distance_field.map(|df| &df.inner);
-        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref(), rust_field, h, d_star, max_step).into()
+    pub fn step_advanced(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>, h: f64, d_star: Option<f64>, max_step: Option<f64>, distance_field: Option<JsValue>) -> Complex {
+        // If JS provides a DistanceField wrapper (JsValue), use a JS-aware codepath that
+        // calls the object's methods for sampling/gradient/velocity instead of attempting an
+        // ownership transfer. This avoids runtime ownership/borrow panics that were observed
+        // when the JS wrapper was moved while it was borrowed elsewhere.
+        if let Some(js_df) = distance_field.as_ref() {
+            // JS-backed execution path
+            return self.step_advanced_with_js_df(dt, RustResidualParams::from(residual_params), band_gates.as_deref(), h, d_star, max_step, js_df).into();
+        }
+
+        // Fallback: no DF provided at all
+        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref(), None, h, d_star, max_step).into()
+    }
+
+    // Internal helper: run the stepping path using a JS distance field object (calls into its
+    // `get_velocity_scale`, `sample_bilinear`, and `gradient` methods via `Reflect`).
+    fn step_advanced_with_js_df(&mut self, dt: f64, residual_params: RustResidualParams, band_gates: Option<&[f64]>, h: f64, d_star: Option<f64>, max_step: Option<f64>, js_df: &JsValue) -> RustComplex {
+        // Helper closures to call into the JS DF safely with fallbacks
+        let call_get_velocity_scale = |c: RustComplex| -> f64 {
+            // Default velocity scale is 1.0
+            if let Ok(func) = Reflect::get(js_df, &JsValue::from_str("get_velocity_scale")) {
+                if func.is_function() {
+                    let f: Function = func.unchecked_into();
+                    let r = f.call2(js_df, &JsValue::from_f64(c.real), &JsValue::from_f64(c.imag));
+                    if let Ok(rv) = r {
+                        return rv.as_f64().unwrap_or(1.0);
+                    }
+                }
+            }
+            1.0
+        };
+
+        let call_sample_bilinear = |c: RustComplex| -> f64 {
+            if let Ok(func) = Reflect::get(js_df, &JsValue::from_str("sample_bilinear")) {
+                if func.is_function() {
+                    let f: Function = func.unchecked_into();
+                    let r = f.call2(js_df, &JsValue::from_f64(c.real), &JsValue::from_f64(c.imag));
+                    if let Ok(rv) = r {
+                        return rv.as_f64().unwrap_or(1.0);
+                    }
+                }
+            }
+            1.0
+        };
+
+        let call_gradient = |c: RustComplex| -> (f64, f64) {
+            if let Ok(func) = Reflect::get(js_df, &JsValue::from_str("gradient")) {
+                if func.is_function() {
+                    let f: Function = func.unchecked_into();
+                    if let Ok(rv) = f.call2(js_df, &JsValue::from_f64(c.real), &JsValue::from_f64(c.imag)) {
+                        let arr = Array::from(&rv);
+                        let gx = arr.get(0).as_f64().unwrap_or(0.0);
+                        let gy = arr.get(1).as_f64().unwrap_or(0.0);
+                        return (gx, gy);
+                    }
+                }
+            }
+            (0.0, 0.0)
+        };
+
+        // Get effective dt via velocity scale
+        let c_current = crate::controller::synthesize(&self.inner, residual_params, band_gates);
+        let velocity_scale = call_get_velocity_scale(c_current) as f64;
+        let effective_dt = dt * velocity_scale;
+
+        // Sample distance and gradient via JS DF BEFORE advancing to avoid reentrant
+        // calls into JS that might trigger Rust-side borrows while we hold a mutable
+        // borrow during `advance()`.
+        let d = call_sample_bilinear(c_current);
+        let (gx, gy) = call_gradient(c_current);
+        let grad_norm = (gx * gx + gy * gy).sqrt();
+
+        // Advance and synthesize proposal
+        self.inner.advance(effective_dt);
+        let c_proposed = crate::controller::synthesize(&self.inner, residual_params, band_gates);
+
+        // If max_step > 0, apply clamping similar to original step_logic
+        let max_s = max_step.unwrap_or(0.5_f64);
+
+        // If JS DF provided, perform contour-biased integrator using JS calls
+        let u_real = c_proposed.real - c_current.real;
+        let u_imag = c_proposed.imag - c_current.imag;
+
+        // d_star or fallback
+        let d_s = d_star.unwrap_or(0.0);
+
+        if grad_norm <= 1e-12 {
+            let u_mag = (u_real * u_real + u_imag * u_imag).sqrt();
+            let scale = if u_mag > max_s { max_s / u_mag } else { 1.0 };
+            return RustComplex::new(c_current.real + u_real * scale, c_current.imag + u_imag * scale);
+        }
+
+        let nx = gx / grad_norm;
+        let ny = gy / grad_norm;
+        let tx = -gy / grad_norm;
+        let ty = gx / grad_norm;
+
+        let proj_t = u_real * tx + u_imag * ty;
+        let proj_n = u_real * nx + u_imag * ny;
+
+        let normal_scale_no_hit = 0.05_f64;
+        let normal_scale_hit = 1.0_f64;
+        let tangential_scale = 1.0_f64;
+        let normal_scale = normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * (h.clamp(0.0, 1.0) as f64);
+        let servo_gain = 0.2_f64;
+        let servo = servo_gain * (d_s - d);
+
+        let mut dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo);
+        let mut dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo);
+
+        let mag = (dx * dx + dy * dy).sqrt();
+        if mag > max_s && mag > 0.0 {
+            let s = max_s / mag;
+            dx *= s;
+            dy *= s;
+        }
+
+        RustComplex::new(c_current.real + dx, c_current.imag + dy)
     }
 }
 
@@ -300,7 +417,9 @@ pub struct DistanceField {
 #[wasm_bindgen]
 impl DistanceField {
     #[wasm_bindgen(constructor)]
-    pub fn new(field: Vec<f32>, resolution: usize, real_range: (f64, f64), imag_range: (f64, f64), max_distance: f64, slowdown_threshold: f64) -> DistanceField {
+    pub fn new(field: Vec<f32>, resolution: usize, real_min: f64, real_max: f64, imag_min: f64, imag_max: f64, max_distance: f64, slowdown_threshold: f64) -> DistanceField {
+        let real_range = (real_min, real_max);
+        let imag_range = (imag_min, imag_max);
         DistanceField { inner: crate::distance_field::DistanceField::new(field, resolution, real_range, imag_range, max_distance, slowdown_threshold) }
     }
 
@@ -326,7 +445,78 @@ impl DistanceField {
 
 /// Contour-biased integrator exposed to JS
 #[wasm_bindgen]
-pub fn contour_biased_step(real: f64, imag: f64, u_real: f64, u_imag: f64, h: f64, d_star: f64, max_step: f64, distance_field: Option<&DistanceField>) -> Complex {
-    let rust_field = distance_field.map(|df| &df.inner);
-    crate::controller::contour_biased_step(RustComplex::new(real, imag), u_real, u_imag, h, rust_field, d_star, max_step).into()
+pub fn contour_biased_step(real: f64, imag: f64, u_real: f64, u_imag: f64, h: f64, d_star: f64, max_step: f64, distance_field: Option<JsValue>) -> Complex {
+    if let Some(js_df) = distance_field.as_ref() {
+        return contour_biased_step_with_js_df(RustComplex::new(real, imag), u_real, u_imag, h, js_df, d_star, max_step).into();
+    }
+    crate::controller::contour_biased_step(RustComplex::new(real, imag), u_real, u_imag, h, None, d_star, max_step).into()
+}
+
+// JS-aware variant that calls the DF methods via Reflect/Function.
+fn contour_biased_step_with_js_df(c: RustComplex, u_real: f64, u_imag: f64, h: f64, js_df: &JsValue, d_star: f64, max_step: f64) -> RustComplex {
+    // helpers mirroring the ones in step_advanced_with_js_df
+    let call_sample_bilinear = |c: RustComplex| -> f64 {
+        if let Ok(func) = Reflect::get(js_df, &JsValue::from_str("sample_bilinear")) {
+            if func.is_function() {
+                let f: Function = func.unchecked_into();
+                let r = f.call2(js_df, &JsValue::from_f64(c.real), &JsValue::from_f64(c.imag));
+                if let Ok(rv) = r {
+                    return rv.as_f64().unwrap_or(1.0);
+                }
+            }
+        }
+        1.0
+    };
+
+    let call_gradient = |c: RustComplex| -> (f64, f64) {
+        if let Ok(func) = Reflect::get(js_df, &JsValue::from_str("gradient")) {
+            if func.is_function() {
+                let f: Function = func.unchecked_into();
+                if let Ok(rv) = f.call2(js_df, &JsValue::from_f64(c.real), &JsValue::from_f64(c.imag)) {
+                    let arr = Array::from(&rv);
+                    let gx = arr.get(0).as_f64().unwrap_or(0.0);
+                    let gy = arr.get(1).as_f64().unwrap_or(0.0);
+                    return (gx, gy);
+                }
+            }
+        }
+        (0.0, 0.0)
+    };
+
+    let d = call_sample_bilinear(c);
+    let (gx, gy) = call_gradient(c);
+    let grad_norm = (gx * gx + gy * gy).sqrt();
+
+    let u_mag = (u_real * u_real + u_imag * u_imag).sqrt();
+    if grad_norm <= 1e-12 {
+        let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+        return RustComplex::new(c.real + u_real * scale, c.imag + u_imag * scale);
+    }
+
+    let nx = gx / grad_norm;
+    let ny = gy / grad_norm;
+    let tx = -gy / grad_norm;
+    let ty = gx / grad_norm;
+
+    let proj_t = u_real * tx + u_imag * ty;
+    let proj_n = u_real * nx + u_imag * ny;
+
+    let normal_scale_no_hit = 0.05_f64;
+    let normal_scale_hit = 1.0_f64;
+    let tangential_scale = 1.0_f64;
+    let normal_scale = normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * (h.clamp(0.0, 1.0) as f64);
+    let servo_gain = 0.2_f64;
+    let servo = servo_gain * (d_star - d);
+
+    let mut dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo);
+    let mut dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo);
+
+    let mag = (dx * dx + dy * dy).sqrt();
+    if mag > max_step && mag > 0.0 {
+        let s = max_step / mag;
+        dx *= s;
+        dy *= s;
+    }
+
+    RustComplex::new(c.real + dx, c.imag + dy)
 }

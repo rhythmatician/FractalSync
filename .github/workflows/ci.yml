@@ -86,6 +86,20 @@ jobs:
           cd runtime-core
           cargo test --lib --release
 
+      - name: Install wasm-pack
+        run: |
+          cargo install --locked wasm-pack
+
+      - name: Run wasm-bindgen tests
+        run: |
+          cd wasm-orbit
+          wasm-pack test --node
+
+      - name: Build wasm pkg
+        run: |
+          cd wasm-orbit
+          wasm-pack build --target bundler --out-dir pkg --release
+
   frontend-tests:
     name: Frontend Tests (TypeScript)
     runs-on: ubuntu-latest

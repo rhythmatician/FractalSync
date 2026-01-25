@@ -1,4 +1,5 @@
 """Update the 'version' field in contracts/model_io_contract.json to the SHA256 of the rest of the contract."""
+
 from pathlib import Path
 import json
 from compute_contract_hash import compute_hash

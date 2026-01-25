@@ -48,26 +48,16 @@ from .runtime_core_bridge import (
 import runtime_core as rc
 
 # Torch DistanceField helper
-try:
-    from .differentiable_integrator import TorchDistanceField
-except Exception:
-    TorchDistanceField = None
+from .differentiable_integrator import TorchDistanceField
 
-# Visual proxy and losses (optional, light-weight differentiable components)
-try:
-    from .visual_proxy import ProxyRenderer
-    from .visual_losses import (
-        MultiscaleDeltaVLoss,
-        SpeedBoundLoss,
-        HitAlignmentLoss,
-        CoverageLoss,
-    )
-except Exception:
-    ProxyRenderer = None
-    MultiscaleDeltaVLoss = None
-    SpeedBoundLoss = None
-    HitAlignmentLoss = None
-    CoverageLoss = None
+# Visual proxy and losses
+from .visual_proxy import ProxyRenderer
+from .visual_losses import (
+    MultiscaleDeltaVLoss,
+    SpeedBoundLoss,
+    HitAlignmentLoss,
+    CoverageLoss,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -467,7 +457,7 @@ class ControlTrainer:
 
         # Optional differentiable visual losses (fast proxy renderer + lightweight losses)
         self.enable_visual_losses = bool(enable_visual_losses)
-        if self.enable_visual_losses and ProxyRenderer is not None:
+        if self.enable_visual_losses:
             self.proxy_renderer = ProxyRenderer(
                 resolution=int(visual_proxy_resolution),
                 max_iter=int(visual_proxy_max_iter),
@@ -483,10 +473,6 @@ class ControlTrainer:
             self.hit_loss = HitAlignmentLoss(weight=vw.get("hit_align", 0.1))
             self.coverage_loss = CoverageLoss(
                 weight=vw.get("coverage", 0.05), bins=show_cfg.variety_bins
-            )
-        else:
-            raise RuntimeError(
-                "Visual continuity losses are required but proxy renderer is unavailable."
             )
 
         # Surrogate model (optional)
