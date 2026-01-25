@@ -11,16 +11,11 @@ from typing import List, Optional, Sequence, Tuple, Union
 import math
 
 import numpy as np
+import runtime_core as rc
+import onnxruntime as ort
 
-try:
-    import onnxruntime as ort
-except Exception:
-    ort = None
 
-try:
-    import torch
-except Exception:
-    torch = None
+import torch
 
 from .policy_interface import policy_state_encoder, policy_output_decoder
 from .runtime_core_bridge import make_orbit_state, synthesize
@@ -69,7 +64,7 @@ def run_policy_step(
     d_c: float = 1.0,
     grad: Tuple[float, float] = (0.0, 0.0),
     directional_probes: Optional[Sequence[float]] = None,
-    lobe_state: Optional[object] = None,
+    lobe_state: Optional["rc.LobeState"] = None,
     dt: float = 1.0,
 ) -> dict:
     """Run a single policy inference and apply deltas to return new orbit/c.

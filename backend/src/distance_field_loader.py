@@ -126,33 +126,37 @@ class DistanceField:
     def gradient(self, real: float, imag: float) -> Tuple[float, float]:
         """Return finite-difference gradient (gx, gy) of the distance field at (real, imag).
 
-        This mirrors the sampling used by :meth:`lookup` and uses one grid-cell offsets
-        to compute central differences. If no precomputed array is present, fall back
-        to numeric differences of the analytic escape-time estimator.
+        Prefer using the runtime-core (Rust) implementation when available for
+        correctness and performance. Falls back to the numpy-based finite-difference
+        implementation when runtime-core is not available or conversion fails.
         """
+        # Require a precomputed array and runtime-core binding; no Python fallbacks.
         if self.arr is None:
-            # Analytic fallback: use small epsilon relative to the analytic domain
-            eps = 1e-4
-            fcx = compute_escape_time_estimate(real + eps, imag)
-            fmx = compute_escape_time_estimate(real - eps, imag)
-            fcy = compute_escape_time_estimate(real, imag + eps)
-            fmy = compute_escape_time_estimate(real, imag - eps)
-            gx = (fcx - fmx) / (2.0 * eps)
-            gy = (fcy - fmy) / (2.0 * eps)
-            return float(gx), float(gy)
+            raise RuntimeError(
+                "DistanceField.gradient requires a precomputed array (arr) and runtime_core binding"
+            )
 
-        h, w = self.arr.shape
-        real_scale = (self.real_range[1] - self.real_range[0]) / float(w)
-        imag_scale = (self.imag_range[1] - self.imag_range[0]) / float(h)
+        # Create rc.DistanceField once (array must be square)
+        if getattr(self, "_rc_df", None) is None:
+            flat = self.arr.astype("float32").ravel().tolist()
+            flat_len = len(flat)
+            res = int(flat_len**0.5)
+            if res * res != flat_len:
+                raise RuntimeError(
+                    "runtime_core DistanceField requires a square flattened array"
+                )
+            self._rc_df = rc.DistanceField(
+                flat,
+                res,
+                (float(self.real_range[0]), float(self.real_range[1])),
+                (float(self.imag_range[0]), float(self.imag_range[1])),
+                1.0,
+                float(self.slowdown_threshold),
+            )
 
-        left = self._lookup_array(real - real_scale, imag)
-        right = self._lookup_array(real + real_scale, imag)
-        down = self._lookup_array(real, imag - imag_scale)
-        up = self._lookup_array(real, imag + imag_scale)
-
-        gx = (right - left) / (2.0 * real_scale)
-        gy = (up - down) / (2.0 * imag_scale)
-        return float(gx), float(gy)
+        # Delegate to the Rust implementation for gradient
+        g = self._rc_df.gradient(real, imag)
+        return float(g[0]), float(g[1])
 
 
 def load_distance_field_for_runtime(path: str) -> DistanceField:

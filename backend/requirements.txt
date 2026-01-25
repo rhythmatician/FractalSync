@@ -4,7 +4,7 @@ numpy>=1.24.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 onnx>=1.15.0
-# onnxruntime>=1.16.0  # Optional - only needed for model validation, not training
+onnxruntime>=1.16.0  # only needed for model validation, not training
 Pillow>=10.0.0
 opencv-python>=4.8.0
 scipy>=1.11.0
@@ -16,3 +16,11 @@ pytest
 httpx>=0.24.0  # required by starlette/fastapi testclient
 moderngl>=5.8.0
 glfw>=2.6.0
+
+# NOTE: `runtime_core` is a local Rust (PyO3) extension used by the backend
+# It is not a PyPI dependency and therefore is not listed here. To build
+# and install it into your venv run:
+#   python build_runtime_core.py
+# or from the repo root with maturin:
+#   cd runtime-core && maturin develop --release
+# See `build_runtime_core.py` and `runtime-core/README.md` for details

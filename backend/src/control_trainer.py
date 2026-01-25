@@ -295,7 +295,7 @@ class ControlTrainer:
         self,
         model: AudioToControlModel,
         visual_metrics: VisualMetrics,
-        feature_extractor: FeatureExtractorAdapter,,
+        feature_extractor: FeatureExtractorAdapter,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         use_curriculum: bool = True,
@@ -1117,15 +1117,40 @@ class ControlTrainer:
                         c_imag = c_mixed_imag / divisor
                         trajectory_c_values.append([c_real, c_imag])
                     elif epoch == 0:
-                        # Static synthesis: single c
-                        c = synthesize(orbit, self.residual_params, gates_list)
-                        c_norm = np.sqrt(c.real**2 + c.imag**2)
-                        max_magnitude = 2.0
-                        divisor = max(c_norm, max_magnitude) / max_magnitude
-                        c_real = c.real / divisor
-                        c_imag = c.imag / divisor
-                        trajectory_c_values.append([c_real, c_imag])
+                        # Static synthesis: create an initial frame and take one small step so
+                        # we can compute a non-zero ΔV on epoch 0 for continuity diagnostics.
+                        try:
+                            assert spectral_flux is not None
+                            c0 = synthesize(orbit, self.residual_params, gates_list)
+                            # Take a single step to produce a subsequent frame
+                            c1 = step_orbit(
+                                orbit,
+                                self.trajectory_dt,
+                                self.residual_params,
+                                gates_list,
+                                distance_field=self.distance_field,
+                                h=(
+                                    float(spectral_flux[i].detach().item())
+                                    if i < spectral_flux.shape[0]
+                                    else 0.0
+                                ),
+                                d_star=self.contour_d_star,
+                                max_step=self.contour_max_step,
+                            )
+                        except Exception:
+                            # Fallback to single static frame if stepping fails for any reason
+                            c0 = synthesize(orbit, self.residual_params, gates_list)
+                            c1 = c0
+
+                        for c in (c0, c1):
+                            c_norm = np.sqrt(c.real**2 + c.imag**2)
+                            max_magnitude = 2.0
+                            divisor = max(c_norm, max_magnitude) / max_magnitude
+                            c_real = c.real / divisor
+                            c_imag = c.imag / divisor
+                            trajectory_c_values.append([c_real, c_imag])
                     else:
+                        assert spectral_flux is not None
                         # Trajectory synthesis via runtime_core
                         for step in range(self.trajectory_steps):
                             # transient strength for this sample: use spectral flux as proxy
@@ -1235,6 +1260,7 @@ class ControlTrainer:
 
                         # Optional flight recorder: record per-step proxy frame and controller state
                         if self.flight_recorder is not None:
+                            assert spectral_flux is not None
                             proxy_frame = proxy
 
                             controller_state = {
@@ -1667,7 +1693,7 @@ class ControlTrainer:
                 f'Boundary: {avg_losses["boundary_exploration_loss"]:.4f}, '
                 f'Continuity: {avg_losses["visual_continuity_loss"]:.4f}, '
                 f'Complexity: {avg_losses["complexity_correlation_loss"]:.4f}, '
-                f'ΔV: {avg_losses["mean_delta_v"]:.4f}, '
+                f'dV: {avg_losses["mean_delta_v"]:.4f}, '
                 f'B: {avg_losses["mean_budget"]:.4f}, '
                 f'>B: {avg_losses["fraction_exceeding_budget"]:.2%}'
             )

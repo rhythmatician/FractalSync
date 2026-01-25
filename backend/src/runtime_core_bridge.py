@@ -8,8 +8,12 @@ matching values exposed by the wasm bindings.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    # Import only for typing to avoid runtime cycles
+    from .distance_field_loader import DistanceField
 
 import runtime_core as rc
 import numpy as np
@@ -135,7 +139,7 @@ def step_orbit(
     dt: float,
     residual_params: Optional[rc.ResidualParams] = None,
     band_gates: Optional[Sequence[float]] = None,
-    distance_field: Optional[object] = None,
+    distance_field: Optional["DistanceField"] = None,
     h: float = 0.0,
     d_star: Optional[float] = None,
     max_step: Optional[float] = None,
