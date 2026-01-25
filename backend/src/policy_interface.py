@@ -132,7 +132,7 @@ def policy_output_decoder(
 # -------------------- Torch helpers (batched) --------------------
 def policy_output_decoder_torch(
     output, k_bands: int, clamp: Optional[Dict[str, Tuple[float, float]]] = None
-):
+) -> Dict[str, torch.Tensor]:
     """Decode batched policy outputs (N, 6 + k_bands) into named tensors.
 
     Returns dict of tensors: u (N,2), delta_s (N,), delta_omega (N,), alpha_hit (N,), gate_logits (N,k)

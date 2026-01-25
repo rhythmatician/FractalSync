@@ -35,6 +35,7 @@ from .distance_field_loader import load_distance_field_for_runtime
 
 
 from .runtime_core_bridge import (
+    FeatureExtractorAdapter,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
@@ -294,7 +295,7 @@ class ControlTrainer:
         self,
         model: AudioToControlModel,
         visual_metrics: VisualMetrics,
-        feature_extractor: Optional[object] = None,
+        feature_extractor: FeatureExtractorAdapter,,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,
         use_curriculum: bool = True,
@@ -398,7 +399,7 @@ class ControlTrainer:
         df = load_distance_field_for_runtime(str(df_base))
         self.distance_field = df
         self.df_numpy = df.arr
-        self.df_meta = {
+        self.df_meta: Dict[str, Any] = {
             "real_range": df.real_range,
             "imag_range": df.imag_range,
             "slowdown_threshold": df.slowdown_threshold,
@@ -422,14 +423,10 @@ class ControlTrainer:
         self.feature_extractor = feature_extractor or make_feature_extractor()
 
         # Load distance field for velocity-based slowdown
-        try:
-            self.distance_field = load_distance_field_for_runtime(
-                "data/mandelbrot_distance_field"
-            )
-            logger.info("Loaded distance field for orbit synthesis slowdown")
-        except Exception as e:
-            logger.warning(f"Failed to load distance field: {e}")
-            self.distance_field = None
+        self.distance_field = load_distance_field_for_runtime(
+            "data/mandelbrot_distance_field"
+        )
+        logger.info("Loaded distance field for orbit synthesis slowdown")
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()
@@ -850,9 +847,9 @@ class ControlTrainer:
 
                     # Update primitive states (s,alpha,omega)
                     deltas = {
-                        "delta_s": decoded_t.get("delta_s"),
-                        "delta_omega": decoded_t.get("delta_omega"),
-                        "alpha_hit": decoded_t.get("alpha_hit"),
+                        "delta_s": decoded_t["delta_s"],
+                        "delta_omega": decoded_t["delta_omega"],
+                        "alpha_hit": decoded_t["alpha_hit"],
                     }
                     updated = apply_policy_deltas_torch(
                         s, alpha, omega, theta, deltas, h_t=spectral_flux_t

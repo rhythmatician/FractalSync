@@ -13,6 +13,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+import runtime_core as rc
 
 
 class TorchDistanceField:
@@ -93,13 +94,12 @@ class TorchDistanceField:
             out = out.view(-1)
             return out
         # else: use runtime_core exact sampling semantics (non-differentiable)
-        import runtime_core as rc
 
         N = g.shape[0]
         # extract real/imags as python lists
         reals = real.detach().cpu().numpy().tolist()
         imags = imag.detach().cpu().numpy().tolist()
-        vals = rc.sample_bilinear_batch(
+        vals = rc.sample_bilinear_batch(  # FIXME: Module has no attribute "sample_bilinear_batch"Mypyattr-defined
             self._runtime_field_flat,
             self.W,
             self.real_min,

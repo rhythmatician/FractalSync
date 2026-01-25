@@ -7,6 +7,8 @@ the absence of GPU support.
 
 import numpy as np
 import logging
+import moderngl
+import glfw
 
 logger = logging.getLogger(__name__)
 
@@ -24,110 +26,120 @@ class GPUJuliaRenderer:
         """
         self.width = width
         self.height = height
-        self.ctx = None
-        self.program = None
-        self.vao = None
+        self.ctx: moderngl.Context
+        self.program: moderngl.Program
+        self.vao: moderngl.VertexArray
 
+        # Try to create headless context
         try:
-            import moderngl
-
-            # Try to create headless context
-            try:
-                # Headless context (no window required)
-                self.ctx = moderngl.create_context(standalone=True)
-                logger.info(
-                    f"ModernGL initialized (headless): {self.ctx.info['GL_VENDOR']}"
-                )
-            except Exception as e:
-                logger.warning(f"Headless context failed: {e}, trying with window...")
-                try:
-                    import glfw
-
-                    if not glfw.init():
-                        raise RuntimeError("GLFW init failed")
-
-                    glfw.window_hint(glfw.VISIBLE, False)
-                    window = glfw.create_window(
-                        self.width, self.height, "Julia", None, None
-                    )
-                    if not window:
-                        raise RuntimeError("GLFW window creation failed")
-
-                    glfw.make_context_current(window)
-                    self.ctx = moderngl.create_context()
-                    self.glfw_window = window
-                    logger.info("ModernGL initialized with hidden GLFW window")
-                except ImportError as e:
-                    raise RuntimeError(
-                        f"GLFW not available or GPU context failed to initialize: {e}"
-                    ) from e
-
-            # Vertex shader (simple fullscreen quad)
-            vertex_shader = """
-            #version 330
-
-            out VS_OUTPUT {
-                vec2 uv;
-            } vs_out;
-
-            void main() {
-                vec2 pos = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1) * 2.0 - 1.0;
-                vs_out.uv = pos * 0.5 + 0.5;
-                gl_Position = vec4(pos, 0.0, 1.0);
-            }
-            """
-
-            # Fragment shader (Julia set computation)
-            fragment_shader = """
-            #version 330
-
-            in VS_OUTPUT {
-                vec2 uv;
-            } fs_in;
-
-            out vec4 color;
-
-            uniform vec2 seed;
-            uniform float zoom;
-            uniform int max_iter;
-
-            void main() {
-                // Map UV to complex plane
-                vec2 p = fs_in.uv * 4.0 / zoom - 2.0 / zoom;
-                vec2 z = p;
-                vec2 c = seed;
-
-                int iter = 0;
-                for (int i = 0; i < 256; i++) {
-                    if (length(z) > 2.0) break;
-                    // z = z^2 + c
-                    vec2 z_sq = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y);
-                    z = z_sq + c;
-                    iter++;
-                    if (iter >= max_iter) break;
-                }
-
-                float normalized = float(iter) / float(max_iter);
-                color = vec4(vec3(normalized), 1.0);
-            }
-            """
-
-            self.program = self.ctx.program(
-                vertex_shader=vertex_shader, fragment_shader=fragment_shader
+            # Headless context (no window required)
+            self.ctx = moderngl.create_context(standalone=True)
+            logger.info(
+                f"ModernGL initialized (headless): {self.ctx.info['GL_VENDOR']}"
             )
+        except Exception as e:
+            logger.warning(f"Headless context failed: {e}, trying with window...")
+            if not glfw.init():
+                raise RuntimeError("GLFW init failed")
+            glfw.window_hint(glfw.VISIBLE, False)
+            window = glfw.create_window(self.width, self.height, "Julia", None, None)
+            if not window:
+                raise RuntimeError("GLFW window creation failed")
 
-            # Create VAO for rendering
-            self.vao = self.ctx.vertex_array(self.program, [])
+            glfw.make_context_current(window)
+            self.ctx = moderngl.create_context()
+            self.glfw_window = window
+            logger.info("ModernGL initialized with hidden GLFW window")
 
-            # Create framebuffer texture
-            self.texture = self.ctx.texture((self.width, self.height), 4)
-            self.fbo = self.ctx.framebuffer([self.texture])
+        # Vertex shader (simple fullscreen quad)
+        vertex_shader = """
+        #version 330
 
-            self.use_gpu = True
-            logger.info(f"GPU Julia renderer ready ({self.width}x{self.height})")
+        out VS_OUTPUT {
+            vec2 uv;
+        } vs_out;
 
-        except ImportError as e:
-            raise RuntimeError(f"ModernGL not available: {e}") from e
+        void main() {
+            vec2 pos = vec2(gl_VertexID & 1, (gl_VertexID >> 1) & 1) * 2.0 - 1.0;
+            vs_out.uv = pos * 0.5 + 0.5;
+            gl_Position = vec4(pos, 0.0, 1.0);
+        }
+        """
+
+        # Fragment shader (Julia set computation — fixed-N heightfield normals)
+        fragment_shader = """
+        #version 330
+
+        in VS_OUTPUT {
+            vec2 uv;
+        } fs_in;
+
+        out vec4 color;
+
+        uniform vec2 seed;
+        uniform float zoom;
+        uniform int max_iter;
+
+        const float EPS_POT = 1e-30;
+        const int MAX_ITER_CAP = 1024;
+
+        // Iterate to fixed N (max_iter) and return potential f = log(|z_N|)
+        float potential_at(vec2 p, vec2 c, int max_iter) {
+            vec2 z = p;
+            for (int i = 0; i < MAX_ITER_CAP; i++) {
+                if (i >= max_iter) break;
+                // z = z^2 + c
+                vec2 z_sq = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y);
+                z = z_sq + c;
+            }
+            float r = length(z);
+            return log(max(r, EPS_POT));
+        }
+
+        void main() {
+            // Map UV to complex plane
+            vec2 p = fs_in.uv * 4.0 / zoom - 2.0 / zoom;
+            vec2 c = seed;
+
+            // Center potential at fixed N
+            float f = potential_at(p, c, max_iter);
+
+            // Small offset for finite differences, scale with zoom to remain stable
+            float eps = 1e-3 / max(zoom, 1e-6);
+
+            float fxp = potential_at(p + vec2(eps, 0.0), c, max_iter);
+            float fxm = potential_at(p - vec2(eps, 0.0), c, max_iter);
+            float fyp = potential_at(p + vec2(0.0, eps), c, max_iter);
+            float fym = potential_at(p - vec2(0.0, eps), c, max_iter);
+
+            float gx = (fxp - fxm) / (2.0 * eps);
+            float gy = (fyp - fym) / (2.0 * eps);
+
+            vec3 normal = normalize(vec3(-gx, -gy, 1.0));
+
+            // Simple directional lighting
+            vec3 lightDir = normalize(vec3(0.5, 0.5, 1.0));
+            float diff = max(dot(normal, lightDir), 0.0);
+            float ambient = 0.2;
+            vec3 col = vec3(ambient + 0.8 * diff);
+
+            color = vec4(clamp(col, 0.0, 1.0), 1.0);
+        }
+        """
+
+        self.program = self.ctx.program(
+            vertex_shader=vertex_shader, fragment_shader=fragment_shader
+        )
+
+        # Create VAO for rendering
+        self.vao = self.ctx.vertex_array(self.program, [])
+
+        # Create framebuffer texture
+        self.texture = self.ctx.texture((self.width, self.height), 4)
+        self.fbo = self.ctx.framebuffer([self.texture])
+
+        self.use_gpu = True
+        logger.info(f"GPU Julia renderer ready ({self.width}x{self.height})")
 
     def render(
         self, seed_real: float, seed_imag: float, zoom: float = 1.0, max_iter: int = 50
