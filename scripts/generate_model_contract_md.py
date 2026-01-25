@@ -2,6 +2,11 @@
 
 from pathlib import Path
 import json
+import subprocess
+
+# Ensure contract "version" field is the deterministic hash of the contract body
+subprocess.run(["python", "scripts/update_contract_version.py"], check=True)
+
 
 root = Path(__file__).resolve().parents[1]
 contract_path = root / "contracts" / "model_io_contract.json"
@@ -17,6 +22,8 @@ lines = []
 lines.append("# Model I/O Contract (Generated)")
 lines.append("")
 lines.append("> Auto-generated from `contracts/model_io_contract.json`")
+lines.append("")
+lines.append(f"**version**: `{cj.get('version')}`  (SHA256 of contract body)")
 lines.append("")
 lines.append("## Input")
 lines.append(f"- name: `{inp['name']}`")

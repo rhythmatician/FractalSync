@@ -1,6 +1,6 @@
 {
     "$schema": "./model_io_contract.schema.json",
-    "version": "1.0",
+    "version": "fc2dcd98c3dc6f33ea1dc6645fb30357e450f7cefbe4d10dd447655bc8770e34",
     "input": {
         "name": "audio_features",
         "window_frames": 10,

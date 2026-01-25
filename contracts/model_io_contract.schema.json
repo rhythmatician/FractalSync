@@ -9,7 +9,9 @@
     ],
     "properties": {
         "version": {
-            "type": "string"
+            "type": "string",
+            "description": "SHA256 hex of the contract JSON excluding the version field",
+            "pattern": "^[0-9a-f]{64}$"
         },
         "input": {
             "type": "object",

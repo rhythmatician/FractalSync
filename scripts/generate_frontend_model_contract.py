@@ -2,6 +2,11 @@
 
 from pathlib import Path
 import json
+import subprocess
+
+# Ensure contract "version" field is the deterministic hash of the contract body
+subprocess.run(["python", "scripts/update_contract_version.py"], check=True)
+
 
 root = Path(__file__).resolve().parents[1]
 contract_path = root / "contracts" / "model_io_contract.json"
