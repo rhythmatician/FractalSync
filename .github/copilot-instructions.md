@@ -97,6 +97,36 @@ rather than:
 
 These rules align with the NO BLOAT policy: prefer replacing or fixing the canonical implementation rather than adding long-lived fallbacks.
 
+### Type-hinting guidance (mypy-friendly) 🔧
+
+- **Prefer concrete types** for function and class parameters rather than using `Optional[object] = None` or untyped defaults when the parameter is expected to be provided. This makes APIs clearer and reduces noisy type-checker warnings.
+- **Example (recommended):**
+
+  ```py
+  def __init__(
+      self,
+      model: AudioToControlModel,
+      visual_metrics: VisualMetrics,
+      feature_extractor: FeatureExtractorAdapter,
+  ):
+      ...
+  ```
+
+  **Over (avoid):**
+
+  ```py
+  def __init__(
+      self,
+      model: AudioToControlModel,
+      visual_metrics: VisualMetrics,
+      feature_extractor: Optional[object] = None,
+  ):
+      ...
+  ```
+
+- Use `Optional[T]` only when `None` is an intended and handled state for that parameter.
+- Rationale: concrete types encourage clearer APIs, make mypy more useful for catching real bugs, and minimize time spent chasing spurious type errors.
+
 ## Examples
 - Start server then train:
   - Server: `cd backend && python api/server.py`
