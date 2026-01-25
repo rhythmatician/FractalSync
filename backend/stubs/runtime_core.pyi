@@ -160,7 +160,16 @@ def lobe_point_at_angle(
     theta: float,
     s: float = 1.0,
 ) -> Complex: ...
-
+def sample_bilinear_batch(
+    field: Sequence[float],
+    resolution: int,
+    real_min: float,
+    real_max: float,
+    imag_min: float,
+    imag_max: float,
+    reals: Sequence[float],
+    imags: Sequence[float],
+) -> list[float]: ...
 
 class LobeState:
     """Finite-state machine tracking lobe selection and cooldowns."""
@@ -170,4 +179,3 @@ class LobeState:
     current_lobe: int
 
     def step(self, scores: list[float], dt: float, transient: float) -> None: ...
-

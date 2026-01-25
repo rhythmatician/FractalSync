@@ -422,11 +422,8 @@ class ControlTrainer:
         # Runtime-core feature extractor (shared constants)
         self.feature_extractor = feature_extractor or make_feature_extractor()
 
-        # Load distance field for velocity-based slowdown
-        self.distance_field = load_distance_field_for_runtime(
-            "data/mandelbrot_distance_field"
-        )
-        logger.info("Loaded distance field for orbit synthesis slowdown")
+        # Distance field already loaded above for slowdown loss
+        logger.info("Distance field loaded for orbit synthesis slowdown")
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()
@@ -478,15 +475,19 @@ class ControlTrainer:
         if self.use_surrogate and surrogate_path is not None:
             try:
                 from .visual_surrogate import SurrogateDeltaV
-
-                self.surrogate = SurrogateDeltaV.load_checkpoint(
-                    surrogate_path, device=self.device
-                )
-                self.surrogate.to(self.device)
-                self.surrogate.eval()
-            except Exception as e:
-                logger.warning(f"Failed to load surrogate model: {e}")
+            except (ImportError, ModuleNotFoundError) as e:
+                logger.warning("Visual surrogate package not available: %s", e)
                 self.surrogate = None
+            else:
+                try:
+                    self.surrogate = SurrogateDeltaV.load_checkpoint(
+                        surrogate_path, device=self.device
+                    )
+                    self.surrogate.to(self.device)
+                    self.surrogate.eval()
+                except (FileNotFoundError, RuntimeError, ValueError) as e:
+                    logger.warning("Failed to load surrogate checkpoint: %s", e)
+                    self.surrogate = None
 
         # Optimizer
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -813,10 +814,8 @@ class ControlTrainer:
                         # DF features
                         if df_torch is not None:
                             d_prev_t = df_torch.sample_bilinear(c_real, c_imag)
-                            gx, gy = df_torch.gradient(c_real, c_imag)
-                            grad_prev_t = torch.stack([gx, gy], dim=1)
-                        else:
-                            d_prev_t = torch.ones(B, device=device)
+                            gx_t, gy_t = df_torch.gradient(c_real, c_imag)
+                            grad_prev_t = torch.stack([gx_t, gy_t], dim=1)
                             grad_prev_t = torch.zeros((B, 2), device=device)
 
                         pred_dv = self.surrogate.predict(cp, cn, d_prev_t, grad_prev_t)
@@ -963,7 +962,7 @@ class ControlTrainer:
                                             float(c0.real), float(c0.imag)
                                         )
                                     )
-                                    gx, gy = self.distance_field.gradient(
+                                    gx_f, gy_f = self.distance_field.gradient(
                                         float(c0.real), float(c0.imag)
                                     )
                                     # directional probes (8 directions × 2 radii)
@@ -983,11 +982,11 @@ class ControlTrainer:
                                             )
                                 else:
                                     d_c = 1.0
-                                    gx, gy = (0.0, 0.0)
+                                    gx_f, gy_f = (0.0, 0.0)
                                     probes = [0.0] * 16
                             except Exception:
                                 d_c = 1.0
-                                gx, gy = (0.0, 0.0)
+                                gx_f, gy_f = (0.0, 0.0)
                                 probes = [0.0] * 16
 
                             inp = policy_state_encoder(
@@ -1002,7 +1001,7 @@ class ControlTrainer:
                                 band_energies=band_energies,
                                 band_deltas=band_deltas,
                                 d_c=d_c,
-                                grad=(gx, gy),
+                                grad=(gx_f, gy_f),
                                 directional_probes=probes,
                             )
                             policy_inputs.append(inp)
@@ -1188,10 +1187,10 @@ class ControlTrainer:
             render_sample_count = max(1, int(batch_size * self.render_fraction))
             render_sample_indices = list(range(render_sample_count))
 
-            images = []
+            images: List[Optional[torch.Tensor]] = []
             color_hues = []
-            temporal_changes = []
-            visual_complexities = []
+            temporal_changes: List[torch.Tensor] = []
+            visual_complexities: List[torch.Tensor] = []
             mandelbrot_distances = []
 
             if self.policy_mode and self.sequence_training:
@@ -1351,6 +1350,7 @@ class ControlTrainer:
                 sc_subset = torch.zeros(render_sample_count, device=self.device)
                 sf_subset = torch.zeros(render_sample_count, device=self.device)
             else:
+                assert spectral_centroid is not None and spectral_flux is not None
                 sc_subset = spectral_centroid[render_sample_indices]
                 sf_subset = spectral_flux[render_sample_indices]
 
@@ -1541,6 +1541,7 @@ class ControlTrainer:
                 total_batch_loss = total_batch_loss + fix
 
             if self.use_amp:
+                assert self.scaler is not None
                 self.scaler.scale(total_batch_loss).backward()
                 if self.max_grad_norm > 0:
                     self.scaler.unscale_(self.optimizer)

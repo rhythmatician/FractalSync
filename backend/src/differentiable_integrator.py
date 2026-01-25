@@ -97,9 +97,11 @@ class TorchDistanceField:
 
         N = g.shape[0]
         # extract real/imags as python lists
+        # runtime_core's batch sampler expects a prepared flattened field
+        assert self._runtime_field_flat is not None, "runtime field not prepared"
         reals = real.detach().cpu().numpy().tolist()
         imags = imag.detach().cpu().numpy().tolist()
-        vals = rc.sample_bilinear_batch(  # FIXME: Module has no attribute "sample_bilinear_batch"Mypyattr-defined
+        vals = rc.sample_bilinear_batch(
             self._runtime_field_flat,
             self.W,
             self.real_min,
@@ -108,7 +110,7 @@ class TorchDistanceField:
             self.imag_max,
             reals,
             imags,
-        )
+        )  # runtime_core provides a fast batch bilinear sampler
         # convert back to tensor on same device/dtype
         out_t = torch.tensor(vals, dtype=self.field.dtype, device=self.field.device)
         return out_t

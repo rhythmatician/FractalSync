@@ -1,6 +1,7 @@
 import random
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 import torch
@@ -58,7 +59,9 @@ for idx in range(10):
     gx = float(gx.item())
     gy = float(gy.item())
 
-    print(f"idx={idx} real={real:.6f} imag={imag:.6f} u=({u_real:.6f},{u_imag:.6f}) h={h}")
+    print(
+        f"idx={idx} real={real:.6f} imag={imag:.6f} u=({u_real:.6f},{u_imag:.6f}) h={h}"
+    )
     print(f"  rc out: {out_py.real:.6f}, {out_py.imag:.6f}")
     print(f"  torch out: {float(nr.item()):.6f}, {float(ni.item()):.6f}")
     print(f"  err: real={err_real:.6f}, imag={err_imag:.6f}")
@@ -75,12 +78,15 @@ for idx in range(10):
             (real, imag - step_y),
             (real, imag + step_y),
         ]
-        print('  debug samples (runtime sampler):')
-        for (rx, ry) in coords:
+        print("  debug samples (runtime sampler):")
+        for rx, ry in coords:
             v = rc.sample_bilinear_batch(flat, res, -1.5, 1.5, -1.5, 1.5, [rx], [ry])[0]
             print(f"    ({rx:.6f},{ry:.6f}) -> {v:.6f}")
-        print('  debug samples (torch sampler):')
-        for (rx, ry) in coords:
-            val = tdf.sample_bilinear(torch.tensor([rx],dtype=torch.float32), torch.tensor([ry],dtype=torch.float32))
+        print("  debug samples (torch sampler):")
+        for rx, ry in coords:
+            val = tdf.sample_bilinear(
+                torch.tensor([rx], dtype=torch.float32),
+                torch.tensor([ry], dtype=torch.float32),
+            )
             print(f"    ({rx:.6f},{ry:.6f}) -> {float(val.item()):.6f}")
-    print('')
+    print("")

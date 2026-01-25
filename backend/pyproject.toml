@@ -23,7 +23,7 @@ ignore_missing_imports = true
 module = "runtime_core.*"
 ignore_missing_imports = true
 
-# Third-party libraries without stubs
+# Third-party libraries without stubs (common) - prefer installing stubs via `mypy --install-types`
 [[tool.mypy.overrides]]
-module = ["cv2", "librosa", "librosa.*", "glfw", "glfw.*"]
+module = ["cv2", "librosa", "librosa.*", "glfw", "glfw.*", "tqdm", "onnxruntime", "moderngl", "onnxscript"]
 ignore_missing_imports = true
