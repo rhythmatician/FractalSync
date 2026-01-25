@@ -105,6 +105,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      FEATURE_PARITY_STRICT: "1"
 
     steps:
       - name: Checkout code

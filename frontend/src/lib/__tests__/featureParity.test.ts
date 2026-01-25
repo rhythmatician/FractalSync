@@ -13,10 +13,16 @@ function makeAudio(sr: number, durationSec: number, freq: number) {
   return buf;
 }
 
-// Hann window
+// Hann window (normalized to RMS = 1 to match Rust's implementation)
 function hann(n: number) {
   const w = new Float32Array(n);
   for (let i = 0; i < n; i++) w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)));
+  // normalize so window RMS is 1 (same approach as Rust)
+  let sumsq = 0;
+  for (let i = 0; i < n; i++) sumsq += w[i] * w[i];
+  const rms = sumsq / n;
+  const norm = 1 / Math.sqrt(rms);
+  for (let i = 0; i < n; i++) w[i] *= norm;
   return w;
 }
 
@@ -63,31 +69,29 @@ function computeWindowedFeaturesReference(audio: Float32Array, sr: number, hop: 
     }
     const centroid = magSum > 0 ? (weighted / magSum) / nyq : 0;
 
-    // flux (L1 positive changes normalized by energy)
+    // flux (squared L2 difference between consecutive mags) — match Rust
     let flux = 0;
     if (prevSpec) {
-      let sumPos = 0;
+      let sumSq = 0;
       for (let i = 0; i < mag.length; i++) {
         const diff = mag[i] - prevSpec[i];
-        if (diff > 0) sumPos += diff;
+        sumSq += diff * diff;
       }
-      const energy = magSum;
-      flux = energy > 0 ? sumPos / energy : 0;
+      flux = sumSq;
     }
 
     // rms (time-domain)
     let rms = 0;
     for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
     rms = Math.sqrt(rms / Math.max(1, frame.length));
-    if (rms > 1) rms = 1;
 
     // zero crossing rate approx
     let zc = 0;
     for (let i = 1; i < frame.length; i++) if ((frame[i] >= 0) !== (frame[i - 1] >= 0)) zc++;
     zc = zc / frame.length;
 
-    // onset proxy: thresholded flux
-    const onset = flux > 0.1 ? flux : 0;
+    // onset proxy: use raw flux (normalised later)
+    const onset = flux;
 
     // spectral rolloff
     let cumulative = 0;
@@ -106,7 +110,53 @@ function computeWindowedFeaturesReference(audio: Float32Array, sr: number, hop: 
     features.push(centroid, flux, rms, zc, onset, rolloff);
     prevSpec = mag;
   }
-  return features;
+
+  // After frames loop: normalise flux, rms, and onset arrays to [0,1] like Rust
+  // The push above created repetitions of centroid, flux, rms, zc, onset, rolloff per window —
+  // we need to extract per-feature series and normalise the appropriate ones.
+  const nFrames = windowFrames;
+  const centroids: number[] = [];
+  const fluxes: number[] = [];
+  const rmses: number[] = [];
+  const zcs: number[] = [];
+  const onsets: number[] = [];
+  const rolloffs: number[] = [];
+
+  for (let f = 0; f < nFrames; f++) {
+    const idx = f * 6;
+    centroids.push(features[idx + 0]);
+    fluxes.push(features[idx + 1]);
+    rmses.push(features[idx + 2]);
+    zcs.push(features[idx + 3]);
+    onsets.push(features[idx + 4]);
+    rolloffs.push(features[idx + 5]);
+  }
+
+  function normaliseInPlace(arr: number[]) {
+    if (arr.length === 0) return;
+    let min = Infinity, max = -Infinity;
+    for (const v of arr) {
+      if (!Number.isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const range = max - min;
+    if (range > 0) {
+      for (let i = 0; i < arr.length; i++) arr[i] = (arr[i] - min) / range;
+    }
+  }
+
+  normaliseInPlace(fluxes);
+  normaliseInPlace(rmses);
+  normaliseInPlace(onsets);
+
+  // Reconstruct flattened features with normalised series
+  const normalizedFeatures: number[] = [];
+  for (let f = 0; f < nFrames; f++) {
+    normalizedFeatures.push(centroids[f], fluxes[f], rmses[f], zcs[f], onsets[f], rolloffs[f]);
+  }
+
+  return normalizedFeatures;
 }
 
 describe('Feature parity: wasm vs reference JS', () => {
@@ -144,25 +194,26 @@ describe('Feature parity: wasm vs reference JS', () => {
     const duration = ((windowFrames - 1) * hop + nfft) / sr + 0.1; // seconds
     const audio = makeAudio(sr, duration, 440);
 
-    // call wasm feature extractor
+    // Extract per-frame features from wasm by using window_frames=1 so we get one frame per window
     const wasmFe = new FeatureExtractor(sr, hop, nfft, false, false);
-    const nested = wasmFe.extract_windowed_features(audio, windowFrames) as any[];
-    // nested is Array<Array<number>> of length windowFrames
-    const wasmFlat: number[] = [];
-    for (let i = 0; i < nested.length; i++) {
-      const row = nested[i];
-      for (let v of row as any) wasmFlat.push(Number(v));
+    const nestedFrames = wasmFe.extract_windowed_features(audio, 1) as any[]; // each row is 6 features for a frame
+
+    // nestedFrames.length === number of frames produced by wasm's STFT
+    const wasmFlatPerFrame: number[] = [];
+    for (let i = 0; i < nestedFrames.length; i++) {
+      const row = nestedFrames[i];
+      for (let v of row as any) wasmFlatPerFrame.push(Number(v));
     }
 
-    // compute reference features for the same number of windows implied by wasm output
-    const windowsCount = Math.floor(wasmFlat.length / 6);
-    const ref = computeWindowedFeaturesReference(audio, sr, hop, nfft, windowsCount);
+    // compute reference per-frame features for the same number of frames
+    const framesCount = nestedFrames.length;
+    const ref = computeWindowedFeaturesReference(audio, sr, hop, nfft, framesCount);
 
-    // ensure equal length
-    expect(wasmFlat.length).toBe(ref.length);
+    // ensure equal length (frames × 6 features)
+    expect(wasmFlatPerFrame.length).toBe(ref.length);
 
     // Compare per-feature correlation between wasm and reference (more robust than exact equality)
-    const windows = Math.floor(wasmFlat.length / 6);
+    const windows = framesCount;
     function corr(a: number[], b: number[]) {
       const na = a.length;
       const mean = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
@@ -184,7 +235,7 @@ describe('Feature parity: wasm vs reference JS', () => {
     for (let f = 0; f < windows; f++) {
       for (let k = 0; k < 6; k++) {
         const idx = f * 6 + k;
-        wasmPerFeature[k].push(wasmFlat[idx]);
+        wasmPerFeature[k].push(wasmFlatPerFrame[idx]);
         refPerFeature[k].push(ref[idx]);
       }
     }
@@ -222,6 +273,41 @@ describe('Feature parity: wasm vs reference JS', () => {
 
     // Save diagnostics to console so we can iterate on training/impl if needed
     console.log('Feature parity diagnostics: windows=', windows, 'perFeatureMeans=', wasmPerFeature.map(a => (a.reduce((s,v)=>s+v,0)/a.length).toFixed(4)));
+
+    // If debug mode is enabled, write detailed diagnostics to disk for offline analysis
+    if ((process.env.FEATURE_PARITY_DEBUG === '1')) {
+      const fs = await import('fs');
+      const out: any = { windows, sr, hop, nfft, wasmPerFeature, refPerFeature, metrics: {} };
+      for (let k = 0; k < 6; k++) {
+        const a = wasmPerFeature[k];
+        const b = refPerFeature[k];
+        const mean = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+        const ma = mean(a);
+        const mb = mean(b);
+        let num = 0, da = 0, db = 0, mae = 0, mse = 0;
+        for (let i = 0; i < a.length; i++) {
+          const da_i = a[i] - ma;
+          const db_i = b[i] - mb;
+          num += da_i * db_i;
+          da += da_i * da_i;
+          db += db_i * db_i;
+          const err = a[i] - b[i];
+          mae += Math.abs(err);
+          mse += err * err;
+        }
+        const r = (Math.sqrt(da * db) === 0) ? 0 : num / Math.sqrt(da * db);
+        mae /= a.length;
+        mse /= a.length;
+        // linear slope from a->b
+        const slope = da === 0 ? 0 : num / da;
+        const intercept = mb - slope * ma;
+        out.metrics[k] = { r, mae, mse, slope, intercept, meanA: ma, meanB: mb };
+      }
+      const outDir = 'test-output';
+      try { await fs.promises.mkdir(outDir, { recursive: true }); } catch (e) { /* ignore */ }
+      await fs.promises.writeFile(`${outDir}/feature_parity_debug.json`, JSON.stringify(out, null, 2));
+      console.log(`Wrote debug diagnostics to ${outDir}/feature_parity_debug.json`);
+    }
 
   });
 });
