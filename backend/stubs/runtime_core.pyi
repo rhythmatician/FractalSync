@@ -141,6 +141,9 @@ class OrbitState:
         residual_params: ResidualParams,
         band_gates: Optional[list[float]] = None,
         distance_field: Optional[DistanceField] = None,
+        h: float = 0.0,
+        d_star: Optional[float] = None,
+        max_step: Optional[float] = None,
     ) -> Complex: ...
     def synthesize(
         self,
@@ -157,3 +160,14 @@ def lobe_point_at_angle(
     theta: float,
     s: float = 1.0,
 ) -> Complex: ...
+
+
+class LobeState:
+    """Finite-state machine tracking lobe selection and cooldowns."""
+
+    def __init__(self, n_lobes: int = 2) -> None: ...
+
+    current_lobe: int
+
+    def step(self, scores: list[float], dt: float, transient: float) -> None: ...
+

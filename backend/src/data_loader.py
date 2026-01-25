@@ -145,8 +145,11 @@ class AudioDataset:
         if cache_file:
             try:
                 np.save(cache_file, features)
-            except Exception:
-                pass
+            except (OSError, IOError) as exc:
+                # Best-effort cache write; non-fatal if disk write fails
+                logging.getLogger(__name__).debug(
+                    "Failed to write feature cache '%s': %s", cache_file, exc
+                )
 
         return features
 
@@ -211,11 +214,12 @@ class SequenceAudioDataset:
             raise ValueError("Either audio_dataset or features_list must be provided")
         self.seq_len = int(seq_len)
         self.stride = int(stride)
-        self.features_list: List[np.ndarray] = (
-            features_list
-            if features_list is not None
-            else audio_dataset.load_all_features()
-        )
+        if features_list is not None:
+            self.features_list: List[np.ndarray] = features_list
+        else:
+            # audio_dataset must be provided when features_list is None (checked above)
+            assert audio_dataset is not None
+            self.features_list = audio_dataset.load_all_features()
 
         # Build index mapping: list of (file_idx, start_idx)
         self.index_map: List[tuple[int, int]] = []

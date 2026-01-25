@@ -144,8 +144,10 @@ def load_and_export(
                 .decode()
                 .strip()[:8]
             )
-        except Exception:
-            pass
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            # Git not available or not a git repo — not fatal for export
+            git_hash = None
+            print(f"Warning: could not determine git hash: {exc}")
 
         metadata_dict = {
             "source_checkpoint": str(checkpoint_path),

@@ -117,14 +117,33 @@ class TorchDistanceField:
         self, real: torch.Tensor, imag: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # finite-difference with one grid cell offsets
+        # Use half-grid offsets to match runtime_core implementation and
+        # reduce aliasing when sampling near grid cell boundaries.
         real_scale = (self.real_max - self.real_min) / float(self.W)
         imag_scale = (self.imag_max - self.imag_min) / float(self.H)
-        left = self.sample_bilinear(real - real_scale, imag)
-        right = self.sample_bilinear(real + real_scale, imag)
-        down = self.sample_bilinear(real, imag - imag_scale)
-        up = self.sample_bilinear(real, imag + imag_scale)
-        gx = (right - left) / (2.0 * real_scale)
-        gy = (up - down) / (2.0 * imag_scale)
+        step_x = real_scale * 0.5
+        step_y = imag_scale * 0.5
+        # When using the runtime sampler, clamp sample coordinates to the
+        # valid region to match the runtime_core gradient behaviour.
+        if self.use_runtime_sampler:
+            # real and imag may be batched tensors (N,), so clamp elementwise
+            left_x = torch.clamp(real - step_x, min=self.real_min, max=self.real_max)
+            right_x = torch.clamp(real + step_x, min=self.real_min, max=self.real_max)
+            down_y = torch.clamp(imag - step_y, min=self.imag_min, max=self.imag_max)
+            up_y = torch.clamp(imag + step_y, min=self.imag_min, max=self.imag_max)
+
+            left = self.sample_bilinear(left_x, imag)
+            right = self.sample_bilinear(right_x, imag)
+            down = self.sample_bilinear(real, down_y)
+            up = self.sample_bilinear(real, up_y)
+        else:
+            left = self.sample_bilinear(real - step_x, imag)
+            right = self.sample_bilinear(real + step_x, imag)
+            down = self.sample_bilinear(real, imag - step_y)
+            up = self.sample_bilinear(real, imag + step_y)
+
+        gx = (right - left) / (2.0 * step_x)
+        gy = (up - down) / (2.0 * step_y)
         return gx, gy
 
     def get_velocity_scale(

@@ -85,32 +85,40 @@ def export_to_onnx(
         # pragmatic compatibility shim, retry without dynamo in those cases so
         # tests and CI on varied environments can still validate the exporter.
         msg = str(dynamo_error)
-        if "Expecting a type not f<class 'typing.Union'>" not in msg:
-            # Fail fast for other unexpected errors.
+        # Dynamo-based export can fail for several known reasons (missing
+        # onnxscript, typing translation error, etc). If it's one of the
+        # recognized transient issues, retry without dynamo for compatibility.
+        if (
+            "Expecting a type not f<class 'typing.Union'>" in msg
+            or "onnxscript" in msg
+            or isinstance(dynamo_error, ModuleNotFoundError)
+        ):
+            try:
+                torch.onnx.export(
+                    model,
+                    (dummy_input,),
+                    output_path,
+                    export_params=True,
+                    input_names=[input_name],
+                    output_names=[output_name],
+                    dynamic_axes={
+                        input_name: {0: "batch_size"},
+                        output_name: {0: "batch_size"},
+                    },
+                    opset_version=18,
+                    do_constant_folding=True,
+                    verbose=False,
+                    dynamo=False,
+                )
+            except Exception as fallback_error:
+                raise RuntimeError(
+                    f"ONNX export failed (dynamo and fallback): {fallback_error}"
+                ) from fallback_error
+        else:
+            # Unknown error - fail fast so CI surfaces the original issue
             raise RuntimeError(
                 f"ONNX dynamo export failed: {dynamo_error}"
             ) from dynamo_error
-        try:
-            torch.onnx.export(
-                model,
-                (dummy_input,),
-                output_path,
-                export_params=True,
-                input_names=[input_name],
-                output_names=[output_name],
-                dynamic_axes={
-                    input_name: {0: "batch_size"},
-                    output_name: {0: "batch_size"},
-                },
-                opset_version=18,
-                do_constant_folding=True,
-                verbose=False,
-                dynamo=False,
-            )
-        except Exception as fallback_error:
-            raise RuntimeError(
-                f"ONNX export failed (dynamo and fallback): {fallback_error}"
-            ) from fallback_error
 
     # Load and verify ONNX model structure (skip full validation due to compat issues)
     try:
@@ -215,7 +223,7 @@ def export_to_onnx(
             ):
                 if _fld in _cj:
                     metadata_dict.setdefault(_fld, _cj[_fld])
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         logging.warning("Could not read canonical contract fields for export: %s", exc)
 
     # Copy canonical contract fields into metadata when present (but allow caller

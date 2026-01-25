@@ -104,7 +104,7 @@ class FlightRecorder:
                 else:
                     cv2.imwrite(str(img_path), arr)
                 rec["proxy_frame_path"] = str(img_path.relative_to(self.run_dir))
-            except Exception as e:  # pragma: no cover - best-effort write
+            except (cv2.error, OSError, ValueError) as e:  # pragma: no cover - best-effort write
                 rec["proxy_frame_write_error"] = str(e)
 
         # Write ndjson

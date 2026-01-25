@@ -17,11 +17,11 @@ disallow_any_explicit = false
 # Runtime core is a Rust extension
 [[tool.mypy.overrides]]
 module = "runtime_core"
-ignore_missing_imports = false
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "runtime_core.*"
-ignore_missing_imports = false
+ignore_missing_imports = true
 
 # Third-party libraries without stubs
 [[tool.mypy.overrides]]

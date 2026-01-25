@@ -67,7 +67,8 @@ if ($Foreground) {
     npm run dev
 } else {
     Write-Host "[dev_local] Launching frontend dev server in background (npm run dev)"
-    Start-Process -FilePath "npm" -ArgumentList "run dev" -NoNewWindow
+    # Use cmd to run npm on Windows shells to avoid Start-Process executable errors
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" -NoNewWindow
 }
 Pop-Location
 

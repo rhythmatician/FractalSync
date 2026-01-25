@@ -19,6 +19,12 @@ import runtime_core as rc
 import numpy as np
 
 
+class LobeState:
+    """Placeholder LobeState class for type hints."""
+
+    pass
+
+
 class FeatureExtractorAdapter:
     """Adapter to present the same interface as PythonFeatureExtractor while
     delegating to the Rust-backed `rc.FeatureExtractor` for heavy lifting.
@@ -158,20 +164,23 @@ def step_orbit(
     df_arg = None
     if distance_field is not None:
         # If already an rc.DistanceField, pass it through
-        try:
-            if isinstance(distance_field, rc.DistanceField):
-                df_arg = distance_field
-            else:
-                # Attempt conversion from Python DistanceField-like object
-                arr = getattr(distance_field, "arr", None)
-                real_range = getattr(distance_field, "real_range", None)
-                imag_range = getattr(distance_field, "imag_range", None)
-                slowdown = getattr(distance_field, "slowdown_threshold", None)
-                if (
-                    arr is not None
-                    and real_range is not None
-                    and imag_range is not None
-                ):
+        if isinstance(distance_field, rc.DistanceField):
+            df_arg = distance_field
+        else:
+            # Attempt conversion from Python DistanceField-like object (only when it looks valid)
+            arr = getattr(distance_field, "arr", None)
+            real_range = getattr(distance_field, "real_range", None)
+            imag_range = getattr(distance_field, "imag_range", None)
+            slowdown = getattr(distance_field, "slowdown_threshold", None)
+
+            if (
+                arr is not None
+                and real_range is not None
+                and imag_range is not None
+                and hasattr(arr, "astype")
+                and hasattr(arr, "ndim")
+            ):
+                try:
                     flat = arr.astype("float32").ravel().tolist()
                     res = arr.shape[1] if arr.ndim == 2 else int(len(flat) ** 0.5)
                     df_arg = rc.DistanceField(
@@ -182,12 +191,28 @@ def step_orbit(
                         1.0,
                         float(slowdown or 0.02),
                     )
-        except Exception:
-            # If conversion fails, we just pass None to the Rust integrator
-            df_arg = None
+                except (AttributeError, TypeError, ValueError) as exc:
+                    # Conversion failed; log and leave df_arg as None so runtime integrator
+                    # will operate without a distance field rather than silently masking
+                    # unexpected exceptions.
+                    import logging
+
+                    logging.getLogger(__name__).debug(
+                        "Failed to convert Python DistanceField to rc.DistanceField: %s",
+                        exc,
+                    )
+                    df_arg = None
 
     # Call runtime-core's OrbitState.step with the full, canonical signature.
-    return state.step(dt=dt, residual_params=rp, band_gates=gates, distance_field=df_arg, h=h, d_star=d_star, max_step=max_step)  # type: ignore[arg-type]
+    return state.step(
+        dt=dt,
+        residual_params=rp,
+        band_gates=gates,
+        distance_field=df_arg,
+        h=h,
+        d_star=d_star,
+        max_step=max_step,
+    )
 
 
 def synthesize(
