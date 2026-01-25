@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Optional, Tuple
-
+import runtime_core as rc
 import numpy as np
 
 
@@ -122,6 +122,37 @@ class DistanceField:
         s = _smoothstep(u)
         scale = 1.0 - s
         return float(np.clip(scale, 0.0, 1.0))
+
+    def gradient(self, real: float, imag: float) -> Tuple[float, float]:
+        """Return finite-difference gradient (gx, gy) of the distance field at (real, imag).
+
+        This mirrors the sampling used by :meth:`lookup` and uses one grid-cell offsets
+        to compute central differences. If no precomputed array is present, fall back
+        to numeric differences of the analytic escape-time estimator.
+        """
+        if self.arr is None:
+            # Analytic fallback: use small epsilon relative to the analytic domain
+            eps = 1e-4
+            fcx = compute_escape_time_estimate(real + eps, imag)
+            fmx = compute_escape_time_estimate(real - eps, imag)
+            fcy = compute_escape_time_estimate(real, imag + eps)
+            fmy = compute_escape_time_estimate(real, imag - eps)
+            gx = (fcx - fmx) / (2.0 * eps)
+            gy = (fcy - fmy) / (2.0 * eps)
+            return float(gx), float(gy)
+
+        h, w = self.arr.shape
+        real_scale = (self.real_range[1] - self.real_range[0]) / float(w)
+        imag_scale = (self.imag_range[1] - self.imag_range[0]) / float(h)
+
+        left = self._lookup_array(real - real_scale, imag)
+        right = self._lookup_array(real + real_scale, imag)
+        down = self._lookup_array(real, imag - imag_scale)
+        up = self._lookup_array(real, imag + imag_scale)
+
+        gx = (right - left) / (2.0 * real_scale)
+        gy = (up - down) / (2.0 * imag_scale)
+        return float(gx), float(gy)
 
 
 def load_distance_field_for_runtime(path: str) -> DistanceField:

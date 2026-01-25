@@ -133,18 +133,26 @@ impl DistanceField {
     /// on the bilinearly sampled field. Returned gradients are in units of
     /// (escape_time / complex-plane unit)
     pub fn gradient(&self, c: Complex) -> (f64, f64) {
-        // Use one grid cell in world units as finite difference step
+        // Use a half-grid cell as finite difference step for more stable results on small grids
         let dx = (self.real_max - self.real_min) / (self.resolution as f64);
         let dy = (self.imag_max - self.imag_min) / (self.resolution as f64);
+        let step_x = dx / 2.0;
+        let step_y = dy / 2.0;
+
+        // Clamp offsets to remain inside the valid domain to avoid sampling out-of-bounds
+        let left_x = (c.real - step_x).clamp(self.real_min, self.real_max);
+        let right_x = (c.real + step_x).clamp(self.real_min, self.real_max);
+        let down_y = (c.imag - step_y).clamp(self.imag_min, self.imag_max);
+        let up_y = (c.imag + step_y).clamp(self.imag_min, self.imag_max);
 
         // Sample left/right and up/down
-        let left = self.sample_bilinear(Complex::new(c.real - dx, c.imag));
-        let right = self.sample_bilinear(Complex::new(c.real + dx, c.imag));
-        let down = self.sample_bilinear(Complex::new(c.real, c.imag - dy));
-        let up = self.sample_bilinear(Complex::new(c.real, c.imag + dy));
+        let left = self.sample_bilinear(Complex::new(left_x, c.imag));
+        let right = self.sample_bilinear(Complex::new(right_x, c.imag));
+        let down = self.sample_bilinear(Complex::new(c.real, down_y));
+        let up = self.sample_bilinear(Complex::new(c.real, up_y));
 
-        let gx = ((right as f64) - (left as f64)) / (2.0 * dx);
-        let gy = ((up as f64) - (down as f64)) / (2.0 * dy);
+        let gx = ((right as f64) - (left as f64)) / (2.0 * step_x);
+        let gy = ((up as f64) - (down as f64)) / (2.0 * step_y);
 
         (gx, gy)
     }
@@ -275,4 +283,35 @@ mod tests {
             assert!((val - expected).abs() < 1e-4, "val {} != expected {} at ({},{})", val, expected, r, i);
         }
     }
+
+    #[test]
+    fn test_gradient_linear_x() {
+        // Create a 4x4 field where values increase linearly with column index
+        let mut field = Vec::with_capacity(4 * 4);
+        for _ in 0..4 {
+            field.push(0.0);
+            field.push(1.0);
+            field.push(2.0);
+            field.push(3.0);
+        }
+
+        let df = DistanceField::new(field, 4, (0.0, 4.0), (0.0, 4.0), 1.0, 0.05);
+
+        // At center (x=2.0, y=2.0) gradient in x should be ~1.0, y ~ 0.0
+        let (gx, gy) = df.gradient(Complex::new(2.0, 2.0));
+        assert!((gx - 1.0).abs() < 1e-6, "gx {} not close to 1.0", gx);
+        assert!(gy.abs() < 1e-6, "gy {} not close to 0.0", gy);
+    }
+
+    #[test]
+    fn test_gradient_constant_field_zero() {
+        let field = vec![0.5f32; 9];
+        let df = DistanceField::new(field, 3, (-1.0, 1.0), (-1.0, 1.0), 0.5, 0.05);
+
+        let (gx, gy) = df.gradient(Complex::new(0.0, 0.0));
+        // Allow small numeric tolerance for float interpolation differences
+        assert!(gx.abs() < 1e-3, "gx {} not near zero", gx);
+        assert!(gy.abs() < 1e-3, "gy {} not near zero", gy);
+    }
 }
+

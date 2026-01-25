@@ -196,7 +196,7 @@ def apply_policy_deltas_torch(
     alpha,
     omega,
     theta,
-    deltas: Dict[str, object],
+    deltas: Dict[str, torch.Tensor],
     h_t=None,
     max_delta_s: float = 0.5,
     max_delta_omega: float = 1.0,
