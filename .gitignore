@@ -56,6 +56,8 @@ tmp/
 **/mandelbrot_distance_field.png
 **/mandelbrot_distance_field.json
 **/mandelbrot_distance_field.npy
+**/mandelbrot_distance_field.bin
+# !frontend/public/mandelbrot_distance_field.bin
 !frontend/public/mandelbrot_distance_field.json
 !backend/data/mandelbrot_distance_field.json
 !backend/data/mandelbrot_distance_field.npy
@@ -64,7 +66,7 @@ tmp/
 # !mandelbrot_distance_field/data/mandelbrot_distance_field.png
 # !mandelbrot_distance_field/data/mandelbrot_distance_field.json
 # !mandelbrot_distance_field/data/mandelbrot_distance_field.npy
+# !mandelbrot_distance_field/data/mandelbrot_distance_field.bin
 
 # Frontend run exports
 frontend_*/*
-frontend/public/mandelbrot_distance_field.bin
