@@ -1,0 +1,38 @@
+{
+    "$schema": "./model_io_contract.schema.json",
+    "version": "1.0",
+    "input": {
+        "name": "audio_features",
+        "window_frames": 10,
+        "features_per_frame": 6,
+        "feature_names": [
+            "spectral_centroid",
+            "spectral_flux",
+            "rms_energy",
+            "zero_crossing_rate",
+            "onset_strength",
+            "spectral_rolloff"
+        ]
+    },
+    "output": {
+        "name": "control_signals",
+        "k_bands": 6,
+        "base_output_names": [
+            "s_target",
+            "alpha",
+            "omega_scale"
+        ],
+        "parameter_prefix": "band_gate_"
+    },
+    "metadata_fields": [
+        "input_shape",
+        "input_name",
+        "input_feature_names",
+        "output_dim",
+        "output_name",
+        "parameter_names",
+        "parameter_ranges",
+        "feature_mean",
+        "feature_std"
+    ]
+}

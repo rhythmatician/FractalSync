@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Iterable, List
 
 
+# Defaults (will be overridden if `contracts/model_io_contract.json` exists)
 MODEL_INPUT_NAME = "audio_features"
 MODEL_OUTPUT_NAME = "control_signals"
 
@@ -25,6 +26,27 @@ FEATURE_NAMES: List[str] = [
 
 DEFAULT_WINDOW_FRAMES = 10
 DEFAULT_K_BANDS = 6
+
+# Attempt to load canonical JSON contract if present
+try:
+    import json
+    from pathlib import Path
+
+    _root = Path(__file__).resolve().parents[1]
+    _contract_path = _root / "contracts" / "model_io_contract.json"
+    if _contract_path.exists():
+        with open(_contract_path, "r", encoding="utf-8") as _f:
+            _cj = json.load(_f)
+        _inp = _cj.get("input", {})
+        _out = _cj.get("output", {})
+        MODEL_INPUT_NAME = _inp.get("name", MODEL_INPUT_NAME)
+        FEATURE_NAMES = list(_inp.get("feature_names", FEATURE_NAMES))
+        DEFAULT_WINDOW_FRAMES = int(_inp.get("window_frames", DEFAULT_WINDOW_FRAMES))
+        DEFAULT_K_BANDS = int(_out.get("k_bands", DEFAULT_K_BANDS))
+        MODEL_OUTPUT_NAME = _out.get("name", MODEL_OUTPUT_NAME)
+except Exception:
+    # Don't fail import; fall back to defaults
+    pass
 
 
 def build_input_names(

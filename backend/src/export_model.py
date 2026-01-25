@@ -194,6 +194,34 @@ def export_to_onnx(
         "input_feature_names": contract.input_names,
     }
 
+    # Validate against canonical JSON contract if present
+    try:
+        repo_root = _Path(__file__).resolve().parents[1]
+        contract_path = repo_root / "contracts" / "model_io_contract.json"
+        if contract_path.exists():
+            import json as _json
+
+            cj = _json.loads(contract_path.read_text())
+            # Basic sanity checks
+            assert metadata_dict["input_name"] == cj["input"]["name"]
+            assert metadata_dict["output_name"] == cj["output"]["name"]
+            # Parameter prefix & count check
+            base = cj["output"]["base_output_names"]
+            k = int(cj["output"]["k_bands"])
+            expected = base + [f"{cj['output']['parameter_prefix']}{i}" for i in range(k)]
+            # If caller provided explicit parameter_names, prefer that; else ensure we generated expected
+            if "parameter_names" in metadata_dict and metadata_dict["parameter_names"]:
+                # If lengths match expect exact equality; otherwise at least check prefix
+                got = metadata_dict["parameter_names"]
+                if len(got) == len(expected):
+                    assert got == expected
+                else:
+                    assert got[: len(base)] == base
+    except Exception:
+        # Don't block export on these validations; surface in logs only
+        logging.warning("Model metadata did not fully validate against canonical contract")
+
+
     if feature_mean is not None:
         metadata_dict["feature_mean"] = feature_mean.tolist()
     if feature_std is not None:

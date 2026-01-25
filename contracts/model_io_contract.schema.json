@@ -1,0 +1,76 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Model I/O Contract",
+    "type": "object",
+    "required": [
+        "version",
+        "input",
+        "output"
+    ],
+    "properties": {
+        "version": {
+            "type": "string"
+        },
+        "input": {
+            "type": "object",
+            "required": [
+                "name",
+                "window_frames",
+                "features_per_frame",
+                "feature_names"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "window_frames": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "features_per_frame": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "feature_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "output": {
+            "type": "object",
+            "required": [
+                "name",
+                "k_bands",
+                "base_output_names",
+                "parameter_prefix"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "k_bands": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "base_output_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "parameter_prefix": {
+                    "type": "string"
+                }
+            }
+        },
+        "metadata_fields": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    }
+}
