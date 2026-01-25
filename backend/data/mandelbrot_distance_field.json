@@ -1,0 +1,13 @@
+{
+    "resolution": 128,
+    "real_range": [
+        -2.5,
+        1.0
+    ],
+    "imag_range": [
+        -1.5,
+        1.5
+    ],
+    "max_distance": 1.0,
+    "slowdown_threshold": 0.05
+}

@@ -13,6 +13,16 @@ import torch
 import hashlib
 from pathlib import Path as _Path  # local alias for internal path ops
 
+from .model_contract import (
+    MODEL_INPUT_NAME,
+    MODEL_OUTPUT_NAME,
+    DEFAULT_WINDOW_FRAMES,
+    DEFAULT_K_BANDS,
+    build_output_names,
+    contract_for,
+    default_contract,
+)
+
 
 def export_to_onnx(
     model: torch.nn.Module,
@@ -45,9 +55,9 @@ def export_to_onnx(
 
     # Select input/output names. We no longer use a "model_type" field - prefer
     # explicit metadata (e.g., 'output_dim', 'k_bands', 'parameter_names') when
-    # available. Default input/output names are for audio feature -> visual param models.
-    input_name = "audio_features"
-    output_name = "visual_parameters"
+    # available.
+    input_name = MODEL_INPUT_NAME
+    output_name = MODEL_OUTPUT_NAME
 
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes
     # and prefer a newer opset to avoid automatic version conversion.
@@ -153,51 +163,35 @@ def export_to_onnx(
             for i in range(k):
                 parameter_ranges[f"gate_logits_{i}"] = [-5.0, 5.0]
         else:
-            # Default to orbit-control style when k_bands present or fall back to legacy
+            # Default to orbit-control style when k_bands present or fall back to
+            # contract defaults (audio_features -> control_signals).
             if k_bands is not None:
                 k = int(k_bands)
-                parameter_names = ["s_target", "alpha", "omega_scale"] + [
-                    f"band_gate_{i}" for i in range(k)
-                ]
-                output_dim = (
-                    provided_output_dim if provided_output_dim is not None else 3 + k
-                )
-                parameter_ranges = {
-                    "s_target": [0.2, 3.0],
-                    "alpha": [0.0, 1.0],
-                    "omega_scale": [0.1, 5.0],
-                }
-                for i in range(k):
-                    parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
             else:
-                # Legacy default
-                output_dim = 7
-                parameter_names = [
-                    "julia_real",
-                    "julia_imag",
-                    "color_hue",
-                    "color_sat",
-                    "color_bright",
-                    "zoom",
-                    "speed",
-                ]
-                parameter_ranges = {
-                    "julia_real": [-2.0, 2.0],
-                    "julia_imag": [-2.0, 2.0],
-                    "color_hue": [0.0, 1.0],
-                    "color_sat": [0.0, 1.0],
-                    "color_bright": [0.0, 1.0],
-                    "zoom": [0.1, 10.0],
-                    "speed": [0.0, 1.0],
-                }
+                k = default_contract().output_dim - 3
+            parameter_names = build_output_names(k)
+            output_dim = provided_output_dim if provided_output_dim is not None else 3 + k
+            parameter_ranges = {
+                "s_target": [0.2, 3.0],
+                "alpha": [0.0, 1.0],
+                "omega_scale": [0.1, 5.0],
+            }
+            for i in range(k):
+                parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
 
+    contract_window_frames = int(md.get("window_frames", DEFAULT_WINDOW_FRAMES))
+    contract_k_bands = int(k_bands if k_bands is not None else DEFAULT_K_BANDS)
+    contract = contract_for(window_frames=int(contract_window_frames), k_bands=int(contract_k_bands))
     metadata_dict = {
         "input_shape": (
             list(input_shape) if len(input_shape) > 1 else [1, input_shape[0]]
         ),
+        "input_name": input_name,
+        "output_name": output_name,
         "output_dim": output_dim,
         "parameter_names": parameter_names,
         "parameter_ranges": parameter_ranges,
+        "input_feature_names": contract.input_names,
     }
 
     if feature_mean is not None:

@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import * as ort from "onnxruntime-web";
+import { OUTPUT_DIM } from "../modelContract";
 
 // Use relative path for test fixtures in vitest
 const INFERENCE_BASELINE_PATH = "./src/lib/__tests__/fixtures/inference_baseline.json";
@@ -120,8 +121,8 @@ describe("Model Inference Parity", () => {
       const outputName = session.outputNames[0];
       const output = results[outputName] as ort.Tensor;
 
-      // Should output [batch_size, 7]
-      expect(output.dims).toEqual([1, 7]);
+      // Should output [batch_size, OUTPUT_DIM]
+      expect(output.dims).toEqual([1, OUTPUT_DIM]);
     });
   });
 

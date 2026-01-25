@@ -168,6 +168,56 @@ impl OrbitState {
     pub fn advance(&mut self, dt: f64) {
         self.inner.advance(dt);
     }
+
+    /// Compute c(t) without advancing time.
+    pub fn synthesize(&self, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
+        rust_synthesize(
+            &self.inner,
+            residual_params.inner,
+            band_gates.as_deref(),
+        )
+        .into()
+    }
+
+    /// Advance by dt and return c(t). Mutates this OrbitState.
+    pub fn step(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
+        rust_step(
+            &mut self.inner,
+            dt,
+            residual_params.inner,
+            band_gates.as_deref(),
+            None,
+            0.0,
+            None,
+            None,
+        )
+        .into()
+    }
+
+    /// Advance with transient and integrator options: h in [0,1], optional d_star, max_step.
+    pub fn step_advanced(
+        &mut self,
+        dt: f64,
+        residual_params: &ResidualParams,
+        band_gates: Option<Vec<f64>>,
+        h: f64,
+        d_star: Option<f64>,
+        max_step: Option<f64>,
+        distance_field: Option<&DistanceField>,
+    ) -> Complex {
+        let rust_field = distance_field.map(|df| &df.inner);
+        rust_step(
+            &mut self.inner,
+            dt,
+            residual_params.inner,
+            band_gates.as_deref(),
+            rust_field,
+            h,
+            d_star,
+            max_step,
+        )
+        .into()
+    }
 }
 
 /// Residual parameters
@@ -221,4 +271,54 @@ pub fn step(
 ) -> Complex {
     state.inner.advance(dt);
     synthesize(state, residual_params, band_gates)
+}
+
+/// Distance field wrapper for WASM
+#[wasm_bindgen]
+pub struct DistanceField {
+    inner: RustDistanceField,
+}
+
+#[wasm_bindgen]
+impl DistanceField {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        field: Vec<f32>,
+        resolution: usize,
+        real_range: (f64, f64),
+        imag_range: (f64, f64),
+        max_distance: f64,
+        slowdown_threshold: f64,
+    ) -> DistanceField {
+        DistanceField {
+            inner: RustDistanceField::new(
+                field,
+                resolution,
+                real_range,
+                imag_range,
+                max_distance,
+                slowdown_threshold,
+            ),
+        }
+    }
+
+    pub fn lookup(&self, real: f64, imag: f64) -> f32 {
+        self.inner.lookup(RustComplex::new(real, imag))
+    }
+
+    pub fn sample_bilinear(&self, real: f64, imag: f64) -> f32 {
+        self.inner.sample_bilinear(RustComplex::new(real, imag))
+    }
+
+    pub fn gradient(&self, real: f64, imag: f64) -> js_sys::Array {
+        let (gx, gy) = self.inner.gradient(RustComplex::new(real, imag));
+        let arr = js_sys::Array::new();
+        arr.push(&JsValue::from_f64(gx));
+        arr.push(&JsValue::from_f64(gy));
+        arr
+    }
+
+    pub fn get_velocity_scale(&self, real: f64, imag: f64) -> f32 {
+        self.inner.get_velocity_scale(RustComplex::new(real, imag))
+    }
 }

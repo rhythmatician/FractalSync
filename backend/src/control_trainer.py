@@ -19,11 +19,9 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
-from .visual_metrics import VisualMetrics
-from .flight_recorder import (
-    FlightRecorder,
-    compute_delta_v,
-)  # optional recording utilities
+from .visual_metrics import VisualMetrics, proxy_delta_v
+from .show_config import load_show_config
+from .flight_recorder import FlightRecorder  # optional recording utilities
 
 # Policy helpers for orbit_policy models
 from .policy_interface import (
@@ -231,23 +229,23 @@ class CorrelationLoss(nn.Module):
 
 
 class VisualContinuityLoss(nn.Module):
-    """Penalize visual discontinuities that don't align with audio transients."""
+    """Budgeted visual continuity loss (ΔV vs. transient-conditioned budget)."""
 
-    def __init__(self, weight: float = 1.0):
+    def __init__(
+        self, weight: float = 1.0, budget_idle: float = 0.02, budget_hit: float = 0.08
+    ):
         super().__init__()
         self.weight = weight
+        self.budget_idle = float(budget_idle)
+        self.budget_hit = float(budget_hit)
 
     def forward(
         self, visual_changes: torch.Tensor, transient_strengths: torch.Tensor
     ) -> torch.Tensor:
-        """Loss = visual_change * (1 - transient_strength).
-        High visual change is OK during transients, penalized otherwise.
-        """
-        # Normalize transient strengths to [0, 1]
-        transient_norm = torch.sigmoid(transient_strengths)
-        # Penalize visual changes that occur without transients
-        # Scale by 100 to make comparable to boundary loss (temporal_change is typically 0.0-0.1)
-        loss = torch.mean(visual_changes * (1.0 - transient_norm)) * 100.0
+        """Loss = mean(relu(ΔV_t - B_t)^2), B_t = B_idle*(1-h) + B_hit*h."""
+        h = torch.clamp(transient_strengths, 0.0, 1.0)
+        budget = self.budget_idle * (1.0 - h) + self.budget_hit * h
+        loss = torch.mean(torch.relu(visual_changes - budget) ** 2)
         return self.weight * loss
 
 
@@ -324,13 +322,13 @@ class ControlTrainer:
         render_fraction: float = 0.25,
         regularization_weight: float = 1e-4,
         flight_recorder: Optional[FlightRecorder] = None,
-        contour_d_star: float = 0.3,
-        contour_max_step: float = 0.03,
+        contour_d_star: float | None = None,
+        contour_max_step: float | None = None,
         policy_mode: bool = False,
         sequence_training: bool = False,
         sequence_unroll_steps: int = 5,
         sequence_stride: int = 1,
-        enable_visual_losses: bool = False,
+        enable_visual_losses: bool = True,
         visual_loss_weights: Optional[dict] = None,
         visual_proxy_resolution: int = 64,
         visual_proxy_max_iter: int = 20,
@@ -381,8 +379,19 @@ class ControlTrainer:
         self.flight_recorder: Optional[FlightRecorder] = flight_recorder
 
         # Contour integrator parameters (tunable)
-        self.contour_d_star = contour_d_star
-        self.contour_max_step = contour_max_step
+        show_cfg = load_show_config()
+        self.contour_d_star = (
+            float(contour_d_star)
+            if contour_d_star is not None
+            else show_cfg.contour_d_star
+        )
+        self.contour_max_step = (
+            float(contour_max_step)
+            if contour_max_step is not None
+            else show_cfg.contour_max_step
+        )
+        self.continuity_budget_idle = show_cfg.continuity_idle
+        self.continuity_budget_hit = show_cfg.continuity_hit
 
         # Policy mode (if True, expects a PolicyModel and uses the policy I/O contract)
         self.policy_mode = policy_mode
@@ -398,6 +407,12 @@ class ControlTrainer:
         # This will raise a FileNotFoundError if the precomputed field is not present
         df = load_distance_field_for_runtime(str(df_base))
         self.distance_field = df
+        self.df_numpy = df.arr
+        self.df_meta = {
+            "real_range": df.real_range,
+            "imag_range": df.imag_range,
+            "slowdown_threshold": df.slowdown_threshold,
+        }
         logger.info("Loaded numpy distance field for slowdown loss")
 
         # Default correlation weights
@@ -432,7 +447,9 @@ class ControlTrainer:
             weight=self.correlation_weights.get("control_loss", 1.0)
         )
         self.visual_continuity_loss = VisualContinuityLoss(
-            weight=self.correlation_weights.get("visual_continuity", 2.0)
+            weight=self.correlation_weights.get("visual_continuity", 2.0),
+            budget_idle=show_cfg.continuity_idle,
+            budget_hit=show_cfg.continuity_hit,
         )
         self.boundary_loss = BoundaryExplorationLoss(
             weight=self.correlation_weights.get("boundary_exploration", 1.5),
@@ -464,13 +481,13 @@ class ControlTrainer:
                 weight=vw.get("speed_bound", 0.05), base_step=self.contour_max_step
             )
             self.hit_loss = HitAlignmentLoss(weight=vw.get("hit_align", 0.1))
-            self.coverage_loss = CoverageLoss(weight=vw.get("coverage", 0.05))
+            self.coverage_loss = CoverageLoss(
+                weight=vw.get("coverage", 0.05), bins=show_cfg.variety_bins
+            )
         else:
-            self.proxy_renderer = None
-            self.ms_deltav = None
-            self.speed_loss = None
-            self.hit_loss = None
-            self.coverage_loss = None
+            raise RuntimeError(
+                "Visual continuity losses are required but proxy renderer is unavailable."
+            )
 
         # Surrogate model (optional)
         self.use_surrogate = bool(use_surrogate)
@@ -518,6 +535,9 @@ class ControlTrainer:
             "visual_continuity_loss": [],
             "boundary_exploration_loss": [],
             "complexity_correlation_loss": [],
+            "mean_delta_v": [],
+            "mean_budget": [],
+            "fraction_exceeding_budget": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -610,6 +630,9 @@ class ControlTrainer:
         total_visual_continuity = 0.0
         total_boundary_exploration = 0.0
         total_complexity_correlation = 0.0
+        total_mean_delta_v = 0.0
+        total_mean_budget = 0.0
+        total_fraction_exceed = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -744,6 +767,23 @@ class ControlTrainer:
                 total_step_loss = torch.tensor(0.0, device=device, dtype=torch.float32)
                 # Collect per-step lobe logits when present for switch-cost loss
                 lobe_logits_seq: List[torch.Tensor] = []
+                df_torch = None
+                if self.df_numpy is not None:
+                    df_torch = TorchDistanceField(
+                        torch.tensor(self.df_numpy, device=device),
+                        real_min=float(self.df_meta["real_range"][0]),
+                        real_max=float(self.df_meta["real_range"][1]),
+                        imag_min=float(self.df_meta["imag_range"][0]),
+                        imag_max=float(self.df_meta["imag_range"][1]),
+                        slowdown_threshold=float(self.df_meta["slowdown_threshold"]),
+                        use_runtime_sampler=True,
+                    )
+
+                # Initialize rolling losses used inside per-step loop
+                visual_continuity_loss_val = torch.tensor(0.0, device=device)
+                trajectory_slowdown_loss_val = torch.tensor(0.0, device=device)
+                boundary_loss_val = torch.tensor(0.0, device=device)
+                complexity_correlation_loss_val = torch.tensor(0.0, device=device)
 
                 for t in range(T):
                     features_t = batch_seq[:, t, :]
@@ -775,7 +815,7 @@ class ControlTrainer:
                         spectral_flux_t,
                         self.contour_d_star,
                         self.contour_max_step,
-                        None,
+                        df_torch,
                     )
 
                     # L2 jump loss (encourages small, smooth motions)
@@ -784,65 +824,43 @@ class ControlTrainer:
 
                     # Visual continuity: prefer surrogate predictor when available for speed
                     if self.use_surrogate and self.surrogate is not None:
-                        try:
-                            cp = torch.stack([c_real, c_imag], dim=1)
-                            cn = torch.stack([next_r, next_i], dim=1)
+                        cp = torch.stack([c_real, c_imag], dim=1)
+                        cn = torch.stack([next_r, next_i], dim=1)
 
-                            # DF features
-                            if hasattr(self, "df_numpy") and self.df_numpy is not None:
-                                df_torch = getattr(self, "_torch_df", None)
-                                if df_torch is None:
-                                    df_torch = TorchDistanceField(
-                                        torch.tensor(self.df_numpy, device=device)
-                                    )
-                                    self._torch_df = df_torch
-                                d_prev_t = df_torch.sample_bilinear(c_real, c_imag)
-                                gx, gy = df_torch.gradient(c_real, c_imag)
-                                grad_prev_t = torch.stack([gx, gy], dim=1)
-                            else:
-                                d_prev_t = torch.ones(B, device=device)
-                                grad_prev_t = torch.zeros((B, 2), device=device)
+                        # DF features
+                        if df_torch is not None:
+                            d_prev_t = df_torch.sample_bilinear(c_real, c_imag)
+                            gx, gy = df_torch.gradient(c_real, c_imag)
+                            grad_prev_t = torch.stack([gx, gy], dim=1)
+                        else:
+                            d_prev_t = torch.ones(B, device=device)
+                            grad_prev_t = torch.zeros((B, 2), device=device)
 
-                            pred_dv = self.surrogate.predict(
-                                cp, cn, d_prev_t, grad_prev_t
-                            )
+                        pred_dv = self.surrogate.predict(cp, cn, d_prev_t, grad_prev_t)
+                        budget = (
+                            self.continuity_budget_idle * (1.0 - spectral_flux_t)
+                            + self.continuity_budget_hit * spectral_flux_t
+                        )
+                        L_cont = torch.mean(torch.relu(pred_dv - budget) ** 2)
+                        visual_continuity_loss_val = visual_continuity_loss_val + L_cont
+                    else:
+                        prev_frames = self.proxy_renderer.render(c_real, c_imag)
+                        curr_frames = self.proxy_renderer.render(next_r, next_i)
+                        L_v = self.ms_deltav(
+                            prev_frames,
+                            curr_frames,
+                            h_t=spectral_flux_t,
+                            budget_idle=self.continuity_budget_idle,
+                            budget_hit=self.continuity_budget_hit,
+                        )
+                        visual_continuity_loss_val = visual_continuity_loss_val + L_v
 
-                            base_B = 0.02
-                            B_t = base_B * (1.0 + 2.0 * spectral_flux_t)
-                            try:
-                                sens = df_torch.get_velocity_scale(c_real, c_imag)
-                            except Exception:
-                                sens = torch.zeros_like(B_t)
-                            B_t = B_t * (1.0 - 0.5 * sens)
-
-                            L_cont = torch.mean(torch.relu(pred_dv - B_t) ** 2)
-                            visual_continuity_loss_val = (
-                                visual_continuity_loss_val + L_cont
-                            )
-                        except Exception as e:
-                            logger.warning(f"Surrogate continuity skipped: {e}")
-                    elif self.enable_visual_losses and self.proxy_renderer is not None:
-                        try:
-                            prev_frames = self.proxy_renderer.render(c_real, c_imag)
-                            curr_frames = self.proxy_renderer.render(next_r, next_i)
-                            L_v = self.ms_deltav(
-                                prev_frames, curr_frames, h_t=spectral_flux_t
-                            )
-                            visual_continuity_loss_val = (
-                                visual_continuity_loss_val + L_v
-                            )
-                        except Exception as e:
-                            logger.warning(f"Visual ΔV loss skipped due to: {e}")
-
-                        try:
-                            cp = torch.stack([c_real, c_imag], dim=1)
-                            cn = torch.stack([next_r, next_i], dim=1)
-                            L_s = self.speed_loss(cp, cn, df=None)
-                            trajectory_slowdown_loss_val = (
-                                trajectory_slowdown_loss_val + L_s
-                            )
-                        except Exception as e:
-                            logger.warning(f"Speed bound loss skipped due to: {e}")
+                        cp = torch.stack([c_real, c_imag], dim=1)
+                        cn = torch.stack([next_r, next_i], dim=1)
+                        L_s = self.speed_loss(cp, cn, df=df_torch)
+                        trajectory_slowdown_loss_val = (
+                            trajectory_slowdown_loss_val + L_s
+                        )
 
                     # Update primitive states (s,alpha,omega)
                     deltas = {
@@ -858,28 +876,18 @@ class ControlTrainer:
                     omega = updated["omega"]
 
                     # Record c after step for coverage
-                    try:
-                        c_history.append(torch.stack([next_r, next_i], dim=1))
-                    except Exception:
-                        pass
+                    c_history.append(torch.stack([next_r, next_i], dim=1))
 
                     # Update c for next step
                     c_real = next_r
                     c_imag = next_i
 
                 # Optional coverage loss from c_history
-                if (
-                    self.enable_visual_losses
-                    and self.coverage_loss is not None
-                    and len(c_history) > 0
-                ):
-                    try:
-                        # c_history is list of (B,2) tensors for each step -> stack to (B, T, 2)
-                        c_seq = torch.stack(c_history, dim=1)
-                        L_cov = self.coverage_loss(c_seq)
-                        visual_continuity_loss_val = visual_continuity_loss_val + L_cov
-                    except Exception as e:
-                        logger.warning(f"Coverage loss skipped due to: {e}")
+                if len(c_history) > 0 and self.coverage_loss is not None:
+                    # c_history is list of (B,2) tensors for each step -> stack to (B, T, 2)
+                    c_seq = torch.stack(c_history, dim=1)
+                    L_cov = self.coverage_loss(c_seq)
+                    visual_continuity_loss_val = visual_continuity_loss_val + L_cov
 
                 # Average step loss across steps
                 avg_step_loss = total_step_loss / float(T)
@@ -890,7 +898,7 @@ class ControlTrainer:
                 control_loss_val = torch.zeros(1, device=device)
                 timbre_color_loss = torch.tensor(0.0, device=device)
                 transient_impact_loss = torch.tensor(0.0, device=device)
-                visual_continuity_loss_val = torch.tensor(0.0, device=device)
+                # Keep visual_continuity_loss_val from sequence rollout (do not reset)
                 boundary_loss_val = torch.tensor(0.0, device=device)
                 complexity_correlation_loss_val = torch.tensor(0.0, device=device)
                 trajectory_slowdown_loss_val = torch.tensor(0.0, device=device)
@@ -921,7 +929,15 @@ class ControlTrainer:
                 )
             else:
                 # Forward pass with mixed precision for single-step training
-                device_type = "cuda" if (self.device and "cuda" in str(self.device) and torch.cuda.is_available()) else "cpu"
+                device_type = (
+                    "cuda"
+                    if (
+                        self.device
+                        and "cuda" in str(self.device)
+                        and torch.cuda.is_available()
+                    )
+                    else "cpu"
+                )
                 with torch.amp.autocast(device_type=device_type, enabled=self.use_amp):
                     # Policy mode: model expects the policy_input vector instead of raw audio features
                     if self.policy_mode:
@@ -1216,24 +1232,27 @@ class ControlTrainer:
                             image, prev_image=prev_image
                         )
 
+                        # Proxy frame for canonical ΔV
+                        proxy = self.visual_metrics.render_julia_set(
+                            seed_real=float(seed_r),
+                            seed_imag=float(seed_i),
+                            width=64,
+                            height=64,
+                            max_iter=min(40, self.julia_max_iter),
+                        )
+                        proxy_gray = (
+                            np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
+                        )
+                        delta_v = (
+                            proxy_delta_v(prev_proxy, proxy_gray)
+                            if prev_proxy is not None
+                            else 0.0
+                        )
+                        prev_proxy = proxy_gray
+
                         # Optional flight recorder: record per-step proxy frame and controller state
                         if self.flight_recorder is not None:
-                            try:
-                                proxy = self.visual_metrics.render_julia_set(
-                                    seed_real=float(seed_r),
-                                    seed_imag=float(seed_i),
-                                    width=64,
-                                    height=64,
-                                    max_iter=min(40, self.julia_max_iter),
-                                )
-                                proxy_gray = (
-                                    np.mean(proxy, axis=2) if proxy.ndim == 3 else proxy
-                                )
-                                delta_v = compute_delta_v(proxy_gray, prev_proxy)
-                            except Exception:  # pragma: no cover - best-effort logging
-                                proxy = None
-                                proxy_gray = None
-                                delta_v = None
+                            proxy_frame = proxy
 
                             controller_state = {
                                 "s": float(s_target[i].detach().item()),
@@ -1256,11 +1275,9 @@ class ControlTrainer:
                                 h=h_val,
                                 band_energies=band_gates[i].detach().cpu().tolist(),
                                 audio_features=audio_feats,
-                                proxy_frame=proxy,
+                                proxy_frame=proxy_frame,
                                 delta_v=delta_v,
                             )
-
-                            prev_proxy = proxy_gray
 
                         # Visual complexity from connectedness and edge density
                         visual_complexity = (
@@ -1277,7 +1294,7 @@ class ControlTrainer:
 
                         sample_temporal_changes.append(
                             torch.tensor(
-                                metrics["temporal_change"],
+                                delta_v,
                                 device=self.device,
                                 dtype=torch.float32,
                             )
@@ -1338,6 +1355,17 @@ class ControlTrainer:
             visual_continuity_loss_val = self.visual_continuity_loss(
                 temporal_change_tensor, sf_subset
             )
+            with torch.no_grad():
+                h_clamped = torch.clamp(sf_subset, 0.0, 1.0)
+                budget = (
+                    self.continuity_budget_idle * (1.0 - h_clamped)
+                    + self.continuity_budget_hit * h_clamped
+                )
+                mean_delta_v = float(torch.mean(temporal_change_tensor).item())
+                mean_budget = float(torch.mean(budget).item())
+                fraction_exceed = float(
+                    torch.mean((temporal_change_tensor > budget).float()).item()
+                )
 
             # Boundary exploration loss: encourage c to stay near Mandelbrot boundary
             # Boundary loss computed on rendered subset
@@ -1532,6 +1560,9 @@ class ControlTrainer:
             total_visual_continuity += visual_continuity_loss_val.item()
             total_boundary_exploration += boundary_loss_val.item()
             total_complexity_correlation += complexity_correlation_loss_val.item()
+            total_mean_delta_v += mean_delta_v
+            total_mean_budget += mean_budget
+            total_fraction_exceed += fraction_exceed
             n_batches += 1
 
         # Average losses
@@ -1543,6 +1574,9 @@ class ControlTrainer:
             "visual_continuity_loss": total_visual_continuity / n_batches,
             "boundary_exploration_loss": total_boundary_exploration / n_batches,
             "complexity_correlation_loss": total_complexity_correlation / n_batches,
+            "mean_delta_v": total_mean_delta_v / n_batches,
+            "mean_budget": total_mean_budget / n_batches,
+            "fraction_exceeding_budget": total_fraction_exceed / n_batches,
         }
 
         return avg_losses
@@ -1649,7 +1683,10 @@ class ControlTrainer:
                 f'Loss: {avg_losses["loss"]:.4f}, '
                 f'Boundary: {avg_losses["boundary_exploration_loss"]:.4f}, '
                 f'Continuity: {avg_losses["visual_continuity_loss"]:.4f}, '
-                f'Complexity: {avg_losses["complexity_correlation_loss"]:.4f}'
+                f'Complexity: {avg_losses["complexity_correlation_loss"]:.4f}, '
+                f'ΔV: {avg_losses["mean_delta_v"]:.4f}, '
+                f'B: {avg_losses["mean_budget"]:.4f}, '
+                f'>B: {avg_losses["fraction_exceeding_budget"]:.2%}'
             )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == total_epochs):

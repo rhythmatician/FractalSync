@@ -3,7 +3,14 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
+import { OrbitRuntime } from './orbitRuntime';
+import {
+  DEFAULT_K_BANDS,
+  INPUT_DIM,
+  MODEL_INPUT_NAME,
+  MODEL_OUTPUT_NAME,
+  OUTPUT_NAMES,
+} from './modelContract';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -17,9 +24,12 @@ export interface VisualParameters {
 
 export interface ModelMetadata {
   input_shape: number[];
+  input_name?: string;
   output_dim: number;
+  output_name?: string;
   parameter_names: string[];
   parameter_ranges: Record<string, [number, number]>;
+  input_feature_names?: string[];
   feature_mean?: number[];
   feature_std?: number[];
   epoch?: number;
@@ -45,10 +55,21 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // Orbit-based synthesis (new architecture)
-  private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitState: OrbitState | null = null;
-  private isOrbitModel: boolean = false;
+  // Orbit runtime (runtime-core stepping)
+  private orbitRuntime: OrbitRuntime | null = null;
+  private isControlModel: boolean = false;
+  private kBands: number = DEFAULT_K_BANDS;
+  private deterministicMode: boolean = false;
+  private orbitSeed: number = 1337;
+  private contourDStar: number = 0.3;
+  private contourMaxStep: number = 0.03;
+  private dfBinaryPath: string = "/mandelbrot_distance_field.bin";
+  private dfMetaPath: string = "/mandelbrot_distance_field.json";
+  private dfLoadError: string | null = null;
+  private showMode: boolean = false;
+  private residualCap: number = 0.5;
+  private residualOmegaScale: number = 2.0;
+  private baseOmega: number = 1.0;
   
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
@@ -98,15 +119,81 @@ export class ModelInference {
         const response = await fetch(metadataPath);
         this.metadata = await response.json() as ModelMetadata;
         
-        // Check if this is an orbit-based control model
-        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
-        
-        if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
-          const kBands = this.metadata.k_bands || 6;
-          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
-          console.log('[ModelInference] Loaded orbit-based control model');
+// Check if this is a control model and validate contract
+        this.isControlModel = (this.metadata.parameter_names?.length ?? 0) === this.metadata.output_dim;
+        this.kBands = this.metadata.k_bands || DEFAULT_K_BANDS;
+        if (this.isControlModel && this.metadata.parameter_names) {
+          const expected = OUTPUT_NAMES.slice(0, 3 + this.kBands);
+          const matches = expected.every((name, idx) => this.metadata?.parameter_names?.[idx] === name);
+          if (!matches) {
+            throw new Error(`[ModelInference] Output parameter names do not match model contract`);
+          }
+          if (this.metadata.input_name && this.metadata.input_name !== MODEL_INPUT_NAME) {
+            throw new Error(`[ModelInference] Input tensor name mismatch: ${this.metadata.input_name}`);
+          }
+          if (this.metadata.output_name && this.metadata.output_name !== MODEL_OUTPUT_NAME) {
+            throw new Error(`[ModelInference] Output tensor name mismatch: ${this.metadata.output_name}`);
+          }
+        }
+
+        // Load show control configuration
+        try {
+          const configResponse = await fetch('/show_control.json');
+          if (configResponse.ok) {
+            const config = await configResponse.json();
+            this.deterministicMode = Boolean(config.replay_mode);
+            this.orbitSeed = Number(config.orbit?.seed ?? this.orbitSeed);
+            this.residualCap = Number(config.orbit?.residual_cap ?? this.residualCap);
+            this.residualOmegaScale = Number(
+              config.orbit?.residual_omega_scale ?? this.residualOmegaScale
+            );
+            this.baseOmega = Number(config.orbit?.base_omega ?? this.baseOmega);
+            this.contourDStar = Number(config.contour?.d_star ?? this.contourDStar);
+            this.contourMaxStep = Number(config.contour?.max_step ?? this.contourMaxStep);
+            this.dfBinaryPath = String(config.df?.path ?? this.dfBinaryPath);
+            this.dfMetaPath = String(config.df?.meta_path ?? this.dfMetaPath);
+            this.showMode = Boolean(config.show_mode);
+          }
+        } catch (error) {
+          console.warn('[ModelInference] Failed to load show control config, using defaults', error);
+        }
+
+        if (this.isControlModel) {
+          const runtime = new OrbitRuntime();
+          try {
+            await runtime.initialize({
+              kBands: this.kBands,
+              residualCap: this.residualCap,
+              residualOmegaScale: this.residualOmegaScale,
+              baseOmega: this.baseOmega,
+              seed: this.orbitSeed,
+              dfBinaryPath: this.dfBinaryPath,
+              dfMetaPath: this.dfMetaPath,
+              dStar: this.contourDStar,
+              maxStep: this.contourMaxStep
+            });
+            this.orbitRuntime = runtime;
+            console.log('[ModelInference] Loaded orbit control model with runtime-core stepping');
+          } catch (error) {
+            this.dfLoadError = error instanceof Error ? error.message : String(error);
+            console.error('[ModelInference] Distance field failed to load:', this.dfLoadError);
+            if (this.showMode) {
+              throw new Error(`[ModelInference] Distance field required in show mode: ${this.dfLoadError}`);
+            }
+            // Fall back to runtime without DF
+            await runtime.initialize({
+              kBands: this.kBands,
+              residualCap: this.residualCap,
+              residualOmegaScale: this.residualOmegaScale,
+              baseOmega: this.baseOmega,
+              seed: this.orbitSeed,
+              dfBinaryPath: '',
+              dfMetaPath: '',
+              dStar: this.contourDStar,
+              maxStep: this.contourMaxStep
+            });
+            this.orbitRuntime = runtime;
+          }
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
@@ -128,6 +215,17 @@ export class ModelInference {
   async infer(features: number[]): Promise<VisualParameters> {
     if (!this.session) {
       throw new Error('Model not loaded');
+    }
+
+    if (this.metadata?.input_dim && features.length !== this.metadata.input_dim) {
+      throw new Error(
+        `[ModelInference] Input feature length ${features.length} does not match model input_dim ${this.metadata.input_dim}`
+      );
+    }
+    if (!this.metadata?.input_dim && features.length !== INPUT_DIM) {
+      console.warn(
+        `[ModelInference] Input feature length ${features.length} does not match contract ${INPUT_DIM}`
+      );
     }
 
     const totalStartTime = performance.now();
@@ -155,11 +253,16 @@ export class ModelInference {
 
     // Run inference
     const inferStartTime = performance.now();
-    const feeds = { audio_features: inputTensor };
+    const feeds = { [MODEL_INPUT_NAME]: inputTensor };
     const results = await this.session.run(feeds);
     const inferTime = performance.now() - inferStartTime;
 
-    const outputTensor = results.visual_parameters;
+    const outputTensor = results[MODEL_OUTPUT_NAME] || results[Object.keys(results)[0]];
+    if (this.isControlModel && outputTensor.dims?.[1] !== 3 + this.kBands) {
+      throw new Error(
+        `[ModelInference] Output dim mismatch: expected ${3 + this.kBands}, got ${outputTensor.dims?.[1]}`
+      );
+    }
     const params = Array.from(outputTensor.data as Float32Array);
 
     // Post-processing
@@ -167,51 +270,47 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL
-      // Parse control signals from model output
-      const controlSignals: ControlSignals = {
+    if (this.isControlModel && this.orbitRuntime) {
+      // Orbit-based control model (runtime-core step_advanced)
+      const controlSignals = {
         sTarget: params[0],
         alpha: params[1],
         omegaScale: params[2],
-        bandGates: params.slice(3)
+        bandGates: params.slice(3, 3 + this.kBands)
       };
-      
+
       // Store last control signals for external inspection / flight recorder
       (this as any).lastControlSignals = controlSignals;
 
-      console.debug('Raw model output (control signals):', {
+      this.orbitRuntime.updateState({
         s: controlSignals.sTarget,
         alpha: controlSignals.alpha,
-        omegaScale: controlSignals.omegaScale,
-        bandGates: controlSignals.bandGates
+        omega: this.baseOmega * controlSignals.omegaScale
       });
 
-      // Update orbit state with new control signals
-      this.orbitState.s = controlSignals.sTarget;
-      this.orbitState.alpha = controlSignals.alpha;
-      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
-
-      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
-
-      // Synthesize Julia parameter c(t) from orbit
       const dt = 1.0 / 60.0; // Assume 60 FPS
-      const { c, newState } = this.orbitSynthesizer.step(
-        this.orbitState,
-        dt,
-        controlSignals.bandGates
-      );
-      this.orbitState = newState;
 
-      // Extract audio features for color mapping
+      // Transient strength proxy = spectral flux averaged across window
       const numFeatures = 6;
       const windowFrames = Math.floor(features.length / numFeatures);
-      let avgRMS = 0, avgOnset = 0;
+      let avgFlux = 0;
+      let avgRMS = 0;
       for (let i = 0; i < windowFrames; i++) {
+        avgFlux += features[i * numFeatures + 1];
         avgRMS += features[i * numFeatures + 2];
+      }
+      avgFlux /= windowFrames;
+      avgRMS /= windowFrames;
+
+      const h = Math.max(0, Math.min(1, avgFlux));
+
+      const c = this.orbitRuntime.step(dt, controlSignals.bandGates, h);
+
+      // Extract audio features for color mapping
+      let avgOnset = 0;
+      for (let i = 0; i < windowFrames; i++) {
         avgOnset += features[i * numFeatures + 4];
       }
-      avgRMS /= windowFrames;
       avgOnset /= windowFrames;
 
       // Map to visual parameters
@@ -225,9 +324,11 @@ export class ModelInference {
         zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
         speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
       };
-      
-      // Color-based section detection for lobe switching
-      this.detectSectionChange(currentHue);
+
+      // Color-based section detection for lobe switching (optional)
+      if (!this.deterministicMode) {
+        this.detectSectionChange(currentHue);
+      }
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -315,7 +416,7 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
+        modelType: this.isControlModel ? 'orbit_control' : 'legacy'
       });
     }
 
@@ -343,6 +444,22 @@ export class ModelInference {
     return (this as any).lastControlSignals || null;
   }
 
+  getOrbitDebug(): any | null {
+    return this.orbitRuntime ? this.orbitRuntime.getDebug() : null;
+  }
+
+  getDistanceFieldError(): string | null {
+    return this.dfLoadError;
+  }
+
+  isDeterministicMode(): boolean {
+    return this.deterministicMode;
+  }
+
+  resetOrbit(): void {
+    if (this.orbitRuntime) this.orbitRuntime.reset(this.orbitSeed);
+  }
+
   /**
    * Check if model is loaded.
    */
@@ -355,31 +472,32 @@ export class ModelInference {
    * Switches to a random different lobe when a significant color change is detected.
    */
   private detectSectionChange(currentHue: number): void {
-    if (!this.orbitState) return;
-    
+    if (!this.orbitRuntime) return;
+    if (this.deterministicMode) return; // don't switch in deterministic replay mode
+
     // Add current hue to history
     this.colorHistory.push(currentHue);
     if (this.colorHistory.length > this.colorHistorySize) {
       this.colorHistory.shift();
     }
-    
+
     // Need enough history to detect changes
     if (this.colorHistory.length < this.colorHistorySize) return;
-    
+
     // Check cooldown (hysteresis)
     const framesSinceLastSwitch = this.colorHistory.length - this.lastLobeSwitch;
     if (framesSinceLastSwitch < this.lobeSwitchCooldown) return;
-    
+
     // Compute moving average of recent colors
     const recentWindow = Math.floor(this.colorHistorySize / 4); // Last 30 frames (~0.5s)
     const oldWindow = Math.floor(this.colorHistorySize / 2); // Middle 60 frames (~1s)
-    
+
     let recentAvg = 0;
     for (let i = this.colorHistory.length - recentWindow; i < this.colorHistory.length; i++) {
       recentAvg += this.colorHistory[i];
     }
     recentAvg /= recentWindow;
-    
+
     let oldAvg = 0;
     const oldStart = this.colorHistory.length - oldWindow - recentWindow;
     const oldEnd = this.colorHistory.length - recentWindow;
@@ -387,20 +505,20 @@ export class ModelInference {
       if (i >= 0) oldAvg += this.colorHistory[i];
     }
     oldAvg /= oldWindow;
-    
+
     // Detect significant change (accounting for hue wraparound)
     let hueDiff = Math.abs(recentAvg - oldAvg);
     if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff; // Wraparound correction
-    
+
     if (hueDiff > this.colorChangeThreshold) {
       // Section change detected! Switch to a random different lobe
-      const currentLobe = this.orbitState.lobe;
+      const currentLobe = this.orbitRuntime.getLobe();
       const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
       const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
-      
-      this.orbitState.lobe = newLobe;
+
+      this.orbitRuntime.setLobe(newLobe);
       this.lastLobeSwitch = this.colorHistory.length;
-      
+
       console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);
     }
   }

@@ -56,6 +56,9 @@ tmp/
 **/mandelbrot_distance_field.png
 **/mandelbrot_distance_field.json
 **/mandelbrot_distance_field.npy
+!frontend/public/mandelbrot_distance_field.json
+!backend/data/mandelbrot_distance_field.json
+!backend/data/mandelbrot_distance_field.npy
 
 # Uncomment to track the files runtime-core depends on
 # !mandelbrot_distance_field/data/mandelbrot_distance_field.png

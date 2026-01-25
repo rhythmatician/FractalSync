@@ -1,0 +1,42 @@
+{
+  "window_frames": 10,
+  "num_features_per_frame": 6,
+  "k_bands": 6,
+  "model_input_name": "audio_features",
+  "model_output_name": "control_signals",
+  "orbit": {
+    "base_omega": 1.0,
+    "residual_cap": 0.5,
+    "residual_omega_scale": 2.0,
+    "seed": 1337
+  },
+  "contour": {
+    "d_star": 0.3,
+    "max_step": 0.03
+  },
+  "continuity_budget": {
+    "idle": 0.02,
+    "hit": 0.08
+  },
+  "df": {
+    "path": "/mandelbrot_distance_field.bin",
+    "meta_path": "/mandelbrot_distance_field.json"
+  },
+  "replay_mode": false,
+  "show_mode": false,
+  "variety": {
+    "coverage_bins": 16,
+    "min_coverage": 0.35
+  },
+  "eval_thresholds": {
+    "idle_h_threshold": 0.2,
+    "hit_h_threshold": 0.7,
+    "idle_median_max": 0.03,
+    "idle_p95_max": 0.06,
+    "hit_p95_min": 0.08,
+    "max_best_lag": 1,
+    "min_variety": 0.35,
+    "d_low": 0.05,
+    "d_high": 0.6
+  }
+}

@@ -28,8 +28,10 @@ class MultiscaleDeltaVLoss(torch.nn.Module):
         prev_frames: torch.Tensor,
         curr_frames: torch.Tensor,
         h_t: Optional[torch.Tensor] = None,
+        budget_idle: float = 0.02,
+        budget_hit: float = 0.08,
     ) -> torch.Tensor:
-        """Compute a multiscale mean |I_t - I_t-1| optionally gated by h_t.
+        """Compute a budgeted multiscale ΔV loss.
 
         prev_frames, curr_frames: shape (N, H, W)
         h_t: optional shape (N,) normalized transient strength (0..1)
@@ -54,12 +56,29 @@ class MultiscaleDeltaVLoss(torch.nn.Module):
         multi = torch.stack(losses, dim=0)  # (len(scales), N)
         # per-sample mean across scales
         per_sample = torch.mean(multi, dim=0)
-        if h_t is not None:
-            gate = torch.sigmoid(
-                -3.0 * h_t
-            )  # smaller loss when h_t is high (transient)
-            per_sample = per_sample * gate
-        return self.weight * torch.mean(per_sample)
+        if h_t is None:
+            h_t = torch.zeros_like(per_sample)
+        h_t = torch.clamp(h_t, 0.0, 1.0)
+        budget = budget_idle * (1.0 - h_t) + budget_hit * h_t
+        loss = torch.mean(torch.relu(per_sample - budget) ** 2)
+        return self.weight * loss
+
+    @staticmethod
+    def compute_delta_v(prev_frames: torch.Tensor, curr_frames: torch.Tensor) -> torch.Tensor:
+        """Return per-sample multiscale ΔV without applying any budget."""
+        assert prev_frames.shape == curr_frames.shape
+        losses = []
+        for s in [1, 2, 4]:
+            if s == 1:
+                p = prev_frames
+                c = curr_frames
+            else:
+                p = F.avg_pool2d(prev_frames.unsqueeze(1), kernel_size=s, stride=s).squeeze(1)
+                c = F.avg_pool2d(curr_frames.unsqueeze(1), kernel_size=s, stride=s).squeeze(1)
+            delta = torch.mean(torch.abs(c - p), dim=[1, 2])
+            losses.append(delta)
+        multi = torch.stack(losses, dim=0)
+        return torch.mean(multi, dim=0)
 
 
 class SpeedBoundLoss(torch.nn.Module):

@@ -8,6 +8,11 @@ A real-time music visualizer that renders morphing Julia sets, using machine lea
 - **Frontend (React)**: Real-time visualization with microphone input, ONNX.js inference, and WebGL Julia set rendering
 - **API Server**: FastAPI for training monitoring and model management
 
+## Contracts & Demo
+
+- Model I/O contract: [docs/MODEL_IO_CONTRACT.md](docs/MODEL_IO_CONTRACT.md)
+- End-to-end show demo: [docs/SHOW_DEMO.md](docs/SHOW_DEMO.md)
+
 ## Setup
 
 ### Backend

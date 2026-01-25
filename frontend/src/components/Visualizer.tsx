@@ -21,6 +21,7 @@ export function Visualizer() {
   const [modelMetadata, setModelMetadata] = useState<ModelMetadata | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showModelInfo, setShowModelInfo] = useState(true);
+  const [showDebugOverlay, setShowDebugOverlay] = useState(false);
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
@@ -31,6 +32,8 @@ export function Visualizer() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordCount, setRecordCount] = useState(0);
   const prevProxyGrayRef = useRef<Float32Array | null>(null);
+  const [orbitDebug, setOrbitDebug] = useState<any | null>(null);
+  const [distanceFieldError, setDistanceFieldError] = useState<string | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
   const DEFAULT_PARAMS: VisualParameters = {
@@ -142,6 +145,16 @@ export function Visualizer() {
     loadModel();
   }, []);
 
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'd') {
+        setShowDebugOverlay(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
   const handleFeatures = async (features: number[]) => {
     if (!rendererRef.current) return;
 
@@ -169,6 +182,8 @@ export function Visualizer() {
         
         // Update renderer
         rendererRef.current.updateParameters(params);
+        setOrbitDebug(modelRef.current.getOrbitDebug ? modelRef.current.getOrbitDebug() : null);
+        setDistanceFieldError(modelRef.current.getDistanceFieldError ? modelRef.current.getDistanceFieldError() : null);
 
         // If recording, capture proxy frame and record step
         if (isRecording && recorderRef.current) {
@@ -252,15 +267,23 @@ export function Visualizer() {
   };
 
   const toggleVisualization = () => {
-    setIsVisualizing(!isVisualizing);
-    
+    const next = !isVisualizing;
+    setIsVisualizing(next);
+
     // Update metrics periodically while visualizing
-    if (!isVisualizing) {
+    if (!next) {
       if (metricsUpdateRef.current !== null) {
         clearInterval(metricsUpdateRef.current);
         metricsUpdateRef.current = null;
       }
     } else {
+      if (modelRef.current?.isDeterministicMode()) {
+        try {
+          modelRef.current.resetOrbit();
+        } catch (e) {
+          // best-effort
+        }
+      }
       metricsUpdateRef.current = window.setInterval(() => {
         if (modelRef.current?.isLoaded()) {
           setMetrics(modelRef.current.getMetrics());
@@ -584,6 +607,48 @@ export function Visualizer() {
         />
 
         <FullscreenToggle targetId="visualizerCanvas" position="top-right" />
+
+        {(error || distanceFieldError) && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '10px',
+              padding: '8px 12px',
+              background: 'rgba(200, 50, 50, 0.9)',
+              color: '#fff',
+              borderRadius: '6px',
+              fontSize: '12px',
+              maxWidth: '60%'
+            }}
+          >
+            ⚠️ {error || distanceFieldError}
+          </div>
+        )}
+
+        {showDebugOverlay && orbitDebug && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '10px',
+              left: '10px',
+              padding: '8px 12px',
+              background: 'rgba(0,0,0,0.65)',
+              color: '#fff',
+              borderRadius: '6px',
+              fontSize: '12px',
+              lineHeight: '1.4'
+            }}
+          >
+            <div>DF d(c): {orbitDebug.distance?.toFixed(4)}</div>
+            <div>|∇d|: {orbitDebug.gradNorm?.toFixed(4)}</div>
+            <div>dt slowdown: {orbitDebug.velocityScale?.toFixed(3)}</div>
+            <div>max_step: {orbitDebug.maxStep?.toFixed(4)}</div>
+            <div>d_star: {orbitDebug.dStar?.toFixed(3)}</div>
+            <div>h: {orbitDebug.h?.toFixed(3)}</div>
+            <div style={{ opacity: 0.7, marginTop: '4px' }}>Press “D” to toggle</div>
+          </div>
+        )}
       </div>
 
       {isVisualizing && (
