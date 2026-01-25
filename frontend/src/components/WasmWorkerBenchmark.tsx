@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { WasmFeatureWorkerClient } from '../lib/wasm/wasm_feature_worker_client';
 
 export default function WasmWorkerBenchmark() {
@@ -24,7 +24,8 @@ export default function WasmWorkerBenchmark() {
     for (let r = 0; r < runs; r++) {
       const aCopy = audio.slice(); // worker transfer invalidates buffer
       const t0 = performance.now();
-      const features = await client.extract(aCopy, windowFrames);
+      const _features = await client.extract(aCopy, windowFrames);
+      void _features; // used to satisfy TS (bench doesn't assert features)
       const t1 = performance.now();
       times.push(t1 - t0);
     }

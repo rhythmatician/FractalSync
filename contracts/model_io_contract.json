@@ -1,6 +1,6 @@
 {
     "$schema": "./model_io_contract.schema.json",
-    "version": "fc2dcd98c3dc6f33ea1dc6645fb30357e450f7cefbe4d10dd447655bc8770e34",
+    "version": "badf08b0f456000862daf371df3957217088972fa0b3537802cb8ac783f5d6b0",
     "input": {
         "name": "audio_features",
         "window_frames": 10,
@@ -14,6 +14,37 @@
             "spectral_rolloff"
         ]
     },
+    "input_timing": {
+        "sample_rate_hz": 48000,
+        "hop_size_samples": 480,
+        "frame_rate_hz": 100,
+        "window_alignment": "right_aligned",
+        "causal": true
+    },
+    "input_normalization": {
+        "type": "zscore",
+        "applied_by": "runtime",
+        "mean_field": "feature_mean",
+        "std_field": "feature_std"
+    },
+    "state_inputs": [
+        "c_real",
+        "c_imag",
+        "distance",
+        "grad_dx",
+        "grad_dy"
+    ],
+    "parameter_names": [
+        "s_target",
+        "alpha",
+        "omega_scale",
+        "band_gate_0",
+        "band_gate_1",
+        "band_gate_2",
+        "band_gate_3",
+        "band_gate_4",
+        "band_gate_5"
+    ],
     "output": {
         "name": "control_signals",
         "k_bands": 6,
@@ -24,6 +55,36 @@
         ],
         "parameter_prefix": "band_gate_"
     },
+    "output_semantics": {
+        "s_target": {
+            "range": [
+                0.0,
+                3.0
+            ],
+            "activation": "softplus_then_clamp"
+        },
+        "alpha": {
+            "range": [
+                0.0,
+                1.0
+            ],
+            "activation": "sigmoid"
+        },
+        "omega_scale": {
+            "range": [
+                0.5,
+                2.0
+            ],
+            "activation": "exp_then_clamp"
+        },
+        "band_gate": {
+            "range": [
+                0.0,
+                1.0
+            ],
+            "activation": "sigmoid"
+        }
+    },
     "metadata_fields": [
         "input_shape",
         "input_name",
@@ -33,6 +94,9 @@
         "parameter_names",
         "parameter_ranges",
         "feature_mean",
-        "feature_std"
+        "feature_std",
+        "input_timing",
+        "input_normalization",
+        "output_semantics"
     ]
 }

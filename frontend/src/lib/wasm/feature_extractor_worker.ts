@@ -16,10 +16,10 @@ self.addEventListener('message', async (ev: MessageEvent) => {
   try {
     if (msg.type === 'init') {
       // initialize wasm; the bundler will resolve wasmUrl in module
-      await wasmInit();
+      await (wasmInit as any)();
       // create the extractor instance
       fe = new FeatureExtractor(msg.sr, msg.hop, msg.nfft, !!msg.include_delta, !!msg.include_delta_delta);
-      self.postMessage({ type: 'inited', ok: true });
+      (self as any).postMessage({ type: 'inited', ok: true });
       return;
     }
 
@@ -37,7 +37,7 @@ self.addEventListener('message', async (ev: MessageEvent) => {
       }
 
       const buf = new Float64Array(flat);
-      self.postMessage({ type: 'result', id: msg.id, features: buf.buffer }, [buf.buffer]);
+      (self as any).postMessage({ type: 'result', id: msg.id, features: buf.buffer }, [buf.buffer]);
       return;
     }
   } catch (err) {

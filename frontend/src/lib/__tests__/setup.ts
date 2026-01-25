@@ -110,37 +110,46 @@ class MockAnalyserNode {
 }
 
 // Set up globalThis AudioContext for jsdom
-if (!(globalThis as any).AudioContext) {
-  (globalThis as any).AudioContext = MockAudioContext;
-}
-
-if (!(globalThis as any).webkitAudioContext) {
-  (globalThis as any).webkitAudioContext = MockAudioContext;
-}
+// Always override to ensure tests use the Mock implementation regardless of environment
+const _MockAudioContextCtor = function (..._args: any[]) {
+  // allow invoked with or without `new`
+  return new (MockAudioContext as any)();
+} as any;
+_MockAudioContextCtor.prototype = MockAudioContext.prototype;
+(globalThis as any).AudioContext = _MockAudioContextCtor;
+(globalThis as any).webkitAudioContext = _MockAudioContextCtor;
 
 // Mock fetch for fixture paths in tests
 const originalFetch = globalThis.fetch;
-globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === 'string' ? input : input.toString();
+const TEST_NO_NETWORK = (process.env.TEST_NO_NETWORK === '1' || process.env.TEST_NO_NETWORK === 'true');
+if (TEST_NO_NETWORK) {
+  // Disable any network calls during tests
+  (globalThis as any).fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    throw new Error('Network disabled during tests (TEST_NO_NETWORK=1)');
+  }) as any;
+} else {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
 
-  // Handle relative fixture paths
-  if (url.startsWith('./src/lib/__tests__/fixtures/')) {
-    const fixturePath = resolve(__dirname, url.replace('./src/lib/__tests__/', ''));
-    try {
-      const content = readFileSync(fixturePath, 'utf-8');
-      return {
-        ok: true,
-        json: async () => JSON.parse(content),
-      } as any;
-    } catch (_error) {
-      return {
-        ok: false,
-      } as any;
+    // Handle relative fixture paths
+    if (url.startsWith('./src/lib/__tests__/fixtures/')) {
+      const fixturePath = resolve(__dirname, url.replace('./src/lib/__tests__/', ''));
+      try {
+        const content = readFileSync(fixturePath, 'utf-8');
+        return {
+          ok: true,
+          json: async () => JSON.parse(content),
+        } as any;
+      } catch (_error) {
+        return {
+          ok: false,
+        } as any;
+      }
     }
-  }
 
-  return originalFetch(input, init);
-}) as any;
+    return originalFetch(input, init);
+  }) as any;
+}
 
 // Mock Blob and URL.createObjectURL for ONNX Runtime
 if (typeof (globalThis as any).Blob === 'undefined') {
@@ -150,7 +159,10 @@ if (typeof (globalThis as any).Blob === 'undefined') {
 }
 
 if (!URL.createObjectURL) {
-  (URL as any).createObjectURL = (_blob: any) => `blob:${Math.random()}`;
+  // Return a relative path so onnxruntime-web's worker filename validation passes
+  // (it rejects blob: URLs). The test harness uses a mocked Worker so no actual
+  // file is required.
+  (URL as any).createObjectURL = (_blob: any) => './__onnx_worker_stub.js';
   (URL as any).revokeObjectURL = () => {};
 }
 
@@ -174,3 +186,28 @@ vi.stubGlobal(
     }
   }
 );
+
+// Mock onnxruntime-web's InferenceSession.create to avoid heavy WASM/worker initialization during unit tests.
+// Behavior is dynamic: if TEST_NO_NETWORK=1 when tests run, `create` will reject so tests avoid network/WASM work.
+vi.mock('onnxruntime-web', async (importOriginal) => {
+  // Import the real module by default so we preserve all exports needed by normal tests
+  const actual = await importOriginal();
+  // If test-fast / no-network mode is active, override the heavy path
+  if (process.env.TEST_NO_NETWORK === '1' || process.env.TEST_NO_NETWORK === 'true') {
+    return {
+      ...(actual as any),
+      InferenceSession: {
+        create: async (_src: any) => {
+          throw new Error('onnxruntime InferenceSession.create blocked by TEST_NO_NETWORK in tests');
+        },
+      },
+    } as any;
+  }
+  // otherwise return the actual module unmodified
+  return actual; 
+});
+
+// Mark that the ort mock is installed so tests can assert it (avoids importing the real package in fast mode)
+(globalThis as any).__ORT_MOCK_INSTALLED = true;
+// Also set on common Node globals to be sure it's visible in all runner contexts
+try { (global as any).__ORT_MOCK_INSTALLED = true; } catch (_) { /* ignore */ }

@@ -68,6 +68,103 @@
                 }
             }
         },
+        "input_timing": {
+            "type": "object",
+            "required": [
+                "sample_rate_hz",
+                "hop_size_samples",
+                "frame_rate_hz"
+            ],
+            "properties": {
+                "sample_rate_hz": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "hop_size_samples": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frame_rate_hz": {
+                    "type": "number",
+                    "minimum": 0.1
+                },
+                "window_alignment": {
+                    "type": "string",
+                    "enum": [
+                        "left_aligned",
+                        "right_aligned",
+                        "centered"
+                    ]
+                },
+                "causal": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "input_normalization": {
+            "type": "object",
+            "required": [
+                "type",
+                "applied_by"
+            ],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "zscore",
+                        "none"
+                    ]
+                },
+                "applied_by": {
+                    "type": "string",
+                    "enum": [
+                        "runtime",
+                        "model"
+                    ]
+                },
+                "mean_field": {
+                    "type": "string"
+                },
+                "std_field": {
+                    "type": "string"
+                }
+            }
+        },
+        "state_inputs": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "parameter_names": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "output_semantics": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "required": [
+                    "range",
+                    "activation"
+                ],
+                "properties": {
+                    "range": {
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                    },
+                    "activation": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
         "metadata_fields": {
             "type": "array",
             "items": {

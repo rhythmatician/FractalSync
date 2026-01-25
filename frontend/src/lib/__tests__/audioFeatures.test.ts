@@ -17,10 +17,28 @@ describe("Audio Feature Extraction", () => {
   let extractor: AudioFeatureExtractor;
 
   beforeAll(() => {
-    // Create mock audio context for testing
-    audioContext = new (globalThis as any).AudioContext();
-    analyser = audioContext.createAnalyser();
-    extractor = new AudioFeatureExtractor(audioContext, analyser);
+    // Use a local lightweight AudioContext mock so tests don't depend on global state
+    class LocalAnalyser {
+      fftSize = 2048;
+      frequencyData = new Float32Array(1024);
+      timeData = new Float32Array(1024);
+      getFloatFrequencyData(dst: Float32Array) { dst.set(this.frequencyData); }
+      getFloatTimeDomainData(dst: Float32Array) { dst.set(this.timeData); }
+      get frequencyBinCount() { return 1024; }
+      connect() {}
+      disconnect() {}
+    }
+
+    class LocalAudioContext {
+      createAnalyser() { return new LocalAnalyser() as any; }
+      get sampleRate() { return 44100; }
+      get currentTime() { return 0; }
+      createGain() { return { connect() {}, disconnect() {}, gain: { value: 1 } }; }
+    }
+
+    audioContext = new LocalAudioContext() as any;
+    analyser = audioContext.createAnalyser() as any;
+    extractor = new AudioFeatureExtractor(audioContext as any, analyser as any);
   });
 
   describe("Feature Extractor Initialization", () => {

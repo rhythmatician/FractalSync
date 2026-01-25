@@ -42,3 +42,4 @@ docs/copilot/*
 
 # Sample run proxy frames
 logs/flight_recorder/*
+tmp_export_debug/*

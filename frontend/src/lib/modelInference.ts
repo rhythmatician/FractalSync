@@ -32,6 +32,8 @@ export interface ModelMetadata {
   input_feature_names?: string[];
   feature_mean?: number[];
   feature_std?: number[];
+  // Optional runtime normalization policy: who applies normalization and which fields contain mean/std
+  input_normalization?: { applied_by: 'runtime' | 'model'; mean_field?: string; std_field?: string } | null;
   epoch?: number;
   window_frames?: number;
   input_dim?: number;
@@ -39,7 +41,7 @@ export interface ModelMetadata {
   git_hash?: string;
   model_type?: string; // 'orbit_control' or legacy
   k_bands?: number;
-}
+} 
 
 export interface PerformanceMetrics {
   lastInferenceTime: number; // milliseconds
@@ -201,10 +203,20 @@ export class ModelInference {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
         
-        // Set up normalization
-        if (this.metadata.feature_mean && this.metadata.feature_std) {
-          this.featureMean = new Float32Array(this.metadata.feature_mean);
-          this.featureStd = new Float32Array(this.metadata.feature_std);
+        // Set up normalization based on contract's `input_normalization` policy.
+        const inorm = (this.metadata && this.metadata.input_normalization) || null;
+        if (inorm && inorm.applied_by === "runtime") {
+          // Use configured field names when present to remain flexible
+          const meanField = inorm.mean_field || "feature_mean";
+          const stdField = inorm.std_field || "feature_std";
+          if ((this.metadata as any)[meanField] && (this.metadata as any)[stdField]) {
+            this.featureMean = new Float32Array((this.metadata as any)[meanField]);
+            this.featureStd = new Float32Array((this.metadata as any)[stdField]);
+          }
+        } else {
+          // No runtime normalization requested by the contract
+          this.featureMean = null;
+          this.featureStd = null;
         }
       } catch (error) {
         console.warn('Failed to load metadata:', error);
@@ -235,6 +247,19 @@ export class ModelInference {
 
       const totalStartTime = performance.now();
       let normStartTime = performance.now();
+
+      // Ensure normalization stats are set from metadata if the contract requests runtime normalization
+      if (!this.featureMean || !this.featureStd) {
+        const inorm = (this.metadata && (this.metadata as any).input_normalization) || null;
+        if (inorm && inorm.applied_by === "runtime") {
+          const meanField = inorm.mean_field || "feature_mean";
+          const stdField = inorm.std_field || "feature_std";
+          if ((this.metadata as any)[meanField] && (this.metadata as any)[stdField]) {
+            this.featureMean = new Float32Array((this.metadata as any)[meanField]);
+            this.featureStd = new Float32Array((this.metadata as any)[stdField]);
+          }
+        }
+      }
 
       // Normalize features if normalization stats are available
       let normalizedFeatures = new Float32Array(features);

@@ -26,6 +26,13 @@ def test_export_contract_metadata(tmp_path):
     model = DummyControl(contract.input_dim, contract.output_dim)
 
     onnx_path = str(Path(tmp_path) / "control.onnx")
+
+    # Ensure canonical contract file is accessible during export
+    repo_root = Path(__file__).resolve().parents[2]
+    contract_path = repo_root / "contracts" / "model_io_contract.json"
+    assert contract_path.exists()
+    cj = json.loads(contract_path.read_text())
+    assert "input_timing" in cj and "input_normalization" in cj
     metadata_path = export_to_onnx(
         model=model,
         input_shape=(contract.input_dim,),
@@ -35,9 +42,18 @@ def test_export_contract_metadata(tmp_path):
 
     with open(metadata_path, "r", encoding="utf-8") as f:
         md = json.load(f)
-
-    assert md["parameter_names"] == contract.output_names
     assert md["output_dim"] == contract.output_dim
     assert md["input_feature_names"] == contract.input_names
     assert md["output_name"] == MODEL_OUTPUT_NAME
     assert md["input_name"] == MODEL_INPUT_NAME
+
+    # New contract fields should be present (copied from canonical contract)
+    if "input_timing" not in md:
+        raise AssertionError(
+            f"metadata missing input_timing; keys={sorted(list(md.keys()))}; content={md}"
+        )
+    assert md["input_timing"].get("sample_rate_hz") == 48000
+    assert "input_normalization" in md
+    assert md["input_normalization"].get("type") == "zscore"
+    assert "state_inputs" in md and "c_real" in md["state_inputs"]
+    assert "output_semantics" in md and "s_target" in md["output_semantics"]

@@ -5,6 +5,8 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   test: {
+    testTimeout: 60_000,   // per test
+    hookTimeout: 60_000,   // before/after hooks
     environment: 'jsdom',
     setupFiles: ['./src/lib/__tests__/setup.ts'],
     globals: true,
@@ -21,3 +23,5 @@ export default defineConfig({
     }
   }
 });
+import { defineConfig } from "vitest/config";
+

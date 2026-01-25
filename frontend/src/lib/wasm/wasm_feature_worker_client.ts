@@ -36,7 +36,7 @@ export class WasmFeatureWorkerClient {
   }
 
   async init(opts: { sr: number; hop: number; nfft: number; include_delta?: boolean; include_delta_delta?: boolean; }) {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>((resolve) => {
       const onInit = (ev: MessageEvent) => {
         const msg = ev.data;
         if (msg && msg.type === 'inited') {
@@ -51,7 +51,7 @@ export class WasmFeatureWorkerClient {
 
   async extract(audio: Float32Array, window_frames: number): Promise<Float64Array> {
     const id = this.counter++;
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       this.pending.set(id, resolve as any);
       // Transfer audio buffer to worker as ArrayBuffer copy (Float32 -> underlying buffer)
       this.worker.postMessage({ type: 'extract', id, audio: audio.buffer, window_frames }, [audio.buffer]);

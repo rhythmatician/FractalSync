@@ -6,9 +6,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node ../scripts/run-with-timeout.js --timeout 300 -- vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "test:fast": "node ./scripts/test-fast.js",
     "bench:headless": "node ./scripts/run-bench-playwright.js",
     "smoke": "npm run build --silent && node ./scripts/check-dist.cjs"
   },
@@ -19,6 +20,7 @@
     "jszip": "^3.10.1"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "playwright": "^1.36.0",
     "@testing-library/react": "^14.0.0",
     "@types/react": "^18.2.0",

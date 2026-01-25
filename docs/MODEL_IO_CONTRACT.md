@@ -2,7 +2,7 @@
 
 > Auto-generated from `contracts/model_io_contract.json`
 
-**version**: `fc2dcd98c3dc6f33ea1dc6645fb30357e450f7cefbe4d10dd447655bc8770e34`  (SHA256 of contract body)
+**version**: `badf08b0f456000862daf371df3957217088972fa0b3537802cb8ac783f5d6b0`  (SHA256 of contract body)
 
 ## Input
 - name: `audio_features`

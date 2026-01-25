@@ -170,7 +170,9 @@ def export_to_onnx(
             else:
                 k = default_contract().output_dim - 3
             parameter_names = build_output_names(k)
-            output_dim = provided_output_dim if provided_output_dim is not None else 3 + k
+            output_dim = (
+                provided_output_dim if provided_output_dim is not None else 3 + k
+            )
             parameter_ranges = {
                 "s_target": [0.2, 3.0],
                 "alpha": [0.0, 1.0],
@@ -181,7 +183,9 @@ def export_to_onnx(
 
     contract_window_frames = int(md.get("window_frames", DEFAULT_WINDOW_FRAMES))
     contract_k_bands = int(k_bands if k_bands is not None else DEFAULT_K_BANDS)
-    contract = contract_for(window_frames=int(contract_window_frames), k_bands=int(contract_k_bands))
+    contract = contract_for(
+        window_frames=int(contract_window_frames), k_bands=int(contract_k_bands)
+    )
     metadata_dict = {
         "input_shape": (
             list(input_shape) if len(input_shape) > 1 else [1, input_shape[0]]
@@ -193,6 +197,49 @@ def export_to_onnx(
         "parameter_ranges": parameter_ranges,
         "input_feature_names": contract.input_names,
     }
+
+    # Proactively include canonical contract attributes so exported models are
+    # self-describing even when callers omit them.
+    try:
+        _root = _Path(__file__).resolve().parents[2]
+        _contract_file = _root / "contracts" / "model_io_contract.json"
+        if _contract_file.exists():
+            import json as _json
+
+            _cj = _json.loads(_contract_file.read_text())
+            for _fld in (
+                "input_timing",
+                "input_normalization",
+                "state_inputs",
+                "output_semantics",
+            ):
+                if _fld in _cj:
+                    metadata_dict.setdefault(_fld, _cj[_fld])
+    except Exception as exc:
+        logging.warning("Could not read canonical contract fields for export: %s", exc)
+
+    # Copy canonical contract fields into metadata when present (but allow caller
+    # provided metadata to override explicit fields).
+    try:
+        repo_root = _Path(__file__).resolve().parents[2]
+        contract_path = repo_root / "contracts" / "model_io_contract.json"
+        if contract_path.exists():
+            import json as _json
+
+            cj_full = _json.loads(contract_path.read_text())
+            for fld in (
+                "input_timing",
+                "input_normalization",
+                "state_inputs",
+                "output_semantics",
+            ):
+                if fld in cj_full and fld not in metadata_dict:
+                    metadata_dict[fld] = cj_full[fld]
+                    logging.info("export_to_onnx: added contract field %s", fld)
+    except Exception as exc:
+        logging.warning(
+            "Could not copy canonical contract fields into metadata: %s", exc
+        )
 
     # Validate against canonical JSON contract if present
     try:
@@ -208,7 +255,9 @@ def export_to_onnx(
             # Parameter prefix & count check
             base = cj["output"]["base_output_names"]
             k = int(cj["output"]["k_bands"])
-            expected = base + [f"{cj['output']['parameter_prefix']}{i}" for i in range(k)]
+            expected = base + [
+                f"{cj['output']['parameter_prefix']}{i}" for i in range(k)
+            ]
             # If caller provided explicit parameter_names, prefer that; else ensure we generated expected
             if "parameter_names" in metadata_dict and metadata_dict["parameter_names"]:
                 # If lengths match expect exact equality; otherwise at least check prefix
@@ -219,8 +268,9 @@ def export_to_onnx(
                     assert got[: len(base)] == base
     except Exception:
         # Don't block export on these validations; surface in logs only
-        logging.warning("Model metadata did not fully validate against canonical contract")
-
+        logging.warning(
+            "Model metadata did not fully validate against canonical contract"
+        )
 
     if feature_mean is not None:
         metadata_dict["feature_mean"] = feature_mean.tolist()
@@ -231,6 +281,47 @@ def export_to_onnx(
     # ranges provided by the caller are preserved.
     if md:
         metadata_dict.update(md)
+
+    # Ensure canonical contract fields are present unless the caller explicitly
+    # overrides them.
+    try:
+        repo_root = _Path(__file__).resolve().parents[2]
+        contract_path = repo_root / "contracts" / "model_io_contract.json"
+        if contract_path.exists():
+            import json as _json
+
+            cj_full = _json.loads(contract_path.read_text())
+            for fld in (
+                "input_timing",
+                "input_normalization",
+                "state_inputs",
+                "output_semantics",
+            ):
+                if fld not in metadata_dict and fld in cj_full:
+                    metadata_dict[fld] = cj_full[fld]
+                    logging.info(
+                        "export_to_onnx: ensured contract field %s present", fld
+                    )
+            # As a last resort, unconditionally set the fields to guarantee
+            # the metadata lists the canonical contract (overwritten only by
+            # an explicit caller-provided value in 'md').
+            try:
+                if "input_timing" in cj_full:
+                    metadata_dict["input_timing"] = cj_full["input_timing"]
+                if "input_normalization" in cj_full:
+                    metadata_dict["input_normalization"] = cj_full[
+                        "input_normalization"
+                    ]
+                if "state_inputs" in cj_full:
+                    metadata_dict["state_inputs"] = cj_full["state_inputs"]
+                if "output_semantics" in cj_full:
+                    metadata_dict["output_semantics"] = cj_full["output_semantics"]
+            except Exception:
+                pass
+    except Exception as exc:
+        logging.warning(
+            "Could not ensure canonical contract fields in metadata: %s", exc
+        )
 
     # Compute model hash (SHA256) from the exported ONNX file
     try:
@@ -245,7 +336,7 @@ def export_to_onnx(
     # Files considered: backend/src/control_model.py, backend/src/control_trainer.py,
     # and runtime-core/src/controller.rs (if the runtime-core crate exists alongside repo).
     try:
-        repo_root = _Path(__file__).resolve().parents[1]
+        repo_root = _Path(__file__).resolve().parents[2]
         candidate_paths = [
             _Path(__file__).resolve().parent / "control_model.py",
             _Path(__file__).resolve().parent / "control_trainer.py",
@@ -261,6 +352,7 @@ def export_to_onnx(
     except Exception:
         logging.warning("Could not compute controller hash (one or more files missing)")
 
+    # Write metadata to file
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)
 
