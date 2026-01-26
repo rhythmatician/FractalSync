@@ -19,7 +19,7 @@ Open http://localhost:3000
 
 ## Architecture
 
-- `src/components/` - React components (AudioCapture, Visualizer, TrainingPanel)
+- `src/components/` - React components (AudioCapture, Visualizer)
 - `src/lib/modelInference.ts` - ONNX model loading and inference with **audio-driven post-processing**
 - `src/lib/audioFeatures.ts` - Browser-based audio feature extraction
 - `src/lib/juliaRenderer.ts` - WebGL Julia set renderer
