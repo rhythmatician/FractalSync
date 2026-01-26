@@ -2,6 +2,7 @@
 FastAPI server for model serving.
 """
 
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -41,3 +42,23 @@ async def get_latest_model():
         filename=latest_model.name,
     )
 
+
+@app.get("/api/model/metadata")
+async def get_model_metadata():
+    """Get metadata for the latest model."""
+    # Prioritize checkpoints (latest trained models)
+    models_dir = Path("checkpoints")
+    if not models_dir.exists():
+        models_dir = Path("models")  # Fallback to legacy location
+
+    metadata_files = list(models_dir.glob("*_metadata.json"))
+
+    if not metadata_files:
+        raise HTTPException(status_code=404, detail="No model metadata found")
+
+    latest_metadata = max(metadata_files, key=lambda p: p.stat().st_mtime)
+
+    with open(latest_metadata, "r") as f:
+        metadata = json.load(f)
+
+    return metadata
