@@ -25,14 +25,7 @@ from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
-
-# GPU rendering optimization imports
-try:
-    from src.julia_gpu import GPUJuliaRenderer
-
-    GPU_AVAILABLE = True
-except ImportError:
-    GPU_AVAILABLE = False
+from src.julia_gpu import GPUJuliaRenderer  # noqa: E402
 
 app = FastAPI(title="FractalSync Training API")
 
@@ -123,17 +116,14 @@ async def train_model_async(request: TrainingRequest):
         feature_extractor = make_feature_extractor()
         visual_metrics = VisualMetrics()
 
-        # Initialize GPU renderer if requested and available
+        # Initialize GPU renderer if requested
         julia_renderer = None
-        if request.use_gpu_rendering and GPU_AVAILABLE:
-            try:
-                julia_renderer = GPUJuliaRenderer(
-                    width=request.julia_resolution,
-                    height=request.julia_resolution,
-                )
-                logging.info("GPU renderer initialized successfully")
-            except Exception as e:
-                logging.warning(f"Failed to initialize GPU renderer: {e}")
+        if request.use_gpu_rendering:
+            julia_renderer = GPUJuliaRenderer(
+                width=request.julia_resolution,
+                height=request.julia_resolution,
+            )
+            logging.info("GPU renderer initialized successfully")
 
         # Initialize control model
         model = AudioToControlModel(

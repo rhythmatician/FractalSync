@@ -25,14 +25,7 @@ from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import VisualMetrics  # noqa: E402
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
-
-# GPU rendering optimization imports
-try:
-    from src.julia_gpu import GPUJuliaRenderer
-
-    GPU_AVAILABLE = True
-except ImportError:
-    GPU_AVAILABLE = False
+from src.julia_gpu import GPUJuliaRenderer  # noqa: E402
 
 
 def main():
@@ -148,7 +141,7 @@ def main():
         print(f"  Curriculum decay: {args.curriculum_decay}")
     print(f"Device: {args.device}")
     print("Optimizations:")
-    print(f"  GPU rendering: {not args.no_gpu_rendering and GPU_AVAILABLE}")
+    print(f"  GPU rendering: {not args.no_gpu_rendering}")
     print(f"  Julia resolution: {args.julia_resolution}x{args.julia_resolution}")
     print(f"  Julia max iterations: {args.julia_max_iter}")
     print(f"  DataLoader workers: {args.num_workers}")
@@ -174,21 +167,16 @@ def main():
 
     print("[4/7] Initializing GPU renderer (if enabled)...")
     julia_renderer = None
-    if not args.no_gpu_rendering and GPU_AVAILABLE:
-        try:
-            julia_renderer = GPUJuliaRenderer(
-                width=args.julia_resolution,
-                height=args.julia_resolution,
-            )
-            print(
-                f"  GPU renderer initialized: {args.julia_resolution}x{args.julia_resolution}"
-            )
-        except Exception as e:
-            print(f"  Warning: GPU renderer failed: {e}")
-            print("  Falling back to CPU rendering")
-            julia_renderer = None
+    if not args.no_gpu_rendering:
+        julia_renderer = GPUJuliaRenderer(
+            width=args.julia_resolution,
+            height=args.julia_resolution,
+        )
+        print(
+            f"  GPU renderer initialized: {args.julia_resolution}x{args.julia_resolution}"
+        )
     else:
-        print("  GPU rendering disabled, using CPU")
+        print("  GPU rendering disabled")
 
     print("[5/7] Creating orbit-based control model...")
     model = AudioToControlModel(

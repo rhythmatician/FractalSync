@@ -94,30 +94,26 @@ export class ModelInference {
 
     // Load metadata if provided
     if (metadataPath) {
-      try {
-        const response = await fetch(metadataPath);
-        this.metadata = await response.json() as ModelMetadata;
-        
-        // Check if this is an orbit-based control model
-        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
-        
-        if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
-          const kBands = this.metadata.k_bands || 6;
-          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
-          console.log('[ModelInference] Loaded orbit-based control model');
-        } else {
-          console.log('[ModelInference] Loaded legacy visual parameter model');
-        }
-        
-        // Set up normalization
-        if (this.metadata.feature_mean && this.metadata.feature_std) {
-          this.featureMean = new Float32Array(this.metadata.feature_mean);
-          this.featureStd = new Float32Array(this.metadata.feature_std);
-        }
-      } catch (error) {
-        console.warn('Failed to load metadata:', error);
+      const response = await fetch(metadataPath);
+      this.metadata = await response.json() as ModelMetadata;
+      
+      // Check if this is an orbit-based control model
+      this.isOrbitModel = this.metadata.model_type === 'orbit_control';
+      
+      if (this.isOrbitModel) {
+        // Initialize orbit synthesizer for control-signal models
+        const kBands = this.metadata.k_bands || 6;
+        this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+        this.orbitState = createInitialState({ kResiduals: kBands });
+        console.log('[ModelInference] Loaded orbit-based control model');
+      } else {
+        console.log('[ModelInference] Loaded legacy visual parameter model');
+      }
+      
+      // Set up normalization
+      if (this.metadata.feature_mean && this.metadata.feature_std) {
+        this.featureMean = new Float32Array(this.metadata.feature_mean);
+        this.featureStd = new Float32Array(this.metadata.feature_std);
       }
     }
   }

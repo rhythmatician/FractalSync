@@ -14,7 +14,7 @@ use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// Shared runtime constants to keep backend and frontend in lockstep.
-/// Exposed through bindings so both sides can assert parity at startup.
+/// Exposed through bindings for both runtimes.
 pub const SAMPLE_RATE: usize = 48_000;
 pub const HOP_LENGTH: usize = 1_024;
 pub const N_FFT: usize = 4_096;

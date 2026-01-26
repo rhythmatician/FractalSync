@@ -41,57 +41,27 @@ def export_to_onnx(
     else:
         dummy_input = torch.zeros(*input_shape)
 
-    # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
-    try:
-        torch.onnx.export(
-            model,
-            (dummy_input,),
-            output_path,
-            export_params=True,
-            input_names=["audio_features"],
-            output_names=["visual_parameters"],
-            dynamic_axes={
-                "audio_features": {0: "batch_size"},
-                "visual_parameters": {0: "batch_size"},
-            },
-            opset_version=11,
-            do_constant_folding=True,
-            verbose=False,
-            dynamo=True,
-        )
-    except Exception as dynamo_error:  # pragma: no cover - fallback path
-        logging.warning(
-            "ONNX dynamo export failed (%s); falling back to legacy exporter.",
-            dynamo_error,
-        )
-        try:
-            torch.onnx.export(
-                model,
-                (dummy_input,),
-                output_path,
-                export_params=True,
-                input_names=["audio_features"],
-                output_names=["visual_parameters"],
-                dynamic_axes={
-                    "audio_features": {0: "batch_size"},
-                    "visual_parameters": {0: "batch_size"},
-                },
-                opset_version=11,
-                do_constant_folding=True,
-                verbose=False,
-                dynamo=False,
-            )
-        except Exception as legacy_error:
-            raise RuntimeError(
-                f"ONNX export failed (dynamo and legacy): {legacy_error}"
-            ) from legacy_error
+    # Export using the dynamo-based exporter.
+    torch.onnx.export(
+        model,
+        (dummy_input,),
+        output_path,
+        export_params=True,
+        input_names=["audio_features"],
+        output_names=["visual_parameters"],
+        dynamic_axes={
+            "audio_features": {0: "batch_size"},
+            "visual_parameters": {0: "batch_size"},
+        },
+        opset_version=11,
+        do_constant_folding=True,
+        verbose=False,
+        dynamo=True,
+    )
 
-    # Load and verify ONNX model structure (skip full validation due to compat issues)
-    try:
-        onnx.load(output_path)
-        logging.info(f"Model exported successfully to {output_path}")
-    except Exception as e:
-        logging.warning(f"Could not fully validate ONNX model: {e}")
+    # Load and verify ONNX model structure
+    onnx.load(output_path)
+    logging.info(f"Model exported successfully to {output_path}")
 
     # Save metadata
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))

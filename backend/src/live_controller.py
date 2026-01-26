@@ -5,7 +5,6 @@ Implements the new architecture with:
 - Fast impact detection (many per song)
 - Slow section boundary detection (occasional lobe switches)
 - Orbit state machine with carrier + residual
-- Deterministic fallback behavior
 """
 
 import numpy as np

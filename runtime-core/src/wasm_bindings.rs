@@ -239,7 +239,7 @@ pub fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Comp
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
-/// Shared runtime constants for parity checks between backend and frontend.
+/// Shared runtime constants exposed for browser use.
 #[wasm_bindgen]
 pub fn sample_rate() -> usize {
     SAMPLE_RATE

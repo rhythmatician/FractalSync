@@ -1,10 +1,10 @@
 /**
  * Main visualizer component that orchestrates audio capture, inference, and rendering.
- * Includes performance monitoring, error recovery, and fallback visualization.
+ * Includes performance monitoring and error reporting.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
+import { JuliaRenderer } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 import { FullscreenToggle } from './FullscreenToggle';
@@ -20,21 +20,9 @@ export function Visualizer() {
   const [modelMetadata, setModelMetadata] = useState<ModelMetadata | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showModelInfo, setShowModelInfo] = useState(true);
-  const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
   const metricsUpdateRef = useRef<number | null>(null);
-
-  // Default fallback parameters (safe Julia set from training)
-  const DEFAULT_PARAMS: VisualParameters = {
-    juliaReal: -0.7269,
-    juliaImag: 0.1889,
-    colorHue: 0.5,
-    colorSat: 0.8,
-    colorBright: 0.9,
-    zoom: 1.0,
-    speed: 0.5
-  };
 
   useEffect(() => {
     // Initialize renderer
@@ -61,75 +49,35 @@ export function Visualizer() {
   }, []);
 
   useEffect(() => {
-    // Load model with retry logic
     const loadModel = async () => {
-      const maxRetries = 3;
-      let lastError: Error | null = null;
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          const model = new ModelInference();
-          
-          // Try to load from API, fallback to local path
-          try {
-            const modelResponse = await fetch('/api/model/latest');
-            if (modelResponse.ok) {
-              const blob = await modelResponse.blob();
-              const modelUrl = URL.createObjectURL(blob);
-              
-              // Try to get metadata
-              let metadataUrl: string | undefined;
-              try {
-                const metadataResponse = await fetch('/api/model/metadata');
-                if (metadataResponse.ok) {
-                  const metadataBlob = await metadataResponse.blob();
-                  metadataUrl = URL.createObjectURL(metadataBlob);
-                }
-              } catch (e) {
-                console.warn('Failed to load metadata:', e);
-              }
-              
-              await model.loadModel(modelUrl, metadataUrl);
-            } else {
-              // Fallback: try local model path with cache busting
-              const cacheBuster = `?t=${Date.now()}`;
-              await model.loadModel(
-                `/models/model.onnx${cacheBuster}`,
-                `/models/model.onnx_metadata.json${cacheBuster}`
-              );
-            }
-          } catch (e) {
-            console.warn('Failed to load model from API, trying local:', e);
-            // Fallback to local with cache busting
-            const cacheBuster = `?t=${Date.now()}`;
-            await model.loadModel(
-              `/models/model.onnx${cacheBuster}`,
-              `/models/model.onnx_metadata.json${cacheBuster}`
-            );
-          }
-          
-          modelRef.current = model;
-          setIsModelLoaded(true);
-          setError(null);
-          setModelMetadata(model.getMetadata());
-          console.log('✓ Model loaded successfully');
-          return;
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          console.warn(`Model load attempt ${attempt}/${maxRetries} failed:`, lastError.message);
-          
-          if (attempt < maxRetries) {
-            // Exponential backoff before retry
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
-          }
+      try {
+        const model = new ModelInference();
+        const modelResponse = await fetch('/api/model/latest');
+        if (!modelResponse.ok) {
+          throw new Error(`Failed to fetch model: ${modelResponse.status}`);
         }
-      }
+        const blob = await modelResponse.blob();
+        const modelUrl = URL.createObjectURL(blob);
 
-      // All retries exhausted
-      const errorMsg = `Failed to load model after ${maxRetries} attempts: ${lastError?.message}`;
-      setError(errorMsg);
-      setIsModelLoaded(false);
-      console.error(errorMsg);
+        const metadataResponse = await fetch('/api/model/metadata');
+        if (!metadataResponse.ok) {
+          throw new Error(`Failed to fetch metadata: ${metadataResponse.status}`);
+        }
+        const metadataBlob = await metadataResponse.blob();
+        const metadataUrl = URL.createObjectURL(metadataBlob);
+
+        await model.loadModel(modelUrl, metadataUrl);
+        modelRef.current = model;
+        setIsModelLoaded(true);
+        setError(null);
+        setModelMetadata(model.getMetadata());
+        console.log('✓ Model loaded successfully');
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        setError(errorMsg);
+        setIsModelLoaded(false);
+        console.error(errorMsg);
+      }
     };
 
     loadModel();
@@ -139,46 +87,33 @@ export function Visualizer() {
     if (!rendererRef.current) return;
 
     try {
-      if (modelRef.current && modelRef.current.isLoaded()) {
-        // Run inference with the model
-        const params = await modelRef.current.infer(features);
-        
-        // Update metrics display
-        const modelMetrics = modelRef.current.getMetrics();
-        setMetrics(modelMetrics);
-        
-        // Warn if inference is taking too long for live performance
-        if (modelMetrics.lastInferenceTime > 30) {
-          console.warn(
-            `⚠️ Slow inference: ${modelMetrics.lastInferenceTime.toFixed(1)}ms (avg: ${modelMetrics.averageInferenceTime.toFixed(1)}ms)`
-          );
-        }
-
-        // Reset failure counter on success
-        setInferenceFailures(0);
-        
-        // Debug: log final visual parameters (after orbit synthesis)
-        console.debug('Final visual params (post-orbit-synthesis):', params);
-        
-        // Update renderer
-        rendererRef.current.updateParameters(params);
-      } else {
-        // Fallback: use default parameters if model not available
-        rendererRef.current.updateParameters(DEFAULT_PARAMS);
-        setInferenceFailures(prev => prev + 1);
+      if (!modelRef.current || !modelRef.current.isLoaded()) {
+        throw new Error('Model not loaded');
       }
-    } catch (err) {
-      console.error('Inference error:', err);
-      setInferenceFailures(prev => {
-        const newCount = prev + 1;
-        if (newCount % 10 === 0) {
-          console.warn(`⚠️ Inference failures: ${newCount}. Using fallback visualization.`);
-        }
-        return newCount;
-      });
+
+      // Run inference with the model
+      const params = await modelRef.current.infer(features);
       
-      // Use fallback visualization
-      rendererRef.current.updateParameters(DEFAULT_PARAMS);
+      // Update metrics display
+      const modelMetrics = modelRef.current.getMetrics();
+      setMetrics(modelMetrics);
+      
+      // Warn if inference is taking too long for live performance
+      if (modelMetrics.lastInferenceTime > 30) {
+        console.warn(
+          `⚠️ Slow inference: ${modelMetrics.lastInferenceTime.toFixed(1)}ms (avg: ${modelMetrics.averageInferenceTime.toFixed(1)}ms)`
+        );
+      }
+
+      // Debug: log final visual parameters (after orbit synthesis)
+      console.debug('Final visual params (post-orbit-synthesis):', params);
+      
+      // Update renderer
+      rendererRef.current.updateParameters(params);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('Inference error:', errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -286,9 +221,6 @@ export function Visualizer() {
                 <span style={{ color: '#ff4444' }}>✗ {error.substring(0, 40)}...</span>
               )}
               
-              {inferenceFailures > 0 && (
-                <span style={{ color: '#ffaa00' }}>⚠️ {inferenceFailures} failures (fallback mode)</span>
-              )}
             </div>
           </div>
           
