@@ -4,6 +4,7 @@
 
 import * as ort from 'onnxruntime-web';
 import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
+import { ContourController } from './contourController';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -49,6 +50,10 @@ export class ModelInference {
   private orbitSynthesizer: OrbitSynthesizer | null = null;
   private orbitState: OrbitState | null = null;
   private isOrbitModel: boolean = false;
+
+  // Contour-following synthesis (height-field controller)
+  private contourController: ContourController | null = null;
+  private isContourModel: boolean = false;
   
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
@@ -100,6 +105,7 @@ export class ModelInference {
         
         // Check if this is an orbit-based control model
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
+        this.isContourModel = this.metadata.model_type === 'contour_control';
         
         if (this.isOrbitModel) {
           // Initialize orbit synthesizer for control-signal models
@@ -107,6 +113,10 @@ export class ModelInference {
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
           this.orbitState = createInitialState({ kResiduals: kBands });
           console.log('[ModelInference] Loaded orbit-based control model');
+        } else if (this.isContourModel) {
+          // Initialize contour controller for height-field models
+          this.contourController = new ContourController({ real: -0.75, imag: 0.1 });
+          console.log('[ModelInference] Loaded contour-control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
@@ -225,6 +235,40 @@ export class ModelInference {
       
       // Color-based section detection for lobe switching
       this.detectSectionChange(currentHue);
+    } else if (this.isContourModel && this.contourController) {
+      // HEIGHT-FIELD CONTOUR CONTROL MODEL
+      const modelDelta = { real: params[0] ?? 0.0, imag: params[1] ?? 0.0 };
+      const heightDrift = params.length > 2 ? params[2] : 0.0;
+      if (heightDrift !== 0.0) {
+        const targetHeight = this.contourController.getTargetHeight() + heightDrift;
+        this.contourController.setTargetHeight(targetHeight);
+      }
+
+      const step = this.contourController.step(modelDelta);
+      const c = step.c;
+
+      const numFeatures = 6;
+      const windowFrames = Math.floor(features.length / numFeatures);
+      let avgRMS = 0;
+      let avgOnset = 0;
+      for (let i = 0; i < windowFrames; i++) {
+        avgRMS += features[i * numFeatures + 2];
+        avgOnset += features[i * numFeatures + 4];
+      }
+      avgRMS /= windowFrames;
+      avgOnset /= windowFrames;
+
+      const currentHue = (avgRMS * 2.0) % 1.0;
+      const deltaMag = Math.hypot(modelDelta.real, modelDelta.imag);
+      visualParams = {
+        juliaReal: c.real,
+        juliaImag: c.imag,
+        colorHue: currentHue,
+        colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
+        colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
+        zoom: Math.max(1.5, Math.min(4.0, 2.5)),
+        speed: Math.max(0.3, Math.min(0.7, deltaMag * 2.0))
+      };
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -312,7 +356,11 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
+        modelType: this.isOrbitModel
+          ? 'orbit_control'
+          : this.isContourModel
+            ? 'contour_control'
+            : 'legacy'
       });
     }
 

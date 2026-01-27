@@ -7,8 +7,6 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
-
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
@@ -23,6 +21,19 @@ use crate::controller::{
     WINDOW_FRAMES,
     step as rust_step,
     synthesize as rust_synthesize,
+};
+use crate::height_controller::{
+    contour_correct_delta as rust_contour_correct_delta,
+    sample_height_field as rust_sample_height_field,
+    ContourControllerParams as RustContourControllerParams,
+    ContourState as RustContourState,
+    ContourStep as RustContourStep,
+    HeightFieldParams as RustHeightFieldParams,
+    HeightFieldSample as RustHeightFieldSample,
+    DEFAULT_CONTOUR_CORRECTION_GAIN,
+    DEFAULT_CONTOUR_PROJECTION_EPSILON,
+    DEFAULT_HEIGHT_ITERATIONS,
+    DEFAULT_HEIGHT_MIN_MAGNITUDE,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
@@ -40,6 +51,18 @@ pub struct Complex {
 impl From<RustComplex> for Complex {
     fn from(c: RustComplex) -> Self {
         Self { real: c.real, imag: c.imag }
+    }
+}
+
+impl From<Complex> for RustComplex {
+    fn from(c: Complex) -> Self {
+        Self::new(c.real, c.imag)
+    }
+}
+
+impl From<&Complex> for RustComplex {
+    fn from(c: &Complex) -> Self {
+        Self::new(c.real, c.imag)
     }
 }
 
@@ -88,6 +111,171 @@ impl From<ResidualParams> for RustResidualParams {
             k_residuals: p.k_residuals,
             residual_cap: p.residual_cap,
             radius_scale: p.radius_scale,
+        }
+    }
+}
+
+/// Python wrapper for the height-field parameters.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct HeightFieldParams {
+    #[pyo3(get, set)]
+    pub iterations: usize,
+    #[pyo3(get, set)]
+    pub min_magnitude: f64,
+}
+
+#[pymethods]
+impl HeightFieldParams {
+    #[new]
+    #[pyo3(signature = (iterations=DEFAULT_HEIGHT_ITERATIONS, min_magnitude=DEFAULT_HEIGHT_MIN_MAGNITUDE))]
+    fn py_new(iterations: usize, min_magnitude: f64) -> Self {
+        Self {
+            iterations,
+            min_magnitude,
+        }
+    }
+}
+
+impl From<HeightFieldParams> for RustHeightFieldParams {
+    fn from(p: HeightFieldParams) -> RustHeightFieldParams {
+        RustHeightFieldParams {
+            iterations: p.iterations,
+            min_magnitude: p.min_magnitude,
+        }
+    }
+}
+
+/// Python wrapper for a height-field sample.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct HeightFieldSample {
+    #[pyo3(get)]
+    pub height: f64,
+    #[pyo3(get)]
+    pub gradient: Complex,
+    #[pyo3(get)]
+    pub z: Complex,
+    #[pyo3(get)]
+    pub w: Complex,
+    #[pyo3(get)]
+    pub magnitude: f64,
+}
+
+impl From<RustHeightFieldSample> for HeightFieldSample {
+    fn from(sample: RustHeightFieldSample) -> Self {
+        Self {
+            height: sample.height,
+            gradient: sample.gradient.into(),
+            z: sample.z.into(),
+            w: sample.w.into(),
+            magnitude: sample.magnitude,
+        }
+    }
+}
+
+/// Python wrapper for contour controller parameters.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ContourControllerParams {
+    #[pyo3(get, set)]
+    pub correction_gain: f64,
+    #[pyo3(get, set)]
+    pub projection_epsilon: f64,
+}
+
+#[pymethods]
+impl ContourControllerParams {
+    #[new]
+    #[pyo3(signature = (correction_gain=DEFAULT_CONTOUR_CORRECTION_GAIN, projection_epsilon=DEFAULT_CONTOUR_PROJECTION_EPSILON))]
+    fn py_new(correction_gain: f64, projection_epsilon: f64) -> Self {
+        Self {
+            correction_gain,
+            projection_epsilon,
+        }
+    }
+}
+
+impl From<ContourControllerParams> for RustContourControllerParams {
+    fn from(p: ContourControllerParams) -> RustContourControllerParams {
+        RustContourControllerParams {
+            correction_gain: p.correction_gain,
+            projection_epsilon: p.projection_epsilon,
+        }
+    }
+}
+
+/// Python wrapper for contour controller state.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ContourState {
+    inner: RustContourState,
+}
+
+#[pymethods]
+impl ContourState {
+    #[new]
+    #[pyo3(signature = (c, field_params=None))]
+    fn py_new(c: Complex, field_params: Option<HeightFieldParams>) -> Self {
+        let params = field_params.unwrap_or_else(|| HeightFieldParams {
+            iterations: DEFAULT_HEIGHT_ITERATIONS,
+            min_magnitude: DEFAULT_HEIGHT_MIN_MAGNITUDE,
+        });
+        Self {
+            inner: RustContourState::new(c.into(), params.into()),
+        }
+    }
+
+    #[pyo3(signature = (target_height))]
+    fn set_target_height(&mut self, target_height: f64) {
+        self.inner.set_target_height(target_height);
+    }
+
+    fn target_height(&self) -> f64 {
+        self.inner.target_height
+    }
+
+    fn c(&self) -> Complex {
+        self.inner.c.into()
+    }
+
+    fn step(
+        &mut self,
+        model_delta: Complex,
+        field_params: HeightFieldParams,
+        controller_params: ContourControllerParams,
+    ) -> ContourStep {
+        let step = self
+            .inner
+            .step(model_delta.into(), field_params.into(), controller_params.into());
+        step.into()
+    }
+}
+
+/// Python wrapper for contour controller step output.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ContourStep {
+    #[pyo3(get)]
+    pub c: Complex,
+    #[pyo3(get)]
+    pub height: f64,
+    #[pyo3(get)]
+    pub height_error: f64,
+    #[pyo3(get)]
+    pub gradient: Complex,
+    #[pyo3(get)]
+    pub corrected_delta: Complex,
+}
+
+impl From<RustContourStep> for ContourStep {
+    fn from(step: RustContourStep) -> Self {
+        Self {
+            c: step.c.into(),
+            height: step.height,
+            height_error: step.height_error,
+            gradient: step.gradient.into(),
+            corrected_delta: step.corrected_delta.into(),
         }
     }
 }
@@ -280,6 +468,39 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
+/// Free function: sample height field at a point.
+#[pyfunction]
+#[pyo3(signature = (c, params=None))]
+fn sample_height_field(c: Complex, params: Option<HeightFieldParams>) -> HeightFieldSample {
+    let params = params.unwrap_or_else(|| HeightFieldParams {
+        iterations: DEFAULT_HEIGHT_ITERATIONS,
+        min_magnitude: DEFAULT_HEIGHT_MIN_MAGNITUDE,
+    });
+    rust_sample_height_field(c.into(), params.into()).into()
+}
+
+/// Free function: apply contour correction to a proposed delta.
+#[pyfunction]
+#[pyo3(signature = (model_delta, gradient, height_error, params=None))]
+fn contour_correct_delta(
+    model_delta: Complex,
+    gradient: Complex,
+    height_error: f64,
+    params: Option<ContourControllerParams>,
+) -> Complex {
+    let params = params.unwrap_or_else(|| ContourControllerParams {
+        correction_gain: DEFAULT_CONTOUR_CORRECTION_GAIN,
+        projection_epsilon: DEFAULT_CONTOUR_PROJECTION_EPSILON,
+    });
+    rust_contour_correct_delta(
+        model_delta.into(),
+        gradient.into(),
+        height_error,
+        params.into(),
+    )
+    .into()
+}
+
 #[pymodule]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Shared constants
@@ -292,11 +513,22 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+    m.add("DEFAULT_HEIGHT_ITERATIONS", DEFAULT_HEIGHT_ITERATIONS)?;
+    m.add("DEFAULT_HEIGHT_MIN_MAGNITUDE", DEFAULT_HEIGHT_MIN_MAGNITUDE)?;
+    m.add("DEFAULT_CONTOUR_CORRECTION_GAIN", DEFAULT_CONTOUR_CORRECTION_GAIN)?;
+    m.add("DEFAULT_CONTOUR_PROJECTION_EPSILON", DEFAULT_CONTOUR_PROJECTION_EPSILON)?;
 
     m.add_class::<Complex>()?;
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
+    m.add_class::<HeightFieldParams>()?;
+    m.add_class::<HeightFieldSample>()?;
+    m.add_class::<ContourControllerParams>()?;
+    m.add_class::<ContourState>()?;
+    m.add_class::<ContourStep>()?;
     m.add_class::<FeatureExtractor>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_height_field, m)?)?;
+    m.add_function(wrap_pyfunction!(contour_correct_delta, m)?)?;
     Ok(())
 }

@@ -17,6 +17,10 @@ DEFAULT_RESIDUAL_CAP: float
 DEFAULT_RESIDUAL_OMEGA_SCALE: float
 DEFAULT_BASE_OMEGA: float
 DEFAULT_ORBIT_SEED: int
+DEFAULT_HEIGHT_ITERATIONS: int
+DEFAULT_HEIGHT_MIN_MAGNITUDE: float
+DEFAULT_CONTOUR_CORRECTION_GAIN: float
+DEFAULT_CONTOUR_PROJECTION_EPSILON: float
 
 class Complex:
     """Complex number with re and im attributes."""
@@ -114,6 +118,67 @@ class OrbitState:
     ) -> Complex: ...
     def clone(self) -> OrbitState: ...
 
+class HeightFieldParams:
+    """Height-field sampling parameters."""
+
+    def __init__(
+        self,
+        iterations: int = 64,
+        min_magnitude: float = 1.0e-6,
+    ) -> None: ...
+
+    iterations: int
+    min_magnitude: float
+
+class HeightFieldSample:
+    """Sample from the Mandelbrot height field."""
+
+    height: float
+    gradient: Complex
+    z: Complex
+    w: Complex
+    magnitude: float
+
+class ContourControllerParams:
+    """Contour controller parameters."""
+
+    def __init__(
+        self,
+        correction_gain: float = 0.8,
+        projection_epsilon: float = 1.0e-6,
+    ) -> None: ...
+
+    correction_gain: float
+    projection_epsilon: float
+
+class ContourStep:
+    """Step output from contour controller."""
+
+    c: Complex
+    height: float
+    height_error: float
+    gradient: Complex
+    corrected_delta: Complex
+
+class ContourState:
+    """Contour-following state."""
+
+    def __init__(
+        self,
+        c: Complex,
+        field_params: Optional[HeightFieldParams] = None,
+    ) -> None: ...
+
+    def set_target_height(self, target_height: float) -> None: ...
+    def target_height(self) -> float: ...
+    def c(self) -> Complex: ...
+    def step(
+        self,
+        model_delta: Complex,
+        field_params: HeightFieldParams,
+        controller_params: ContourControllerParams,
+    ) -> ContourStep: ...
+
 # Geometry functions
 
 def lobe_point_at_angle(
@@ -121,4 +186,16 @@ def lobe_point_at_angle(
     sub_lobe: int,
     theta: float,
     s: float = 1.0,
+) -> Complex: ...
+
+def sample_height_field(
+    c: Complex,
+    params: Optional[HeightFieldParams] = None,
+) -> HeightFieldSample: ...
+
+def contour_correct_delta(
+    model_delta: Complex,
+    gradient: Complex,
+    height_error: float,
+    params: Optional[ContourControllerParams] = None,
 ) -> Complex: ...

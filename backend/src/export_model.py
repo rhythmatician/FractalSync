@@ -111,6 +111,15 @@ def export_to_onnx(
         }
         for i in range(k_bands):
             parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
+    elif metadata and metadata.get("model_type") == "contour_control":
+        # Contour-control model outputs: delta_real, delta_imag, height_drift
+        output_dim = metadata.get("output_dim", 3)
+        parameter_names = ["delta_real", "delta_imag", "height_drift"]
+        parameter_ranges = {
+            "delta_real": [-1.0, 1.0],
+            "delta_imag": [-1.0, 1.0],
+            "height_drift": [-0.1, 0.1],
+        }
     else:
         # Default: physics/visual parameter model (legacy)
         output_dim = 7
