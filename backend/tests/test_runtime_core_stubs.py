@@ -50,10 +50,10 @@ def test_classes_have_expected_members():
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
                 elif cls_name == "HeightFieldSample":
-                    inst = rc.height_field(cls(0.0, 0.0))
+                    inst = rc.height_field(rc.Complex(0.0, 0.0))
                 elif cls_name == "HeightControllerStep":
                     inst = rc.height_controller_step(
-                        cls(0.0, 0.0), cls(0.01, 0.01), -0.5, 0.1
+                        rc.Complex(0.0, 0.0), rc.Complex(0.01, 0.01), -0.5, 0.1
                     )
             except Exception:
                 inst = None
