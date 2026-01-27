@@ -6,35 +6,46 @@ import pytest
 
 rc = pytest.importorskip("runtime_core")
 
-EXPECTED_CLASSES = {
-    "Complex": [],
-    "FeatureExtractor": [
-        "feature_mean",
-        "feature_std",
-        "num_features_per_frame",
-        "extract_windowed_features",
-        "compute_normalization_stats",
-        "normalize_features",
-    ],
-    "ResidualParams": [
-        "k_residuals",
-        "residual_cap",
-        "radius_scale",
-    ],
-    "OrbitState": [
-        "lobe",
-        "sub_lobe",
-        "theta",
-        "omega",
-        "s",
-        "alpha",
-        "k_residuals",
-        "residual_omega_scale",
-        "step",
-        "synthesize",
-        "clone",
-    ],
-}
+
+def compile_classes() -> dict[str, list[str]] | None:
+    """Attempt to compile the expected classes from the stub file.
+
+    Returns:
+        A mapping of class names to lists of member names, or None on failure.
+    """
+    import ast
+    from pathlib import Path
+
+    stub_path = Path(__file__).parent.parent / "stubs" / "runtime_core.pyi"
+    if not stub_path.exists():
+        return None
+
+    try:
+        with open(stub_path, "r", encoding="utf-8") as f:
+            stub_source = f.read()
+        tree = ast.parse(stub_source, filename=str(stub_path))
+
+        classes = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                member_names = []
+                for body_item in node.body:
+                    if isinstance(body_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        member_names.append(body_item.name)
+                    elif isinstance(body_item, ast.AnnAssign):
+                        if isinstance(body_item.target, ast.Name):
+                            member_names.append(body_item.target.id)
+                    elif isinstance(body_item, ast.Assign):
+                        for target in body_item.targets:
+                            if isinstance(target, ast.Name):
+                                member_names.append(target.id)
+                classes[node.name] = member_names
+        return classes
+    except Exception:
+        return None
+
+
+EXPECTED_CLASSES = compile_classes()
 
 
 def _get_class(cls_name: str):
@@ -48,11 +59,13 @@ def test_classes_have_expected_members():
 
     We attempt a conservative check: look for the member on the class object
     and (when possible) on a default instance. For certain classes we use
-    safe fallbacks to obtain an instance (e.g. `lobe_point_at_angle` for
-    `Complex`, explicit constructor args for `OrbitState`). This makes the
+    safe fallbacks to obtain an instance (e.g. explicit constructor args for
+    `Complex`). This makes the
     test tolerant of minor ABI differences while verifying presence of the
     API surface described in the stubs.
     """
+    if not EXPECTED_CLASSES:
+        pytest.fail("Could not compile expected classes from runtime_core stubs")
     all_missing = {}
     for cls_name, members in EXPECTED_CLASSES.items():
         cls = _get_class(cls_name)
@@ -65,23 +78,16 @@ def test_classes_have_expected_members():
         except Exception:
             # Fallbacks for commonly non-default-constructible types
             try:
-                if cls_name == "OrbitState":
-                    inst = cls(
-                        1,
-                        0,
-                        0.0,
-                        float(getattr(rc, "DEFAULT_BASE_OMEGA", 0.15)),
-                        1.02,
-                        0.3,
-                        int(getattr(rc, "DEFAULT_K_RESIDUALS", 6)),
-                        float(getattr(rc, "DEFAULT_RESIDUAL_OMEGA_SCALE", 1.0)),
-                    )
-                elif cls_name == "Complex" and hasattr(rc, "lobe_point_at_angle"):
-                    inst = rc.lobe_point_at_angle(1, 0, 0.1, 1.0)
-                elif cls_name == "ResidualParams":
-                    inst = cls()
+                if cls_name == "Complex":
+                    inst = cls(0.0, 0.0)
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
+                elif cls_name == "HeightFieldSample":
+                    inst = rc.height_field(rc.Complex(0.0, 0.0))
+                elif cls_name == "HeightControllerStep":
+                    inst = rc.height_controller_step(
+                        rc.Complex(0.0, 0.0), rc.Complex(0.01, 0.01), -0.5, 0.1
+                    )
             except Exception:
                 inst = None
 
@@ -121,3 +127,14 @@ def test_classes_have_expected_members():
     if all_missing:
         messages = [f"{k}: missing {sorted(v)}" for k, v in all_missing.items()]
         pytest.fail("Runtime core API differs from stubs:\n" + "\n".join(messages))
+
+
+def test_compile_classes_returns_nonempty_dict():
+    """Test that compile_classes returns valid structure."""
+    result = compile_classes()
+    assert isinstance(result, dict)
+    assert result is not None, "compile_classes returned None"
+    for cls_name, members in result.items():
+        assert isinstance(cls_name, str)
+        assert isinstance(members, list)
+        assert all(isinstance(m, str) for m in members)
