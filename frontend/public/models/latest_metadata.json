@@ -1,0 +1,18 @@
+{
+  "input_shape": [
+    1,
+    60
+  ],
+  "output_dim": 7,
+  "parameter_names": [
+    "julia_real",
+    "julia_imag",
+    "color_hue",
+    "color_sat",
+    "color_bright",
+    "zoom",
+    "speed"
+  ],
+  "parameter_ranges": {},
+  "timestamp": null
+}
