@@ -29,10 +29,3 @@ cd ../wasm-orbit; wasm-pack build --target web # wasm bindings for frontend
 cd ../frontend; npm run build  # frontend
 # backend does not need to be built
 ```
-
-## Until reboot:
-
-Add cargo to PATH
-```ps1
-$env:Path = "$env:Path;C:\Users\JeffHall\.cargo\bin";
-```
