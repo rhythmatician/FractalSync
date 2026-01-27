@@ -10,6 +10,7 @@ import os
 import sys
 import subprocess
 import logging
+import shutil
 from datetime import datetime
 import traceback
 
@@ -37,6 +38,7 @@ except ImportError:
 
 def main():
     """Main training function."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     # Configure logging so ControlTrainer messages are visible
     os.makedirs("logs", exist_ok=True)
     logging.basicConfig(
@@ -94,6 +96,12 @@ def main():
         type=str,
         default="checkpoints",
         help="Directory to save model checkpoints",
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=str,
+        default=os.path.join(repo_root, "models"),
+        help="Directory to save exported ONNX models and metadata",
     )
     parser.add_argument(
         "--device",
@@ -222,6 +230,7 @@ def main():
     print("[7/7] Starting training...")
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
+    print(f"Trained models will be exported to: {args.model_dir}")
     print("\nArchitecture overview:")
     print("  - Model predicts control signals: s, alpha, omega_scale, band_gates")
     print("  - Orbit synthesizer generates deterministic c(t) from controls")
@@ -244,6 +253,7 @@ def main():
     # Export to ONNX
     print("\nExporting model to ONNX format...")
     os.makedirs(args.save_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     iso_timestamp = datetime.now().isoformat()
@@ -261,11 +271,11 @@ def main():
         print(f"Warning: Could not get git hash: {e}")
 
     onnx_model_filename = f"model_orbit_control_{timestamp}.onnx"
-    onnx_path = os.path.join(args.save_dir, onnx_model_filename)
+    onnx_path = os.path.join(args.model_dir, onnx_model_filename)
 
     try:
         model.eval()
-        export_to_onnx(
+        metadata_path = export_to_onnx(
             model=model,
             input_shape=(1, model.input_dim),
             output_path=onnx_path,
@@ -292,6 +302,13 @@ def main():
             },
         )
         print(f"Model exported to: {onnx_path}")
+        latest_model_path = os.path.join(args.model_dir, "model.onnx")
+        latest_metadata_path = os.path.join(
+            args.model_dir, "model.onnx_metadata.json"
+        )
+        shutil.copy2(onnx_path, latest_model_path)
+        shutil.copy2(metadata_path, latest_metadata_path)
+        print(f"Latest model copied to: {latest_model_path}")
     except Exception as e:
         print(f"Warning: Could not export to ONNX: {e}")
 

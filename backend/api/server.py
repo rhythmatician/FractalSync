@@ -24,10 +24,10 @@ app.add_middleware(
 @app.get("/api/model/latest")
 async def get_latest_model():
     """Download the latest ONNX model."""
-    # Prioritize checkpoints (latest trained models)
-    models_dir = Path("checkpoints")
+    repo_root = Path(__file__).resolve().parents[2]
+    models_dir = repo_root / "models"
     if not models_dir.exists():
-        models_dir = Path("models")  # Fallback to legacy location
+        models_dir = repo_root / "backend" / "checkpoints"
 
     onnx_files = list(models_dir.glob("*.onnx"))
 
@@ -46,10 +46,10 @@ async def get_latest_model():
 @app.get("/api/model/metadata")
 async def get_model_metadata():
     """Get metadata for the latest model."""
-    # Prioritize checkpoints (latest trained models)
-    models_dir = Path("checkpoints")
+    repo_root = Path(__file__).resolve().parents[2]
+    models_dir = repo_root / "models"
     if not models_dir.exists():
-        models_dir = Path("models")  # Fallback to legacy location
+        models_dir = repo_root / "backend" / "checkpoints"
 
     metadata_files = list(models_dir.glob("*_metadata.json"))
 

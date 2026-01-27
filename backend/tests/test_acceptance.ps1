@@ -44,14 +44,14 @@ Test-Step "Training script runs without hanging" {
 }
 
 Test-Step "ONNX model file exists" {
-    $onnxFiles = Get-ChildItem backend/checkpoints/*.onnx -ErrorAction Stop
+    $onnxFiles = Get-ChildItem models/*.onnx -ErrorAction Stop
     if ($onnxFiles.Count -eq 0) {
         throw "No ONNX model files found"
     }
 }
 
 Test-Step "ONNX metadata file exists" {
-    $metadataFiles = Get-ChildItem backend/checkpoints/*.onnx_metadata.json -ErrorAction Stop
+    $metadataFiles = Get-ChildItem models/*.onnx_metadata.json -ErrorAction Stop
     if ($metadataFiles.Count -eq 0) {
         throw "No ONNX metadata files found"
     }
