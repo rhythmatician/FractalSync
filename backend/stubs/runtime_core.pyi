@@ -48,19 +48,13 @@ class FeatureExtractor:
         include_delta: bool = False,
         include_delta_delta: bool = False,
     ) -> None: ...
-
-    # Normalization statistics provided after compute_normalization_stats
-    feature_mean: Sequence[float]
-    feature_std: Sequence[float]
-
     def num_features_per_frame(self) -> int: ...
     def extract_windowed_features(
         self,
         audio: Sequence[float],
         window_frames: int = 10,
     ) -> NDArray: ...
-    def compute_normalization_stats(self, features: Sequence[NDArray]) -> None: ...
-    def normalize_features(self, features: NDArray) -> NDArray: ...
+    def test_simple(self) -> bool: ...
 
 class ResidualParams:
     """Residual orbit parameters."""
@@ -81,26 +75,33 @@ class OrbitState:
 
     def __init__(
         self,
-        lobe: int = 1,
-        sub_lobe: int = 0,
-        theta: float = 0.0,
-        omega: float = 0.15,
-        s: float = 1.02,
-        alpha: float = 0.3,
-        k_residuals: int = 6,
-        residual_omega_scale: float = 1.0,
-        seed: Optional[int] = None,
+        lobe: int,
+        sub_lobe: int,
+        theta: float,
+        omega: float,
+        s: float,
+        alpha: float,
+        k_residuals: int,
+        residual_omega_scale: float,
     ) -> None: ...
-
-    lobe: int
-    sub_lobe: int
-    theta: float
-    omega: float
-    s: float
-    alpha: float
-    k_residuals: int
-    residual_omega_scale: float
-
+    @staticmethod
+    def new_with_seed(
+        lobe: int,
+        sub_lobe: int,
+        theta: float,
+        omega: float,
+        s: float,
+        alpha: float,
+        k_residuals: int,
+        residual_omega_scale: float,
+        seed: int,
+    ) -> OrbitState: ...
+    @staticmethod
+    def new_default_seeded(seed: int) -> OrbitState: ...
+    def carrier(self) -> Complex: ...
+    def residual_phases(self) -> list[float]: ...
+    def residual_omegas(self) -> list[float]: ...
+    def advance(self, dt: float) -> None: ...
     def step(
         self,
         dt: float,
@@ -112,7 +113,6 @@ class OrbitState:
         residual_params: ResidualParams,
         band_gates: Optional[list[float]] = None,
     ) -> Complex: ...
-    def clone(self) -> OrbitState: ...
 
 # Geometry functions
 
