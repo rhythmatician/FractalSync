@@ -21,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/api/model/latest")
 async def get_latest_model():
     """Download the latest ONNX model."""
@@ -62,3 +63,9 @@ async def get_model_metadata():
         metadata = json.load(f)
 
     return metadata
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("api.server:app", host="127.0.0.1", port=8000, reload=True)
