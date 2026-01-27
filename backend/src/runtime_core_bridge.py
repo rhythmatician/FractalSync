@@ -8,7 +8,7 @@ matching values exposed by the wasm bindings.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence, Union
+from typing import Union
 import logging
 
 import runtime_core as rc
@@ -20,11 +20,9 @@ SAMPLE_RATE: int = rc.SAMPLE_RATE
 HOP_LENGTH: int = rc.HOP_LENGTH
 N_FFT: int = rc.N_FFT
 WINDOW_FRAMES: int = rc.WINDOW_FRAMES
-DEFAULT_K_RESIDUALS: int = rc.DEFAULT_K_RESIDUALS
-DEFAULT_RESIDUAL_CAP: float = rc.DEFAULT_RESIDUAL_CAP
-DEFAULT_RESIDUAL_OMEGA_SCALE: float = rc.DEFAULT_RESIDUAL_OMEGA_SCALE
-DEFAULT_BASE_OMEGA: float = rc.DEFAULT_BASE_OMEGA
-DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
+DEFAULT_HEIGHT_ITERATIONS: int = rc.DEFAULT_HEIGHT_ITERATIONS
+DEFAULT_HEIGHT_EPSILON: float = rc.DEFAULT_HEIGHT_EPSILON
+DEFAULT_HEIGHT_GAIN: float = rc.DEFAULT_HEIGHT_GAIN
 
 
 def make_feature_extractor(
@@ -60,60 +58,23 @@ def make_feature_extractor(
     )
 
 
-def make_residual_params(
-    k_residuals: int = DEFAULT_K_RESIDUALS,
-    residual_cap: float = DEFAULT_RESIDUAL_CAP,
-    radius_scale: float = 1.0,
-) -> rc.ResidualParams:
-    return rc.ResidualParams(
-        k_residuals=k_residuals,
-        residual_cap=residual_cap,
-        radius_scale=radius_scale,
+def height_field(
+    c: rc.Complex,
+    iterations: int = DEFAULT_HEIGHT_ITERATIONS,
+    epsilon: float = DEFAULT_HEIGHT_EPSILON,
+) -> rc.HeightFieldSample:
+    return rc.height_field(c, iterations, epsilon)
+
+
+def height_controller_step(
+    c: rc.Complex,
+    delta_model: rc.Complex,
+    target_height: float,
+    normal_risk: float,
+    height_gain: float = DEFAULT_HEIGHT_GAIN,
+    iterations: int = DEFAULT_HEIGHT_ITERATIONS,
+    epsilon: float = DEFAULT_HEIGHT_EPSILON,
+) -> rc.HeightControllerStep:
+    return rc.height_controller_step(
+        c, delta_model, target_height, normal_risk, height_gain, iterations, epsilon
     )
-
-
-def make_orbit_state(
-    *,
-    lobe: int = 1,
-    sub_lobe: int = 0,
-    theta: float = 0.0,
-    omega: float = DEFAULT_BASE_OMEGA,
-    s: float = 1.02,
-    alpha: float = 0.3,
-    k_residuals: int = DEFAULT_K_RESIDUALS,
-    residual_omega_scale: float = DEFAULT_RESIDUAL_OMEGA_SCALE,
-    seed: Optional[int] = DEFAULT_ORBIT_SEED,
-) -> rc.OrbitState:
-    """Construct a deterministic orbit state using the Rust implementation."""
-    return rc.OrbitState(
-        lobe=lobe,
-        sub_lobe=sub_lobe,
-        theta=theta,
-        omega=omega,
-        s=s,
-        alpha=alpha,
-        k_residuals=k_residuals,
-        residual_omega_scale=residual_omega_scale,
-        seed=seed,
-    )
-
-
-def step_orbit(
-    state: rc.OrbitState,
-    dt: float,
-    residual_params: Optional[rc.ResidualParams] = None,
-    band_gates: Optional[Sequence[float]] = None,
-) -> rc.Complex:
-    rp = residual_params or make_residual_params()
-    return state.step(
-        dt, rp, band_gates=list(band_gates) if band_gates is not None else None
-    )
-
-
-def synthesize(
-    state: rc.OrbitState,
-    residual_params: Optional[rc.ResidualParams] = None,
-    band_gates: Optional[Iterable[float]] = None,
-) -> rc.Complex:
-    rp = residual_params or make_residual_params()
-    return state.synthesize(rp, list(band_gates) if band_gates is not None else None)

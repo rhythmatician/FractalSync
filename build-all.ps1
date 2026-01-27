@@ -8,7 +8,6 @@
 #   - Python 3.8+ with venv activated
 #   - Node.js 16+
 #   - maturin (installed via: cargo install maturin)
-#   - wasm-pack (installed via: cargo install wasm-pack)
 
 $ErrorActionPreference = "Stop"
 
@@ -26,13 +25,6 @@ Write-Host "=== Building runtime_core ===" -ForegroundColor Cyan
 Push-Location "$projectRoot\runtime-core"
 Write-Host "Building Python bindings..." -ForegroundColor Yellow
 & maturin develop --release
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Pop-Location
-
-# Build WebAssembly bindings
-Write-Host "Building WebAssembly bindings..." -ForegroundColor Yellow
-Push-Location "$projectRoot\wasm-orbit"
-& wasm-pack build --target bundler --release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Pop-Location
 

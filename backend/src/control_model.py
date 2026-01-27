@@ -1,8 +1,8 @@
 """
-Control signal model for orbit-based Julia parameter synthesis.
+Control signal model for height-field Julia parameter synthesis.
 
-Predicts control signals (s, alpha, ω, band_gates) instead of raw c(t).
-The orbit synthesizer uses these signals to generate deterministic c(t).
+Predicts a model step Δc plus height-control parameters used by the
+height-field controller to stay on level sets of f(c) = log|z_N(c)|.
 """
 
 import torch
@@ -11,15 +11,13 @@ import torch.nn as nn
 
 class AudioToControlModel(nn.Module):
     """
-    Neural network that predicts orbit control signals from audio features.
+    Neural network that predicts height-field control signals from audio features.
 
     Outputs:
-        - s_target: Radius scaling factor [0.2, 3.0]
-        - alpha: Residual amplitude [0, 1]
-        - omega_scale: Angular velocity scale [0.1, 5.0]
-        - band_gates: Per-band residual gates [0, 1]^k (k=6 default)
-
-    The lobe/sub_lobe are controlled by section detection (not predicted per-frame).
+        - delta_c_real: Proposed Δc real component
+        - delta_c_imag: Proposed Δc imag component
+        - target_height: Desired height f(c)
+        - normal_risk: How much normal motion to allow [0, 1]
     """
 
     def __init__(
@@ -27,7 +25,6 @@ class AudioToControlModel(nn.Module):
         window_frames: int = 10,
         n_features_per_frame: int = 6,
         hidden_dims: list[int] = [128, 256, 128],
-        k_bands: int = 6,
         dropout: float = 0.2,
         include_delta: bool = False,
         include_delta_delta: bool = False,
@@ -39,7 +36,6 @@ class AudioToControlModel(nn.Module):
             window_frames: Number of time frames
             n_features_per_frame: Number of features per frame (6 base, +6 delta, +6 delta-delta)
             hidden_dims: List of hidden layer dimensions
-            k_bands: Number of band gates (residual epicycles)
             dropout: Dropout rate
             include_delta: Include delta (velocity) features
             include_delta_delta: Include delta-delta (acceleration) features
@@ -48,7 +44,6 @@ class AudioToControlModel(nn.Module):
 
         self.window_frames = window_frames
         self.n_features_per_frame = n_features_per_frame
-        self.k_bands = k_bands
         self.include_delta = include_delta
         self.include_delta_delta = include_delta_delta
 
@@ -61,8 +56,8 @@ class AudioToControlModel(nn.Module):
 
         self.input_dim = n_features_per_frame * features_multiplier * window_frames
 
-        # Output dimension: s_target(1) + alpha(1) + omega_scale(1) + band_gates(k_bands)
-        self.output_dim = 3 + k_bands
+        # Output dimension: delta_c(2) + target_height(1) + normal_risk(1)
+        self.output_dim = 4
 
         # Build encoder layers
         encoder_layers = []
@@ -82,30 +77,23 @@ class AudioToControlModel(nn.Module):
         self.encoder = nn.Sequential(*encoder_layers)
 
         # Control signal heads
-        self.s_head = nn.Sequential(
+        self.delta_head = nn.Sequential(
+            nn.Linear(prev_dim, 32),
+            nn.ReLU(),
+            nn.Linear(32, 2),
+        )
+
+        self.height_head = nn.Sequential(
             nn.Linear(prev_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
         )
 
-        self.alpha_head = nn.Sequential(
+        self.normal_risk_head = nn.Sequential(
             nn.Linear(prev_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
-            nn.Sigmoid(),  # Alpha in [0, 1]
-        )
-
-        self.omega_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-        )
-
-        self.band_gates_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
-            nn.ReLU(),
-            nn.Linear(32, k_bands),
-            nn.Sigmoid(),  # Gates in [0, 1]
+            nn.Sigmoid(),
         )
 
         # Initialize weights
@@ -131,7 +119,7 @@ class AudioToControlModel(nn.Module):
 
         Returns:
             Control signals of shape (batch_size, output_dim)
-            Format: [s_target, alpha, omega_scale, band_gate_0, ..., band_gate_k-1]
+            Format: [delta_c_real, delta_c_imag, target_height, normal_risk]
         """
         # Validate input shape
         if x.shape[1] != self.input_dim:
@@ -147,21 +135,19 @@ class AudioToControlModel(nn.Module):
         encoded = self.encoder(x)
 
         # Predict control signals
-        s_raw = self.s_head(encoded)  # (batch_size, 1)
-        alpha = self.alpha_head(encoded)  # (batch_size, 1)
-        omega_raw = self.omega_head(encoded)  # (batch_size, 1)
-        band_gates = self.band_gates_head(encoded)  # (batch_size, k_bands)
+        delta_raw = self.delta_head(encoded)  # (batch_size, 2)
+        height_raw = self.height_head(encoded)  # (batch_size, 1)
+        normal_risk = self.normal_risk_head(encoded)  # (batch_size, 1)
 
         # Apply activation functions to constrain outputs
-        # s_target: map to [0.2, 3.0] using sigmoid + scaling
-        s_target = 0.2 + 2.8 * torch.sigmoid(s_raw)  # [0.2, 3.0]
+        delta_scale = 0.02
+        delta_c = torch.tanh(delta_raw) * delta_scale  # [-0.02, 0.02]
 
-        # omega_scale: map to [0.1, 5.0] using softplus
-        omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
-        omega_scale = torch.clamp(omega_scale, 0.1, 5.0)
+        # target_height: keep within a compact range
+        target_height = torch.tanh(height_raw) * 2.0  # ~[-2, 2]
 
         # Concatenate all control signals
-        output = torch.cat([s_target, alpha, omega_scale, band_gates], dim=1)
+        output = torch.cat([delta_c, target_height, normal_risk], dim=1)
 
         return output
 
@@ -173,12 +159,11 @@ class AudioToControlModel(nn.Module):
             Dictionary mapping parameter names to (min, max) tuples
         """
         ranges = {
-            "s_target": (0.2, 3.0),
-            "alpha": (0.0, 1.0),
-            "omega_scale": (0.1, 5.0),
+            "delta_c_real": (-0.02, 0.02),
+            "delta_c_imag": (-0.02, 0.02),
+            "target_height": (-2.0, 2.0),
+            "normal_risk": (0.0, 1.0),
         }
-        for k in range(self.k_bands):
-            ranges[f"band_gate_{k}"] = (0.0, 1.0)
         return ranges
 
     def parse_output(self, output: torch.Tensor) -> dict:
@@ -189,11 +174,11 @@ class AudioToControlModel(nn.Module):
             output: Model output tensor (batch_size, output_dim)
 
         Returns:
-            Dictionary with keys: s_target, alpha, omega_scale, band_gates
+            Dictionary with keys: delta_c_real, delta_c_imag, target_height, normal_risk
         """
         return {
-            "s_target": output[:, 0],
-            "alpha": output[:, 1],
-            "omega_scale": output[:, 2],
-            "band_gates": output[:, 3:],
+            "delta_c_real": output[:, 0],
+            "delta_c_imag": output[:, 1],
+            "target_height": output[:, 2],
+            "normal_risk": output[:, 3],
         }

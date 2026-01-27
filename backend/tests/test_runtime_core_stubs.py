@@ -9,31 +9,11 @@ rc = pytest.importorskip("runtime_core")
 EXPECTED_CLASSES = {
     "Complex": [],
     "FeatureExtractor": [
-        "feature_mean",
-        "feature_std",
         "num_features_per_frame",
         "extract_windowed_features",
-        "compute_normalization_stats",
-        "normalize_features",
     ],
-    "ResidualParams": [
-        "k_residuals",
-        "residual_cap",
-        "radius_scale",
-    ],
-    "OrbitState": [
-        "lobe",
-        "sub_lobe",
-        "theta",
-        "omega",
-        "s",
-        "alpha",
-        "k_residuals",
-        "residual_omega_scale",
-        "step",
-        "synthesize",
-        "clone",
-    ],
+    "HeightFieldSample": ["height", "gradient"],
+    "HeightControllerStep": ["new_c", "delta", "height", "gradient"],
 }
 
 
@@ -48,8 +28,8 @@ def test_classes_have_expected_members():
 
     We attempt a conservative check: look for the member on the class object
     and (when possible) on a default instance. For certain classes we use
-    safe fallbacks to obtain an instance (e.g. `lobe_point_at_angle` for
-    `Complex`, explicit constructor args for `OrbitState`). This makes the
+    safe fallbacks to obtain an instance (e.g. explicit constructor args for
+    `Complex`). This makes the
     test tolerant of minor ABI differences while verifying presence of the
     API surface described in the stubs.
     """
@@ -65,23 +45,16 @@ def test_classes_have_expected_members():
         except Exception:
             # Fallbacks for commonly non-default-constructible types
             try:
-                if cls_name == "OrbitState":
-                    inst = cls(
-                        1,
-                        0,
-                        0.0,
-                        float(getattr(rc, "DEFAULT_BASE_OMEGA", 0.15)),
-                        1.02,
-                        0.3,
-                        int(getattr(rc, "DEFAULT_K_RESIDUALS", 6)),
-                        float(getattr(rc, "DEFAULT_RESIDUAL_OMEGA_SCALE", 1.0)),
-                    )
-                elif cls_name == "Complex" and hasattr(rc, "lobe_point_at_angle"):
-                    inst = rc.lobe_point_at_angle(1, 0, 0.1, 1.0)
-                elif cls_name == "ResidualParams":
-                    inst = cls()
+                if cls_name == "Complex":
+                    inst = cls(0.0, 0.0)
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
+                elif cls_name == "HeightFieldSample":
+                    inst = rc.height_field(cls(0.0, 0.0))
+                elif cls_name == "HeightControllerStep":
+                    inst = rc.height_controller_step(
+                        cls(0.0, 0.0), cls(0.01, 0.01), -0.5, 0.1
+                    )
             except Exception:
                 inst = None
 

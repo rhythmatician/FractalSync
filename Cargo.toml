@@ -1,5 +1,5 @@
 [workspace]
-members = ["runtime-core", "wasm-orbit"]
+members = ["runtime-core"]
 resolver = "2"
 
 [workspace.dependencies]

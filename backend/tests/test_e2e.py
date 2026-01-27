@@ -5,7 +5,7 @@ End-to-end integration test for FractalSync.
 Tests:
 1. Backend runtime_core imports work
 2. Feature extraction works
-3. Orbit synthesis works
+3. Height-field controller works
 4. Model training can run
 5. ONNX export works
 """
@@ -24,8 +24,8 @@ def test_imports():
     try:
         from src.runtime_core_bridge import (  # noqa: F401
             make_feature_extractor,
-            make_orbit_state,
-            synthesize,
+            height_field,
+            height_controller_step,
             SAMPLE_RATE,
             HOP_LENGTH,
             N_FFT,
@@ -103,54 +103,31 @@ def test_feature_extraction():
         return False
 
 
-def test_orbit_synthesis():
-    """Test that orbit synthesis works."""
+def test_height_controller():
+    """Test that height-field controller works."""
     print("\n" + "=" * 60)
-    print("TEST 3: Orbit Synthesis")
+    print("TEST 3: Height Controller")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (
-            make_orbit_state,
-            make_residual_params,
-            synthesize,
-        )
+        from src.runtime_core_bridge import height_controller_step
+        import runtime_core as rc
 
-        # Create orbit state with seed for determinism
-        orbit_state = make_orbit_state(
-            lobe=1,
-            sub_lobe=0,
-            theta=0.0,
-            omega=6.28,  # 2*pi
-            s=1.02,
-            alpha=0.3,
-            k_residuals=10,
-            residual_omega_scale=1.5,
-            seed=42,
-        )
-        print("✓ OrbitState created with seed=42")
+        c = rc.Complex(-0.6, 0.0)
+        delta = rc.Complex(0.01, -0.01)
 
-        # Create residual params
-        residual_params = make_residual_params(
-            k_residuals=10, residual_cap=0.5, radius_scale=1.5
-        )
-        print("✓ ResidualParams created")
+        step1 = height_controller_step(c, delta, target_height=-0.5, normal_risk=0.1)
+        step2 = height_controller_step(c, delta, target_height=-0.5, normal_risk=0.1)
 
-        # Synthesize first point
-        c1 = synthesize(orbit_state, residual_params, band_gates=None)
-        print(f"✓ Synthesized c(t=0) = {c1}")
+        print("✓ Height controller step computed")
+        print(f"✓ Step1 c = {step1.new_c}")
+        print(f"✓ Step2 c = {step2.new_c}")
 
-        # Step time forward
-        orbit_state.advance(0.01)
-        c2 = synthesize(orbit_state, residual_params, band_gates=None)
-        print(f"✓ Synthesized c(t=0.01) = {c2}")
-
-        # Verify outputs are different (orbit progresses)
-        assert c1 != c2, "Orbit did not progress"
-        print("✓ Orbit progression verified")
+        assert step1.new_c.real == step2.new_c.real
+        assert step1.new_c.imag == step2.new_c.imag
 
         return True
     except Exception as e:
-        print(f"✗ Orbit synthesis failed: {e}")
+        print(f"✗ Height controller failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -171,7 +148,6 @@ def test_model_init():
             window_frames=10,
             n_features_per_frame=6,
             hidden_dims=[128, 256, 128],
-            k_bands=6,
         )
         print("✓ Model initialized")
 
@@ -181,7 +157,7 @@ def test_model_init():
         print(f"✓ Forward pass works: input {test_input.shape} → output {output.shape}")
 
         # Verify output shape
-        assert output.shape == (1, 9), f"Expected output (1,9), got {output.shape}"
+        assert output.shape == (1, 4), f"Expected output (1,4), got {output.shape}"
         print("✓ Output shape is correct")
 
         return True
@@ -233,7 +209,7 @@ def main():
     results = []
     results.append(("Imports", test_imports()))
     results.append(("Feature Extraction", test_feature_extraction()))
-    results.append(("Orbit Synthesis", test_orbit_synthesis()))
+    results.append(("Height Controller", test_height_controller()))
     results.append(("Model Initialization", test_model_init()))
     results.append(("Visual Metrics", test_visual_metrics()))
 

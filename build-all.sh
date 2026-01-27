@@ -7,7 +7,6 @@
 #   - Python 3.8+ with venv activated
 #   - Node.js 16+
 #   - maturin (installed via: cargo install maturin)
-#   - wasm-pack (installed via: cargo install wasm-pack)
 
 set -e
 
@@ -25,11 +24,6 @@ echo "=== Building runtime_core ==="
 cd "$PROJECT_ROOT/runtime-core"
 echo "Building Python bindings..."
 maturin develop --release
-
-# Build WebAssembly bindings
-echo "Building WebAssembly bindings..."
-cd "$PROJECT_ROOT/wasm-orbit"
-wasm-pack build --target bundler --release
 
 # Install frontend dependencies
 echo "Installing frontend dependencies..."
