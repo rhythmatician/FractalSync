@@ -18,7 +18,7 @@ cd backend; pip install -r requirements.txt # backend
 ```ps1
 pytest backend #  backend
 npm test --prefix frontend  # frontend
-cd ../runtime-core; cargo test -q # runtime-core
+cargo test -q # runtime-core
 ```
 
 ## Building
