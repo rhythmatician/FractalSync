@@ -34,6 +34,34 @@ EXPECTED_CLASSES = {
         "synthesize",
         "clone",
     ],
+    "HeightFieldParams": [
+        "iterations",
+        "min_magnitude",
+    ],
+    "HeightFieldSample": [
+        "height",
+        "gradient",
+        "z",
+        "w",
+        "magnitude",
+    ],
+    "ContourControllerParams": [
+        "correction_gain",
+        "projection_epsilon",
+    ],
+    "ContourState": [
+        "set_target_height",
+        "target_height",
+        "c",
+        "step",
+    ],
+    "ContourStep": [
+        "c",
+        "height",
+        "height_error",
+        "gradient",
+        "corrected_delta",
+    ],
 }
 
 
@@ -82,6 +110,16 @@ def test_classes_have_expected_members():
                     inst = cls()
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
+                elif cls_name == "HeightFieldParams":
+                    inst = cls()
+                elif cls_name == "ContourControllerParams":
+                    inst = cls()
+                elif cls_name == "HeightFieldSample" and hasattr(rc, "sample_height_field"):
+                    c = rc.lobe_point_at_angle(1, 0, 0.1, 1.0)
+                    inst = rc.sample_height_field(c)
+                elif cls_name == "ContourState":
+                    c = rc.lobe_point_at_angle(1, 0, 0.1, 1.0)
+                    inst = cls(c)
             except Exception:
                 inst = None
 

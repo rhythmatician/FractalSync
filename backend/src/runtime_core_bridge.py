@@ -25,6 +25,10 @@ DEFAULT_RESIDUAL_CAP: float = rc.DEFAULT_RESIDUAL_CAP
 DEFAULT_RESIDUAL_OMEGA_SCALE: float = rc.DEFAULT_RESIDUAL_OMEGA_SCALE
 DEFAULT_BASE_OMEGA: float = rc.DEFAULT_BASE_OMEGA
 DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
+DEFAULT_HEIGHT_ITERATIONS: int = rc.DEFAULT_HEIGHT_ITERATIONS
+DEFAULT_HEIGHT_MIN_MAGNITUDE: float = rc.DEFAULT_HEIGHT_MIN_MAGNITUDE
+DEFAULT_CONTOUR_CORRECTION_GAIN: float = rc.DEFAULT_CONTOUR_CORRECTION_GAIN
+DEFAULT_CONTOUR_PROJECTION_EPSILON: float = rc.DEFAULT_CONTOUR_PROJECTION_EPSILON
 
 
 def make_feature_extractor(
@@ -117,3 +121,38 @@ def synthesize(
 ) -> rc.Complex:
     rp = residual_params or make_residual_params()
     return state.synthesize(rp, list(band_gates) if band_gates is not None else None)
+
+
+def make_height_field_params(
+    iterations: int = DEFAULT_HEIGHT_ITERATIONS,
+    min_magnitude: float = DEFAULT_HEIGHT_MIN_MAGNITUDE,
+) -> rc.HeightFieldParams:
+    return rc.HeightFieldParams(iterations=iterations, min_magnitude=min_magnitude)
+
+
+def sample_height_field(
+    c: rc.Complex,
+    params: Optional[rc.HeightFieldParams] = None,
+) -> rc.HeightFieldSample:
+    params = params or make_height_field_params()
+    return rc.sample_height_field(c, params)
+
+
+def make_contour_controller_params(
+    correction_gain: float = DEFAULT_CONTOUR_CORRECTION_GAIN,
+    projection_epsilon: float = DEFAULT_CONTOUR_PROJECTION_EPSILON,
+) -> rc.ContourControllerParams:
+    return rc.ContourControllerParams(
+        correction_gain=correction_gain,
+        projection_epsilon=projection_epsilon,
+    )
+
+
+def contour_correct_delta(
+    model_delta: rc.Complex,
+    gradient: rc.Complex,
+    height_error: float,
+    params: Optional[rc.ContourControllerParams] = None,
+) -> rc.Complex:
+    params = params or make_contour_controller_params()
+    return rc.contour_correct_delta(model_delta, gradient, height_error, params)

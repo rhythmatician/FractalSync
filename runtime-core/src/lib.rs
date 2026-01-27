@@ -25,6 +25,7 @@
 
 pub mod geometry;
 pub mod controller;
+pub mod height_controller;
 pub mod features;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
