@@ -1,17 +1,12 @@
 """
-Parity tracing harness: verify backend and frontend produce identical orbit synthesis results.
+Parity tracing harness: verify backend and frontend produce identical
+height-field controller results.
 
 This module provides utilities to:
 1. Extract runtime constants and feature extractor parameters
 2. Run feature extraction with deterministic seeds
-3. Perform orbit synthesis and compare numeric precision
+3. Evaluate height-field controller steps and compare numeric precision
 4. Generate parity test reports
-
-Usage:
-    python -m backend.src.parity_trace \
-        --audio-file data/audio/sample.wav \
-        --seed 1337 \
-        --output-report parity_results.json
 """
 
 import json
@@ -25,16 +20,12 @@ from .runtime_core_bridge import (
     HOP_LENGTH,
     N_FFT,
     WINDOW_FRAMES,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_RESIDUAL_CAP,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
-    DEFAULT_BASE_OMEGA,
-    DEFAULT_ORBIT_SEED,
+    DEFAULT_HEIGHT_EPSILON,
+    DEFAULT_HEIGHT_GAIN,
+    DEFAULT_HEIGHT_ITERATIONS,
     make_feature_extractor,
-    make_orbit_state,
-    synthesize,
-    step_orbit,
 )
+from .height_field import controller_step
 
 
 def dump_constants() -> Dict[str, Any]:
@@ -48,17 +39,13 @@ def dump_constants() -> Dict[str, Any]:
         "HOP_LENGTH": HOP_LENGTH,
         "N_FFT": N_FFT,
         "WINDOW_FRAMES": WINDOW_FRAMES,
-        "DEFAULT_K_RESIDUALS": DEFAULT_K_RESIDUALS,
-        "DEFAULT_RESIDUAL_CAP": DEFAULT_RESIDUAL_CAP,
-        "DEFAULT_RESIDUAL_OMEGA_SCALE": DEFAULT_RESIDUAL_OMEGA_SCALE,
-        "DEFAULT_BASE_OMEGA": DEFAULT_BASE_OMEGA,
-        "DEFAULT_ORBIT_SEED": DEFAULT_ORBIT_SEED,
+        "DEFAULT_HEIGHT_ITERATIONS": DEFAULT_HEIGHT_ITERATIONS,
+        "DEFAULT_HEIGHT_EPSILON": DEFAULT_HEIGHT_EPSILON,
+        "DEFAULT_HEIGHT_GAIN": DEFAULT_HEIGHT_GAIN,
     }
 
 
-def extract_features_deterministic(
-    audio_path: str, seed: int = DEFAULT_ORBIT_SEED
-) -> np.ndarray:
+def extract_features_deterministic(audio_path: str, seed: int = 1337) -> np.ndarray:
     """
     Extract windowed audio features with deterministic settings.
 
@@ -85,51 +72,47 @@ def extract_features_deterministic(
     return features
 
 
-def generate_orbit_sequence_deterministic(
-    duration: float = 1.0,
-    dt: float = 1.0 / 48000.0,
-    seed: int = DEFAULT_ORBIT_SEED,
+def generate_height_sequence_deterministic(
+    steps: int = 120,
+    seed: int = 1337,
 ) -> Dict[str, Any]:
     """
-    Generate deterministic orbit sequence for parity testing.
+    Generate deterministic height-field controller sequence for parity testing.
 
     Args:
-        duration: Sequence duration in seconds
-        dt: Time step (usually 1/sample_rate)
-        seed: RNG seed for orbit state initialization
+        steps: Number of controller steps
+        seed: RNG seed for deterministic initialization
 
     Returns:
         Dict with sequence data and metadata
     """
-    n_samples = int(duration / dt)
-
-    # Create orbit state with deterministic seed
-    state = make_orbit_state(
-        lobe=1,
-        sub_lobe=0,
-        theta=0.0,
-        omega=DEFAULT_BASE_OMEGA,
-        s=1.02,
-        alpha=0.3,
-        k_residuals=DEFAULT_K_RESIDUALS,
-        residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-        seed=seed,
-    )
-
-    # Generate sequence
-    c_sequence = []
-    for i in range(n_samples):
-        c = synthesize(state)
-        c_sequence.append({"re": c.re, "im": c.im})
-        # Advance state for next iteration
-        step_orbit(state, dt)
+    rng = np.random.default_rng(seed)
+    c = complex(-0.6, 0.0)
+    sequence = []
+    for _ in range(steps):
+        delta_model = rng.uniform(-0.01, 0.01, size=2).astype(np.float32)
+        c, delta, sample = controller_step(
+            c,
+            delta_model,
+            target_height=-0.5,
+            normal_risk=0.05,
+            height_gain=DEFAULT_HEIGHT_GAIN,
+            iterations=DEFAULT_HEIGHT_ITERATIONS,
+            epsilon=DEFAULT_HEIGHT_EPSILON,
+        )
+        sequence.append(
+            {
+                "real": c.real,
+                "imag": c.imag,
+                "height": sample.height,
+                "delta": [float(delta[0]), float(delta[1])],
+            }
+        )
 
     return {
-        "duration": duration,
-        "dt": dt,
-        "n_samples": n_samples,
+        "steps": steps,
         "seed": seed,
-        "sequence": c_sequence[:100],  # First 100 samples for report
+        "sequence": sequence,
     }
 
 
@@ -196,7 +179,7 @@ def generate_parity_report(output_path: str = "parity_trace.json") -> None:
     """
     Generate a complete parity trace report.
 
-    This report captures all shared constants and deterministic orbit sequences
+    This report captures all shared constants and deterministic height-field sequences
     that can be compared with the frontend implementation.
 
     Args:
@@ -206,9 +189,7 @@ def generate_parity_report(output_path: str = "parity_trace.json") -> None:
         "timestamp": __import__("datetime").datetime.now().isoformat(),
         "runtime": "Python backend (runtime_core + PyO3)",
         "constants": dump_constants(),
-        "orbit_sequence": generate_orbit_sequence_deterministic(
-            duration=0.1, seed=DEFAULT_ORBIT_SEED
-        ),
+        "height_sequence": generate_height_sequence_deterministic(steps=120, seed=1337),
     }
 
     with open(output_path, "w") as f:
@@ -227,12 +208,9 @@ if __name__ == "__main__":
         help="Output path for parity trace JSON",
     )
     parser.add_argument(
-        "--duration", type=float, default=0.1, help="Orbit sequence duration (seconds)"
-    )
-    parser.add_argument(
         "--seed",
         type=int,
-        default=DEFAULT_ORBIT_SEED,
+        default=1337,
         help="Random seed for deterministic generation",
     )
 

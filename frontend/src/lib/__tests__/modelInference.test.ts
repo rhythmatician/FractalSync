@@ -120,8 +120,8 @@ describe("Model Inference Parity", () => {
       const outputName = session.outputNames[0];
       const output = results[outputName] as ort.Tensor;
 
-      // Should output [batch_size, 7]
-      expect(output.dims).toEqual([1, 7]);
+      // Should output [batch_size, 4]
+      expect(output.dims).toEqual([1, 4]);
     });
   });
 
@@ -202,22 +202,13 @@ describe("Model Inference Parity", () => {
           baseline.config.input_dim
         );
 
-        const [c_real, c_imag, hue, saturation, value, zoom, speed] = output;
+        const [deltaReal, deltaImag, targetHeight, normalRisk] = output;
 
-        // Julia seed should be roughly in [-2, 2]
-        expect(Math.abs(c_real)).toBeLessThan(5);
-        expect(Math.abs(c_imag)).toBeLessThan(5);
-
-        // Color parameters roughly in [0, 1] or [-1, 1]
-        expect(Math.abs(hue)).toBeLessThan(2);
-        expect(Math.abs(saturation)).toBeLessThan(2);
-        expect(Math.abs(value)).toBeLessThan(2);
-
-        // Zoom should be positive
-        expect(zoom).toBeGreaterThan(0);
-
-        // Speed should be reasonable
-        expect(Math.abs(speed)).toBeLessThan(100);
+        expect(Math.abs(deltaReal)).toBeLessThan(1);
+        expect(Math.abs(deltaImag)).toBeLessThan(1);
+        expect(Math.abs(targetHeight)).toBeLessThan(10);
+        expect(normalRisk).toBeGreaterThanOrEqual(-1);
+        expect(normalRisk).toBeLessThanOrEqual(2);
       }
     });
   });

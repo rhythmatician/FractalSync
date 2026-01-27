@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "runtime_core"
 version = "0.1.0"
-description = "Shared runtime for audio-driven orbit synthesis"
+description = "Shared runtime for audio-driven height-field control"
 requires-python = ">=3.8"
 authors = [{name = "FractalSync Developers"}]
 license = {text = "MIT"}

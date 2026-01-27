@@ -1,32 +1,28 @@
 //! WebAssembly bindings for runtime-core
 //!
-//! This module exposes the shared runtime to JavaScript via
-//! `wasm-bindgen`. The API is intentionally kept close to the Python
-//! bindings so both front-end and back-end can call the same logic.
+//! Exposes the height-field controller and audio feature extractor.
 
-use wasm_bindgen::prelude::*;
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
 use crate::controller::{
-    step as rust_step,
-    synthesize as rust_synthesize,
-    OrbitState as RustOrbitState,
-    ResidualParams as RustResidualParams,
-    DEFAULT_BASE_OMEGA,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_ORBIT_SEED,
-    DEFAULT_RESIDUAL_CAP,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    evaluate_height_field,
+    step_height_controller,
+    HeightControllerParams as RustHeightControllerParams,
+    HeightControllerStep as RustHeightControllerStep,
+    DEFAULT_HEIGHT_EPSILON,
+    DEFAULT_HEIGHT_GAIN,
+    DEFAULT_HEIGHT_ITERATIONS,
     HOP_LENGTH,
     N_FFT,
     SAMPLE_RATE,
     WINDOW_FRAMES,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::Complex as RustComplex;
 
-/// A complex number (Julia parameter c = a + bi).
+/// A complex number (c = a + bi).
 #[wasm_bindgen]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Complex {
@@ -37,6 +33,12 @@ pub struct Complex {
 impl From<RustComplex> for Complex {
     fn from(c: RustComplex) -> Self {
         Self { real: c.real, imag: c.imag }
+    }
+}
+
+impl From<&Complex> for RustComplex {
+    fn from(c: &Complex) -> RustComplex {
+        RustComplex::new(c.real, c.imag)
     }
 }
 
@@ -58,133 +60,109 @@ impl Complex {
     }
 }
 
-/// Parameters controlling the residual epicycle sum.
+/// Height-field sample returned by evaluating f(c).
 #[wasm_bindgen]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ResidualParams {
-    k_residuals: usize,
-    residual_cap: f64,
-    radius_scale: f64,
+pub struct HeightFieldSample {
+    height: f64,
+    gradient: Complex,
 }
 
-impl From<&ResidualParams> for RustResidualParams {
-    fn from(p: &ResidualParams) -> RustResidualParams {
-        RustResidualParams {
-            k_residuals: p.k_residuals,
-            residual_cap: p.residual_cap,
-            radius_scale: p.radius_scale,
+#[wasm_bindgen]
+impl HeightFieldSample {
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> f64 {
+        self.height
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn gradient(&self) -> Complex {
+        self.gradient.clone()
+    }
+}
+
+/// Controller step result.
+#[wasm_bindgen]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HeightControllerStep {
+    new_c: Complex,
+    delta: Complex,
+    height: f64,
+    gradient: Complex,
+}
+
+impl From<RustHeightControllerStep> for HeightControllerStep {
+    fn from(step: RustHeightControllerStep) -> Self {
+        Self {
+            new_c: step.new_c.into(),
+            delta: step.delta.into(),
+            height: step.height,
+            gradient: step.gradient.into(),
         }
     }
 }
 
 #[wasm_bindgen]
-impl ResidualParams {
-    #[wasm_bindgen(constructor)]
-    pub fn new(k_residuals: usize, residual_cap: f64, radius_scale: f64) -> ResidualParams {
-        ResidualParams {
-            k_residuals,
-            residual_cap,
-            radius_scale,
-        }
+impl HeightControllerStep {
+    #[wasm_bindgen(getter)]
+    pub fn new_c(&self) -> Complex {
+        self.new_c.clone()
     }
 
     #[wasm_bindgen(getter)]
-    pub fn k_residuals(&self) -> usize {
-        self.k_residuals
+    pub fn delta(&self) -> Complex {
+        self.delta.clone()
     }
 
     #[wasm_bindgen(getter)]
-    pub fn residual_cap(&self) -> f64 {
-        self.residual_cap
+    pub fn height(&self) -> f64 {
+        self.height
     }
 
     #[wasm_bindgen(getter)]
-    pub fn radius_scale(&self) -> f64 {
-        self.radius_scale
+    pub fn gradient(&self) -> Complex {
+        self.gradient.clone()
     }
 }
 
-/// Orbit state (carrier + residual phases).
+/// Evaluate the height field at c.
 #[wasm_bindgen]
-pub struct OrbitState {
-    inner: RustOrbitState,
+pub fn height_field(c: &Complex, iterations: Option<usize>, epsilon: Option<f64>) -> HeightFieldSample {
+    let sample = evaluate_height_field(
+        RustComplex::from(c),
+        iterations.unwrap_or(DEFAULT_HEIGHT_ITERATIONS),
+        epsilon.unwrap_or(DEFAULT_HEIGHT_EPSILON),
+    );
+    HeightFieldSample {
+        height: sample.height,
+        gradient: sample.gradient.into(),
+    }
 }
 
+/// Project a model step onto the height contour and apply correction.
 #[wasm_bindgen]
-impl OrbitState {
-    /// Create a new orbit state.
-    ///
-    /// If you want deterministic residual phases, use `new_with_seed`.
-    #[wasm_bindgen(constructor)]
-    pub fn new(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-    ) -> OrbitState {
-        OrbitState {
-            inner: RustOrbitState::new(
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                k_residuals,
-                residual_omega_scale,
-            ),
-        }
-    }
-
-    /// Create a new orbit state with a fixed RNG seed (deterministic).
-    #[wasm_bindgen]
-    pub fn new_with_seed(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-        seed: u64,
-    ) -> OrbitState {
-        OrbitState {
-            inner: RustOrbitState::new_with_seed(
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                k_residuals,
-                residual_omega_scale,
-                seed,
-            ),
-        }
-    }
-
-    /// Advance phases by dt (seconds).
-    #[wasm_bindgen]
-    pub fn advance(&mut self, dt: f64) {
-        self.inner.advance(dt);
-    }
-
-    /// Compute c(t) without advancing time.
-    #[wasm_bindgen]
-    pub fn synthesize(&self, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_synthesize(&self.inner, RustResidualParams::from(residual_params), band_gates.as_deref()).into()
-    }
-
-    /// Advance by dt and return c(t). Mutates this OrbitState.
-    #[wasm_bindgen]
-    pub fn step(&mut self, dt: f64, residual_params: &ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, RustResidualParams::from(residual_params), band_gates.as_deref()).into()
-    }
+pub fn height_controller_step(
+    c: &Complex,
+    delta_model: &Complex,
+    target_height: f64,
+    normal_risk: f64,
+    height_gain: Option<f64>,
+    iterations: Option<usize>,
+    epsilon: Option<f64>,
+) -> HeightControllerStep {
+    let params = RustHeightControllerParams {
+        target_height,
+        normal_risk,
+        height_gain: height_gain.unwrap_or(DEFAULT_HEIGHT_GAIN),
+    };
+    step_height_controller(
+        RustComplex::from(c),
+        RustComplex::from(delta_model),
+        params,
+        iterations.unwrap_or(DEFAULT_HEIGHT_ITERATIONS),
+        epsilon.unwrap_or(DEFAULT_HEIGHT_EPSILON),
+    )
+    .into()
 }
 
 /// Audio feature extractor.
@@ -233,12 +211,6 @@ impl FeatureExtractor {
     }
 }
 
-/// Point on a lobe boundary.
-#[wasm_bindgen]
-pub fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex {
-    rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
-}
-
 /// Shared runtime constants for parity checks between backend and frontend.
 #[wasm_bindgen]
 pub fn sample_rate() -> usize {
@@ -261,26 +233,16 @@ pub fn window_frames() -> usize {
 }
 
 #[wasm_bindgen]
-pub fn default_k_residuals() -> usize {
-    DEFAULT_K_RESIDUALS
+pub fn default_height_iterations() -> usize {
+    DEFAULT_HEIGHT_ITERATIONS
 }
 
 #[wasm_bindgen]
-pub fn default_residual_cap() -> f64 {
-    DEFAULT_RESIDUAL_CAP
+pub fn default_height_epsilon() -> f64 {
+    DEFAULT_HEIGHT_EPSILON
 }
 
 #[wasm_bindgen]
-pub fn default_residual_omega_scale() -> f64 {
-    DEFAULT_RESIDUAL_OMEGA_SCALE
-}
-
-#[wasm_bindgen]
-pub fn default_base_omega() -> f64 {
-    DEFAULT_BASE_OMEGA
-}
-
-#[wasm_bindgen]
-pub fn default_orbit_seed() -> u64 {
-    DEFAULT_ORBIT_SEED
+pub fn default_height_gain() -> f64 {
+    DEFAULT_HEIGHT_GAIN
 }

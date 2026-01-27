@@ -97,20 +97,21 @@ def export_to_onnx(
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
 
     # Determine parameter names and ranges based on metadata
-    if metadata and metadata.get("model_type") == "orbit_control":
-        # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
-        k_bands = metadata.get("k_bands", 6)
-        output_dim = metadata.get("output_dim", 3 + k_bands)
-        parameter_names = ["s_target", "alpha", "omega_scale"] + [
-            f"band_gate_{i}" for i in range(k_bands)
+    if metadata and metadata.get("model_type") == "height_control":
+        # Height-field control model outputs: delta_c (2), target_height, normal_risk
+        output_dim = metadata.get("output_dim", 4)
+        parameter_names = [
+            "delta_c_real",
+            "delta_c_imag",
+            "target_height",
+            "normal_risk",
         ]
         parameter_ranges = {
-            "s_target": [0.2, 3.0],
-            "alpha": [0.0, 1.0],
-            "omega_scale": [0.1, 5.0],
+            "delta_c_real": [-0.02, 0.02],
+            "delta_c_imag": [-0.02, 0.02],
+            "target_height": [-2.0, 2.0],
+            "normal_risk": [0.0, 1.0],
         }
-        for i in range(k_bands):
-            parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
     else:
         # Default: physics/visual parameter model (legacy)
         output_dim = 7

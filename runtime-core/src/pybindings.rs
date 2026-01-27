@@ -1,31 +1,23 @@
-//! Python bindings for runtime‑core
+//! Python bindings for runtime-core
 //!
-//! This module exposes the Rust runtime via PyO3.  It defines
-//! Python classes and functions that mirror the structs and free
-//! functions in `geometry`, `controller` and `features`.  These
-//! bindings allow the Python backend to import a compiled
-//! `runtime_core` module and call the shared logic directly.
+//! Exposes the height-field controller and feature extractor.
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
 
 use crate::controller::{
-    OrbitState as RustOrbitState,
-    ResidualParams as RustResidualParams,
-    DEFAULT_BASE_OMEGA,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_ORBIT_SEED,
-    DEFAULT_RESIDUAL_CAP,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    evaluate_height_field,
+    step_height_controller,
+    HeightControllerParams,
+    DEFAULT_HEIGHT_EPSILON,
+    DEFAULT_HEIGHT_GAIN,
+    DEFAULT_HEIGHT_ITERATIONS,
     HOP_LENGTH,
     N_FFT,
     SAMPLE_RATE,
     WINDOW_FRAMES,
-    step as rust_step,
-    synthesize as rust_synthesize,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::Complex as RustComplex;
 
 /// Helper struct to expose a complex number to Python as a tuple.
 #[pyclass]
@@ -43,190 +35,34 @@ impl From<RustComplex> for Complex {
     }
 }
 
-/// Python wrapper for `ResidualParams`.
+impl From<&Complex> for RustComplex {
+    fn from(c: &Complex) -> RustComplex {
+        RustComplex::new(c.real, c.imag)
+    }
+}
+
+/// Python wrapper for height-field samples.
 #[pyclass]
 #[derive(Clone, Debug)]
-pub struct ResidualParams {
-    #[pyo3(get, set)]
-    pub k_residuals: usize,
-    #[pyo3(get, set)]
-    pub residual_cap: f64,
-    #[pyo3(get, set)]
-    pub radius_scale: f64,
+pub struct HeightFieldSample {
+    #[pyo3(get)]
+    pub height: f64,
+    #[pyo3(get)]
+    pub gradient: Complex,
 }
 
-#[pymethods]
-impl ResidualParams {
-    #[new]
-    #[pyo3(signature = (k_residuals=DEFAULT_K_RESIDUALS, residual_cap=DEFAULT_RESIDUAL_CAP, radius_scale=1.0))]
-    fn py_new(
-        k_residuals: usize,
-        residual_cap: f64,
-        radius_scale: f64,
-    ) -> Self {
-        Self {
-            k_residuals,
-            residual_cap,
-            radius_scale,
-        }
-    }
-}
-
-impl From<RustResidualParams> for ResidualParams {
-    fn from(p: RustResidualParams) -> Self {
-        Self {
-            k_residuals: p.k_residuals,
-            residual_cap: p.residual_cap,
-            radius_scale: p.radius_scale,
-        }
-    }
-}
-
-impl From<ResidualParams> for RustResidualParams {
-    fn from(p: ResidualParams) -> RustResidualParams {
-        RustResidualParams {
-            k_residuals: p.k_residuals,
-            residual_cap: p.residual_cap,
-            radius_scale: p.radius_scale,
-        }
-    }
-}
-
-/// Python wrapper for the orbit state.
+/// Python wrapper for controller step results.
 #[pyclass]
 #[derive(Clone, Debug)]
-pub struct OrbitState {
-    inner: RustOrbitState,
-}
-
-#[pymethods]
-impl OrbitState {
-    #[new]
-    #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed=None))]
-    fn py_new(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-        seed: Option<u64>,
-    ) -> Self {
-        Self {
-            inner: match seed {
-                Some(seed_val) => RustOrbitState::new_with_seed(
-                    lobe,
-                    sub_lobe,
-                    theta,
-                    omega,
-                    s,
-                    alpha,
-                    k_residuals,
-                    residual_omega_scale,
-                    seed_val,
-                ),
-                None => RustOrbitState::new(
-                    lobe,
-                    sub_lobe,
-                    theta,
-                    omega,
-                    s,
-                    alpha,
-                    k_residuals,
-                    residual_omega_scale,
-                ),
-            },
-        }
-    }
-
-    /// Create with deterministic seed (no-arg convenience using shared defaults).
-    #[staticmethod]
-    #[pyo3(signature = (seed=DEFAULT_ORBIT_SEED))]
-    fn new_default_seeded(seed: u64) -> Self {
-        Self {
-            inner: RustOrbitState::new_with_seed(
-                1,
-                0,
-                0.0,
-                DEFAULT_BASE_OMEGA,
-                1.02,
-                0.3,
-                DEFAULT_K_RESIDUALS,
-                DEFAULT_RESIDUAL_OMEGA_SCALE,
-                seed,
-            ),
-        }
-    }
-
-    /// Create fully specified state with deterministic seed.
-    #[staticmethod]
-    #[pyo3(signature = (lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed))]
-    fn new_with_seed(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-        seed: u64,
-    ) -> Self {
-        Self {
-            inner: RustOrbitState::new_with_seed(
-                lobe,
-                sub_lobe,
-                theta,
-                omega,
-                s,
-                alpha,
-                k_residuals,
-                residual_omega_scale,
-                seed,
-            ),
-        }
-    }
-
-    /// Advance the state by dt without synthesising c.  This mutates
-    /// the internal phases.
-    fn advance(&mut self, dt: f64) {
-        self.inner.advance(dt);
-    }
-
-    /// Return the current carrier point (no residuals).  This calls
-    /// `lobe_point_at_angle` with the current theta and radial scale.
-    fn carrier(&self) -> Complex {
-        rust_lobe_point_at_angle(self.inner.lobe, self.inner.sub_lobe, self.inner.theta, self.inner.s).into()
-    }
-
-    /// Get a copy of the residual phases.  This can be used by
-    /// training code to seed deterministic initial phases.
-    fn residual_phases(&self) -> Vec<f64> {
-        self.inner.residual_phases.clone()
-    }
-
-    /// Get a copy of the residual angular velocities.
-    fn residual_omegas(&self) -> Vec<f64> {
-        self.inner.residual_omegas.clone()
-    }
-
-    /// Synthesize c(t) without advancing time.  Band gates may be
-    /// provided as a list of floats with length `k_residuals`.  If
-    /// omitted each residual is fully enabled.
-    #[pyo3(signature = (residual_params, band_gates=None))]
-    fn synthesize(&self, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        let gates_ref = band_gates.as_deref();
-        rust_synthesize(&self.inner, residual_params.into(), gates_ref).into()
-    }
-
-    /// Advance time by dt and return the next c(t).  The band gates
-    /// are applied to each residual.
-    #[pyo3(signature = (dt, residual_params, band_gates=None))]
-    fn step(&mut self, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref()).into()
-    }
+pub struct HeightControllerStep {
+    #[pyo3(get)]
+    pub new_c: Complex,
+    #[pyo3(get)]
+    pub delta: Complex,
+    #[pyo3(get)]
+    pub height: f64,
+    #[pyo3(get)]
+    pub gradient: Complex,
 }
 
 /// Python wrapper for the feature extractor
@@ -256,7 +92,7 @@ impl FeatureExtractor {
     fn num_features_per_frame(&self) -> usize {
         self.inner.num_features_per_frame()
     }
-    
+
     /// Simple test function to verify Rust execution
     fn test_simple(&self) -> Vec<f32> {
         eprintln!("[DEBUG] test_simple called");
@@ -273,11 +109,47 @@ impl FeatureExtractor {
     }
 }
 
-/// Free function: compute a point on the Mandelbrot lobe in Python.
+/// Evaluate f(c) = log|z_N(c)| and its gradient.
 #[pyfunction]
-#[pyo3(signature = (lobe, sub_lobe, theta, s))]
-fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex {
-    rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
+#[pyo3(signature = (c, iterations=DEFAULT_HEIGHT_ITERATIONS, epsilon=DEFAULT_HEIGHT_EPSILON))]
+fn height_field(c: Complex, iterations: usize, epsilon: f64) -> HeightFieldSample {
+    let sample = evaluate_height_field(RustComplex::from(&c), iterations, epsilon);
+    HeightFieldSample {
+        height: sample.height,
+        gradient: sample.gradient.into(),
+    }
+}
+
+/// Project a model step onto the height contour and apply correction.
+#[pyfunction]
+#[pyo3(signature = (c, delta_model, target_height, normal_risk, height_gain=DEFAULT_HEIGHT_GAIN, iterations=DEFAULT_HEIGHT_ITERATIONS, epsilon=DEFAULT_HEIGHT_EPSILON))]
+fn height_controller_step(
+    c: Complex,
+    delta_model: Complex,
+    target_height: f64,
+    normal_risk: f64,
+    height_gain: f64,
+    iterations: usize,
+    epsilon: f64,
+) -> HeightControllerStep {
+    let params = HeightControllerParams {
+        target_height,
+        normal_risk,
+        height_gain,
+    };
+    let step = step_height_controller(
+        RustComplex::from(&c),
+        RustComplex::from(&delta_model),
+        params,
+        iterations,
+        epsilon,
+    );
+    HeightControllerStep {
+        new_c: step.new_c.into(),
+        delta: step.delta.into(),
+        height: step.height,
+        gradient: step.gradient.into(),
+    }
 }
 
 #[pymodule]
@@ -287,16 +159,15 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("HOP_LENGTH", HOP_LENGTH)?;
     m.add("N_FFT", N_FFT)?;
     m.add("WINDOW_FRAMES", WINDOW_FRAMES)?;
-    m.add("DEFAULT_K_RESIDUALS", DEFAULT_K_RESIDUALS)?;
-    m.add("DEFAULT_RESIDUAL_CAP", DEFAULT_RESIDUAL_CAP)?;
-    m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
-    m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
-    m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+    m.add("DEFAULT_HEIGHT_ITERATIONS", DEFAULT_HEIGHT_ITERATIONS)?;
+    m.add("DEFAULT_HEIGHT_EPSILON", DEFAULT_HEIGHT_EPSILON)?;
+    m.add("DEFAULT_HEIGHT_GAIN", DEFAULT_HEIGHT_GAIN)?;
 
     m.add_class::<Complex>()?;
-    m.add_class::<ResidualParams>()?;
-    m.add_class::<OrbitState>()?;
+    m.add_class::<HeightFieldSample>()?;
+    m.add_class::<HeightControllerStep>()?;
     m.add_class::<FeatureExtractor>()?;
-    m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(height_field, m)?)?;
+    m.add_function(wrap_pyfunction!(height_controller_step, m)?)?;
     Ok(())
 }

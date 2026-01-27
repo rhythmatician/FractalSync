@@ -157,8 +157,8 @@ export function Visualizer() {
         // Reset failure counter on success
         setInferenceFailures(0);
         
-        // Debug: log final visual parameters (after orbit synthesis)
-        console.debug('Final visual params (post-orbit-synthesis):', params);
+        // Debug: log final visual parameters (after height-field control)
+        console.debug('Final visual params (post-height-control):', params);
         
         // Update renderer
         rendererRef.current.updateParameters(params);

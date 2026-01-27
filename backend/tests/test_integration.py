@@ -4,17 +4,14 @@ End-to-end test suite for FractalSync runtime-core integration.
 
 Prerequisites:
   - Python runtime_core bindings built: `cd runtime-core && maturin develop --release`
-  - WASM bindings built: [OK] (already built in wasm-orbit/pkg/)
 
 Run this test to verify:
   1. Backend feature extraction works
-  2. Orbit synthesis is deterministic
+  2. Height-field controller is deterministic
   3. Model training pipeline initializes
-  4. WASM module loads (frontend ready)
 """
 
 import sys
-from pathlib import Path
 
 
 def test_imports():
@@ -25,12 +22,12 @@ def test_imports():
 
         print("  [OK] runtime_core imported")
         print(f"    - SAMPLE_RATE: {runtime_core.SAMPLE_RATE}")
-        print(f"    - DEFAULT_K_RESIDUALS: {runtime_core.DEFAULT_K_RESIDUALS}")
+        print(f"    - DEFAULT_HEIGHT_ITERATIONS: {runtime_core.DEFAULT_HEIGHT_ITERATIONS}")
 
         from src.runtime_core_bridge import (  # noqa: F401
             make_feature_extractor,
-            make_orbit_state,
-            synthesize,
+            height_field,
+            height_controller_step,
         )
 
         print("  [OK] runtime_core_bridge imported")
@@ -63,33 +60,33 @@ def test_feature_extraction():
         return False
 
 
-def test_orbit_synthesis():
-    """Test 3: Can we synthesize orbits deterministically?"""
-    print("\n[Test 3] Testing orbit synthesis...")
+def test_height_controller():
+    """Test 3: Can we step the height controller deterministically?"""
+    print("\n[Test 3] Testing height controller...")
     try:
-        from src.runtime_core_bridge import make_orbit_state, synthesize
+        from src.runtime_core_bridge import height_controller_step
+        import runtime_core as rc
 
-        # Create state with seed
-        state1 = make_orbit_state(seed=1337)
-        c1 = synthesize(state1)
+        c = rc.Complex(-0.6, 0.0)
+        delta = rc.Complex(0.01, -0.005)
+        step1 = height_controller_step(c, delta, target_height=-0.5, normal_risk=0.1)
+        step2 = height_controller_step(c, delta, target_height=-0.5, normal_risk=0.1)
 
-        # Create another with same seed
-        state2 = make_orbit_state(seed=1337)
-        c2 = synthesize(state2)
-
-        print("  ✓ Orbit state created (seed=1337)")
-        print(f"    - First synthesis: {c1.real:.6f} + {c1.imag:.6f}i")
-        print(f"    - Second synthesis: {c2.real:.6f} + {c2.imag:.6f}i")
+        print("  ✓ Height controller step computed")
+        print(f"    - Step1 c: {step1.new_c.real:.6f} + {step1.new_c.imag:.6f}i")
+        print(f"    - Step2 c: {step2.new_c.real:.6f} + {step2.new_c.imag:.6f}i")
 
         # Check determinism
-        if abs(c1.real - c2.real) < 1e-10 and abs(c1.imag - c2.imag) < 1e-10:
-            print("  ✓ Synthesis is deterministic")
+        if (
+            abs(step1.new_c.real - step2.new_c.real) < 1e-10
+            and abs(step1.new_c.imag - step2.new_c.imag) < 1e-10
+        ):
+            print("  ✓ Controller step is deterministic")
             return True
-        else:
-            print("  ✗ Synthesis not deterministic")
-            return False
+        print("  ✗ Controller step not deterministic")
+        return False
     except Exception as e:
-        print(f"  ✗ Orbit synthesis failed: {e}")
+        print(f"  ✗ Height controller failed: {e}")
         return False
 
 
@@ -103,7 +100,6 @@ def test_model_init():
             window_frames=10,
             n_features_per_frame=6,
             hidden_dims=[128, 256, 128],
-            k_bands=6,
         )
         print("  ✓ AudioToControlModel created")
 
@@ -140,32 +136,6 @@ def test_visual_metrics():
         return False
 
 
-def test_wasm_artifacts():
-    """Test 6: Are WASM artifacts built?"""
-    print("\n[Test 6] Testing WASM artifacts...")
-    try:
-        pkg_dir = Path("wasm-orbit/pkg")
-        files = {
-            "orbit_synth_wasm.js": pkg_dir / "orbit_synth_wasm.js",
-            "orbit_synth_wasm.wasm": pkg_dir / "orbit_synth_wasm_bg.wasm",
-            "orbit_synth_wasm.d.ts": pkg_dir / "orbit_synth_wasm.d.ts",
-        }
-
-        all_exist = True
-        for name, path in files.items():
-            if path.exists():
-                size = path.stat().st_size
-                print(f"  ✓ {name}: {size:,} bytes")
-            else:
-                print(f"  ✗ {name}: NOT FOUND")
-                all_exist = False
-
-        return all_exist
-    except Exception as e:
-        print(f"  ✗ WASM check failed: {e}")
-        return False
-
-
 def main():
     """Run all tests."""
     print("=" * 70)
@@ -175,10 +145,9 @@ def main():
     tests = [
         ("Imports", test_imports),
         ("Feature Extraction", test_feature_extraction),
-        ("Orbit Synthesis", test_orbit_synthesis),
+        ("Height Controller", test_height_controller),
         ("Model Initialization", test_model_init),
         ("Visual Metrics", test_visual_metrics),
-        ("WASM Artifacts", test_wasm_artifacts),
     ]
 
     results = {}

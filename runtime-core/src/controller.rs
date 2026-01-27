@@ -1,211 +1,103 @@
-//! Orbit state machine and synthesis
+//! Height-field controller and shared runtime constants.
 //!
-//! This module contains the deterministic controller used by the
-//! audio‑driven orbit synthesiser.  The controller maintains a
-//! carrier orbit and a set of epicycles (residuals).  At each step
-//! the carrier phase `theta` and residual phases advance according
-//! to their angular velocities, then the complex Julia parameter
-//! `c(t)` is synthesised as the sum of the carrier point on the
-//! Mandelbrot lobe and the residual epicycles.  The amplitude of
-//! each residual decays exponentially as 1/2^(k+1) and is modulated
-//! by the controller's `alpha` parameter and the band gate vector.
+//! The controller treats the Mandelbrot map as a scalar field
+//! f(c) = log|z_N(c)| and projects model-proposed steps onto the
+//! level set of f. A small servo term pulls back to the target height.
 
-use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use crate::geometry::{iterate_with_derivative, Complex};
 
 /// Shared runtime constants to keep backend and frontend in lockstep.
-/// Exposed through bindings so both sides can assert parity at startup.
 pub const SAMPLE_RATE: usize = 48_000;
 pub const HOP_LENGTH: usize = 1_024;
 pub const N_FFT: usize = 4_096;
 pub const WINDOW_FRAMES: usize = 10;
-pub const DEFAULT_K_RESIDUALS: usize = 6;
-pub const DEFAULT_RESIDUAL_CAP: f64 = 0.5;
-pub const DEFAULT_RESIDUAL_OMEGA_SCALE: f64 = 2.0;
-pub const DEFAULT_BASE_OMEGA: f64 = 1.0;
-pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 
-/// Parameters controlling the residual epicycle sums.  These values
-/// determine the number of residuals and the cap on their combined
-/// magnitude.  The same parameters are used for both Python and
-/// WebAssembly bindings.
+/// Default height-field parameters.
+pub const DEFAULT_HEIGHT_ITERATIONS: usize = 32;
+pub const DEFAULT_HEIGHT_EPSILON: f64 = 1e-8;
+pub const DEFAULT_HEIGHT_GAIN: f64 = 0.15;
+
+/// Result of evaluating the height field at a point.
 #[derive(Clone, Copy, Debug)]
-pub struct ResidualParams {
-    /// Number of residual epicycles (k)
-    pub k_residuals: usize,
-    /// Maximum allowed residual magnitude as a multiple of the lobe radius
-    pub residual_cap: f64,
-    /// Scaling factor applied to the carrier radius when computing the
-    /// amplitude of the first residual.  In practice this is 1.0.
-    pub radius_scale: f64,
+pub struct HeightFieldSample {
+    pub height: f64,
+    /// Gradient in the c-plane: (real = ∂f/∂x, imag = ∂f/∂y).
+    pub gradient: Complex,
+    pub z: Complex,
+    pub w: Complex,
 }
 
-impl Default for ResidualParams {
-    fn default() -> Self {
-        Self {
-            k_residuals: DEFAULT_K_RESIDUALS,
-            residual_cap: DEFAULT_RESIDUAL_CAP,
-            radius_scale: 1.0,
-        }
-    }
+/// Controller parameters for projecting a model step.
+#[derive(Clone, Copy, Debug)]
+pub struct HeightControllerParams {
+    pub target_height: f64,
+    /// 0 = fully tangent, 1 = allow full normal motion.
+    pub normal_risk: f64,
+    pub height_gain: f64,
 }
 
-/// Orbit state: carrier and residual phases.
-#[derive(Clone, Debug)]
-pub struct OrbitState {
-    pub lobe: u32,
-    pub sub_lobe: u32,
-    pub theta: f64,
-    pub omega: f64,
-    pub s: f64,
-    pub alpha: f64,
-    pub residual_phases: Vec<f64>,
-    pub residual_omegas: Vec<f64>,
+/// Result of a controller step.
+#[derive(Clone, Copy, Debug)]
+pub struct HeightControllerStep {
+    pub new_c: Complex,
+    pub delta: Complex,
+    pub height: f64,
+    pub gradient: Complex,
 }
 
-impl OrbitState {
-    /// Create a new random OrbitState with arbitrary initial phases.
-    /// Residual frequencies are multiples of the base frequency
-    /// (`omega`) scaled by `residual_omega_scale`.  This mirrors the
-    /// behaviour of the existing Python and WASM implementations.
-    pub fn new(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-    ) -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let seed: u64 = rng.gen();
-        Self::new_with_seed(
-            lobe,
-            sub_lobe,
-            theta,
-            omega,
-            s,
-            alpha,
-            k_residuals,
-            residual_omega_scale,
-            seed,
-        )
-    }
+/// Evaluate f(c) = log|z_N(c)| and its gradient.
+pub fn evaluate_height_field(
+    c: Complex,
+    iterations: usize,
+    epsilon: f64,
+) -> HeightFieldSample {
+    let (z, w) = iterate_with_derivative(c, iterations);
+    let z_mag_sq = z.mag_sq().max(epsilon);
+    let z_mag = z_mag_sq.sqrt();
+    let height = (z_mag + epsilon).ln();
 
-    /// Create a new OrbitState with deterministic residual phases.
-    ///
-    /// This is the constructor you want if you need bit-for-bit
-    /// repeatability between runs.
-    pub fn new_with_seed(
-        lobe: u32,
-        sub_lobe: u32,
-        theta: f64,
-        omega: f64,
-        s: f64,
-        alpha: f64,
-        k_residuals: usize,
-        residual_omega_scale: f64,
-        seed: u64,
-    ) -> Self {
-        let mut rng = StdRng::seed_from_u64(seed);
+    let denom = z_mag_sq + epsilon;
+    let a = z.conj().scale(1.0 / denom).mul(w);
+    let gradient = Complex::new(a.real, -a.imag);
 
-        let residual_phases: Vec<f64> = (0..k_residuals)
-            .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
-            .collect();
-        let residual_omegas: Vec<f64> = (0..k_residuals)
-            .map(|k| residual_omega_scale * omega * (k as f64 + 1.0))
-            .collect();
-        Self {
-            lobe,
-            sub_lobe,
-            theta,
-            omega,
-            s,
-            alpha,
-            residual_phases,
-            residual_omegas,
-        }
-    }
-
-    /// Advance the internal phases by dt.  This mutates `theta` and
-    /// the residual phases but does not perform synthesis.  Call
-    /// [`synthesize`] afterwards to compute the next complex value.
-    pub fn advance(&mut self, dt: f64) {
-        // Wrap the angle into [0, 2π) to avoid unbounded growth.
-        self.theta = (self.theta + self.omega * dt) % (2.0 * std::f64::consts::PI);
-        for (phase, omega) in self
-            .residual_phases
-            .iter_mut()
-            .zip(self.residual_omegas.iter())
-        {
-            *phase = (*phase + omega * dt) % (2.0 * std::f64::consts::PI);
-        }
+    HeightFieldSample {
+        height,
+        gradient,
+        z,
+        w,
     }
 }
 
-/// Synthesize the complex parameter c(t) from the given state and
-/// residual parameters.  This function is pure and does not mutate
-/// the state.
-pub fn synthesize(
-    state: &OrbitState,
-    residual_params: ResidualParams,
-    band_gates: Option<&[f64]>,
-) -> Complex {
-    // Carrier: deterministic point on the lobe
-    let carrier = lobe_point_at_angle(state.lobe, state.sub_lobe, state.theta, state.s);
+/// Project a model step onto the height-field level set and apply a servo term.
+pub fn step_height_controller(
+    c: Complex,
+    delta_model: Complex,
+    params: HeightControllerParams,
+    iterations: usize,
+    epsilon: f64,
+) -> HeightControllerStep {
+    let sample = evaluate_height_field(c, iterations, epsilon);
+    let g = sample.gradient;
+    let g2 = (g.real * g.real + g.imag * g.imag).max(epsilon);
 
-    // No residuals or zero depth: return carrier early
-    if residual_params.k_residuals == 0 || state.alpha == 0.0 {
-        return carrier;
+    let normal_component = (g.real * delta_model.real + g.imag * delta_model.imag) / g2;
+    let projection_scale = (1.0 - params.normal_risk).clamp(0.0, 1.0) * normal_component;
+    let projected = Complex::new(
+        delta_model.real - g.real * projection_scale,
+        delta_model.imag - g.imag * projection_scale,
+    );
+
+    let height_error = sample.height - params.target_height;
+    let servo_scale = -params.height_gain * height_error / g2;
+    let servo = Complex::new(g.real * servo_scale, g.imag * servo_scale);
+
+    let delta = Complex::new(projected.real + servo.real, projected.imag + servo.imag);
+    let new_c = Complex::new(c.real + delta.real, c.imag + delta.imag);
+
+    HeightControllerStep {
+        new_c,
+        delta,
+        height: sample.height,
+        gradient: sample.gradient,
     }
-
-    // Determine lobe radius for scaling.  We use the same radius
-    // definition as geometry::period_n_bulb_radius for non‑cardioid
-    // lobes and a fixed 0.25 for the cardioid.
-    let radius = if state.lobe == 1 {
-        0.25
-    } else {
-        period_n_bulb_radius(state.lobe, state.sub_lobe)
-    } * residual_params.radius_scale;
-
-    let mut residual_real = 0.0;
-    let mut residual_imag = 0.0;
-
-    for k in 0..residual_params.k_residuals {
-        // Amplitude decays exponentially as 1/2^(k+1) for tighter jitter
-        let amplitude = (state.alpha * (state.s * radius)) / 2.0_f64.powi(k as i32 + 1);
-        // Optional gating for each residual band
-        let gate = band_gates.map(|g| g.get(k).copied().unwrap_or(1.0)).unwrap_or(1.0);
-        let phase = state.residual_phases.get(k).copied().unwrap_or(0.0);
-        residual_real += amplitude * gate * phase.cos();
-        residual_imag += amplitude * gate * phase.sin();
-    }
-
-    // Cap residual magnitude to prevent runaway orbits
-    let mag = (residual_real * residual_real + residual_imag * residual_imag).sqrt();
-    let cap = residual_params.residual_cap * radius;
-    if mag > cap && mag > 0.0 {
-        let scale = cap / mag;
-        residual_real *= scale;
-        residual_imag *= scale;
-    }
-
-    // Sum carrier and residual
-    Complex::new(carrier.real + residual_real, carrier.imag + residual_imag)
-}
-
-/// Advance the state by dt and compute the new c(t).  Returns the
-/// updated complex value.  This convenience function calls
-/// `advance()` on the state then `synthesize()`.  The state is
-/// mutated in place.
-pub fn step(
-    state: &mut OrbitState,
-    dt: f64,
-    residual_params: ResidualParams,
-    band_gates: Option<&[f64]>,
-) -> Complex {
-    state.advance(dt);
-    synthesize(state, residual_params, band_gates)
 }

@@ -60,22 +60,19 @@ The trained model will be exported to ONNX format and can be used by the fronten
 
 **Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
 
-### Physics-Based Model Training (NEW)
+### Height-Field Control Model Training (NEW)
 
-To train with physics-based velocity prediction and curriculum learning:
+To train with height-field control:
 
 ```bash
 cd backend
-python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
+python train.py --data-dir data/audio --epochs 100 --use-curriculum
 ```
 
-**Physics Model Features:**
-- Predicts velocity instead of position for Julia parameter `c`
-- Speed is modulated by audio loudness (RMS energy)
-- Uses preset Mandelbrot orbits for curriculum learning
-- More physically interpretable and temporally consistent
-
-See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed documentation.
+**Height-Field Model Features:**
+- Predicts a model step Δc plus a target height and normal-risk term.
+- A controller projects the step onto contours of f(c) = log|z_N(c)|.
+- Curriculum data follows height-field contours for stable motion.
 
 ## Features
 
@@ -83,9 +80,9 @@ See [backend/docs/PHYSICS_MODEL.md](backend/docs/PHYSICS_MODEL.md) for detailed 
 - ML-learned mappings between audio features and visual parameters
 - Smooth morphing Julia sets rendered with WebGL
 - Training UI for model management and monitoring
-- **Velocity-based prediction** for physics-inspired smooth parameter transitions
-- **NEW**: Physics-based model with velocity prediction (treats Julia parameter as physical object)
-- **NEW**: Curriculum learning using Mandelbrot set orbital trajectories
+- **Height-field control** for smooth contour-following parameter motion
+- **NEW**: Controller-backed model outputs (Δc, target height, normal risk)
+- **NEW**: Curriculum learning using Mandelbrot height-field contours
 
 
 ## Training parameters:

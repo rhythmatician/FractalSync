@@ -68,7 +68,6 @@ def load_and_export(
     window_frames=10,
     n_features_per_frame=6,
     hidden_dims=None,
-    k_bands=6,
     include_delta=False,
     include_delta_delta=False,
 ):
@@ -91,19 +90,17 @@ def load_and_export(
         window_frames = meta.get("window_frames", window_frames)
         n_features_per_frame = meta.get("n_features_per_frame", n_features_per_frame)
         hidden_dims = meta.get("hidden_dims", hidden_dims)
-        k_bands = meta.get("k_bands", k_bands)
         include_delta = meta.get("include_delta", include_delta)
         include_delta_delta = meta.get("include_delta_delta", include_delta_delta)
 
         print(
             f"🧠 Creating model (window_frames={window_frames}, n_features_per_frame={n_features_per_frame}, "
-            f"hidden_dims={hidden_dims}, k_bands={k_bands})"
+            f"hidden_dims={hidden_dims})"
         )
         model = AudioToControlModel(
             window_frames=window_frames,
             n_features_per_frame=n_features_per_frame,
             hidden_dims=hidden_dims,
-            k_bands=k_bands,
             include_delta=include_delta,
             include_delta_delta=include_delta_delta,
         )
@@ -154,7 +151,6 @@ def load_and_export(
             "n_features_per_frame": n_features_per_frame,
             "input_dim": input_dim,
             "hidden_dims": hidden_dims,
-            "k_bands": k_bands,
             "include_delta": include_delta,
             "include_delta_delta": include_delta_delta,
             "model_class": "AudioToControlModel",
@@ -209,7 +205,7 @@ Examples:
 
   # Export with custom model dimensions
   python -m utils.checkpoint_loader --checkpoint checkpoints/checkpoint_epoch_10.pt \\
-    --output model_custom.onnx --window-frames 10 --k-bands 8
+    --output model_custom.onnx --window-frames 10
         """,
     )
 
@@ -238,9 +234,6 @@ Examples:
         help="Hidden layer dimensions (default: 128 256 128)",
     )
     parser.add_argument(
-        "--k-bands", type=int, default=6, help="Number of band gates (default: 6)"
-    )
-    parser.add_argument(
         "--include-delta",
         action="store_true",
         help="Include delta features",
@@ -262,7 +255,6 @@ Examples:
             window_frames=args.window_frames,
             n_features_per_frame=args.n_features_per_frame,
             hidden_dims=args.hidden_dims,
-            k_bands=args.k_bands,
             include_delta=args.include_delta,
             include_delta_delta=args.include_delta_delta,
         )

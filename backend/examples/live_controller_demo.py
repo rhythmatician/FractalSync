@@ -94,7 +94,7 @@ def demo_live_controller():
     print("\n5. Boundary Events:")
     for event in controller.boundary_events:
         print(f"   t={event.timestamp:.3f}s: novelty={event.novelty_score:.3f}, "
-              f"lobe={event.chosen_lobe}-{event.chosen_sub_lobe}, "
+              f"target_height={event.target_height:.3f}, "
               f"dwell={event.previous_dwell_time:.1f}s")
     
     # Visualize trajectory

@@ -10,6 +10,8 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+pytest.importorskip("cv2", reason="OpenCV backend unavailable (libGL missing)")
+
 from visual_metrics import VisualMetrics
 
 

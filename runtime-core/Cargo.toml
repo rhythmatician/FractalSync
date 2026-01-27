@@ -4,7 +4,7 @@
 ## This crate contains the shared audio runtime for FractalSync.  It is
 ## intended to be compiled as a Rust library for both Python (via
 ## `pyo3`) and WebAssembly (via `wasm-bindgen`).  The goal is to
-## encapsulate all orbit geometry, controller logic and feature
+## encapsulate height-field controller logic and feature
 ## extraction in a single source of truth.  By building the crate
 ## with different feature flags, you can generate either a Python
 ## extension module or a WebAssembly module without touching the
@@ -16,7 +16,7 @@ version = "0.1.0"
 authors = ["FractalSync Developers"]
 edition = "2021"
 license = "MIT"
-description = "Shared runtime for audio-driven orbit synthesis"
+description = "Shared runtime for audio-driven height-field control"
 publish = false
 
 # The library can be compiled as both an rlib and a cdylib.  The
@@ -47,6 +47,3 @@ js-sys = { version = "0.3", optional = true }
 
 # DSP
 rustfft = { version = "6" }
-
-# For deterministic residual initialization (seeded RNG supported).
-rand = { version = "0.8", features = ["std"] }

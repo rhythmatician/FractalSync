@@ -1,5 +1,10 @@
 use runtime_core::features::FeatureExtractor;
 
+fn pseudo_noise(i: usize) -> f32 {
+    let x = (i as f32 * 12.9898).sin() * 43758.5453;
+    (x - x.floor()) * 2.0 - 1.0
+}
+
 #[test]
 fn test_extract_windowed_features_dimensions() {
     let extractor = FeatureExtractor::new(22050, 512, 2048, false, false);
@@ -12,7 +17,7 @@ fn test_extract_windowed_features_dimensions() {
     ];
 
     for (audio_len, description) in test_cases {
-        let audio: Vec<f32> = (0..audio_len).map(|_| rand::random::<f32>() * 2.0 - 1.0).collect();
+        let audio: Vec<f32> = (0..audio_len).map(pseudo_noise).collect();
         let features = extractor.extract_windowed_features(&audio, 10);
         
         // Should have 60-dim features (6 features * 10 frames)
@@ -95,7 +100,7 @@ fn test_feature_extraction_with_silence() {
 #[test]
 fn test_feature_extraction_with_noise() {
     let extractor = FeatureExtractor::default();
-    let noise: Vec<f32> = (0..48000).map(|_| rand::random::<f32>() * 2.0 - 1.0).collect();
+    let noise: Vec<f32> = (0..48000).map(pseudo_noise).collect();
     
     let features = extractor.extract_windowed_features(&noise, 10);
     

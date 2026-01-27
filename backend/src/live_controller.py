@@ -3,9 +3,8 @@ Live audio-reactive controller for FractalSync.
 
 Implements the new architecture with:
 - Fast impact detection (many per song)
-- Slow section boundary detection (occasional lobe switches)
-- Orbit state machine with carrier + residual
-- Deterministic fallback behavior
+- Slow section boundary detection (target height updates)
+- Height-field state machine
 """
 
 import numpy as np
@@ -14,10 +13,7 @@ from typing import Tuple, Dict, List, Optional, Union
 from dataclasses import dataclass
 from collections import deque
 
-from .runtime_core_bridge import (
-    make_orbit_state,
-    step_orbit,
-)
+from .height_field import height_field, controller_step
 
 
 @dataclass
@@ -61,8 +57,7 @@ class BoundaryEvent:
     timestamp: float
     novelty_score: float
     loudness: float
-    chosen_lobe: int
-    chosen_sub_lobe: int
+    target_height: float
     previous_dwell_time: float
 
 
@@ -326,7 +321,7 @@ class ImpactDetector:
 
 class ImpactEnvelope:
     """
-    Manages impact envelope state for modulating orbit parameters.
+    Manages impact envelope state for modulating height-field parameters.
     """
 
     def __init__(
@@ -537,153 +532,32 @@ class NoveltyBoundaryDetector:
         return boundary_detected, smoothed_novelty
 
 
-class LobeScheduler:
+class HeightFieldStateMachine:
     """
-    Manages lobe selection and transitions for section boundaries.
-    Avoids repetition and ping-ponging.
-    """
-
-    def __init__(self, available_lobes: Optional[List[Tuple[int, int]]] = None):
-        """
-        Initialize lobe scheduler.
-
-        Args:
-            available_lobes: List of (lobe, sub_lobe) tuples to choose from
-        """
-        if available_lobes is None:
-            # Default: cardioid + main bulbs
-            self.available_lobes = [
-                (1, 0),  # Cardioid
-                (2, 0),  # Period-2
-                (3, 0),  # Period-3 upper
-                (3, 1),  # Period-3 lower
-                (4, 0),  # Period-4 cascade
-                (4, 1),  # Period-4 primary 1
-            ]
-        else:
-            self.available_lobes = available_lobes
-
-        # History
-        self.lobe_history: deque = deque(maxlen=5)
-        self.current_lobe = (1, 0)  # Start at cardioid
-
-    def select_next_lobe(self, energy_level: float, novelty: float) -> Tuple[int, int]:
-        """
-        Select next lobe based on audio state.
-
-        Args:
-            energy_level: Current energy level [0, 1]
-            novelty: Current novelty score
-
-        Returns:
-            Tuple of (lobe, sub_lobe)
-        """
-        # Filter out current and recent lobes
-        candidates = [
-            lobe
-            for lobe in self.available_lobes
-            if lobe != self.current_lobe and lobe not in self.lobe_history
-        ]
-
-        if not candidates:
-            # All lobes used, reset history
-            self.lobe_history.clear()
-            candidates = [
-                lobe for lobe in self.available_lobes if lobe != self.current_lobe
-            ]
-
-        if not candidates:
-            # Fallback
-            candidates = self.available_lobes
-
-        # Simple selection: random with slight bias toward period-2/3 for high energy
-        if energy_level > 0.7 and novelty > 0.6:
-            # Prefer bigger bulbs for high energy
-            preferred = [(2, 0), (3, 0), (3, 1)]
-            preferred_candidates = [c for c in candidates if c in preferred]
-            if preferred_candidates:
-                candidates = preferred_candidates
-
-        # Select randomly from candidates
-        selected = candidates[np.random.randint(len(candidates))]
-
-        # Update history
-        self.lobe_history.append(self.current_lobe)
-        self.current_lobe = selected
-
-        return selected
-
-
-class OrbitStateMachine:
-    """
-    Main orbit state machine managing carrier + residual synthesis.
-    Outputs c(t) at render rate using OrbitSynthesizer.
+    Main height-field state machine. Maintains current c and advances it
+    along approximate height contours.
     """
 
     def __init__(
         self,
         render_rate: float = 60.0,
-        residual_k: int = 6,
-        residual_cap: float = 0.5,
-        s_loud: float = 1.02,
-        s_quiet_noisy: float = 2.5,
-        s_quiet_tonal: float = 0.4,
-        s_smoothing_tau: float = 1.0,
+        height_iterations: int = 32,
+        height_gain: float = 0.15,
     ):
-        """
-        Initialize orbit state machine.
-
-        Args:
-            render_rate: Render rate in Hz
-            residual_k: Number of residual circles
-            residual_cap: Maximum residual amplitude relative to lobe radius
-            s_loud: Target s for loud sections
-            s_quiet_noisy: Target s for quiet+noisy
-            s_quiet_tonal: Target s for quiet+tonal
-            s_smoothing_tau: Time constant for s smoothing (seconds)
-        """
         self.render_rate = render_rate
         self.dt = 1.0 / render_rate
-        self.residual_k = residual_k
-        self.residual_cap = residual_cap
-        self.s_loud = s_loud
-        self.s_quiet_noisy = s_quiet_noisy
-        self.s_quiet_tonal = s_quiet_tonal
-        self.s_smoothing_tau = s_smoothing_tau
+        self.height_iterations = height_iterations
+        self.height_gain = height_gain
 
-        # Initialize orbit state using runtime_core
-        self.orbit_state = make_orbit_state(
-            lobe=1,
-            sub_lobe=0,
-            theta=0.0,
-            omega=1.0,
-            s=1.02,
-            alpha=0.3,
-            k_residuals=residual_k,
-            seed=42,
-        )
+        self.c = complex(-0.6, 0.0)
+        self.target_height = -0.5
+        self.normal_risk = 0.05
+        self.step_scale = 0.004
+        self.last_tangent = np.array([1.0, 0.0], dtype=np.float32)
 
-        self.s_target = 1.02
-
-        # Transition state
-        self.in_transition = False
-        self.transition_start_lobe = (1, 0)
-        self.transition_end_lobe = (1, 0)
-        self.transition_progress = 0.0
-        self.transition_duration = 3.0  # seconds
-
-        # Control inputs (updated by controller)
         self.control_loudness = 0.5
         self.control_tonalness = 0.5
         self.control_noisiness = 0.5
-
-    def start_transition(self, new_lobe: int, new_sub_lobe: int, duration: float = 3.0):
-        """Start transition to new lobe."""
-        self.in_transition = True
-        self.transition_start_lobe = (self.orbit_state.lobe, self.orbit_state.sub_lobe)
-        self.transition_end_lobe = (new_lobe, new_sub_lobe)
-        self.transition_progress = 0.0
-        self.transition_duration = duration
 
     def update_control_inputs(
         self, loudness: float, tonalness: float, noisiness: float
@@ -693,95 +567,44 @@ class OrbitStateMachine:
         self.control_tonalness = tonalness
         self.control_noisiness = noisiness
 
-    def _compute_s_target(self) -> float:
-        """Compute target s based on audio state."""
-        L = self.control_loudness
-        T = self.control_tonalness
-        N = self.control_noisiness
+        self.target_height = -1.2 + 2.4 * float(loudness)
+        self.normal_risk = float(np.clip(noisiness * 0.25, 0.0, 1.0))
+        self.step_scale = 0.002 + 0.006 * float(loudness)
 
-        # Mix based on state
-        if L > 0.6:
-            # Loud: near boundary
-            return self.s_loud
-        elif N > 0.6:
-            # Quiet + noisy: push outward
-            return self.s_quiet_noisy
-        elif T > 0.6:
-            # Quiet + tonal: pull inward
-            return self.s_quiet_tonal
-        else:
-            # Mixed state: interpolate
-            quiet_target = (
-                T * self.s_quiet_tonal
-                + N * self.s_quiet_noisy
-                + (1 - T - N) * self.s_loud
-            )
-            return L * self.s_loud + (1 - L) * quiet_target
-
-    def _smooth_s(self, s_current: float, s_target: float, dt: float) -> float:
-        """Apply exponential smoothing to s."""
-        alpha = 1.0 - np.exp(-dt / self.s_smoothing_tau)
-        return s_current + alpha * (s_target - s_current)
+    def _tangent_direction(self) -> np.ndarray:
+        sample = height_field(self.c, iterations=self.height_iterations)
+        g = sample.gradient.astype(np.float64)
+        g_norm = np.linalg.norm(g)
+        if g_norm < 1e-8:
+            return self.last_tangent
+        tangent = np.array([-g[1], g[0]], dtype=np.float64) / g_norm
+        self.last_tangent = tangent.astype(np.float32)
+        return self.last_tangent
 
     def step(self, impact_envelope_value: float = 0.0) -> complex:
-        """
-        Step the orbit state machine by one render frame.
+        """Advance the controller by one render frame."""
+        tangent = self._tangent_direction()
+        speed = self.step_scale + 0.004 * impact_envelope_value
+        delta_model = tangent * speed
 
-        Args:
-            impact_envelope_value: Current impact envelope value [0, 1]
+        new_c, _, _ = controller_step(
+            self.c,
+            delta_model,
+            target_height=self.target_height,
+            normal_risk=self.normal_risk,
+            height_gain=self.height_gain,
+            iterations=self.height_iterations,
+        )
+        self.c = new_c
+        return self.c
 
-        Returns:
-            Complex Julia parameter c(t)
-        """
-        # Update s target and smooth
-        base_s_target = self._compute_s_target()
-
-        # Apply impact envelope override
-        if impact_envelope_value > 0.0:
-            # Push s outward during impact
-            impact_s = 1.15
-            self.s_target = (
-                base_s_target + (impact_s - base_s_target) * impact_envelope_value
-            )
-        else:
-            self.s_target = base_s_target
-
-        smoothed_s = self._smooth_s(self.orbit_state.s, self.s_target, self.dt)
-
-        # Update residual alpha (boosted by impact)
-        base_alpha = 0.3  # Base residual strength
-        impact_alpha_boost = 0.5 * impact_envelope_value
-        residual_alpha = base_alpha + impact_alpha_boost
-
-        # Handle transitions - just update lobe/sub_lobe for now
-        if self.in_transition:
-            self.transition_progress += self.dt / self.transition_duration
-            if self.transition_progress >= 1.0:
-                # Transition complete
-                self.orbit_state.lobe = self.transition_end_lobe[0]
-                self.orbit_state.sub_lobe = self.transition_end_lobe[1]
-                self.in_transition = False
-
-        # Update orbit state parameters (mutation happens via runtime_core)
-        self.orbit_state.s = smoothed_s
-        self.orbit_state.alpha = residual_alpha
-
-        # Advance state and synthesize
-        c = step_orbit(self.orbit_state, self.dt)
-
-        return complex(c.re, c.im)
-
-    def get_debug_info(self) -> Dict[str, Union[float, int, str]]:
-        """Get debug information for HUD."""
+    def get_debug_info(self) -> Dict[str, Union[float, str]]:
+        sample = height_field(self.c, iterations=self.height_iterations)
         return {
-            "lobe": self.orbit_state.lobe,
-            "sub_lobe": self.orbit_state.sub_lobe,
-            "theta": self.orbit_state.theta,
-            "omega": self.orbit_state.omega,
-            "s": self.orbit_state.s,
-            "s_target": self.s_target,
-            "residual_alpha": self.orbit_state.alpha,
-            "in_transition": self.in_transition,
+            "height": sample.height,
+            "target_height": self.target_height,
+            "normal_risk": self.normal_risk,
+            "step_scale": self.step_scale,
             "loudness": self.control_loudness,
             "tonalness": self.control_tonalness,
             "noisiness": self.control_noisiness,
@@ -820,8 +643,7 @@ class LiveController:
         self.impact_detector = ImpactDetector()
         self.impact_envelope = ImpactEnvelope()
         self.boundary_detector = NoveltyBoundaryDetector()
-        self.lobe_scheduler = LobeScheduler()
-        self.orbit_state = OrbitStateMachine(render_rate=render_rate)
+        self.height_state = HeightFieldStateMachine(render_rate=render_rate)
 
         # Event logs
         self.impact_events: List[ImpactEvent] = []
@@ -871,8 +693,8 @@ class LiveController:
             )
             self.latest_slow_features = slow_features
 
-            # Update orbit control inputs
-            self.orbit_state.update_control_inputs(
+            # Update height-field control inputs
+            self.height_state.update_control_inputs(
                 slow_features.loudness, slow_features.tonalness, slow_features.noisiness
             )
 
@@ -880,15 +702,6 @@ class LiveController:
             is_boundary, novelty = self.boundary_detector.update(slow_features)
 
             if is_boundary:
-                # Select new lobe
-                new_lobe, new_sub_lobe = self.lobe_scheduler.select_next_lobe(
-                    slow_features.loudness, novelty
-                )
-
-                # Start transition
-                self.orbit_state.start_transition(new_lobe, new_sub_lobe, duration=3.0)
-
-                # Log event
                 prev_dwell = timestamp - (
                     self.boundary_events[-1].timestamp if self.boundary_events else 0.0
                 )
@@ -896,8 +709,7 @@ class LiveController:
                     timestamp,
                     novelty,
                     slow_features.loudness,
-                    new_lobe,
-                    new_sub_lobe,
+                    self.height_state.target_height,
                     prev_dwell,
                 )
                 self.boundary_events.append(event)
@@ -907,14 +719,14 @@ class LiveController:
         # Update impact envelope
         envelope_value = self.impact_envelope.update(timestamp)
 
-        # Step orbit state machine
-        c = self.orbit_state.step(envelope_value)
+        # Step height-field state machine
+        c = self.height_state.step(envelope_value)
 
         return c
 
     def get_debug_overlay(self) -> str:
         """Get debug overlay string for HUD."""
-        info = self.orbit_state.get_debug_info()
+        info = self.height_state.get_debug_info()
 
         recent_impacts = len(
             [e for e in self.impact_events if self.current_time - e.timestamp < 5.0]
@@ -924,8 +736,8 @@ class LiveController:
         )
 
         overlay = f"""FractalSync Live
-Lobe: {info['lobe']}-{info['sub_lobe']} {'[TRANSITION]' if info['in_transition'] else ''}
-s: {info['s']:.3f} → {info['s_target']:.3f}
+Height: {info['height']:.3f} → {info['target_height']:.3f}
+Risk: {info['normal_risk']:.2f} | Step: {info['step_scale']:.4f}
 L/T/N: {info['loudness']:.2f}/{info['tonalness']:.2f}/{info['noisiness']:.2f}
 Impacts (5s): {recent_impacts}
 Boundaries (30s): {recent_boundaries}

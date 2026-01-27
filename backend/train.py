@@ -1,5 +1,5 @@
 """
-Training script for orbit-based control signal model.
+Training script for height-field control signal model.
 
 Usage:
     python train.py --data-dir data/audio --epochs 100 --use-curriculum
@@ -48,7 +48,7 @@ def main():
         ],
     )
     parser = argparse.ArgumentParser(
-        description="Train orbit-based control signal model"
+        description="Train height-field control signal model"
     )
     parser.add_argument(
         "--data-dir",
@@ -69,7 +69,7 @@ def main():
     parser.add_argument(
         "--use-curriculum",
         action="store_true",
-        help="Use curriculum learning with Mandelbrot orbits",
+        help="Use curriculum learning with height-field contours",
     )
     parser.add_argument(
         "--curriculum-weight",
@@ -82,12 +82,6 @@ def main():
         type=float,
         default=0.50,
         help="Decay factor for curriculum weight per epoch",
-    )
-    parser.add_argument(
-        "--k-bands",
-        type=int,
-        default=6,
-        help="Number of residual bands (epicycles)",
     )
     parser.add_argument(
         "--save-dir",
@@ -134,14 +128,13 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Orbit-Based Control Signal Model Training")
+    print("Height-Field Control Signal Model Training")
     print("=" * 60)
     print(f"Data directory: {args.data_dir}")
     print(f"Epochs: {args.epochs}")
     print(f"Batch size: {args.batch_size}")
     print(f"Learning rate: {args.learning_rate}")
     print(f"Window frames: {args.window_frames}")
-    print(f"Residual bands (k): {args.k_bands}")
     print(f"Use curriculum: {args.use_curriculum}")
     if args.use_curriculum:
         print(f"  Curriculum weight: {args.curriculum_weight}")
@@ -190,12 +183,11 @@ def main():
     else:
         print("  GPU rendering disabled, using CPU")
 
-    print("[5/7] Creating orbit-based control model...")
+    print("[5/7] Creating height-field control model...")
     model = AudioToControlModel(
         window_frames=args.window_frames,
         n_features_per_frame=6,
         hidden_dims=[128, 256, 128],
-        k_bands=args.k_bands,
         dropout=0.2,
     )
 
@@ -216,16 +208,15 @@ def main():
         julia_resolution=args.julia_resolution,
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
-        k_residuals=args.k_bands,
     )
 
     print("[7/7] Starting training...")
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
     print("\nArchitecture overview:")
-    print("  - Model predicts control signals: s, alpha, omega_scale, band_gates")
-    print("  - Orbit synthesizer generates deterministic c(t) from controls")
-    print("  - Curriculum learning teaches Mandelbrot orbit geometry")
+    print("  - Model predicts Δc plus target height and normal risk")
+    print("  - Height-field controller keeps motion on f(c) contours")
+    print("  - Curriculum learning follows height-field contours")
     print("  - Correlation losses map audio features to visual parameters")
     print("=" * 60)
 
@@ -260,7 +251,7 @@ def main():
     except Exception as e:
         print(f"Warning: Could not get git hash: {e}")
 
-    onnx_model_filename = f"model_orbit_control_{timestamp}.onnx"
+    onnx_model_filename = f"model_height_control_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
     try:
@@ -280,9 +271,8 @@ def main():
                 else None
             ),
             metadata={
-                "model_type": "orbit_control",
+                "model_type": "height_control",
                 "output_dim": model.output_dim,
-                "k_bands": args.k_bands,
                 "epoch": args.epochs,
                 "window_frames": args.window_frames,
                 "num_features_per_frame": 6,
@@ -303,7 +293,7 @@ def main():
         print("Final checkpoint:", final_checkpoint)
     else:
         print("Final checkpoint saved to:", args.save_dir)
-    print("\n[OK] Training complete! Orbit-based model ready for deployment.")
+    print("\n[OK] Training complete! Height-field model ready for deployment.")
 
 
 if __name__ == "__main__":
