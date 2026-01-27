@@ -8,9 +8,11 @@ This is the README file that has never been touched by AI.
 
 ```ps1
 cd frontend; npm install  # frontend
-cd backend; pip install -r requirements.txt # backend
-# install wasm-pack (How?)
-# install rust dependencies (How?)
+pip install -r backend/requirements.txt # backend
+winget install --id Rustlang.Rust  # runtime-core
+cargo --version  # verify runtime-core
+cargo install wasm-pack --locked  # wasm
+wasm-pack --version  # verify wasm
 ```
 
 ## Testing
