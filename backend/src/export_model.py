@@ -43,6 +43,18 @@ def export_to_onnx(
 
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
+        # Dynamo expects dynamic_shapes to be keyed by forward *argument* names
+        # (e.g., 'x' in `def forward(self, x):`) rather than ONNX input/output names.
+        import inspect
+
+        arg_name = "x"
+        sig = inspect.signature(model.forward)
+        params = [p.name for p in sig.parameters.values() if p.name != "self"]
+        if params:
+            arg_name = params[0]
+
+        dynamic_shapes = {arg_name: {0: "batch_size"}}
+
         torch.onnx.export(
             model,
             (dummy_input,),
@@ -51,10 +63,7 @@ def export_to_onnx(
             input_names=["audio_features"],
             output_names=["visual_parameters"],
             # Use dynamic_shapes with the dynamo exporter (preferred) instead of dynamic_axes
-            dynamic_shapes={
-                "audio_features": {0: "batch_size"},
-                "visual_parameters": {0: "batch_size"},
-            },
+            dynamic_shapes=dynamic_shapes,
             # Request a modern opset to avoid post-export version conversion failures
             opset_version=18,
             do_constant_folding=True,
