@@ -50,7 +50,7 @@ def runtime_core_module():
         installed = False
 
     # Ensure maturin is available (don't import the module just to avoid unused-import warnings)
-    from importlib import util as _importlib_util
+    import importlib.util as _importlib_util
 
     if _importlib_util.find_spec("maturin") is None:
         raise RuntimeError(

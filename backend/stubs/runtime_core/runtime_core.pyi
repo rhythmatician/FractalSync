@@ -46,7 +46,12 @@ class FeatureExtractor:
         audio: Sequence[float],
         window_frames: int = 10,
     ) -> NDArray: ...
+    def compute_normalization_stats(self, features: NDArray) -> None: ...
+    def normalize_features(self, features: NDArray) -> NDArray: ...
     def test_simple(self) -> list[float]: ...
+    
+    feature_mean: Optional[NDArray]
+    feature_std: Optional[NDArray]
 
 class ResidualParams:
     def __init__(
@@ -67,6 +72,7 @@ class OrbitState:
         alpha: float,
         k_residuals: int,
         residual_omega_scale: float,
+        seed: Optional[int] = None,
     ) -> None: ...
     @staticmethod
     def new_with_seed(
