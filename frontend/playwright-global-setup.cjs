@@ -55,4 +55,85 @@ module.exports = async function globalSetup() {
     } catch (err) {
         throw new Error('Backend did not become ready in time: ' + String(err));
     }
+
+    // Ensure a model exists. If /api/model/latest returns 200, we're done. If 404, train a tiny model and export it.
+    const modelExists = await new Promise((resolve) => {
+        http.get(backendUrl, (res) => {
+            resolve(res.statusCode === 200);
+        }).on('error', () => resolve(false));
+    });
+
+    if (modelExists) {
+        console.log('Model already present.');
+        return;
+    }
+
+    console.log('No model found; training a tiny model (1 epoch) for E2E tests...');
+
+    // Prefer committed fixture if present; otherwise generate a small audio file for training
+    const fixturePath = path.join(__dirname, 'tests', 'fixtures', 'sample.wav');
+    const audioDir = path.join(backendCwd, 'data', 'audio');
+    fs.mkdirSync(audioDir, { recursive: true });
+    const wavPath = path.join(audioDir, 'e2e_sample.wav');
+
+    if (fs.existsSync(fixturePath)) {
+        console.log('Copying committed sample fixture to backend audio folder');
+        fs.copyFileSync(fixturePath, wavPath);
+    } else {
+        console.log('Fixture not found; generating sample WAV for backend training');
+        // Generate a short silent WAV (mono, 8kHz)
+        const durationSec = 0.5;
+        const sampleRate = 8000;
+        const numChannels = 1;
+        const bytesPerSample = 2;
+        const numSamples = Math.floor(durationSec * sampleRate);
+        const byteRate = sampleRate * numChannels * bytesPerSample;
+        const blockAlign = numChannels * bytesPerSample;
+        const dataSize = numSamples * numChannels * bytesPerSample;
+        const buffer = Buffer.alloc(44 + dataSize);
+        buffer.write('RIFF', 0);
+        buffer.writeUInt32LE(36 + dataSize, 4);
+        buffer.write('WAVE', 8);
+        buffer.write('fmt ', 12);
+        buffer.writeUInt32LE(16, 16);
+        buffer.writeUInt16LE(1, 20);
+        buffer.writeUInt16LE(numChannels, 22);
+        buffer.writeUInt32LE(sampleRate, 24);
+        buffer.writeUInt32LE(byteRate, 28);
+        buffer.writeUInt16LE(blockAlign, 32);
+        buffer.writeUInt16LE(bytesPerSample * 8, 34);
+        buffer.write('data', 36);
+        buffer.writeUInt32LE(dataSize, 40);
+        fs.writeFileSync(wavPath, buffer);
+    }
+
+    // Run a quick training: 1 epoch, limited files
+    await new Promise((resolve, reject) => {
+        const tproc = spawn('python', ['train.py', '--data-dir', 'data/audio', '--epochs', '1', '--max-files', '1'], {
+            cwd: backendCwd,
+            stdio: ['ignore', 'inherit', 'inherit']
+        });
+        tproc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('train.py failed with code ' + code))));
+        tproc.on('error', (err) => reject(err));
+    });
+
+    // Export checkpoint to ONNX using utils.checkpoint_loader
+    const checkpointPath = path.join(backendCwd, 'checkpoints', 'checkpoint_epoch_1.pt');
+    const outputOnnx = path.join(backendCwd, 'checkpoints', 'model.onnx');
+    await new Promise((resolve, reject) => {
+        const eproc = spawn('python', ['-m', 'utils.checkpoint_loader', '--checkpoint', checkpointPath, '--output', outputOnnx], {
+            cwd: backendCwd,
+            stdio: ['ignore', 'inherit', 'inherit']
+        });
+        eproc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('checkpoint export failed with code ' + code))));
+        eproc.on('error', (err) => reject(err));
+    });
+
+    // Confirm model is now available via API
+    try {
+        await waitForUrl(backendUrl, 20000);
+        console.log('Model exported and API reflects it.');
+    } catch (err) {
+        throw new Error('Model export completed but API did not serve it: ' + String(err));
+    }
 };

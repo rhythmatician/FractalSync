@@ -21,6 +21,8 @@ pytest backend/tests/ -v
 
 **Test Coverage:**
 - ✅ End-to-end workflow tests
+
+> E2E note: The Playwright E2E harness will ensure a model is available for tests — if no ONNX model exists the test setup will train a tiny 1-epoch model on a small generated WAV and export it to ONNX so the frontend can fetch it. This makes the E2E suite self-contained and reliable in CI.
 - ✅ Feature extraction parity (Python vs Rust)
 - ✅ Integration tests (runtime-core via PyO3)
 - ✅ Song analyzer tests
