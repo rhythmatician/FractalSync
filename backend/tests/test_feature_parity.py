@@ -51,8 +51,12 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
     """
     print("Running Rust feature extraction via cargo test...")
 
-    # Save audio to temp file
-    audio_path = Path("backend/data/cache/parity_test_audio.npy")
+    #
+
+    # Save audio to temp file (path relative to this test file to avoid depending on working directory)
+    audio_path = (
+        Path(__file__).parent.parent / "data" / "cache" / "parity_test_audio.npy"
+    )
     audio_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(audio_path, audio)
 
@@ -94,7 +98,9 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
         raise RuntimeError(f"Rust test failed with code {result.returncode}")
 
     # Parse JSON output from test
-    output_path = Path("backend/data/cache/parity_test_features.json")
+    output_path = (
+        Path(__file__).parent.parent / "data" / "cache" / "parity_test_features.json"
+    )
     if not output_path.exists():
         raise RuntimeError(f"Rust test did not create {output_path}")
 
