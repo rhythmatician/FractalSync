@@ -1,5 +1,5 @@
 
-maturin>=1.11.0
+maturin==1.11.5
 black>=26
 isort>=7
 mypy>=1.19

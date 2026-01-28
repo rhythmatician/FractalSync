@@ -61,7 +61,9 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
         cargo_cmd = str(cargo_path)
 
     # Run Rust test that reads this file and outputs features
-    env = subprocess.os.environ.copy()
+    import os
+
+    env = os.environ.copy()
     env["PARITY_TEST_AUDIO_PATH"] = str(audio_path.absolute())
 
     result = subprocess.run(

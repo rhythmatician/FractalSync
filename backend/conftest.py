@@ -25,12 +25,27 @@ def runtime_core_module():
     this will raise a helpful RuntimeError instructing the developer how to
     install it (recommended: `pip install -r backend/requirements-dev.txt`).
     """
-    # Try importing runtime_core; if present we may still rebuild if the source changed
+    # Try importing runtime_core; if present we will prefer a local-source build
     installed = False
+    runtime_core_mod = None
     try:
         import runtime_core  # type: ignore
 
+        runtime_core_mod = runtime_core
         installed = True
+        # If the installed runtime_core is not the one built from our local source
+        # (e.g., it's a site-packages wheel), force a rebuild so tests exercise
+        # the current repository source.
+        try:
+            module_file = getattr(runtime_core_mod, "__file__", "")
+            if module_file:
+                module_path = Path(module_file).resolve()
+                # If the installed module's path is not inside our repo's runtime-core dir, rebuild
+                if str((ROOT / "runtime-core").resolve()) not in str(module_path):
+                    installed = False
+        except Exception:
+            # Be conservative and rebuild if we can't determine origin
+            installed = False
     except Exception:
         installed = False
 
@@ -80,11 +95,26 @@ def runtime_core_module():
 
     try:
         import maturin
+        import os
 
-        maturin.build_editable(wheel_directory=wheel_dir)
+        rc_dir = ROOT / "runtime-core"
+        pyproj = rc_dir / "pyproject.toml"
+        if not pyproj.exists():
+            raise RuntimeError(
+                f"runtime-core pyproject.toml not found at expected location: {pyproj}"
+            )
 
-        maturin.build_sdist(sdist_directory=sdist_dir)
-        maturin.build_wheel(wheel_directory=wheel_dir)
+        # maturin's API expects to be called from the project dir so it can
+        # locate `pyproject.toml`. To use debugpy, we temporarily chdir into
+        # the runtime-core directory for the API invocation.
+        try:
+            old_cwd = Path.cwd()
+            os.chdir(rc_dir)
+            maturin.build_editable(wheel_directory=wheel_dir)
+            maturin.build_sdist(sdist_directory=sdist_dir)
+            maturin.build_wheel(wheel_directory=wheel_dir)
+        finally:
+            os.chdir(old_cwd)
 
     except Exception:
         # Fall back to the CLI which is reliable across maturin releases.
