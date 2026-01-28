@@ -38,6 +38,14 @@ uniform float u_fdEps;              // finite-difference epsilon in *pixels* (co
 // Height scale controls the z component when building a 3D normal from the 2D gradient
 uniform float u_heightScale;
 
+// Fresnel and rim controls
+uniform float u_fresnelPower; // exponent for fresnel falloff
+uniform float u_fresnelBoost; // how much fresnel multiplies specular
+uniform float u_rimIntensity;  // additive rim highlight from demSig
+
+// Normal blending: 0 = DE normal only, 1 = gradient normal only
+uniform float u_normalBlend;
+
 const float PI = 3.141592653589793;
 const float ESC_RADIUS_2 = 1.0e10;
 
@@ -393,36 +401,50 @@ vec3 shadePixel(vec2 fragCoord) {
   // Saturation control (not in python; keeps your UI meaningful)
   base = mix(vec3(0.5), base, clamp(u_sat, 0.0, 1.0));
 
-  // Choose normal: either DE-derived normal or finite-difference gradient normal
-  vec2 usedNormal = normal;
+  // dem normalization by diag + python's log+sigmoid shaping (compute early for rim)
+  float demN = max(dem / max(diag, 1.0e-30), 1.0e-30);
+  float demT = -log(demN) / 12.0;
+  float demSig = 1.0 / (1.0 + exp(-10.0 * (demT - 0.5)));
+
+  // Compute blended normal (N3) and usedNormal for existing blinnPhong
+  vec3 N3 = normalize(vec3(normal.x, normal.y, 1.0));
+  vec2 usedNormal = N3.xy;
+
   if (u_useGradientNormals != 0) {
     // convert FD epsilon from pixels to complex-plane units
     float pixelSize = span / minRes;
     float eps = max(u_fdEps * pixelSize, 1.0e-7);
     vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIter, eps);
     float glen = length(grad);
-    // If gradient is tiny (or NaN), fall back to DE normal
+    // If gradient is valid, build N_grad and blend with DE normal
     if (glen > 1.0e-30) {
-      // Build a 3D normal: (grad.x, grad.y, heightScale) then normalize
       float hs = max(u_heightScale, 1.0e-8);
-      vec3 N3 = normalize(vec3(grad.x, grad.y, hs));
+      vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
+      vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
+      float blend = clamp(u_normalBlend, 0.0, 1.0);
+      N3 = normalize(mix(Nd, Ng, blend));
       usedNormal = N3.xy;
-      // Protect against pathological numeric cases
+      // Protect against numerical issues
       if (length(usedNormal) < 1.0e-6) {
         usedNormal = normal;
+        N3 = normalize(vec3(usedNormal.x, usedNormal.y, 1.0));
       }
     } else {
-      usedNormal = normal;
+      // fallback to DE-derived normal
+      N3 = normalize(vec3(normal.x, normal.y, 1.0));
+      usedNormal = N3.xy;
     }
   }
 
   // Brightness with Blinn-Phong (scale specular by derivative confidence)
   float bright = blinnPhong(usedNormal, derivConf);
 
-  // dem normalization by diag + python's log+sigmoid shaping
-  float demN = max(dem / max(diag, 1.0e-30), 1.0e-30);
-  float demT = -log(demN) / 12.0;
-  float demSig = 1.0 / (1.0 + exp(-10.0 * (demT - 0.5)));
+  // Fresnel: boost specular based on grazing angle
+  float fresnel = pow(1.0 - clamp(N3.z, 0.0, 1.0), max(u_fresnelPower, 1.0e-6));
+  bright = bright * (1.0 + u_fresnelBoost * fresnel);
+
+  // Add rim highlight from demSig
+  bright = bright + u_rimIntensity * demSig;
 
   // Shaders: stripes and/or steps (affect brightness like python)
   float nshader = 0.0;
