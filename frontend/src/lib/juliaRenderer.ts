@@ -77,6 +77,11 @@ export class JuliaRenderer {
   private uRimIntensityLocation: WebGLUniformLocation | null = null;
   private uNormalBlendLocation: WebGLUniformLocation | null = null;
 
+  // Low-cost FD/gating uniform locations
+  private uFdIterLowLocation: WebGLUniformLocation | null = null;
+  private uFdEpsLowLocation: WebGLUniformLocation | null = null;
+  private uGradDemThresholdLocation: WebGLUniformLocation | null = null;
+
   // Tunables
   private readonly MAX_ITER_DEFAULT = 500;
   private readonly NCYCLE_DEFAULT = 32.0;
@@ -95,6 +100,13 @@ export class JuliaRenderer {
   private rimIntensity: number = 0.08;
   private normalBlend: number = 0.9;
 
+  // Gradient mode: 0=off,1=full,2=cheap
+  private gradientMode: number = 0; // default to off for real-time
+
+  // Low-cost FD defaults
+  private fdIterLow: number = 32;
+  private fdEpsLow: number = 1.5;
+  private gradDemThreshold: number = 0.02; // only compute cheap FD near boundary
   private readonly STRIPE_S_DEFAULT = 0.0;
   private readonly STRIPE_SIG_DEFAULT = 0.9;
   private readonly STEP_S_DEFAULT = 0.0;
@@ -213,6 +225,11 @@ export class JuliaRenderer {
     this.uFdIterLocation = gl.getUniformLocation(this.program, 'u_fdIter');
     this.uFdEpsLocation = gl.getUniformLocation(this.program, 'u_fdEps');
     this.uHeightScaleLocation = gl.getUniformLocation(this.program, 'u_heightScale');
+
+    // Low-cost FD / gating uniforms
+    this.uFdIterLowLocation = gl.getUniformLocation(this.program, 'u_fdIterLow');
+    this.uFdEpsLowLocation = gl.getUniformLocation(this.program, 'u_fdEpsLow');
+    this.uGradDemThresholdLocation = gl.getUniformLocation(this.program, 'u_gradDemThreshold');
 
     // Fresnel / rim / normal-blend uniform locations
     this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
@@ -382,10 +399,16 @@ export class JuliaRenderer {
     // Derivative gating and gradient-normal config
     gl.uniform1f(this.uDerivLowerLocation!, this.derivLower);
     gl.uniform1f(this.uDerivUpperLocation!, this.derivUpper);
-    gl.uniform1i(this.uUseGradientNormalsLocation!, this.useGradientNormals ? 1 : 0);
+    // Gradient mode: 0=off,1=full,2=cheap
+    gl.uniform1i(this.uUseGradientNormalsLocation!, this.gradientMode);
     gl.uniform1i(this.uFdIterLocation!, this.fdIter);
     gl.uniform1f(this.uFdEpsLocation!, this.fdEps);
     gl.uniform1f(this.uHeightScaleLocation!, this.heightScale);
+
+    // Low-cost FD / gating uniforms
+    gl.uniform1i(this.uFdIterLowLocation!, this.fdIterLow);
+    gl.uniform1f(this.uFdEpsLowLocation!, this.fdEpsLow);
+    gl.uniform1f(this.uGradDemThresholdLocation!, this.gradDemThreshold);
 
     // Fresnel / rim / normal blend
     gl.uniform1f(this.uFresnelPowerLocation!, this.fresnelPower);
@@ -470,6 +493,25 @@ export class JuliaRenderer {
   setDerivThresholds(lower: number, upper: number): void {
     this.derivLower = lower;
     this.derivUpper = upper;
+  }
+
+  // gradient mode: 'off' | 'full' | 'cheap'
+  setGradientMode(mode: 'off' | 'full' | 'cheap'): void {
+    if (mode === 'off') this.gradientMode = 0;
+    else if (mode === 'full') this.gradientMode = 1;
+    else this.gradientMode = 2;
+  }
+
+  setFdIterLow(n: number): void {
+    this.fdIterLow = Math.max(1, Math.floor(n));
+  }
+
+  setFdEpsLow(pixels: number): void {
+    this.fdEpsLow = Math.max(0.0001, pixels);
+  }
+
+  setGradDemThreshold(v: number): void {
+    this.gradDemThreshold = Math.max(0.0, Math.min(1.0, v));
   }
 
   setFresnel(power: number, boost: number): void {

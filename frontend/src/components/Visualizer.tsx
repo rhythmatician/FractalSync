@@ -283,6 +283,18 @@ export function Visualizer() {
 
               </div>
 
+              <label style={{ color: '#ddd', fontSize: '13px' }}>
+                <div style={{ fontSize: '11px' }}>Grad Mode</div>
+                <select defaultValue={'off'} onChange={(e) => {
+                  const v = e.target.value as 'off' | 'cheap' | 'full';
+                  rendererRef.current?.setGradientMode(v);
+                }}>
+                  <option value="off">Off (fast)</option>
+                  <option value="cheap">Cheap (gated FD)</option>
+                  <option value="full">Full (accurate)</option>
+                </select>
+              </label>
+
               {audioFile && (
                 <button
                   onClick={() => setAudioFile(null)}

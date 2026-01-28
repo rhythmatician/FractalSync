@@ -31,9 +31,14 @@ uniform float u_derivLower;    // lower threshold for dz - below this -> low con
 uniform float u_derivUpper;    // upper threshold for dz - above this -> high confidence
 
 // Gradient-normal options (Option B)
-uniform int   u_useGradientNormals; // 0 = use DE normal (default), 1 = use finite-difference gradient normal
+// Modes: 0 = off (DE), 1 = full (accurate FD), 2 = cheap (low-cost FD with gating)
+uniform int   u_useGradientNormals; // mode
 uniform int   u_fdIter;             // number of iterations to evaluate potential for FD (N)
 uniform float u_fdEps;              // finite-difference epsilon in *pixels* (converted to complex units inside shader)
+// Low-cost FD / gating (cheap mode)
+uniform int   u_fdIterLow;          // smaller N for cheap FD
+uniform float u_fdEpsLow;           // larger epsilon for cheap FD (pixels)
+uniform float u_gradDemThreshold;   // demSig threshold below which cheap mode skips FD
 
 // Height scale controls the z component when building a 3D normal from the 2D gradient
 uniform float u_heightScale;
@@ -410,29 +415,40 @@ vec3 shadePixel(vec2 fragCoord) {
   vec3 N3 = normalize(vec3(normal.x, normal.y, 1.0));
   vec2 usedNormal = N3.xy;
 
-  if (u_useGradientNormals != 0) {
-    // convert FD epsilon from pixels to complex-plane units
+  // Gradient mode: 0=off,1=full,2=cheap
+  int gmode = u_useGradientNormals;
+  if (gmode != 0) {
     float pixelSize = span / minRes;
-    float eps = max(u_fdEps * pixelSize, 1.0e-7);
-    vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIter, eps);
-    float glen = length(grad);
-    // If gradient is valid, build N_grad and blend with DE normal
-    if (glen > 1.0e-30) {
-      float hs = max(u_heightScale, 1.0e-8);
-      vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
-      vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
-      float blend = clamp(u_normalBlend, 0.0, 1.0);
-      N3 = normalize(mix(Nd, Ng, blend));
-      usedNormal = N3.xy;
-      // Protect against numerical issues
-      if (length(usedNormal) < 1.0e-6) {
-        usedNormal = normal;
-        N3 = normalize(vec3(usedNormal.x, usedNormal.y, 1.0));
+    if (gmode == 1) {
+      // Full mode: accurate FD using configured parameters
+      float eps = max(u_fdEps * pixelSize, 1.0e-7);
+      vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIter, eps);
+      float glen = length(grad);
+      if (glen > 1.0e-30) {
+        float hs = max(u_heightScale, 1.0e-8);
+        vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
+        vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
+        float blend = clamp(u_normalBlend, 0.0, 1.0);
+        N3 = normalize(mix(Nd, Ng, blend));
+        usedNormal = N3.xy;
       }
     } else {
-      // fallback to DE-derived normal
-      N3 = normalize(vec3(normal.x, normal.y, 1.0));
-      usedNormal = N3.xy;
+      // Cheap mode: only compute FD if demSig >= threshold; use low-cost params
+      if (demSig >= u_gradDemThreshold) {
+        float eps = max(u_fdEpsLow * pixelSize, 1.0e-7);
+        vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIterLow, eps);
+        float glen = length(grad);
+        if (glen > 1.0e-30) {
+          float hs = max(u_heightScale, 1.0e-8);
+          vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
+          vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
+          float blend = clamp(u_normalBlend, 0.0, 1.0);
+          // In cheap mode, favor DE a bit to preserve crispness while avoiding spikes
+          float cheapBlend = mix(0.5, blend, 0.8);
+          N3 = normalize(mix(Nd, Ng, cheapBlend));
+          usedNormal = N3.xy;
+        }
+      }
     }
   }
 
