@@ -3,7 +3,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from runtime_core import FeatureExtractor, OrbitState, ResidualParams, Complex  # noqa: F401
+    from runtime_core import FeatureExtractor, OrbitState, Complex  # noqa: F401
 
 
 def test_runtime_core_smoke(runtime_core_module: ModuleType) -> None:

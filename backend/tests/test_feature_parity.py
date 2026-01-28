@@ -21,14 +21,17 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.python_feature_extractor import PythonFeatureExtractor
+from src.python_feature_extractor import PythonFeatureExtractor  # noqa: E402
 
 
-def generate_test_audio(sample_rate: int = 48000, duration: float = 1.0) -> np.ndarray:
+def generate_test_audio(
+    sample_rate: int = 48000, duration: float = 1.0
+) -> NDArray[np.float32]:
     """Generate deterministic test audio signal."""
     t = np.linspace(0, duration, int(sample_rate * duration), dtype=np.float32)
     # Mix of frequencies for interesting spectral content
