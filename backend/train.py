@@ -154,6 +154,16 @@ def main():
     print(f"  DataLoader workers: {args.num_workers}")
     print("=" * 60)
 
+    # Ensure a consistent multiprocessing start method on Windows to avoid
+    # handle duplication errors when spawning worker processes.
+    import multiprocessing as mp
+
+    try:
+        mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        # Already set; ignore.
+        pass
+
     # Initialize components
     print("\n[1/7] Initializing feature extractor...")
     feature_extractor = make_feature_extractor()
