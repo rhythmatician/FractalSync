@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -21,6 +22,8 @@
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^1.0.0",
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.4.0",
     "jsdom": "^23.0.0",
     "typescript": "^5.2.0",
     "vite": "^5.0.0",

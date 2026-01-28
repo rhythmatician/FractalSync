@@ -1,0 +1,46 @@
+name: E2E Tests (Playwright)
+
+on:
+    pull_request:
+        branches: [main]
+    workflow_dispatch: {}
+
+jobs:
+    e2e:
+        runs-on: ubuntu-latest
+        services: {}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install backend deps
+              run: |
+                  cd backend
+                  python -m pip install --upgrade pip
+                  pip install -r requirements.txt
+
+            - name: Install frontend deps
+              run: |
+                  cd frontend
+                  npm ci
+
+            - name: Install Playwright browsers
+              run: |
+                  cd frontend
+                  npx playwright install --with-deps
+
+            - name: Run E2E tests
+              env:
+                  CI: true
+              run: |
+                  cd frontend
+                  npm run test:e2e
