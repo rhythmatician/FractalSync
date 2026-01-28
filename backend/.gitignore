@@ -29,13 +29,14 @@ ENV/
 checkpoints_orbit/training_history.json
 
 # Byte-compiled / optimized / DLL files
-data/audio/*
-data/cache/*
-data/supervised/*
+/data/audio/**
+!/data/audio/sample.wav
+/data/audio/skip/*
+/data/cache/*
+/data/supervised/*
 
 # Test output
 tests/fixtures/*.json
-
 
 # Copilot's verbose markdown files
 docs/copilot/*
