@@ -7,7 +7,6 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
 
 use crate::controller::{
     OrbitState as RustOrbitState,
@@ -281,6 +280,7 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
 }
 
 #[pymodule]
+#[allow(deprecated)]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Shared constants
     m.add("SAMPLE_RATE", SAMPLE_RATE)?;

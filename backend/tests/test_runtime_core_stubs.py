@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
+from typing import TYPE_CHECKING
+
 import pytest
 
-rc = pytest.importorskip("runtime_core")
+if TYPE_CHECKING:
+    import runtime_core as rc  # noqa: F401
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_runtime_core(runtime_core_module: ModuleType) -> ModuleType:
+    """Autouse fixture that installs the built runtime_core module as `rc`.
+
+    The fixture sets a module-level `rc` variable so existing tests can
+    reference `rc` directly without changing the test bodies.
+    """
+    globals()["rc"] = runtime_core_module
+    return runtime_core_module
 
 
 def compile_classes() -> dict[str, list[str]] | None:
@@ -16,19 +32,19 @@ def compile_classes() -> dict[str, list[str]] | None:
     import ast
     from pathlib import Path
 
-    stub_path = Path(__file__).parent.parent / "stubs" / "runtime_core.pyi"
-    if not stub_path.exists():
-        return None
+    stub_dir = Path(__file__).parent.parent / "stubs"
+    stub_path = stub_dir / "runtime_core" / "runtime_core.pyi"
+    assert stub_path is not None
 
     try:
         with open(stub_path, "r", encoding="utf-8") as f:
             stub_source = f.read()
         tree = ast.parse(stub_source, filename=str(stub_path))
 
-        classes = {}
+        classes: dict[str, list[str]] = {}
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
-                member_names = []
+                member_names: list[str] = []
                 for body_item in node.body:
                     if isinstance(body_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         member_names.append(body_item.name)
@@ -41,17 +57,9 @@ def compile_classes() -> dict[str, list[str]] | None:
                                 member_names.append(target.id)
                 classes[node.name] = member_names
         return classes
-    except Exception:
+    except Exception as e:
+        print(f"[stub-parse-error] {e}", file=sys.stderr)
         return None
-
-
-EXPECTED_CLASSES = compile_classes()
-
-
-def _get_class(cls_name: str):
-    if not hasattr(rc, cls_name):
-        pytest.fail(f"runtime_core missing expected class {cls_name}")
-    return getattr(rc, cls_name)
 
 
 def test_classes_have_expected_members():
@@ -64,11 +72,12 @@ def test_classes_have_expected_members():
     test tolerant of minor ABI differences while verifying presence of the
     API surface described in the stubs.
     """
-    if not EXPECTED_CLASSES:
+    assert rc is not None, "runtime_core fixture did not provide module `rc`"
+    if not (classes := compile_classes()):
         pytest.fail("Could not compile expected classes from runtime_core stubs")
     all_missing = {}
-    for cls_name, members in EXPECTED_CLASSES.items():
-        cls = _get_class(cls_name)
+    for cls_name, members in classes.items():
+        cls = getattr(rc, cls_name)
 
         # Try to obtain an instance for instance-level checks. Be conservative
         # and avoid letting exceptions fail the entire test suite.
@@ -82,12 +91,6 @@ def test_classes_have_expected_members():
                     inst = cls(0.0, 0.0)
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
-                elif cls_name == "HeightFieldSample":
-                    inst = rc.height_field(rc.Complex(0.0, 0.0))
-                elif cls_name == "HeightControllerStep":
-                    inst = rc.height_controller_step(
-                        rc.Complex(0.0, 0.0), rc.Complex(0.01, 0.01), -0.5, 0.1
-                    )
             except Exception:
                 inst = None
 

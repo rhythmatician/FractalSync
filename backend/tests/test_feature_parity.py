@@ -21,14 +21,17 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.python_feature_extractor import PythonFeatureExtractor
+from src.python_feature_extractor import PythonFeatureExtractor  # noqa: E402
 
 
-def generate_test_audio(sample_rate: int = 48000, duration: float = 1.0) -> np.ndarray:
+def generate_test_audio(
+    sample_rate: int = 48000, duration: float = 1.0
+) -> NDArray[np.float32]:
     """Generate deterministic test audio signal."""
     t = np.linspace(0, duration, int(sample_rate * duration), dtype=np.float32)
     # Mix of frequencies for interesting spectral content
@@ -48,8 +51,12 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
     """
     print("Running Rust feature extraction via cargo test...")
 
-    # Save audio to temp file
-    audio_path = Path("backend/data/cache/parity_test_audio.npy")
+    #
+
+    # Save audio to temp file (path relative to this test file to avoid depending on working directory)
+    audio_path = (
+        Path(__file__).parent.parent / "data" / "cache" / "parity_test_audio.npy"
+    )
     audio_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(audio_path, audio)
 
@@ -61,7 +68,9 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
         cargo_cmd = str(cargo_path)
 
     # Run Rust test that reads this file and outputs features
-    env = subprocess.os.environ.copy()
+    import os
+
+    env = os.environ.copy()
     env["PARITY_TEST_AUDIO_PATH"] = str(audio_path.absolute())
 
     result = subprocess.run(
@@ -89,7 +98,9 @@ def run_rust_feature_extraction(audio: np.ndarray, window_frames: int) -> np.nda
         raise RuntimeError(f"Rust test failed with code {result.returncode}")
 
     # Parse JSON output from test
-    output_path = Path("backend/data/cache/parity_test_features.json")
+    output_path = (
+        Path(__file__).parent.parent / "data" / "cache" / "parity_test_features.json"
+    )
     if not output_path.exists():
         raise RuntimeError(f"Rust test did not create {output_path}")
 

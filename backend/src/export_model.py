@@ -43,6 +43,18 @@ def export_to_onnx(
 
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
+        # Dynamo expects dynamic_shapes to be keyed by forward *argument* names
+        # (e.g., 'x' in `def forward(self, x):`) rather than ONNX input/output names.
+        import inspect
+
+        arg_name = "x"
+        sig = inspect.signature(model.forward)
+        params = [p.name for p in sig.parameters.values() if p.name != "self"]
+        if params:
+            arg_name = params[0]
+
+        dynamic_shapes = {arg_name: {0: "batch_size"}}
+
         torch.onnx.export(
             model,
             (dummy_input,),
@@ -50,11 +62,10 @@ def export_to_onnx(
             export_params=True,
             input_names=["audio_features"],
             output_names=["visual_parameters"],
-            dynamic_axes={
-                "audio_features": {0: "batch_size"},
-                "visual_parameters": {0: "batch_size"},
-            },
-            opset_version=11,
+            # Use dynamic_shapes with the dynamo exporter (preferred) instead of dynamic_axes
+            dynamic_shapes=dynamic_shapes,
+            # Request a modern opset to avoid post-export version conversion failures
+            opset_version=18,
             do_constant_folding=True,
             verbose=False,
             dynamo=True,
@@ -76,7 +87,8 @@ def export_to_onnx(
                     "audio_features": {0: "batch_size"},
                     "visual_parameters": {0: "batch_size"},
                 },
-                opset_version=11,
+                # Request a modern opset to match available implementations
+                opset_version=18,
                 do_constant_folding=True,
                 verbose=False,
                 dynamo=False,
@@ -88,8 +100,13 @@ def export_to_onnx(
 
     # Load and verify ONNX model structure (skip full validation due to compat issues)
     try:
-        onnx.load(output_path)
-        logging.info(f"Model exported successfully to {output_path}")
+        model_proto = onnx.load(output_path)
+        opset_version_saved = None
+        if model_proto.opset_import:
+            opset_version_saved = model_proto.opset_import[0].version
+        logging.info(
+            f"Model exported successfully to {output_path} (opset={opset_version_saved})"
+        )
     except Exception as e:
         logging.warning(f"Could not fully validate ONNX model: {e}")
 

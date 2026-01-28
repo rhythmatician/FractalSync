@@ -7,6 +7,7 @@ It provides the same interface and output format.
 
 import numpy as np
 import librosa
+from numpy.typing import NDArray
 
 
 class PythonFeatureExtractor:
@@ -38,8 +39,8 @@ class PythonFeatureExtractor:
         return base
 
     def extract_windowed_features(
-        self, audio: np.ndarray, window_frames: int
-    ) -> np.ndarray:
+        self, audio: NDArray[np.float32], window_frames: int
+    ) -> NDArray[np.float64]:
         """Extract windowed features from audio.
 
         Args:
@@ -75,7 +76,7 @@ class PythonFeatureExtractor:
 
         return np.array(windows, dtype=np.float64)
 
-    def _extract_features(self, audio: np.ndarray) -> np.ndarray:
+    def _extract_features(self, audio: NDArray[np.float32]) -> NDArray[np.float64]:
         """Extract base features from audio.
 
         Returns:
@@ -174,7 +175,7 @@ class PythonFeatureExtractor:
         return features
 
     @staticmethod
-    def _normalize(vec: np.ndarray) -> np.ndarray:
+    def _normalize(vec: NDArray[np.float64]) -> NDArray[np.float64]:
         """Normalize vector to [0, 1] range."""
         if len(vec) == 0:
             return vec
@@ -184,7 +185,7 @@ class PythonFeatureExtractor:
         return vec
 
     @staticmethod
-    def _delta(series: np.ndarray) -> np.ndarray:
+    def _delta(series: NDArray[np.float64]) -> NDArray[np.float64]:
         """Compute first-order delta (derivative)."""
         if len(series) == 0:
             return series
@@ -192,7 +193,7 @@ class PythonFeatureExtractor:
         delta[1:] = np.diff(series)
         return delta
 
-    def compute_normalization_stats(self, all_features: list[np.ndarray]):
+    def compute_normalization_stats(self, all_features: list[NDArray[np.float64]]):
         """Compute mean and std for normalization across dataset."""
         if not all_features:
             return
@@ -201,7 +202,7 @@ class PythonFeatureExtractor:
         self.feature_mean = np.mean(concatenated, axis=0)
         self.feature_std = np.std(concatenated, axis=0) + 1e-8
 
-    def normalize_features(self, features: np.ndarray) -> np.ndarray:
+    def normalize_features(self, features: NDArray[np.float64]) -> NDArray[np.float64]:
         """Normalize features using computed stats."""
         if self.feature_mean is None or self.feature_std is None:
             return features
