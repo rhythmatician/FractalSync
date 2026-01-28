@@ -65,6 +65,26 @@ async def get_model_metadata():
     return metadata
 
 
+# Serve shared shaders to clients/backend
+@app.get("/api/shader/{name}")
+async def get_shared_shader(name: str):
+    """Return a shared shader by name (whitelisted)."""
+    try:
+        from backend.src.shaders import get_shader_path
+    except Exception:
+        # fallback if import path differs
+        from src.shaders import get_shader_path
+
+    try:
+        shader_path = get_shader_path(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Shader not found: {name}")
+
+    return FileResponse(
+        str(shader_path), media_type="text/plain", filename=shader_path.name
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 
