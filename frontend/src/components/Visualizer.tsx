@@ -211,19 +211,77 @@ export function Visualizer() {
                 <input
                   type="file"
                   accept="audio/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setAudioFile(file);
-                      if (isVisualizing) {
-                        setIsVisualizing(false);
-                        setTimeout(() => setIsVisualizing(true), 100);
-                      }
-                    }
-                  }}
+                  onChange={(e) => setAudioFile(e.target.files ? e.target.files[0] : null)}
                   style={{ display: 'none' }}
                 />
               </label>
+
+              {/* Temporary shading controls for experimentation */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Height</div>
+                  <input type="range" min="0.2" max="8" step="0.1" defaultValue="2.0" onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    rendererRef.current?.setHeightScale(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>FD ε (px)</div>
+                  <input type="range" min="0.1" max="3" step="0.1" defaultValue="0.6" onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    rendererRef.current?.setFdEps(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>FD Iter</div>
+                  <input type="range" min="32" max="512" step="8" defaultValue="160" onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    rendererRef.current?.setFdIter(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Normal Blend</div>
+                  <input type="range" min="0" max="1" step="0.01" defaultValue="0.9" onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    rendererRef.current?.setNormalBlend(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Fresnel Power</div>
+                  <input type="range" min="0.5" max="8" step="0.1" defaultValue="3.0" onChange={(e) => {
+                    const p = parseFloat(e.target.value);
+                    rendererRef.current?.setFresnelPower(p);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Fresnel Boost</div>
+                  <input type="range" min="0" max="2" step="0.01" defaultValue="0.25" onChange={(e) => {
+                    const b = parseFloat(e.target.value);
+                    rendererRef.current?.setFresnelBoost(b);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Rim</div>
+                  <input type="range" min="0" max="1" step="0.01" defaultValue="0.08" onChange={(e) => {
+                    const r = parseFloat(e.target.value);
+                    rendererRef.current?.setRimIntensity(r);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Use Grad Normals</div>
+                  <input type="checkbox" defaultChecked={true} onChange={(e) => {
+                    rendererRef.current?.setUseGradientNormals(e.target.checked);
+                  }} />
+                </label>
+
+              </div>
 
               {audioFile && (
                 <button

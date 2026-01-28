@@ -71,6 +71,12 @@ export class JuliaRenderer {
   private uFdEpsLocation: WebGLUniformLocation | null = null;
   private uHeightScaleLocation: WebGLUniformLocation | null = null;
 
+  // Fresnel / rim / normal-blend uniform locations
+  private uFresnelPowerLocation: WebGLUniformLocation | null = null;
+  private uFresnelBoostLocation: WebGLUniformLocation | null = null;
+  private uRimIntensityLocation: WebGLUniformLocation | null = null;
+  private uNormalBlendLocation: WebGLUniformLocation | null = null;
+
   // Tunables
   private readonly MAX_ITER_DEFAULT = 500;
   private readonly NCYCLE_DEFAULT = 32.0;
@@ -82,6 +88,12 @@ export class JuliaRenderer {
   private heightScale: number = 1.0;    // controls slope of height normal
   private derivLower: number = 1e-6;    // derivative confidence lower bound
   private derivUpper: number = 1e-3;    // derivative confidence upper bound
+
+  // Fresnel / rim / normal-blend defaults
+  private fresnelPower: number = 3.0;
+  private fresnelBoost: number = 0.25;
+  private rimIntensity: number = 0.08;
+  private normalBlend: number = 0.9;
 
   private readonly STRIPE_S_DEFAULT = 0.0;
   private readonly STRIPE_SIG_DEFAULT = 0.9;
@@ -201,6 +213,24 @@ export class JuliaRenderer {
     this.uFdIterLocation = gl.getUniformLocation(this.program, 'u_fdIter');
     this.uFdEpsLocation = gl.getUniformLocation(this.program, 'u_fdEps');
     this.uHeightScaleLocation = gl.getUniformLocation(this.program, 'u_heightScale');
+
+    // Fresnel / rim / normal-blend uniform locations
+    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
+    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
+    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
+    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
+
+    // Fresnel / rim / normal-blend
+    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
+    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
+    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
+    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
+
+    // Fresnel / rim / normal-blend
+    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
+    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
+    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
+    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
 
     // Fullscreen quad
     const positionBuffer = gl.createBuffer();
@@ -357,6 +387,12 @@ export class JuliaRenderer {
     gl.uniform1f(this.uFdEpsLocation!, this.fdEps);
     gl.uniform1f(this.uHeightScaleLocation!, this.heightScale);
 
+    // Fresnel / rim / normal blend
+    gl.uniform1f(this.uFresnelPowerLocation!, this.fresnelPower);
+    gl.uniform1f(this.uFresnelBoostLocation!, this.fresnelBoost);
+    gl.uniform1f(this.uRimIntensityLocation!, this.rimIntensity);
+    gl.uniform1f(this.uNormalBlendLocation!, this.normalBlend);
+
     // Debug: log first frame
     if (this.time === 0) {
       console.log('First render:', {
@@ -367,6 +403,9 @@ export class JuliaRenderer {
         gradientNormals: this.useGradientNormals,
         fdIter: this.fdIter,
         fdEps: this.fdEps,
+        fresnel: {power: this.fresnelPower, boost: this.fresnelBoost},
+        rim: this.rimIntensity,
+        normalBlend: this.normalBlend,
         uniforms: {
           uJuliaSeedLocation: this.uJuliaSeedLocation,
           uResolutionLocation: this.uResolutionLocation,
@@ -431,5 +470,26 @@ export class JuliaRenderer {
   setDerivThresholds(lower: number, upper: number): void {
     this.derivLower = lower;
     this.derivUpper = upper;
+  }
+
+  setFresnel(power: number, boost: number): void {
+    this.fresnelPower = Math.max(0.1, power);
+    this.fresnelBoost = Math.max(0.0, boost);
+  }
+
+  setFresnelPower(p: number): void {
+    this.fresnelPower = Math.max(0.1, p);
+  }
+
+  setFresnelBoost(b: number): void {
+    this.fresnelBoost = Math.max(0.0, b);
+  }
+
+  setRimIntensity(v: number): void {
+    this.rimIntensity = Math.max(0.0, v);
+  }
+
+  setNormalBlend(b: number): void {
+    this.normalBlend = Math.max(0.0, Math.min(1.0, b));
   }
 }
