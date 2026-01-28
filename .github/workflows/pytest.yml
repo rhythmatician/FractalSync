@@ -59,6 +59,14 @@ jobs:
           name: runtime-core-wheels
           path: runtime-core-wheels
 
+      - name: List downloaded runtime-core wheels
+        run: |
+          ls -la runtime-core-wheels || true
+          if [ -z "$(ls runtime-core-wheels/*.whl 2>/dev/null)" ]; then
+            echo "No wheel artifact downloaded; failing job."
+            exit 1
+          fi
+
       - name: Install runtime-core wheel (artifact)
         run: |
           python -m pip install --upgrade pip
@@ -124,13 +132,17 @@ jobs:
       - name: Build runtime-core (maturin)
         run: |
           cd runtime-core
-          maturin build --release
+          maturin build --release --out dist
+
+      - name: List built wheels
+        run: |
+          ls -la runtime-core/dist || true
 
       - name: Upload runtime-core wheels
         uses: actions/upload-artifact@v4
         with:
           name: runtime-core-wheels
-          path: runtime-core/target/wheels/**
+          path: runtime-core/dist/*.whl
 
   runtime-core-tests:
     name: Runtime-Core Tests (Rust)
