@@ -113,9 +113,32 @@ def runtime_core_module():
             maturin.build_editable(wheel_directory=wheel_dir)
             maturin.build_sdist(sdist_directory=sdist_dir)
             maturin.build_wheel(wheel_directory=wheel_dir)
+
+            # maturin's build API builds artifacts but does not always
+            # perform an install into the current environment. If we built
+            # a wheel, install the most recent wheel so the extension is
+            # importable immediately.
+            from pathlib import Path as _Path
+
+            wheel_path_dir = _Path(wheel_dir)
+            wheels = sorted(
+                wheel_path_dir.glob("*.whl"), key=lambda p: p.stat().st_mtime
+            )
+            if wheels:
+                latest = wheels[-1]
+                subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--force-reinstall",
+                        str(latest),
+                    ],
+                    check=True,
+                )
         finally:
             os.chdir(old_cwd)
-
     except Exception:
         # Fall back to the CLI which is reliable across maturin releases.
         cmd = [sys.executable, "-m", "maturin", "develop", "--release"]
@@ -133,6 +156,54 @@ def runtime_core_module():
     import importlib
 
     importlib.invalidate_caches()
-    import runtime_core
 
+    # Workaround: a stale or broken installed `runtime_core` package directory
+    # (e.g., .venv/Lib/site-packages/runtime_core/__init__.py that expects a
+    # submodule `runtime_core.runtime_core`) can shadow the compiled extension
+    # we just built. Detect such directories and temporarily rename them so
+    # the import picks up our built extension. We restore names on failure.
+    renamed = []
+    try:
+        for sp in list(sys.path):
+            try:
+                sp_path = Path(sp)
+            except Exception:
+                continue
+            pkg_dir = sp_path / "runtime_core"
+            if pkg_dir.exists() and pkg_dir.is_dir():
+                # If the package directory does not contain a compiled extension
+                # file (pyd/so/dll), it's likely to be the culprit.
+                has_ext = (
+                    any(pkg_dir.glob("*.pyd"))
+                    or any(pkg_dir.glob("*.so"))
+                    or any(pkg_dir.glob("*.dll"))
+                )
+                if not has_ext:
+                    bak = pkg_dir.with_name(pkg_dir.name + ".disabled_by_tests")
+                    try:
+                        pkg_dir.rename(bak)
+                        renamed.append((pkg_dir, bak))
+                        print(
+                            f"[runtime_core_module] renamed conflicting installed package {pkg_dir} -> {bak}",
+                            file=sys.stderr,
+                        )
+                    except Exception as e:
+                        print(
+                            f"[runtime_core_module] failed to rename {pkg_dir}: {e}",
+                            file=sys.stderr,
+                        )
+
+        import runtime_core
+    except Exception:
+        # On failure, attempt to restore any renamed package directories and
+        # re-raise the original exception so the test failure is visible.
+        for orig, bak in renamed:
+            try:
+                if bak.exists():
+                    bak.rename(orig)
+            except Exception:
+                pass
+        raise
+
+    # Successful import; yield the module for tests.
     yield runtime_core
