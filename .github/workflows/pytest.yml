@@ -15,6 +15,8 @@ jobs:
     env:
       # Silence known third-party deprecations to keep CI signal clean
       PYTEST_ADDOPTS: "-W ignore::DeprecationWarning -W ignore::PendingDeprecationWarning -W ignore::UserWarning"
+      # Avoid automatic local builds during tests; rely on runtime-core build artifact
+      RUNTIME_CORE_NO_BUILD: "1"
 
     steps:
       - name: Checkout code
@@ -138,6 +140,21 @@ jobs:
       - name: List built wheels
         run: |
           ls -la runtime-core/dist || true
+
+      - name: Verify wheels exist
+        run: |
+          if [ -z "$(ls runtime-core/dist/*.whl 2>/dev/null)" ]; then
+            echo "No wheels found in runtime-core/dist; failing build"
+            ls -la runtime-core || true
+            exit 1
+          fi
+
+      - name: Write last built commit marker
+        run: |
+          mkdir -p runtime-core/target
+          cd runtime-core
+          git rev-parse HEAD > target/.last_built_commit
+          echo "Wrote marker to runtime-core/target/.last_built_commit"
 
       - name: Upload runtime-core wheels
         uses: actions/upload-artifact@v4
