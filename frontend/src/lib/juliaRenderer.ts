@@ -63,9 +63,25 @@ export class JuliaRenderer {
   private uLightBalanceLocation: WebGLUniformLocation | null = null;
   private uShininessLocation: WebGLUniformLocation | null = null;
 
+  // Gradient-normal & derivative gating uniforms
+  private uDerivLowerLocation: WebGLUniformLocation | null = null;
+  private uDerivUpperLocation: WebGLUniformLocation | null = null;
+  private uUseGradientNormalsLocation: WebGLUniformLocation | null = null;
+  private uFdIterLocation: WebGLUniformLocation | null = null;
+  private uFdEpsLocation: WebGLUniformLocation | null = null;
+  private uHeightScaleLocation: WebGLUniformLocation | null = null;
+
   // Tunables
   private readonly MAX_ITER_DEFAULT = 500;
   private readonly NCYCLE_DEFAULT = 32.0;
+
+  // FD / gradient defaults (tunable)
+  private useGradientNormals: boolean = true;
+  private fdIter: number = 120;         // fixed-N for potential eval
+  private fdEps: number = 1.0;          // in pixels
+  private heightScale: number = 1.0;    // controls slope of height normal
+  private derivLower: number = 1e-6;    // derivative confidence lower bound
+  private derivUpper: number = 1e-3;    // derivative confidence upper bound
 
   private readonly STRIPE_S_DEFAULT = 0.0;
   private readonly STRIPE_SIG_DEFAULT = 0.9;
@@ -175,6 +191,14 @@ export class JuliaRenderer {
     
     this.uLightBalanceLocation = gl.getUniformLocation(this.program, 'u_lightBalance');
     this.uShininessLocation = gl.getUniformLocation(this.program, 'u_shininess');
+
+    // Gradient-normal & gating uniforms
+    this.uDerivLowerLocation = gl.getUniformLocation(this.program, 'u_derivLower');
+    this.uDerivUpperLocation = gl.getUniformLocation(this.program, 'u_derivUpper');
+    this.uUseGradientNormalsLocation = gl.getUniformLocation(this.program, 'u_useGradientNormals');
+    this.uFdIterLocation = gl.getUniformLocation(this.program, 'u_fdIter');
+    this.uFdEpsLocation = gl.getUniformLocation(this.program, 'u_fdEps');
+    this.uHeightScaleLocation = gl.getUniformLocation(this.program, 'u_heightScale');
 
     // Fullscreen quad
     const positionBuffer = gl.createBuffer();
@@ -317,6 +341,14 @@ export class JuliaRenderer {
     // Balance between lights
     gl.uniform1f(this.uLightBalanceLocation!, this.LIGHT_BALANCE);
 
+    // Derivative gating and gradient-normal config
+    gl.uniform1f(this.uDerivLowerLocation!, this.derivLower);
+    gl.uniform1f(this.uDerivUpperLocation!, this.derivUpper);
+    gl.uniform1i(this.uUseGradientNormalsLocation!, this.useGradientNormals ? 1 : 0);
+    gl.uniform1i(this.uFdIterLocation!, this.fdIter);
+    gl.uniform1f(this.uFdEpsLocation!, this.fdEps);
+    gl.uniform1f(this.uHeightScaleLocation!, this.heightScale);
+
     // Debug: log first frame
     if (this.time === 0) {
       console.log('First render:', {
@@ -324,6 +356,9 @@ export class JuliaRenderer {
         resolution: [this.canvas.width, this.canvas.height],
         zoom: this.currentParams.zoom,
         maxIter: this.MAX_ITER_DEFAULT,
+        gradientNormals: this.useGradientNormals,
+        fdIter: this.fdIter,
+        fdEps: this.fdEps,
         uniforms: {
           uJuliaSeedLocation: this.uJuliaSeedLocation,
           uResolutionLocation: this.uResolutionLocation,
@@ -366,5 +401,27 @@ export class JuliaRenderer {
     this.stop();
     const gl = this.gl;
     gl.deleteProgram(this.program);
+  }
+
+  // --- Gradient-normal toggles & configurables ---
+  setUseGradientNormals(enabled: boolean): void {
+    this.useGradientNormals = enabled;
+  }
+
+  setFdIter(n: number): void {
+    this.fdIter = Math.max(1, Math.floor(n));
+  }
+
+  setFdEps(pixels: number): void {
+    this.fdEps = Math.max(0.0001, pixels);
+  }
+
+  setHeightScale(s: number): void {
+    this.heightScale = s;
+  }
+
+  setDerivThresholds(lower: number, upper: number): void {
+    this.derivLower = lower;
+    this.derivUpper = upper;
   }
 }

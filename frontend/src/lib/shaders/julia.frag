@@ -35,6 +35,9 @@ uniform int   u_useGradientNormals; // 0 = use DE normal (default), 1 = use fini
 uniform int   u_fdIter;             // number of iterations to evaluate potential for FD (N)
 uniform float u_fdEps;              // finite-difference epsilon in *pixels* (converted to complex units inside shader)
 
+// Height scale controls the z component when building a 3D normal from the 2D gradient
+uniform float u_heightScale;
+
 const float PI = 3.141592653589793;
 const float ESC_RADIUS_2 = 1.0e10;
 
@@ -400,7 +403,14 @@ vec3 shadePixel(vec2 fragCoord) {
     float glen = length(grad);
     // If gradient is tiny (or NaN), fall back to DE normal
     if (glen > 1.0e-30) {
-      usedNormal = grad / glen;
+      // Build a 3D normal: (grad.x, grad.y, heightScale) then normalize
+      float hs = max(u_heightScale, 1.0e-8);
+      vec3 N3 = normalize(vec3(grad.x, grad.y, hs));
+      usedNormal = N3.xy;
+      // Protect against pathological numeric cases
+      if (length(usedNormal) < 1.0e-6) {
+        usedNormal = normal;
+      }
     } else {
       usedNormal = normal;
     }
