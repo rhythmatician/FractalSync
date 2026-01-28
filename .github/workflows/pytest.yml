@@ -127,7 +127,8 @@ jobs:
         run: |
           cd runtime-core
           . ../.venv/bin/activate
-          maturin develop --release
+          maturin build --release
+          pip install target/wheels/*.whl
 
       - name: Build wasm-orbit bindings
         run: |
@@ -140,7 +141,14 @@ jobs:
           npm ci
           npm run build
 
+      - name: Install backend dependencies
+        run: |
+          . .venv/bin/activate
+          cd backend
+          pip install -r requirements.txt
+
       - name: Compile backend
         run: |
+          . .venv/bin/activate
           cd backend
           python -m compileall .
