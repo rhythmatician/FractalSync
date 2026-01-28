@@ -1,6 +1,4 @@
-"""Type stubs for runtime_core (Rust PyO3 extension)."""
-
-# flake8: noqa
+# Module-style runtime_core stub, used via package-style re-export in __init__.pyi
 
 from __future__ import annotations
 
@@ -19,8 +17,6 @@ DEFAULT_BASE_OMEGA: float
 DEFAULT_ORBIT_SEED: int
 
 class Complex:
-    """Complex number with re and im attributes."""
-
     re: float
     im: float
 
@@ -30,16 +26,12 @@ class Complex:
     def __sub__(self, other: Complex) -> Complex: ...
     def __mul__(self, other: Complex) -> Complex: ...
     def __complex__(self) -> complex: ...
-
-    # Allow attribute access as real/imag for compatibility
     @property
     def real(self) -> float: ...
     @property
     def imag(self) -> float: ...
 
 class FeatureExtractor:
-    """Audio feature extractor."""
-
     def __init__(
         self,
         sr: int = 48000,
@@ -54,25 +46,17 @@ class FeatureExtractor:
         audio: Sequence[float],
         window_frames: int = 10,
     ) -> NDArray: ...
-    def test_simple(self) -> bool: ...
+    def test_simple(self) -> list[float]: ...
 
 class ResidualParams:
-    """Residual orbit parameters."""
-
     def __init__(
-        self,
-        k_residuals: int = 6,
-        residual_cap: float = 0.5,
-        radius_scale: float = 1.0,
+        self, k_residuals: int = 6, residual_cap: float = 0.5, radius_scale: float = 1.0
     ) -> None: ...
-
     k_residuals: int
     residual_cap: float
     radius_scale: float
 
 class OrbitState:
-    """Mandelbrot orbit state."""
-
     def __init__(
         self,
         lobe: int,
@@ -114,11 +98,6 @@ class OrbitState:
         band_gates: Optional[list[float]] = None,
     ) -> Complex: ...
 
-# Geometry functions
-
 def lobe_point_at_angle(
-    period: int,
-    sub_lobe: int,
-    theta: float,
-    s: float = 1.0,
+    period: int, sub_lobe: int, theta: float, s: float = 1.0
 ) -> Complex: ...
