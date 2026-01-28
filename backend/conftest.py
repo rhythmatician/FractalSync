@@ -85,62 +85,17 @@ def runtime_core_module():
         yield runtime_core
         return
 
-    # Prefer using the maturin Python API when available; it provides
-    # better error objects and avoids invoking a subprocess when possible.
-    # Prepare output directories required by the API
-    wheel_dir = str((ROOT / "runtime-core" / "target" / "wheels").absolute())
-    sdist_dir = str((ROOT / "runtime-core" / "target" / "sdist").absolute())
-    (ROOT / "runtime-core" / "target" / "wheels").mkdir(parents=True, exist_ok=True)
-    (ROOT / "runtime-core" / "target" / "sdist").mkdir(parents=True, exist_ok=True)
+    # Minimal behavior: do not attempt to build automatically. Expect the
+    # developer or CI to have installed the extension already using
+    # `pip install -r backend/requirements-dev.txt` and/or
+    # `cd runtime-core && python -m maturin develop --release`.
+    # This keeps test setup simple and avoids fragile runtime-time builds.
+    import os
 
-    try:
-        import maturin
-        import os
-
-        rc_dir = ROOT / "runtime-core"
-        pyproj = rc_dir / "pyproject.toml"
-        if not pyproj.exists():
-            raise RuntimeError(
-                f"runtime-core pyproject.toml not found at expected location: {pyproj}"
-            )
-
-        # maturin's API expects to be called from the project dir so it can
-        # locate `pyproject.toml`. To use debugpy, we temporarily chdir into
-        # the runtime-core directory for the API invocation.
-        try:
-            old_cwd = Path.cwd()
-            os.chdir(rc_dir)
-            maturin.build_editable(wheel_directory=wheel_dir)
-            maturin.build_sdist(sdist_directory=sdist_dir)
-            maturin.build_wheel(wheel_directory=wheel_dir)
-
-            # maturin's build API builds artifacts but does not always
-            # perform an install into the current environment. If we built
-            # a wheel, install the most recent wheel so the extension is
-            # importable immediately.
-            from pathlib import Path as _Path
-
-            wheel_path_dir = _Path(wheel_dir)
-            wheels = sorted(
-                wheel_path_dir.glob("*.whl"), key=lambda p: p.stat().st_mtime
-            )
-            if wheels:
-                latest = wheels[-1]
-                subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pip",
-                        "install",
-                        "--force-reinstall",
-                        str(latest),
-                    ],
-                    check=True,
-                )
-        finally:
-            os.chdir(old_cwd)
-    except Exception:
-        # Fall back to the CLI which is reliable across maturin releases.
+    if not os.environ.get("RUNTIME_CORE_NO_BUILD"):
+        # Try to run the maturin CLI to make it easy for devs who rely on the
+        # fixture to auto-install. If maturin is not available this will raise
+        # and instruct developers to install dev dependencies.
         cmd = [sys.executable, "-m", "maturin", "develop", "--release"]
         subprocess.run(cmd, cwd=ROOT / "runtime-core", check=True)
 
