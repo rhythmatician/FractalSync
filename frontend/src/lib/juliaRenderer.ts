@@ -12,7 +12,7 @@
  * - Distance estimate + Blinn-Phong + optional stripe/step shading match the python logic closely.
  */
 
-import fragSrc from './shaders/julia.frag?raw';
+import fragSrc from '../../../shared/shaders/julia.frag?raw';
 
 export interface VisualParameters {
   juliaReal: number;
