@@ -79,4 +79,23 @@ These instructions make AI agents immediately productive in this repo.
 - Train with velocity features:
   - `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":100,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":true,"include_delta_delta":false}'`
 
+## Testing
+
+```ps1
+pytest backend #  backend
+npm test --prefix frontend  # frontend
+cargo test -q # runtime-core
+```
+
+## Building
+
+```ps1
+cd runtime-core; maturin develop --release; cd ..  # runtime-core
+cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
+npm --prefix frontend run build --silent  # frontend
+# backend does not need to be built
+```
+
+**Working-directory note:** Copilot can sometimes assume the repo root even after a `cd` in prior output. To avoid ambiguity prefer commands that set the working directory explicitly (e.g. `npm --prefix frontend ...`) or use single-line chained `cd` commands (e.g. `cd frontend && npm run dev`). This keeps commands consistent across shells and avoids relying on a persistent `cd` state.
+
 If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
