@@ -3,7 +3,7 @@
 End-to-end test suite for FractalSync runtime-core integration.
 
 Prerequisites:
-  - Python runtime_core bindings built: `cd runtime-core && maturin develop --release`
+  - Python runtime_core bindings built: `Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }`
   - WASM bindings built: [OK] (already built in wasm-orbit/pkg/)
 
 Run this test to verify:

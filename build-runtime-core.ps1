@@ -46,7 +46,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "You can now run:"
     Write-Host "  python diagnostic.py"
     Write-Host "  python test_e2e.py"
-    Write-Host "  cd ..\backend && python api/server.py"
+    Write-Host "  python ..\backend\api\server.py"
 } else {
     Write-Host ""
     Write-Host "❌ Build failed with exit code $LASTEXITCODE"
