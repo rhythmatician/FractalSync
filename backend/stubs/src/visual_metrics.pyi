@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TypeAlias
 import numpy as np
 
 class LossVisualMetrics:
@@ -10,5 +11,4 @@ class LossVisualMetrics:
         self, image: np.ndarray, prev_image: np.ndarray | None = None
     ) -> dict[str, float]: ...
 
-class VisualMetrics(LossVisualMetrics):
-    ...
+VisualMetrics: TypeAlias = LossVisualMetrics
