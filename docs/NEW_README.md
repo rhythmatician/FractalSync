@@ -26,8 +26,8 @@ cargo test -q # runtime-core
 ## Building
 
 ```ps1
-cd runtime-core; maturin develop --release  # runtime-core
-cd ../wasm-orbit; wasm-pack build --target web # wasm bindings for frontend
-cd ../frontend; npm run build  # frontend
+cd runtime-core; maturin develop --release; cd ..  # runtime-core
+cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
+npm --prefix frontend run build --silent  # frontend
 # backend does not need to be built
 ```
