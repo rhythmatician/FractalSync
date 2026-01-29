@@ -51,19 +51,13 @@ This guidance is intended for safely running commands in terminals or by automat
 
 - One-liners: `python -c "print('hi')"` (note quoting differs by shell).
 - Multi-line snippets: write the code to a script and run it: `python script.py`.
-- PowerShell multi-line: use a here-string to write to a file, e.g.:
-
-  ```powershell
-  @'
-  print("hello")
-  '@ > script.py
-  python script.py
-  ```
 
 ### Quick recovery tips (if you accidentally enter a Python REPL)
 
 - PowerShell: press Ctrl+Z then Enter, or type `exit()` and Enter.
 - POSIX shells: press Ctrl+D, or type `exit()` and Enter.
+
+- **Safety note:** Avoid embedding POSIX-style heredoc (e.g., `python << 'PY'`) into PowerShell sessions — it can leave you in a Python REPL. If you see a Python prompt (`>>>`), exit first before running shell commands. For multi-line Python snippets prefer writing them to a temporary file and running `python tmp.py`, or use a PowerShell-safe one-liner such as `python -c "..."`.
 
 ---
 
