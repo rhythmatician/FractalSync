@@ -309,7 +309,7 @@ jobs:
       - name: Install runtime-core wheel
         run: |
           . .venv/bin/activate
-          pip install --find-links runtime-core/target/wheels/ runtime-core
+          pip install --find-links runtime-core/target/wheels/ runtime_core
 
       - name: Install backend dependencies
         run: |
