@@ -2,11 +2,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { copyFileSync, existsSync } from 'fs'
 
-// Auto-copy ONNX Runtime WASM files on startup
-const wasmSource = 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm';
-const wasmTarget = 'public/ort-wasm-simd-threaded.wasm';
-if (existsSync(wasmSource)) {
-  copyFileSync(wasmSource, wasmTarget);
+// Auto-copy ONNX Runtime WASM file (canonical: single-thread, non-SIMD) on startup
+const preferredWasm = 'node_modules/onnxruntime-web/dist/ort-wasm.wasm';
+const fallbackWasm = 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm';
+const wasmTarget = 'public/ort-wasm.wasm';
+if (existsSync(preferredWasm)) {
+  copyFileSync(preferredWasm, wasmTarget);
+} else {
+  console.warn('[vite] preferred WASM artifact not found; please install onnxruntime-web or provide "ort-wasm.wasm" in node_modules/dist/');
 }
 
 export default defineConfig({

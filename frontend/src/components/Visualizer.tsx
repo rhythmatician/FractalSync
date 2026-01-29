@@ -61,75 +61,47 @@ export function Visualizer() {
   }, []);
 
   useEffect(() => {
-    // Load model with retry logic
+    // Load model (single, explicit attempt; no fallbacks)
     const loadModel = async () => {
-      const maxRetries = 3;
-      let lastError: Error | null = null;
+      try {
+        const model = new ModelInference();
 
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          const model = new ModelInference();
-          
-          // Try to load from API, fallback to local path
-          try {
-            const modelResponse = await fetch('/api/model/latest');
-            if (modelResponse.ok) {
-              const blob = await modelResponse.blob();
-              const modelUrl = URL.createObjectURL(blob);
-              
-              // Try to get metadata
-              let metadataUrl: string | undefined;
-              try {
-                const metadataResponse = await fetch('/api/model/metadata');
-                if (metadataResponse.ok) {
-                  const metadataBlob = await metadataResponse.blob();
-                  metadataUrl = URL.createObjectURL(metadataBlob);
-                }
-              } catch (e) {
-                console.warn('Failed to load metadata:', e);
-              }
-              
-              await model.loadModel(modelUrl, metadataUrl);
-            } else {
-              // Fallback: try local model path with cache busting
-              const cacheBuster = `?t=${Date.now()}`;
-              await model.loadModel(
-                `/models/model.onnx${cacheBuster}`,
-                `/models/model.onnx_metadata.json${cacheBuster}`
-              );
-            }
-          } catch (e) {
-            console.warn('Failed to load model from API, trying local:', e);
-            // Fallback to local with cache busting
-            const cacheBuster = `?t=${Date.now()}`;
-            await model.loadModel(
-              `/models/model.onnx${cacheBuster}`,
-              `/models/model.onnx_metadata.json${cacheBuster}`
-            );
-          }
-          
-          modelRef.current = model;
-          setIsModelLoaded(true);
-          setError(null);
-          setModelMetadata(model.getMetadata());
-          console.log('✓ Model loaded successfully');
+        const modelResponse = await fetch('/api/model/latest');
+        if (!modelResponse.ok) {
+          const msg = `Failed to fetch model from API: ${modelResponse.status} ${modelResponse.statusText}`;
+          setError(msg);
+          setIsModelLoaded(false);
+          console.error(msg);
           return;
-        } catch (err) {
-          lastError = err instanceof Error ? err : new Error(String(err));
-          console.warn(`Model load attempt ${attempt}/${maxRetries} failed:`, lastError.message);
-          
-          if (attempt < maxRetries) {
-            // Exponential backoff before retry
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
-          }
         }
-      }
 
-      // All retries exhausted
-      const errorMsg = `Failed to load model after ${maxRetries} attempts: ${lastError?.message}`;
-      setError(errorMsg);
-      setIsModelLoaded(false);
-      console.error(errorMsg);
+        const arrayBuffer = await modelResponse.arrayBuffer();
+
+        // Try to get metadata (optional)
+        let metadataUrl: string | undefined;
+        try {
+          const metadataResponse = await fetch('/api/model/metadata');
+          if (metadataResponse.ok) {
+            const metadataBlob = await metadataResponse.blob();
+            metadataUrl = URL.createObjectURL(metadataBlob);
+          }
+        } catch (e) {
+          console.warn('Failed to load metadata:', e);
+        }
+
+        await model.loadModel(new Uint8Array(arrayBuffer), metadataUrl);
+
+        modelRef.current = model;
+        setIsModelLoaded(true);
+        setError(null);
+        setModelMetadata(model.getMetadata());
+        console.log('✓ Model loaded successfully');
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        setError(errorMsg);
+        setIsModelLoaded(false);
+        console.error('Model load failed:', errorMsg);
+      }
     };
 
     loadModel();

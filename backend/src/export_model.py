@@ -113,6 +113,38 @@ def export_to_onnx(
     # Save metadata
     metadata_path = str(Path(output_path).with_suffix(".onnx_metadata.json"))
 
+    # Ensure model is self-contained (no external data sidecars). If any external data is referenced,
+    # load it into the model and re-save so consumers (like the browser) don't need sidecar files.
+    try:
+        import os
+        from onnx import external_data_helper
+
+        model_dir = os.path.dirname(output_path) or "."
+        model_proto = onnx.load(output_path)
+
+        # If the model references external data, load it and re-save inline
+        try:
+            external_data_helper.load_external_data_for_model(model_proto, model_dir)
+            # If this succeeded, re-save model with embedded data
+            onnx.save_model(model_proto, output_path)
+
+            # Remove any previously generated .data sidecar (we now embed data)
+            sidecar_path = f"{output_path}.data"
+            if os.path.exists(sidecar_path):
+                try:
+                    os.remove(sidecar_path)
+                except Exception:
+                    # Non-fatal: log and continue
+                    logging.warning(
+                        "Failed to remove external sidecar %s", sidecar_path
+                    )
+        except Exception:
+            # No external data to inline or failed to load; continue silently
+            pass
+    except Exception:
+        # Be conservative: if ONNX runtime or helper isn't available, skip and keep original behavior
+        pass
+
     # Determine parameter names and ranges based on metadata
     if metadata and metadata.get("model_type") == "orbit_control":
         # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
