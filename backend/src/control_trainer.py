@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
-from .visual_metrics import VisualMetrics
+from .visual_metrics import LossVisualMetrics
 from .runtime_core_bridge import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -70,7 +70,7 @@ class ControlTrainer:
     def __init__(
         self,
         model: AudioToControlModel,
-        visual_metrics: VisualMetrics,
+        visual_metrics: LossVisualMetrics,
         feature_extractor: Optional[object] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         learning_rate: float = 1e-4,

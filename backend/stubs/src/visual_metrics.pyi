@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 
-class VisualMetrics:
+class LossVisualMetrics:
     def __init__(self) -> None: ...
-    def compute_all_metrics(self, image: np.ndarray) -> dict[str, float]: ...
+    def compute_all_metrics(
+        self, image: np.ndarray, prev_image: np.ndarray | None = None
+    ) -> dict[str, float]: ...
+
+class VisualMetrics(LossVisualMetrics):
+    ...

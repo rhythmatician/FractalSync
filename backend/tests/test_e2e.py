@@ -46,7 +46,7 @@ def test_imports():
 
         print("✓ control_trainer imports")
 
-        from src.visual_metrics import VisualMetrics  # noqa: F401
+        from src.visual_metrics import LossVisualMetrics  # noqa: F401
 
         print("✓ visual_metrics imports")
 
@@ -200,16 +200,24 @@ def test_visual_metrics():
     print("=" * 60)
     try:
         import numpy as np
-        from src.visual_metrics import VisualMetrics
+        import runtime_core
+        from src.visual_metrics import LossVisualMetrics
 
         # Initialize
-        metrics = VisualMetrics()
-        print("✓ VisualMetrics initialized")
+        metrics = LossVisualMetrics()
+        print("✓ LossVisualMetrics initialized")
 
         # Test with a synthetic image
         test_image = np.random.randint(0, 256, (128, 128, 3), dtype=np.uint8)
         result = metrics.compute_all_metrics(test_image)
-        print(f"✓ Metrics computed: {len(result)} metrics")
+        print(f"✓ Loss metrics computed: {len(result)} metrics")
+
+        image_float = test_image.astype(np.float64) / 255.0
+        flat = image_float.reshape(-1).tolist()
+        runtime_metrics = runtime_core.compute_runtime_visual_metrics(
+            flat, test_image.shape[1], test_image.shape[0], test_image.shape[2], 0.0, 0.0, 50
+        )
+        print(f"✓ Runtime metrics computed: edge_density={runtime_metrics.edge_density:.4f}")
 
         assert isinstance(result, dict), f"Expected dict, got {type(result)}"
         assert len(result) > 0, "Expected at least one metric"

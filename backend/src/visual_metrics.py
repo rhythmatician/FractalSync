@@ -9,8 +9,8 @@ import cv2
 import numpy as np
 
 
-class VisualMetrics:
-    """Compute perceptual metrics from rendered Julia sets."""
+class LossVisualMetrics:
+    """Compute loss-facing visual metrics from rendered Julia sets."""
 
     def __init__(self):
         """Initialize metrics calculator."""
@@ -20,7 +20,7 @@ class VisualMetrics:
         self, image: np.ndarray, prev_image: Optional[np.ndarray] = None
     ) -> dict:
         """
-        Compute all visual metrics from image.
+        Compute loss-facing visual metrics from image.
 
         Args:
             image: Current image array (H, W, 3) or (H, W) in [0, 255] or [0, 1]
@@ -41,23 +41,7 @@ class VisualMetrics:
 
         metrics = {}
 
-        # Edge density (roughness/complexity)
-        metrics["edge_density"] = self._compute_edge_density(gray)
-
-        # Color uniformity (smoothness)
-        if len(image.shape) == 3:
-            metrics["color_uniformity"] = self._compute_color_uniformity(image)
-        else:
-            metrics["color_uniformity"] = self._compute_color_uniformity(
-                np.stack([gray, gray, gray], axis=2)
-            )
-
-        # Brightness distribution
-        metrics["brightness_mean"] = float(np.mean(gray))
-        metrics["brightness_std"] = float(np.std(gray))
-        metrics["brightness_range"] = float(np.max(gray) - np.min(gray))
-
-        # Temporal change rate
+        # Temporal change rate (loss metric)
         if prev_image is not None:
             if prev_image.max() > 1.0:
                 prev_image = prev_image.astype(np.float32) / 255.0
@@ -70,70 +54,7 @@ class VisualMetrics:
         else:
             metrics["temporal_change"] = 0.0
 
-        # Connectedness (fractal dimension approximation)
-        metrics["connectedness"] = self._compute_connectedness(gray)
-
         return metrics
-
-    def _compute_edge_density(self, gray: np.ndarray) -> float:
-        """
-        Compute edge density using Canny edge detection.
-        Higher values indicate more roughness/complexity.
-
-        Args:
-            gray: Grayscale image [0, 1]
-
-        Returns:
-            Edge density [0, 1]
-        """
-        # Scale to [0, 255] for OpenCV
-        gray_uint8 = (gray * 255).astype(np.uint8)
-
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray_uint8, (5, 5), 0)
-
-        # Canny edge detection
-        edges = cv2.Canny(blurred, 50, 150)
-
-        # Compute edge density
-        edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
-
-        return float(edge_density)
-
-    def _compute_color_uniformity(self, image: np.ndarray) -> float:
-        """
-        Compute color uniformity (inverse of variance).
-        Higher values indicate smoother, more uniform colors.
-
-        Args:
-            image: RGB image [0, 1]
-
-        Returns:
-            Color uniformity [0, 1]
-        """
-        # Compute local variance using a small kernel
-        # Lower variance = more uniform
-
-        # Convert to grayscale for simplicity
-        gray = np.mean(image, axis=2)
-
-        # Compute local variance
-        kernel_size = 5
-        kernel = np.ones((kernel_size, kernel_size)) / (kernel_size**2)
-
-        # Convolve to get local mean
-        local_mean = cv2.filter2D(gray, -1, kernel)
-
-        # Compute local variance
-        local_var = cv2.filter2D((gray - local_mean) ** 2, -1, kernel)
-
-        # Average variance (lower is more uniform)
-        avg_variance = float(np.mean(local_var))
-
-        # Convert to uniformity score [0, 1] (inverse relationship)
-        uniformity = 1.0 / (1.0 + avg_variance * 10.0)
-
-        return float(uniformity)
 
     def _compute_temporal_change(
         self, current: np.ndarray, previous: np.ndarray
@@ -161,46 +82,6 @@ class VisualMetrics:
         change_rate = np.mean(diff)
 
         return float(change_rate)
-
-    def _compute_connectedness(self, gray: np.ndarray) -> float:
-        """
-        Compute connectedness using fractal dimension approximation.
-        Higher values indicate more connected structures.
-
-        Args:
-            gray: Grayscale image [0, 1]
-
-        Returns:
-            Connectedness score [0, 1]
-        """
-        # Threshold to binary
-        threshold = 0.5
-        binary = (gray > threshold).astype(np.uint8)
-
-        # Count connected components
-        num_labels, labels = cv2.connectedComponents(binary)
-
-        # Compute component sizes
-        component_sizes = []
-        for label in range(1, num_labels):  # Skip background (label 0)
-            component_size = np.sum(labels == label)
-            component_sizes.append(component_size)
-
-        if len(component_sizes) == 0:
-            return 0.0
-
-        # Connectedness: ratio of largest component to total area
-        total_area = binary.shape[0] * binary.shape[1]
-        largest_component = max(component_sizes)
-        connectedness = largest_component / total_area
-
-        # Also consider number of components (fewer = more connected)
-        num_components_factor = 1.0 / (1.0 + len(component_sizes) / 100.0)
-
-        # Combined score
-        score = connectedness * num_components_factor
-
-        return float(score)
 
     def render_julia_set(
         self,
@@ -259,3 +140,7 @@ class VisualMetrics:
         image_rgb = np.stack([image, image, image], axis=2)
 
         return image_rgb
+
+
+# Backwards-compatible alias for loss metrics.
+VisualMetrics = LossVisualMetrics

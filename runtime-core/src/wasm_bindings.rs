@@ -25,6 +25,7 @@ use crate::controller::{
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// A complex number (Julia parameter c = a + bi).
 #[wasm_bindgen]
@@ -231,6 +232,86 @@ impl FeatureExtractor {
 
         outer
     }
+}
+
+/// Runtime visual metrics computed in Rust.
+#[wasm_bindgen]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RuntimeVisualMetrics {
+    edge_density: f64,
+    color_uniformity: f64,
+    brightness_mean: f64,
+    brightness_std: f64,
+    brightness_range: f64,
+    mandelbrot_membership: bool,
+}
+
+impl From<RustRuntimeVisualMetrics> for RuntimeVisualMetrics {
+    fn from(metrics: RustRuntimeVisualMetrics) -> Self {
+        Self {
+            edge_density: metrics.edge_density,
+            color_uniformity: metrics.color_uniformity,
+            brightness_mean: metrics.brightness_mean,
+            brightness_std: metrics.brightness_std,
+            brightness_range: metrics.brightness_range,
+            mandelbrot_membership: metrics.mandelbrot_membership,
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl RuntimeVisualMetrics {
+    #[wasm_bindgen(getter)]
+    pub fn edge_density(&self) -> f64 {
+        self.edge_density
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn color_uniformity(&self) -> f64 {
+        self.color_uniformity
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn brightness_mean(&self) -> f64 {
+        self.brightness_mean
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn brightness_std(&self) -> f64 {
+        self.brightness_std
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn brightness_range(&self) -> f64 {
+        self.brightness_range
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn mandelbrot_membership(&self) -> bool {
+        self.mandelbrot_membership
+    }
+}
+
+#[wasm_bindgen]
+pub fn compute_runtime_visual_metrics(
+    image: Vec<f64>,
+    width: usize,
+    height: usize,
+    channels: usize,
+    c_real: f64,
+    c_imag: f64,
+    max_iter: usize,
+) -> Result<RuntimeVisualMetrics, JsValue> {
+    let metrics = compute_runtime_metrics(
+        &image,
+        width,
+        height,
+        channels,
+        RustComplex::new(c_real, c_imag),
+        max_iter,
+    )
+    .map_err(|message| JsValue::from_str(message))?;
+    Ok(metrics.into())
 }
 
 /// Point on a lobe boundary.

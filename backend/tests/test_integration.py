@@ -121,18 +121,27 @@ def test_visual_metrics():
     print("\n[Test 5] Testing visual metrics...")
     try:
         import numpy as np
-        from src.visual_metrics import VisualMetrics
+        import runtime_core
+        from src.visual_metrics import LossVisualMetrics
 
-        vm = VisualMetrics()
-        print("  ✓ VisualMetrics created")
+        vm = LossVisualMetrics()
+        print("  ✓ LossVisualMetrics created")
 
         # Create a synthetic image
         image = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
 
-        # Compute metrics
+        # Compute loss metrics
         metrics = vm.compute_all_metrics(image)
-        print(f"    - Metrics computed: {len(metrics)} metrics")
-        print(f"    - Edge density: {metrics['edge_density']:.4f}")
+        print(f"    - Loss metrics computed: {len(metrics)} metrics")
+        print(f"    - Temporal change: {metrics['temporal_change']:.4f}")
+
+        # Compute runtime metrics from Rust
+        image_float = image.astype(np.float64) / 255.0
+        flat = image_float.reshape(-1).tolist()
+        runtime_metrics = runtime_core.compute_runtime_visual_metrics(
+            flat, image.shape[1], image.shape[0], image.shape[2], 0.0, 0.0, 50
+        )
+        print(f"    - Edge density: {runtime_metrics.edge_density:.4f}")
 
         return True
     except Exception as e:
