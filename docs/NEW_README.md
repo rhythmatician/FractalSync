@@ -31,3 +31,9 @@ cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for fronte
 npm --prefix frontend run build --silent  # frontend
 # backend does not need to be built
 ```
+
+## Training
+
+```ps1
+cd backend; python train.py; cd ..
+```
