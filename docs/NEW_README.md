@@ -15,25 +15,20 @@ cargo install wasm-pack --locked  # wasm
 wasm-pack --version  # verify wasm
 ```
 
-## Testing
 
 ```ps1
+## Building
+cd runtime-core; maturin develop --release; cd ..  # runtime-core
+cd wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
+npm --prefix frontend run build --silent  # frontend
+# backend does not need to be built
+
+
+## Testing
 pytest backend #  backend
 npm test --prefix frontend  # frontend
 cargo test -q # runtime-core
-```
-
-## Building
-
-```ps1
-cd runtime-core; maturin develop --release; cd ..  # runtime-core
-cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
-npm --prefix frontend run build --silent  # frontend
-# backend does not need to be built
-```
 
 ## Training
-
-```ps1
 cd backend; python train.py; cd ..
 ```
