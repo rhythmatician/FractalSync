@@ -74,10 +74,6 @@ These instructions make AI agents immediately productive in this repo.
 ## Examples
 - Start server then train:
   - Server: `cd backend && python api/server.py`
-  - Train: `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":1,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":false,"include_delta_delta":false}'`
-  - Status: `curl http://localhost:8000/api/train/status`
-- Train with velocity features:
-  - `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":100,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":true,"include_delta_delta":false}'`
 
 ## Testing
 
@@ -91,11 +87,24 @@ cargo test -q # runtime-core
 
 ```ps1
 cd runtime-core; maturin develop --release; cd ..  # runtime-core
-cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
+cd wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
 npm --prefix frontend run build --silent  # frontend
 # backend does not need to be built
 ```
 
-**Working-directory note:** Copilot can sometimes assume the repo root even after a `cd` in prior output. To avoid ambiguity prefer commands that set the working directory explicitly (e.g. `npm --prefix frontend ...`) or use single-line chained `cd` commands (e.g. `cd frontend && npm run dev`). This keeps commands consistent across shells and avoids relying on a persistent `cd` state.
+**Working-directory note:** Copilot may not preserve the current working directory between commands and can assume the repository root.
+
+> Set-Location: Cannot find path 'C:\Users\JeffHall\git\FractalSync\frontend\frontend' because it does not exist.
+
+To avoid ambiguity, prefer commands with explicit paths (e.g., `npm --prefix frontend run build`) or one of these safer patterns:
+
+- Portable alternative: `npm --prefix frontend run build` — avoids changing directories.
+- PowerShell: use `Push-Location` / `Pop-Location` for safe directory changes:
+  - Short: `Push-Location frontend; npm run build; Pop-Location`
+  - Safer (With cleanup):
+    ```powershell
+    Push-Location frontend
+    try { npm run build } finally { Pop-Location }
+    ```
 
 If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
