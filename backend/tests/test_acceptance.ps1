@@ -123,7 +123,7 @@ Write-Host "-" * 70
 
 Test-Step "Frontend dependencies installed" {
     if (!(Test-Path frontend/node_modules)) {
-        throw "node_modules not found, run: cd frontend && npm install"
+        throw "node_modules not found, run: npm --prefix frontend install"
     }
 }
 
@@ -152,8 +152,8 @@ if ($script:failed -eq 0) {
     Write-Host "✓ All acceptance criteria met!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "  1. Start backend API:  cd backend && python api/server.py"
-    Write-Host "  2. Start frontend:     cd frontend && npm run dev"
+    Write-Host "  1. Start backend API:  python backend/api/server.py"
+    Write-Host "  2. Start frontend:     npm --prefix frontend run dev"
     Write-Host "  3. Open browser:       http://localhost:3001"
     Write-Host "  4. Load model from:    backend/checkpoints/model_orbit_control_*.onnx"
     exit 0

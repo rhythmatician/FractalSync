@@ -88,7 +88,7 @@ def runtime_core_module():
     # Minimal behavior: do not attempt to build automatically. Expect the
     # developer or CI to have installed the extension already using
     # `pip install -r backend/requirements-dev.txt` and/or
-    # `cd runtime-core && python -m maturin develop --release`.
+    # PowerShell-safe: `Push-Location runtime-core; try { python -m maturin develop --release } finally { Pop-Location }`.
     # This keeps test setup simple and avoids fragile runtime-time builds.
     import os
 

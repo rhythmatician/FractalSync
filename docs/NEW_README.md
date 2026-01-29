@@ -18,7 +18,7 @@ wasm-pack --version  # verify wasm
 
 ```ps1
 ## Building
-cd runtime-core; maturin develop --release; cd ..  # runtime-core
+Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }  # PowerShell-safe pattern for runtime-core
 cd wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
 npm --prefix frontend run build --silent  # frontend
 # backend does not need to be built

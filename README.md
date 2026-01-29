@@ -8,6 +8,8 @@ A real-time music visualizer that renders morphing Julia sets, using machine lea
 - **Frontend (React)**: Real-time visualization with microphone input, ONNX.js inference, and WebGL Julia set rendering
 - **API Server**: FastAPI for training monitoring and model management
 
+> Note: AI coding agents should read `.github/copilot-instructions.md` first — it contains the Rust-first policy and build/test guidance for contributors.
+
 ## Setup
 
 ### Backend
@@ -140,20 +142,14 @@ The model supports **velocity-based features** (delta and delta-delta features) 
 - **Delta features** (velocity): First-order derivatives showing how fast each feature is changing
 - **Delta-delta features** (acceleration): Second-order derivatives showing how the rate of change is accelerating
 
-Training with velocity features via API:
+Training is performed via CLI:
+
 ```bash
-curl -X POST http://localhost:8000/api/train/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data_dir": "data/audio",
-    "epochs": 100,
-    "batch_size": 32,
-    "learning_rate": 0.0001,
-    "window_frames": 10,
-    "include_delta": true,
-    "include_delta_delta": false
-  }'
+cd backend
+python train.py --data-dir data/audio --epochs 100 --batch-size 32 --window-frames 10
 ```
+
+Note: The FastAPI server serves model artifacts (`/api/model/*`) and metadata for downloads; it does not start training jobs.
 
 Training with velocity features via CLI:
 ```bash
@@ -171,10 +167,8 @@ python train.py --data-dir data/audio --epochs 100 --include-delta
 
 ## Troubleshooting
 
-### Why is onnxruntime-web pinned to 1.14.0?
+### ONNX Runtime in the browser (onnxruntime-web)
 
-Version 1.16+ introduced dynamic ES module imports for different execution providers (JSEP, WebGPU), which conflicts with Vite's handling of files in the `public/` folder. When ONNX Runtime tries to dynamically import `.mjs` files, Vite intercepts them as source code rather than serving them as static assets, causing 404 errors.
+This repo currently uses **onnxruntime-web 1.18.0** (see `frontend/package.json`/`package-lock.json`). Newer versions (1.16+) introduced dynamic ES module imports for optional execution providers (JSEP, WebGPU). If you encounter dynamic-import related 404s with Vite, configure Vite's `optimizeDeps`/`publicDir` to handle `.mjs` files or provide a bundled WASM artifact.
 
-**Solution**: Pin to 1.14.0, which uses a simpler WASM-only backend without dynamic imports.
-
-**Alternative**: If you need 1.16+ features, configure Vite's `optimizeDeps` and `publicDir` to properly handle the `.mjs` files, or use a bundled version of onnxruntime-web.
+The project also copies a canonical `ort-wasm.wasm` into `public/` via `vite.config.ts` to provide a predictable WASM runtime for development. If you require features only available in newer runtime versions, document the Vite config changes required or consider bundling the runtime.

@@ -100,7 +100,7 @@ global.AudioContext = class MockAudioContext {
 
 **Model Inference Tests:**
 These tests skip when no trained model is present. To run with a real model:
-1. Train a model: `cd backend && python train.py --epochs 1`
+1. Train a model: `python backend/train.py --epochs 1` (or PowerShell-safe: `Push-Location backend; try { python train.py --epochs 1 } finally { Pop-Location }`).
 2. Copy model to frontend test fixtures: `cp backend/checkpoints/model_*.onnx frontend/src/lib/__tests__/fixtures/`
 
 ---
@@ -114,10 +114,10 @@ To run the complete test suite:
 pytest backend/tests/
 
 # Runtime-core tests  
-cd runtime-core && cargo test --lib --release && cd ..
+Push-Location runtime-core; try { cargo test --lib --release } finally { Pop-Location }
 
 # Frontend tests
-cd frontend && npm test && cd ..
+npm --prefix frontend test
 ```
 
 ---
@@ -135,7 +135,7 @@ For CI pipelines, use:
 - run: cargo test --lib --release --manifest-path runtime-core/Cargo.toml
 
 # Frontend (requires Node.js)
-- run: cd frontend && npm ci && npm test
+- run: npm --prefix frontend ci && npm --prefix frontend test
 ```
 
 ---

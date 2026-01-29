@@ -14,7 +14,7 @@ Open http://localhost:3000
 ## Key Dependencies
 
 - **React 18** - UI framework
-- **onnxruntime-web 1.14.0** - Browser-based ML inference (pinned to avoid dynamic import issues with 1.16+)
+- **onnxruntime-web 1.18.0** - Browser-based ML inference (see `vite.config.ts` for WASM handling; if upgrading to versions that use dynamic imports, update Vite's `optimizeDeps`/`publicDir`)
 - **Vite 5** - Fast dev server and bundler
 
 ## Architecture
@@ -41,6 +41,6 @@ This ensures the fractal responds to music in real-time, even before the model i
 
 ## Notes
 
-- **ONNX Runtime version**: Pinned to 1.14.0 because 1.16+ uses dynamic ES module imports that conflict with Vite's public folder handling
+- **ONNX Runtime**: Repo uses onnxruntime-web 1.18.0 (see `package.json`/`vite.config.ts`). If you encounter dynamic-import issues with newer runtime versions (1.16+), update Vite's `optimizeDeps`/`publicDir` to handle `.mjs` files or provide a bundled runtime.
 - **WASM files**: Vite copies the canonical single-thread non‑SIMD `ort-wasm.wasm` from `node_modules` to `public/` on startup. The build will warn if the preferred artifact is missing — there is no runtime automatic fallback.
 - **CORS headers**: Required for SharedArrayBuffer (multi-threaded WASM)

@@ -1,21 +1,76 @@
 # AI Coding Agent Instructions (FractalSync)
 
-These instructions make AI agents immediately productive in this repo.
+These notes make AI coding agents immediately productive in this repository.
 
-## Big picture<!-- TOC -->
+<!-- TOC tocDepth:2..3 chapterDepth:2..6 -->
 
-- [AI Coding Agent Instructions FractalSync](#ai-coding-agent-instructions-fractalsync)
-    - [Big Picture](#big-picture)
-    - [Repository Structure](#repository-structure)
-    - [Developer Workflows](#developer-workflows)
-    - [Project Conventions](#project-conventions)
-    - [Integration Points](#integration-points)
-    - [Debugging Tips](#debugging-tips)
-    - [Examples](#examples)
-    - [Testing](#testing)
-    - [Building](#building)
+- [Big picture](#big-picture)
+  - [Quick recovery tips (if you accidentally enter a Python REPL):](#quick-recovery-tips-if-you-accidentally-enter-a-python-repl)
+- [Big picture](#big-picture)
+- [Key files & responsibilities](#key-files-responsibilities)
+- [Developer workflows (short)](#developer-workflows-short)
+- [Project Conventions](#project-conventions)
+- [Integration points](#integration-points)
+- [Runtime-core (Rust) — guidance for changes and builds](#runtime-core-rust-—-guidance-for-changes-and-builds)
+  - [Core-change checklist](#core-change-checklist)
+- [Debugging tips](#debugging-tips)
+  - [Examples](#examples)
+- [Training](#training)
+- [Copilot's bad habbits and how to avoid them](#copilots-bad-habbits-and-how-to-avoid-them)
+- [Working-directory note:](#working-directory-note)
+  - [Shell portability note (terminal / agent guidance)](#shell-portability-note-terminal-agent-guidance)
 
 <!-- /TOC -->
+
+TL;DR — Read this first:
+- **Rust-first**: implement core geometry, feature extraction and visual metrics in `runtime-core` and update `pybindings.rs` and `wasm_bindings.rs` when changing core behavior.
+- **Explicit paths & portability**: avoid assuming a persistent CWD; prefer `npm --prefix frontend run build`, `maturin develop --release`, or the PowerShell `Push-Location`/`Pop-Location` pattern.
+- **Parity & sanity checks**: after changing runtime code run `cargo test -q`, `maturin develop --release`, rebuild wasm with `wasm-pack`, and validate bindings/exports.
+
+## Big picture
+
+# Copilot's bad habbits and how to avoid them
+
+When writing commands that change directories or run multi-line scripts, Copilot may produce code that assumes a persistent working directory or uses shell-specific features that don't work in all environments. To ensure reliability, follow these guidelines:
+
+**Working-directory note:** Copilot may not preserve the current working directory between commands and can assume the repository root.
+
+> Set-Location: Cannot find path 'C:\Users\JeffHall\git\FractalSync\frontend\frontend' because it does not exist.
+
+To avoid ambiguity, prefer commands with explicit paths (e.g., `npm --prefix frontend run build`) or one of these safer patterns:
+
+- Portable alternative: `npm --prefix frontend run build` — avoids changing directories.
+- PowerShell: use `Push-Location` / `Pop-Location` for safe directory changes:
+  - Short: `Push-Location frontend; npm run build; Pop-Location`
+  - Safer (With cleanup):
+    ```powershell
+    Push-Location frontend
+    try { npm run build } finally { Pop-Location }
+    ```
+
+**Shell portability note (terminal / agent guidance):** This guidance is intended for safely running commands in terminals or by automation agents — it is not a repository policy. Avoid POSIX-style heredoc examples like `python << 'PY'` in PowerShell shells (they raise a parser error and can leave you in a Python REPL), and prefer these safer alternatives:
+
+- One-liners: `python -c "print('hi')"` (note quoting differs by shell).
+- Multi-line snippets: write the code to a script and run it: `python script.py`.
+- PowerShell multi-line: use a here-string to write to a file, e.g.:
+
+  ```powershell
+  @'
+  print("hello")
+  '@ > script.py
+  python script.py
+  ```
+
+### Quick recovery tips (if you accidentally enter a Python REPL):
+
+- PowerShell: press Ctrl+Z then Enter, or type `exit()` and Enter.
+- POSIX shells: press Ctrl+D, or type `exit()` and Enter.
+
+---
+
+If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
+
+## Big picture
 - Two-tier app: **backend** (Python + PyTorch) and **frontend** (React + Vite + onnxruntime-web).
 - **Runtime core is implemented in Rust (`runtime-core`) and is the single source of truth for geometry, orbit synthesis, feature extraction and visual metrics.** Use `runtime-core` code first — implement logic in Rust and expose it to Python and the browser via `runtime-core/src/pybindings.rs` and `runtime-core/src/wasm_bindings.rs`.
 - Current model: **orbit-based control model** (predicts control signals that synthesize Julia seeds). Training exports an ONNX model plus a metadata JSON consumed by the browser.
@@ -91,6 +146,31 @@ These instructions make AI agents immediately productive in this repo.
   - Python: `python -c "import runtime_core as rc; fe=rc.FeatureExtractor(); print(fe.test_simple())"` — `test_simple` exists to confirm bindings load.
   - The backend bridge runs a short subprocess probe (`runtime_core_bridge._rust_extractor_sanity_check`); replicate that snippet when debugging.
 
+### Core-change checklist
+- Modify runtime behavior in `runtime-core/src/*` and add unit tests under `runtime-core/tests`.
+- Update the Python bindings (`runtime-core/src/pybindings.rs`) and wasm bindings (`runtime-core/src/wasm_bindings.rs`) for any API changes.
+- Add or update parity tests that assert exported constants and round-trip behavior (see example below).
+- Build & validate locally:
+  - `cargo test -q` (rust tests)
+  - `Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }` (PowerShell safe pattern to install Python wheel locally)
+  - `Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }` (rebuild wasm bindings)
+- Update Python/TypeScript consumers and add integration tests where appropriate.
+
+#### Parity test example
+- Rust unit test (add `runtime-core/tests/test_parity.rs`):
+```rust
+use runtime_core::SAMPLE_RATE;
+
+#[test]
+fn sample_rate_parity() {
+    assert_eq!(SAMPLE_RATE, 48000);
+}
+```
+- Quick Python check:
+```bash
+python -c "import runtime_core as rc; assert rc.SAMPLE_RATE == 48000; print('OK')"
+```
+
 ## Debugging tips
 - Rust feature extractor: `runtime_core` is preferred but may hang; the bridge runs a short subprocess sanity check and logs a warning on failure — the Python extractor is used automatically on failure.
 - ONNX export: check opset (18) and the generated `*.onnx_metadata.json`; missing `feature_mean`/`feature_std` means the frontend will not auto-normalize inputs.
@@ -98,32 +178,35 @@ These instructions make AI agents immediately productive in this repo.
 - Windows specifics: `train.py` forces `mp.set_start_method('spawn', force=True)` to avoid worker handle duplication issues.
 - GPU renderer: `julia_gpu` uses ModernGL/GLFW headless mode and falls back to CPU rendering; use `--no-gpu-rendering` for CI/quick runs.
 
-## Examples
+### Examples
 - Start server then train:
   - Server: `cd backend && python api/server.py`
 
+# Building
 ```ps1
-## Building
 cd runtime-core; maturin develop --release; cd ..  # runtime-core
 cd wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
 npm --prefix frontend run build --silent  # frontend
-# backend does not need to be built
+```
 
-
-## Testing
+#### Testing
+```ps1
 pytest backend #  backend
 npm test --prefix frontend  # frontend
 cargo test -q # runtime-core
+```
 
 ## Training
+```ps1
 cd backend; python train.py; cd ..
 ```
 
-# Copilot's bad habbits and how to avoid them
+## Copilot's bad habbits and how to avoid them
 
 When writing commands that change directories or run multi-line scripts, Copilot may produce code that assumes a persistent working directory or uses shell-specific features that don't work in all environments. To ensure reliability, follow these guidelines:
 
-**Working-directory note:** Copilot may not preserve the current working directory between commands and can assume the repository root.
+## Working-directory note:
+ Copilot may not preserve the current working directory between commands and can assume the repository root.
 
 > Set-Location: Cannot find path 'C:\Users\JeffHall\git\FractalSync\frontend\frontend' because it does not exist.
 
@@ -138,7 +221,8 @@ To avoid ambiguity, prefer commands with explicit paths (e.g., `npm --prefix fro
     try { npm run build } finally { Pop-Location }
     ```
 
-**Shell portability note (terminal / agent guidance):** This guidance is intended for safely running commands in terminals or by automation agents — it is not a repository policy. Avoid POSIX-style heredoc examples like `python << 'PY'` in PowerShell shells (they raise a parser error and can leave you in a Python REPL), and prefer these safer alternatives:
+### Shell portability note (terminal / agent guidance)
+ This guidance is intended for safely running commands in terminals or by automation agents — it is not a repository policy. Avoid POSIX-style heredoc examples like `python << 'PY'` in PowerShell shells (they raise a parser error and can leave you in a Python REPL), and prefer these safer alternatives:
 
 - One-liners: `python -c "print('hi')"` (note quoting differs by shell).
 - Multi-line snippets: write the code to a script and run it: `python script.py`.
