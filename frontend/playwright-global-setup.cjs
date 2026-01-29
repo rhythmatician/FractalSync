@@ -69,7 +69,25 @@ module.exports = async function globalSetup() {
 
     console.log('No model found; training a tiny model (1 epoch) for E2E tests...');
 
-    // Prefer committed fixture if present; otherwise generate a small audio file for training
+    // Prefer a committed ONNX model if present to avoid training in CI
+    const committedModel = path.join(__dirname, '..', '..', 'models_i_like', 'model_orbit_control_20260128_002625.onnx');
+    if (fs.existsSync(committedModel)) {
+        const dest = path.join(backendCwd, 'checkpoints', 'model.onnx');
+        console.log('Committed ONNX model found; copying to backend checkpoints:', committedModel);
+        fs.mkdirSync(path.join(backendCwd, 'checkpoints'), { recursive: true });
+        fs.copyFileSync(committedModel, dest);
+        // Wait briefly for API to pick up model
+        try {
+            await waitForUrl(backendUrl, 20000);
+            console.log('Copied committed model and API serves it.');
+            return;
+        } catch (err) {
+            console.warn('Committed model copied but API not responding yet:', err);
+            // continue with training fallback
+        }
+    }
+
+    // Prefer committed audio fixture if present; otherwise generate a small audio file for training
     const fixturePath = path.join(__dirname, 'tests', 'fixtures', 'sample.wav');
     const audioDir = path.join(backendCwd, 'data', 'audio');
     fs.mkdirSync(audioDir, { recursive: true });
