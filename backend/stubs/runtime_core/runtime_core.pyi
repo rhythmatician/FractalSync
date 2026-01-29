@@ -15,6 +15,9 @@ DEFAULT_RESIDUAL_CAP: float
 DEFAULT_RESIDUAL_OMEGA_SCALE: float
 DEFAULT_BASE_OMEGA: float
 DEFAULT_ORBIT_SEED: int
+MINIMAP_MIP_LEVELS: int
+MINIMAP_PATCH_K: int
+STEP_CONTEXT_LEN: int
 
 class Complex:
     re: float
@@ -106,6 +109,67 @@ class RuntimeVisualMetrics:
     brightness_range: float
     mandelbrot_membership: bool
 
+class Minimap:
+    def __init__(self) -> None: ...
+    def sample(self, c_real: float, c_imag: float, mip_level: int) -> tuple[float, float, float]: ...
+    def sample_patch(self, c_real: float, c_imag: float, mip_level: int, k: int = 16) -> list[float]: ...
+    def context_features(
+        self,
+        c_real: float,
+        c_imag: float,
+        prev_delta_real: float = 0.0,
+        prev_delta_imag: float = 0.0,
+        mip_level: int = 0,
+    ) -> list[float]: ...
+
+class StepDebug:
+    mip_level: int
+    scale_g: float
+    scale_df: float
+    scale: float
+    wall_applied: bool
+
+class ControllerContext:
+    c_real: float
+    c_imag: float
+    prev_delta_real: float
+    prev_delta_imag: float
+    nu_norm: float
+    membership: bool
+    grad_re: float
+    grad_im: float
+    sensitivity: float
+    patch: list[float]
+    def feature_vector(self) -> list[float]: ...
+
+class StepResult:
+    delta_real: float
+    delta_imag: float
+    c_next_real: float
+    c_next_imag: float
+    debug: StepDebug
+    context: ControllerContext
+
+class StepController:
+    def __init__(self) -> None: ...
+    def apply_step(
+        self,
+        c_real: float,
+        c_imag: float,
+        delta_real: float,
+        delta_imag: float,
+        prev_delta_real: float = 0.0,
+        prev_delta_imag: float = 0.0,
+    ) -> StepResult: ...
+    def context_features(
+        self,
+        c_real: float,
+        c_imag: float,
+        prev_delta_real: float = 0.0,
+        prev_delta_imag: float = 0.0,
+        mip_level: int = 0,
+    ) -> ControllerContext: ...
+
 def compute_runtime_visual_metrics(
     image: Sequence[float],
     width: int,
@@ -119,3 +183,5 @@ def compute_runtime_visual_metrics(
 def lobe_point_at_angle(
     period: int, sub_lobe: int, theta: float, s: float = 1.0
 ) -> Complex: ...
+
+def step_mip_for_delta(delta_real: float, delta_imag: float) -> int: ...

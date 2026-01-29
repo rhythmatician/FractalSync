@@ -290,7 +290,7 @@ def main():
                 else None
             ),
             metadata={
-                "model_type": "orbit_control",
+                "model_type": "step_control",
                 "output_dim": model.output_dim,
                 "k_bands": args.k_bands,
                 "epoch": args.epochs,

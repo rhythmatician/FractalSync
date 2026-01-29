@@ -25,6 +25,14 @@ use crate::controller::{
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::minimap::{Minimap as RustMinimap, MINIMAP_MIP_LEVELS, MINIMAP_PATCH_K};
+use crate::step_controller::{
+    ControllerContext as RustControllerContext,
+    StepController as RustStepController,
+    StepResult as RustStepResult,
+    CONTEXT_LEN,
+    mip_for_delta,
+};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// Helper struct to expose a complex number to Python as a tuple.
@@ -298,6 +306,253 @@ pub struct RuntimeVisualMetrics {
     pub mandelbrot_membership: bool,
 }
 
+/// Python wrapper for minimap sampling.
+#[pyclass]
+#[derive(Clone)]
+pub struct Minimap {
+    inner: RustMinimap,
+}
+
+#[pymethods]
+impl Minimap {
+    #[new]
+    fn py_new() -> Self {
+        Self {
+            inner: RustMinimap::new(),
+        }
+    }
+
+    /// Sample F(c) and gradient at a mip level.
+    #[pyo3(signature = (c_real, c_imag, mip_level))]
+    fn sample(&self, c_real: f64, c_imag: f64, mip_level: usize) -> (f32, f32, f32) {
+        let sample = self.inner.sample(RustComplex::new(c_real, c_imag), mip_level);
+        (sample.f_value, sample.grad_re, sample.grad_im)
+    }
+
+    /// Sample a k×k patch (row-major) at a mip level.
+    #[pyo3(signature = (c_real, c_imag, mip_level, k=MINIMAP_PATCH_K))]
+    fn sample_patch(&self, c_real: f64, c_imag: f64, mip_level: usize, k: usize) -> Vec<f32> {
+        self.inner
+            .sample_patch(RustComplex::new(c_real, c_imag), mip_level, k)
+    }
+
+    /// Build the controller context vector in the canonical order.
+    #[pyo3(signature = (c_real, c_imag, prev_delta_real=0.0, prev_delta_imag=0.0, mip_level=0))]
+    fn context_features(
+        &self,
+        c_real: f64,
+        c_imag: f64,
+        prev_delta_real: f64,
+        prev_delta_imag: f64,
+        mip_level: usize,
+    ) -> Vec<f32> {
+        let context = RustControllerContext {
+            c: RustComplex::new(c_real, c_imag),
+            prev_delta: RustComplex::new(prev_delta_real, prev_delta_imag),
+            nu_norm: self.inner.sample(RustComplex::new(c_real, c_imag), mip_level).f_value,
+            membership: RustMinimap::membership(RustComplex::new(c_real, c_imag)),
+            grad_re: self.inner.sample(RustComplex::new(c_real, c_imag), mip_level).grad_re,
+            grad_im: self.inner.sample(RustComplex::new(c_real, c_imag), mip_level).grad_im,
+            sensitivity: 0.0,
+            patch: self
+                .inner
+                .sample_patch(RustComplex::new(c_real, c_imag), mip_level, MINIMAP_PATCH_K),
+        };
+        let mut context = context;
+        let sample = self.inner.sample(RustComplex::new(c_real, c_imag), mip_level);
+        context.sensitivity = crate::step_controller::sensitivity_from_grad(sample);
+        context.to_feature_vector()
+    }
+}
+
+/// Debug info for the step controller.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepDebug {
+    #[pyo3(get)]
+    pub mip_level: usize,
+    #[pyo3(get)]
+    pub scale_g: f64,
+    #[pyo3(get)]
+    pub scale_df: f64,
+    #[pyo3(get)]
+    pub scale: f64,
+    #[pyo3(get)]
+    pub wall_applied: bool,
+}
+
+impl From<crate::step_controller::StepDebug> for StepDebug {
+    fn from(debug: crate::step_controller::StepDebug) -> Self {
+        Self {
+            mip_level: debug.mip_level,
+            scale_g: debug.scale_g,
+            scale_df: debug.scale_df,
+            scale: debug.scale,
+            wall_applied: debug.wall_applied,
+        }
+    }
+}
+
+/// Controller context values.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ControllerContext {
+    inner: RustControllerContext,
+}
+
+#[pymethods]
+impl ControllerContext {
+    #[getter]
+    fn c_real(&self) -> f64 {
+        self.inner.c.real
+    }
+
+    #[getter]
+    fn c_imag(&self) -> f64 {
+        self.inner.c.imag
+    }
+
+    #[getter]
+    fn prev_delta_real(&self) -> f64 {
+        self.inner.prev_delta.real
+    }
+
+    #[getter]
+    fn prev_delta_imag(&self) -> f64 {
+        self.inner.prev_delta.imag
+    }
+
+    #[getter]
+    fn nu_norm(&self) -> f32 {
+        self.inner.nu_norm
+    }
+
+    #[getter]
+    fn membership(&self) -> bool {
+        self.inner.membership
+    }
+
+    #[getter]
+    fn grad_re(&self) -> f32 {
+        self.inner.grad_re
+    }
+
+    #[getter]
+    fn grad_im(&self) -> f32 {
+        self.inner.grad_im
+    }
+
+    #[getter]
+    fn sensitivity(&self) -> f32 {
+        self.inner.sensitivity
+    }
+
+    #[getter]
+    fn patch(&self) -> Vec<f32> {
+        self.inner.patch.clone()
+    }
+
+    fn feature_vector(&self) -> Vec<f32> {
+        self.inner.to_feature_vector()
+    }
+}
+
+impl From<RustControllerContext> for ControllerContext {
+    fn from(inner: RustControllerContext) -> Self {
+        Self { inner }
+    }
+}
+
+/// Result of applying a step.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepResult {
+    #[pyo3(get)]
+    pub delta_real: f64,
+    #[pyo3(get)]
+    pub delta_imag: f64,
+    #[pyo3(get)]
+    pub c_next_real: f64,
+    #[pyo3(get)]
+    pub c_next_imag: f64,
+    #[pyo3(get)]
+    pub debug: StepDebug,
+    #[pyo3(get)]
+    pub context: ControllerContext,
+}
+
+impl From<RustStepResult> for StepResult {
+    fn from(result: RustStepResult) -> Self {
+        Self {
+            delta_real: result.delta_applied.real,
+            delta_imag: result.delta_applied.imag,
+            c_next_real: result.c_next.real,
+            c_next_imag: result.c_next.imag,
+            debug: result.debug.into(),
+            context: result.context.into(),
+        }
+    }
+}
+
+/// Step controller wrapper.
+#[pyclass]
+#[derive(Clone)]
+pub struct StepController {
+    inner: RustStepController,
+}
+
+#[pymethods]
+impl StepController {
+    #[new]
+    fn py_new() -> Self {
+        Self {
+            inner: RustStepController::new(),
+        }
+    }
+
+    #[pyo3(signature = (c_real, c_imag, delta_real, delta_imag, prev_delta_real=0.0, prev_delta_imag=0.0))]
+    fn apply_step(
+        &self,
+        c_real: f64,
+        c_imag: f64,
+        delta_real: f64,
+        delta_imag: f64,
+        prev_delta_real: f64,
+        prev_delta_imag: f64,
+    ) -> StepResult {
+        let result = self.inner.apply_step(
+            RustComplex::new(c_real, c_imag),
+            RustComplex::new(delta_real, delta_imag),
+            Some(RustComplex::new(prev_delta_real, prev_delta_imag)),
+        );
+        result.into()
+    }
+
+    #[pyo3(signature = (c_real, c_imag, prev_delta_real=0.0, prev_delta_imag=0.0, mip_level=0))]
+    fn context_features(
+        &self,
+        c_real: f64,
+        c_imag: f64,
+        prev_delta_real: f64,
+        prev_delta_imag: f64,
+        mip_level: usize,
+    ) -> ControllerContext {
+        self.inner
+            .context_for(
+                RustComplex::new(c_real, c_imag),
+                Some(RustComplex::new(prev_delta_real, prev_delta_imag)),
+                mip_level,
+            )
+            .into()
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (delta_real, delta_imag))]
+fn step_mip_for_delta(delta_real: f64, delta_imag: f64) -> usize {
+    mip_for_delta(RustComplex::new(delta_real, delta_imag))
+}
+
 impl From<RustRuntimeVisualMetrics> for RuntimeVisualMetrics {
     fn from(metrics: RustRuntimeVisualMetrics) -> Self {
         Self {
@@ -348,13 +603,22 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+    m.add("MINIMAP_MIP_LEVELS", MINIMAP_MIP_LEVELS)?;
+    m.add("MINIMAP_PATCH_K", MINIMAP_PATCH_K)?;
+    m.add("STEP_CONTEXT_LEN", CONTEXT_LEN)?;
 
     m.add_class::<Complex>()?;
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
     m.add_class::<FeatureExtractor>()?;
+    m.add_class::<Minimap>()?;
+    m.add_class::<StepController>()?;
+    m.add_class::<ControllerContext>()?;
+    m.add_class::<StepResult>()?;
+    m.add_class::<StepDebug>()?;
     m.add_class::<RuntimeVisualMetrics>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
+    m.add_function(wrap_pyfunction!(step_mip_for_delta, m)?)?;
     Ok(())
 }

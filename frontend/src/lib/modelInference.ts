@@ -3,7 +3,9 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
+
+type Complex = { real: number; imag: number };
+type StepControllerModule = any;
 
 export interface VisualParameters {
   juliaReal: number;
@@ -45,17 +47,13 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // Orbit-based synthesis (new architecture)
-  private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitState: OrbitState | null = null;
-  private isOrbitModel: boolean = false;
-  
-  // Color-based section detection for lobe switching
-  private colorHistory: number[] = [];
-  private colorHistorySize: number = 120; // ~2 seconds at 60fps
-  private lastLobeSwitch: number = 0;
-  private lobeSwitchCooldown: number = 180; // ~3 seconds at 60fps (hysteresis)
-  private colorChangeThreshold: number = 0.15; // Hue change threshold
+  // Step-based controller state
+  private stepControllerModule: StepControllerModule | null = null;
+  private stepController: any | null = null;
+  private currentC: Complex = { real: 0.0, imag: 0.0 };
+  private prevDelta: Complex = { real: 0.0, imag: 0.0 };
+  private controllerContextLen: number | null = null;
+  private isStepModel: boolean = true;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
   private useAudioReactivePostProcessing: boolean = true;
@@ -153,18 +151,8 @@ export class ModelInference {
         }
         this.metadata = await response.json() as ModelMetadata;
 
-        // Check if this is an orbit-based control model
-        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
-
-        if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
-          const kBands = this.metadata.k_bands || 6;
-          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
-          console.log('[ModelInference] Loaded orbit-based control model');
-        } else {
-          console.log('[ModelInference] Loaded legacy visual parameter model');
-        }
+        this.isStepModel = this.metadata.model_type !== 'legacy';
+        console.log(`[ModelInference] Loaded ${this.isStepModel ? 'step-based' : 'legacy'} model`);
 
         // Set up normalization
         if (this.metadata.feature_mean && this.metadata.feature_std) {
@@ -185,17 +173,25 @@ export class ModelInference {
       throw new Error('Model not loaded');
     }
 
+    if (!this.stepControllerModule || !this.stepController) {
+      await this.ensureStepController();
+    }
+
     const totalStartTime = performance.now();
     let normStartTime = performance.now();
 
-    // Normalize features if normalization stats are available
-    let normalizedFeatures = new Float32Array(features);
+    const stepControllerModule = this.stepControllerModule;
+    const stepController = this.stepController;
+
+    const contextFeatures = this.buildControllerContext();
+    const fullFeatures = this.applyInputCompatibility([...features, ...contextFeatures]);
+    let normalizedFeatures = new Float32Array(fullFeatures);
     if (this.featureMean && this.featureStd) {
-      normalizedFeatures = new Float32Array(features.length);
-      for (let i = 0; i < features.length; i++) {
+      normalizedFeatures = new Float32Array(fullFeatures.length);
+      for (let i = 0; i < fullFeatures.length; i++) {
         const mean = this.featureMean[i] || 0;
         const std = this.featureStd[i] || 1;
-        normalizedFeatures[i] = (features[i] - mean) / (std + 1e-8);
+        normalizedFeatures[i] = (fullFeatures[i] - mean) / (std + 1e-8);
       }
     }
 
@@ -205,7 +201,7 @@ export class ModelInference {
     const inputTensor = new ort.Tensor(
       'float32',
       normalizedFeatures,
-      [1, features.length]
+      [1, normalizedFeatures.length]
     );
 
     // Run inference
@@ -222,33 +218,22 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL
-      // Parse control signals from model output
-      const controlSignals: ControlSignals = {
-        sTarget: params[0],
-        alpha: params[1],
-        omegaScale: params[2],
-        bandGates: params.slice(3)
+    if (this.isStepModel && stepControllerModule && stepController) {
+      const deltaModel: Complex = {
+        real: params[0] ?? 0.0,
+        imag: params[1] ?? 0.0
       };
-
-      // Update orbit state with new control signals
-      this.orbitState.s = controlSignals.sTarget;
-      this.orbitState.alpha = controlSignals.alpha;
-      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
-
-      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
-
-      // Synthesize Julia parameter c(t) from orbit
-      const dt = 1.0 / 60.0; // Assume 60 FPS
-      const { c, newState } = this.orbitSynthesizer.step(
-        this.orbitState,
-        dt,
-        controlSignals.bandGates
+      const result = stepController.applyStep(
+        this.currentC.real,
+        this.currentC.imag,
+        deltaModel.real,
+        deltaModel.imag,
+        this.prevDelta.real,
+        this.prevDelta.imag
       );
-      this.orbitState = newState;
+      this.prevDelta = { real: result.delta_real, imag: result.delta_imag };
+      this.currentC = { real: result.c_next_real, imag: result.c_next_imag };
 
-      // Extract audio features for color mapping
       const numFeatures = 6;
       const windowFrames = Math.floor(features.length / numFeatures);
       let avgRMS = 0, avgOnset = 0;
@@ -258,21 +243,16 @@ export class ModelInference {
       }
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
-
-      // Map to visual parameters
       const currentHue = (avgRMS * 2.0) % 1.0;
       visualParams = {
-        juliaReal: c.real,
-        juliaImag: c.imag,
+        juliaReal: this.currentC.real,
+        juliaImag: this.currentC.imag,
         colorHue: currentHue,
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
-        zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
-        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
+        zoom: Math.max(1.5, Math.min(4.0, 2.5)),
+        speed: Math.max(0.3, Math.min(0.7, (Math.abs(result.delta_real) + Math.abs(result.delta_imag)) / 0.04))
       };
-      
-      // Color-based section detection for lobe switching
-      this.detectSectionChange(currentHue);
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -360,7 +340,7 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
+        modelType: this.isStepModel ? 'step_control' : 'legacy'
       });
     }
 
@@ -388,58 +368,54 @@ export class ModelInference {
     return this.session !== null;
   }
   
-  /**
-   * Detect section changes using color moving average with hysteresis.
-   * Switches to a random different lobe when a significant color change is detected.
-   */
-  private detectSectionChange(currentHue: number): void {
-    if (!this.orbitState) return;
-    
-    // Add current hue to history
-    this.colorHistory.push(currentHue);
-    if (this.colorHistory.length > this.colorHistorySize) {
-      this.colorHistory.shift();
+  private buildControllerContext(): number[] {
+    if (!this.stepControllerModule || !this.stepController) {
+      return [];
     }
-    
-    // Need enough history to detect changes
-    if (this.colorHistory.length < this.colorHistorySize) return;
-    
-    // Check cooldown (hysteresis)
-    const framesSinceLastSwitch = this.colorHistory.length - this.lastLobeSwitch;
-    if (framesSinceLastSwitch < this.lobeSwitchCooldown) return;
-    
-    // Compute moving average of recent colors
-    const recentWindow = Math.floor(this.colorHistorySize / 4); // Last 30 frames (~0.5s)
-    const oldWindow = Math.floor(this.colorHistorySize / 2); // Middle 60 frames (~1s)
-    
-    let recentAvg = 0;
-    for (let i = this.colorHistory.length - recentWindow; i < this.colorHistory.length; i++) {
-      recentAvg += this.colorHistory[i];
+    const mip = this.stepControllerModule.mipForDelta(
+      this.prevDelta.real,
+      this.prevDelta.imag
+    );
+    const context = this.stepController.contextFeatures(
+      this.currentC.real,
+      this.currentC.imag,
+      this.prevDelta.real,
+      this.prevDelta.imag,
+      mip
+    );
+    const vector = context.feature_vector as number[];
+    if (this.controllerContextLen && vector.length !== this.controllerContextLen) {
+      if (vector.length < this.controllerContextLen) {
+        return vector.concat(new Array(this.controllerContextLen - vector.length).fill(0.0));
+      }
+      return vector.slice(0, this.controllerContextLen);
     }
-    recentAvg /= recentWindow;
-    
-    let oldAvg = 0;
-    const oldStart = this.colorHistory.length - oldWindow - recentWindow;
-    const oldEnd = this.colorHistory.length - recentWindow;
-    for (let i = oldStart; i < oldEnd; i++) {
-      if (i >= 0) oldAvg += this.colorHistory[i];
+    return vector;
+  }
+
+  private applyInputCompatibility(features: number[]): number[] {
+    const expectedDim = this.metadata?.input_dim ?? this.metadata?.input_shape?.[1];
+    if (!expectedDim || expectedDim <= 0) {
+      return features;
     }
-    oldAvg /= oldWindow;
-    
-    // Detect significant change (accounting for hue wraparound)
-    let hueDiff = Math.abs(recentAvg - oldAvg);
-    if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff; // Wraparound correction
-    
-    if (hueDiff > this.colorChangeThreshold) {
-      // Section change detected! Switch to a random different lobe
-      const currentLobe = this.orbitState.lobe;
-      const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
-      const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
-      
-      this.orbitState.lobe = newLobe;
-      this.lastLobeSwitch = this.colorHistory.length;
-      
-      console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);
+    if (features.length === expectedDim) {
+      return features;
     }
+    if (features.length < expectedDim) {
+      return features.concat(new Array(expectedDim - features.length).fill(0.0));
+    }
+    return features.slice(0, expectedDim);
+  }
+
+  private async ensureStepController(): Promise<void> {
+    if (this.stepControllerModule && this.stepController) {
+      return;
+    }
+    // @ts-ignore - runtime-provided wasm module
+    const module = await import(/* @vite-ignore */ '/wasm/orbit_synth_wasm.js');
+    await module.default();
+    this.stepControllerModule = module;
+    this.stepController = new module.StepController();
+    this.controllerContextLen = module.controllerContextLen();
   }
 }

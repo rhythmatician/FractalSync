@@ -181,7 +181,7 @@ def test_model_init():
         print(f"✓ Forward pass works: input {test_input.shape} → output {output.shape}")
 
         # Verify output shape
-        assert output.shape == (1, 9), f"Expected output (1,9), got {output.shape}"
+        assert output.shape == (1, 2), f"Expected output (1,2), got {output.shape}"
         print("✓ Output shape is correct")
 
         return True

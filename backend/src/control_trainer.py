@@ -1,7 +1,7 @@
 """
-Trainer for control signal model with orbit-based synthesis.
+Trainer for control signal model with step-based synthesis.
 
-Trains model to predict control signals that drive deterministic orbit synthesis.
+Trains model to predict Δc steps that are interpreted by the runtime controller.
 """
 
 import json
@@ -26,6 +26,7 @@ from .runtime_core_bridge import (
     make_feature_extractor,
     make_orbit_state,
     make_residual_params,
+    make_step_controller,
     synthesize,
 )
 import runtime_core as rc
@@ -113,6 +114,7 @@ class ControlTrainer:
         self.num_workers = num_workers
         self.k_residuals = k_residuals
         self.residual_params = make_residual_params(k_residuals=k_residuals)
+        self.step_controller = make_step_controller()
 
         # Default correlation weights
         default_weights = {
@@ -291,31 +293,49 @@ class ControlTrainer:
 
             # Parse control signals
             parsed = self.model.parse_output(predicted_controls)
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
 
-            # Synthesize c(t) using runtime_core (cardioid lobe)
             c_values = []
-            for i in range(batch_size):
-                state = make_orbit_state(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
-                )
-                c = synthesize(
-                    state,
-                    residual_params=self.residual_params,
-                    band_gates=band_gates[i].detach().cpu().tolist(),
-                )
-                c_values.append([c.real, c.imag])
+            color_hue_source = None
+            if "delta_real" in parsed:
+                delta_real = parsed["delta_real"]
+                delta_imag = parsed["delta_imag"]
+                color_hue_source = torch.sqrt(delta_real**2 + delta_imag**2)
+                for i in range(batch_size):
+                    result = self.step_controller.apply_step(
+                        0.0,
+                        0.0,
+                        float(delta_real[i].detach().item()),
+                        float(delta_imag[i].detach().item()),
+                        0.0,
+                        0.0,
+                    )
+                    c_values.append([result.c_next_real, result.c_next_imag])
+            else:
+                s_target = parsed["s_target"]
+                alpha = parsed["alpha"]
+                omega_scale = parsed["omega_scale"]
+                band_gates = parsed["band_gates"]
+                color_hue_source = s_target
+
+                # Synthesize c(t) using runtime_core (cardioid lobe)
+                for i in range(batch_size):
+                    state = make_orbit_state(
+                        lobe=1,
+                        sub_lobe=0,
+                        theta=float(i * 2 * np.pi / batch_size),
+                        omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
+                        s=float(s_target[i].detach().item()),
+                        alpha=float(alpha[i].detach().item()),
+                        k_residuals=self.k_residuals,
+                        residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                        seed=int(DEFAULT_ORBIT_SEED + i),
+                    )
+                    c = synthesize(
+                        state,
+                        residual_params=self.residual_params,
+                        band_gates=band_gates[i].detach().cpu().tolist(),
+                    )
+                    c_values.append([c.real, c.imag])
 
             c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
             julia_real = c_tensor[:, 0]
@@ -369,8 +389,8 @@ class ControlTrainer:
                 )
 
                 images.append(image)
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
+                # Use output magnitude as proxy for color hue (example correlation)
+                color_hues.append(color_hue_source[i])
                 temporal_changes.append(
                     torch.tensor(
                         metrics["temporal_change"],

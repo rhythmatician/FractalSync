@@ -26,6 +26,9 @@ DEFAULT_RESIDUAL_CAP: float = rc.DEFAULT_RESIDUAL_CAP
 DEFAULT_RESIDUAL_OMEGA_SCALE: float = rc.DEFAULT_RESIDUAL_OMEGA_SCALE
 DEFAULT_BASE_OMEGA: float = rc.DEFAULT_BASE_OMEGA
 DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
+MINIMAP_MIP_LEVELS: int = rc.MINIMAP_MIP_LEVELS
+MINIMAP_PATCH_K: int = rc.MINIMAP_PATCH_K
+STEP_CONTEXT_LEN: int = rc.STEP_CONTEXT_LEN
 
 
 def _rust_extractor_sanity_check(
@@ -261,6 +264,16 @@ def make_orbit_state(
         seed,
     )
     return rc.OrbitState(*args)  # type: ignore[call-arg]
+
+
+def make_step_controller() -> rc.StepController:
+    """Create a step controller backed by the Rust minimap sampler."""
+    return rc.StepController()
+
+
+def step_mip_for_delta(delta_real: float, delta_imag: float) -> int:
+    """Compute mip level based on a delta magnitude."""
+    return int(rc.step_mip_for_delta(delta_real, delta_imag))
 
 
 def step_orbit(

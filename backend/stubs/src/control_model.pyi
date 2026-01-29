@@ -11,5 +11,9 @@ class AudioToControlModel:
         n_features_per_frame: int,
         hidden_dims: Sequence[int],
         k_bands: int,
+        dropout: float = ...,
+        include_delta: bool = ...,
+        include_delta_delta: bool = ...,
+        context_dim: int = ...,
     ) -> None: ...
     def parameters(self) -> Sequence[Any]: ...

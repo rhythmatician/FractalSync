@@ -16,7 +16,7 @@ from collections import deque
 
 from .runtime_core_bridge import (
     make_orbit_state,
-    step_orbit,
+    make_step_controller,
 )
 
 
@@ -651,7 +651,7 @@ class OrbitStateMachine:
         self.s_quiet_tonal = s_quiet_tonal
         self.s_smoothing_tau = s_smoothing_tau
 
-        # Initialize orbit state using runtime_core
+        # Initialize orbit state (retained for lobe scheduling/debug only)
         self.orbit_state = make_orbit_state(
             lobe=1,
             sub_lobe=0,
@@ -664,6 +664,9 @@ class OrbitStateMachine:
         )
 
         self.s_target = 1.02
+        self.c_current = complex(0.0, 0.0)
+        self.prev_delta = complex(0.0, 0.0)
+        self.step_controller = make_step_controller()
 
         # Transition state
         self.in_transition = False
@@ -766,10 +769,25 @@ class OrbitStateMachine:
         self.orbit_state.s = smoothed_s
         self.orbit_state.alpha = residual_alpha
 
-        # Advance state and synthesize
-        c = step_orbit(self.orbit_state, self.dt)
+        # Use step controller to update c(t) with a lightweight proxy delta.
+        delta_real = (self.control_loudness - 0.5) * 0.02
+        delta_imag = (self.control_tonalness - self.control_noisiness) * 0.02
+        if impact_envelope_value > 0.0:
+            delta_real += 0.01 * impact_envelope_value
+            delta_imag += -0.01 * impact_envelope_value
 
-        return complex(c.re, c.im)
+        result = self.step_controller.apply_step(
+            self.c_current.real,
+            self.c_current.imag,
+            delta_real,
+            delta_imag,
+            self.prev_delta.real,
+            self.prev_delta.imag,
+        )
+        self.prev_delta = complex(result.delta_real, result.delta_imag)
+        self.c_current = complex(result.c_next_real, result.c_next_imag)
+
+        return self.c_current
 
     def get_debug_info(self) -> Dict[str, Union[float, int, str]]:
         """Get debug information for HUD."""
@@ -782,6 +800,8 @@ class OrbitStateMachine:
             "s_target": self.s_target,
             "residual_alpha": self.orbit_state.alpha,
             "in_transition": self.in_transition,
+            "c_real": self.c_current.real,
+            "c_imag": self.c_current.imag,
             "loudness": self.control_loudness,
             "tonalness": self.control_tonalness,
             "noisiness": self.control_noisiness,

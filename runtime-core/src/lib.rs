@@ -6,10 +6,9 @@
 //! 1. **Geometry** – mathematical functions for computing positions on
 //!    the Mandelbrot set’s lobes and bulbs.  These functions are
 //!    shared between the offline Python backend and the browser.
-//! 2. **Controller** – state management and orbit synthesis logic.
-//!    This encapsulates the deterministic carrier orbit and the
-//!    residual epicycle summation used to generate the final Julia
-//!    parameter `c(t)`.
+//! 2. **Controller** – state management for parameter navigation.
+//!    The step controller applies contextual throttling and safety
+//!    redirection to model-proposed Δc steps.
 //! 3. **Feature Extraction** – low level audio analysis used to
 //!    convert PCM audio into a sequence of features for the control
 //!    model.  The Rust implementation mirrors the logic in
@@ -25,6 +24,8 @@
 
 pub mod geometry;
 pub mod controller;
+pub mod minimap;
+pub mod step_controller;
 pub mod features;
 pub mod visual_metrics;
 
