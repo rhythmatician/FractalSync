@@ -28,8 +28,7 @@ data/cache/
 docs/ignore/*
 
 # ONNX model files
-*.onnx
-*.onnx_metadata.json
+models_i_like/*
 
 julia_over_time.png
 

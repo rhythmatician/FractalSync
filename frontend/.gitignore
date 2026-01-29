@@ -15,6 +15,8 @@ test-results/
 # ONNX Runtime WASM binaries and assets
 public/*.mjs
 public/*.wasm
+public/*.onnx
+public/*.onnx_metadata.json
 public/onnxruntime-web/*
 src/assets/onnxruntime-web/*
 src/assets/onnxruntime/*.wasm
