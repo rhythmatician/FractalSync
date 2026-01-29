@@ -25,8 +25,9 @@ npm --prefix frontend run build --silent  # frontend
 
 
 ## Testing
-pytest backend #  backend
-npm test --prefix frontend  # frontend
+npm test --prefix frontend  # Unit tests (frontend): this runs Vitest **excluding** Playwright E2E tests.
+npm --prefix frontend run test:e2e # Playwright E2E (frontend): runs Playwright test runner and browsers (uses `playwright.config.ts`).
+pytest backend # backend
 cargo test -q # runtime-core
 
 ## Training

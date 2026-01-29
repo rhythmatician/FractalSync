@@ -45,6 +45,10 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
+  // Detected session IO names (derived from model); fallback to legacy names
+  private inputName: string = 'audio_features';
+  private outputName: string = 'visual_parameters';
+  
   // Orbit-based synthesis (new architecture)
   private orbitSynthesizer: OrbitSynthesizer | null = null;
   private orbitState: OrbitState | null = null;
@@ -137,6 +141,17 @@ export class ModelInference {
       } else {
         this.session = await ort.InferenceSession.create(modelPath as string, sessionOptions);
       }
+
+      // Detect input/output names from the session and log them for debugging.
+      if (this.session) {
+        if (Array.isArray(this.session.inputNames) && this.session.inputNames.length > 0) {
+          this.inputName = this.session.inputNames[0];
+        }
+        if (Array.isArray(this.session.outputNames) && this.session.outputNames.length > 0) {
+          this.outputName = this.session.outputNames[0];
+        }
+        console.log(`[ModelInference] session IO: input=${this.inputName} output=${this.outputName}`);
+      }
     } catch (err) {
       // Surface a clear error and do not attempt silent retries or configuration changes.
       throw new Error(`WASM session initialization failed: ${String(err)}`);
@@ -210,11 +225,15 @@ export class ModelInference {
 
     // Run inference
     const inferStartTime = performance.now();
-    const feeds = { audio_features: inputTensor };
+    const feeds: Record<string, ort.Tensor> = {};
+    feeds[this.inputName] = inputTensor;
     const results = await this.session.run(feeds);
     const inferTime = performance.now() - inferStartTime;
 
-    const outputTensor = results.visual_parameters;
+    const outputTensor = results[this.outputName];
+    if (!outputTensor) {
+      throw new Error(`Inference output '${this.outputName}' not found in session results`);
+    }
     const params = Array.from(outputTensor.data as Float32Array);
 
     // Post-processing

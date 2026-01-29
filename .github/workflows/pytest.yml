@@ -256,10 +256,20 @@ jobs:
           cd frontend
           npm run build
 
-      - name: Run tests
+      - name: Run unit tests
         run: |
           cd frontend
           npm test
+
+      - name: Install Playwright browsers
+        run: |
+          cd frontend
+          npx playwright install --with-deps
+
+      - name: Run Playwright E2E tests
+        run: |
+          cd frontend
+          npm run test:e2e
 
   builds:
     name: Build Artifacts
@@ -303,13 +313,12 @@ jobs:
       - name: Build runtime-core (maturin)
         run: |
           cd runtime-core
-          . ../.venv/bin/activate
-          maturin build --release
+          ../.venv/bin/python -m maturin build --release --out dist
 
       - name: Install runtime-core wheel
         run: |
           . .venv/bin/activate
-          pip install --find-links runtime-core/target/wheels/ runtime_core
+          pip install --find-links runtime-core/dist/ runtime_core
 
       - name: Install backend dependencies
         run: |
