@@ -70,7 +70,7 @@ module.exports = async function globalSetup() {
     console.log('No model found; training a tiny model (1 epoch) for E2E tests...');
 
     // Prefer a committed ONNX model if present to avoid training in CI
-    const committedModel = path.join(__dirname, '..', '..', 'models_i_like', 'model_orbit_control_20260128_002625.onnx');
+    const committedModel = path.join(__dirname, '..', '..', 'tests/fixtures', 'model_orbit_control_20260128_002625.onnx');
     if (fs.existsSync(committedModel)) {
         const dest = path.join(backendCwd, 'checkpoints', 'model.onnx');
         console.log('Committed ONNX model found; copying to backend checkpoints:', committedModel);
