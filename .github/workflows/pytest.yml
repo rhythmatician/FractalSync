@@ -304,7 +304,17 @@ jobs:
         run: |
           cd runtime-core
           . ../.venv/bin/activate
-          maturin develop --release
+          maturin build --release
+
+      - name: Install runtime-core wheel
+        run: |
+          . .venv/bin/activate
+          pip install --find-links runtime-core/target/wheels/ runtime_core
+
+      - name: Install backend dependencies
+        run: |
+          . .venv/bin/activate
+          pip install -r backend/requirements.txt
 
       - name: Build wasm-orbit bindings
         run: |
@@ -319,5 +329,6 @@ jobs:
 
       - name: Compile backend
         run: |
+          . .venv/bin/activate
           cd backend
           python -m compileall .
