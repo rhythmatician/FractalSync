@@ -7,9 +7,10 @@ import * as ort from 'onnxruntime-node';
 
 describe('onnxruntime-node smoke test', () => {
   it('loads model and runs an inference', async () => {
-    let modelPath = path.resolve(process.cwd(), 'models_i_like', 'model_orbit_control_20260128_002625.onnx');
+    // Prefer a committed model fixture in frontend/tests/fixtures
+    let modelPath = path.resolve(process.cwd(), 'frontend', 'tests', 'fixtures', 'model.onnx');
 
-    // If committed fixture is not present in the checkout, try the backend checkpoint export path
+    // If no committed fixture, try the backend checkpoint export path
     if (!fs.existsSync(modelPath)) {
       const fallback = path.resolve(process.cwd(), 'backend', 'checkpoints', 'model.onnx');
       if (fs.existsSync(fallback)) {
