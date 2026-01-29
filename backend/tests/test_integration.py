@@ -3,7 +3,7 @@
 End-to-end test suite for FractalSync runtime-core integration.
 
 Prerequisites:
-  - Python runtime_core bindings built: `cd runtime-core && maturin develop --release`
+  - Python runtime_core bindings built: `Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }`
   - WASM bindings built: [OK] (already built in wasm-orbit/pkg/)
 
 Run this test to verify:
@@ -37,7 +37,9 @@ def test_imports():
         return True
     except ImportError as e:
         print(f"  [FAIL] Import failed: {e}")
-        print("    -> Run: cd runtime-core && maturin develop --release")
+        print(
+            "    -> Run (PowerShell-safe): Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }"
+        )
         return False
 
 
@@ -215,15 +217,17 @@ def main():
     if passed == total:
         print("\n🎉 All systems ready!")
         print("\nNext steps:")
-        print("  1. Start backend API: cd backend && python api/server.py")
-        print("  2. Run training: cd backend && python train.py --data-dir data/audio")
-        print("  3. Start frontend: cd frontend && npm run dev")
+        print("  1. Start backend API: python backend/api/server.py")
+        print("  2. Run training: python backend/train.py --data-dir data/audio")
+        print("  3. Start frontend: npm --prefix frontend run dev")
         return 0
     else:
         print("\n⚠️  Some tests failed. See details above.")
         if not results.get("Imports"):
             print("\nCritical: runtime_core not available.")
-            print("  Fix: cd runtime-core && maturin develop --release")
+            print(
+                "  Fix: Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }"
+            )
         return 1
 
 

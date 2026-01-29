@@ -47,6 +47,6 @@ Write-Host ""
 Write-Host "✓ Build complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Start API server: cd backend && python api/server.py"
-Write-Host "  2. Start frontend: cd frontend && npm run dev"
+Write-Host "  1. Start API server: python backend/api/server.py"
+Write-Host "  2. Start frontend: npm --prefix frontend run dev"
 Write-Host "  3. Open http://localhost:3000"

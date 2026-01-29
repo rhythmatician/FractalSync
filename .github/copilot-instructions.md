@@ -1,47 +1,117 @@
 # AI Coding Agent Instructions (FractalSync)
 
-These instructions make AI agents immediately productive in this repo.
+These instructions guide AI coding agents contributing to the FractalSync repository. They outline project architecture, coding conventions, workflows, and specific guidelines to ensure high-quality contributions.
 
-## Big Picture
-- Two-tier app: **backend** (Python/PyTorch + FastAPI) and **frontend** (React + Vite + ONNX.js).
-- Goal: learn correlations from audio features → visual parameters to render **Julia sets** in real time.
-- Training exports ONNX models for browser inference; API provides training lifecycle and model management.
+<!-- TOC tocDepth:2..3 chapterDepth:2..6 -->
 
-## Repository Structure
-- Backend core:
-  - `backend/api/server.py`: FastAPI endpoints for training (`/api/train/start`, `/api/train/status`) and model export.
-  - `backend/src/audio_features.py`: Librosa feature extraction and sliding-window flattening; 6 features × `window_frames` → input dim.
-  - `backend/src/data_loader.py`: Audio dataset discovery + persistent `.npy` feature cache (`data/cache`).
-  - `backend/src/model.py`: `AudioToVisualModel` MLP; default expects 60-dim (6 × 10) input.
-  - `backend/src/trainer.py`: Training loop with correlation + smoothness losses; DataLoader batching; always-on velocity-based loss (jerk penalty).
-  - `backend/src/velocity_predictor.py`: Velocity-based smoothing and prediction for natural parameter transitions; includes `VelocityLoss` for jerk penalty.
-  - `backend/train.py`: CLI to run training without API.
-- Frontend core:
-  - `frontend/src/components/*`: audio capture, training panel, visualizer.
-  - `frontend/src/lib/*`: ONNX inference, Julia renderer, feature helpers.
+- [Copilot's bad habits and how to avoid them](#copilots-bad-habits-and-how-to-avoid-them)
+  - [Working-directory note](#working-directory-note)
+  - [Shell portability note (terminal / agent guidance)](#shell-portability-note-terminal-agent-guidance)
+  - [Quick recovery tips (if you accidentally enter a Python REPL):](#quick-recovery-tips-if-you-accidentally-enter-a-python-repl)
+- [Big picture](#big-picture)
+- [Key files & responsibilities](#key-files-responsibilities)
+- [Developer workflows (short)](#developer-workflows-short)
+- [Project Conventions](#project-conventions)
+- [Integration points](#integration-points)
+- [Runtime-core (Rust) - guidance for changes and builds](#runtime-core-rust---guidance-for-changes-and-builds)
+  - [Core-change checklist](#core-change-checklist)
+- [Debugging tips](#debugging-tips)
+  - [Examples](#examples)
+- [Training](#training)
 
-## Developer Workflows
+<!-- /TOC -->
+
+TL;DR — Read this first:
+- **Rust-first**: implement core geometry, feature extraction and visual metrics in `runtime-core` and update `pybindings.rs` and `wasm_bindings.rs` when changing core behavior.
+- **Explicit paths & portability**: avoid assuming a persistent CWD; prefer `npm --prefix frontend run build`, `maturin develop --release`, or the PowerShell `Push-Location`/`Pop-Location` pattern.
+- **Parity & sanity checks**: after changing runtime code run `cargo test -q`, `maturin develop --release`, rebuild wasm with `wasm-pack`, and validate bindings/exports.
+
+## Copilot's bad habits and how to avoid them
+
+When writing commands that change directories or run multi-line scripts, Copilot may produce code that assumes a persistent working directory or uses shell-specific features that don't work in all environments. To ensure reliability, follow these guidelines:
+
+### Working-directory note
+Copilot may not preserve the current working directory between commands and can assume the repository root.
+
+> Set-Location: Cannot find path 'C:\Users\JeffHall\git\FractalSync\frontend\frontend' because it does not exist.
+
+To avoid ambiguity, prefer commands with explicit paths (e.g., `npm --prefix frontend run build`) or one of these safer patterns:
+
+- Portable alternative: `npm --prefix frontend run build` — avoids changing directories.
+- PowerShell: use `Push-Location` / `Pop-Location` for safe directory changes:
+  - Short: `Push-Location frontend; npm run build; Pop-Location`
+  - Safer (With cleanup):
+    ```powershell
+    Push-Location frontend
+    try { npm run build } finally { Pop-Location }
+    ```
+
+### Shell portability note (terminal / agent guidance)
+This guidance is intended for safely running commands in terminals or by automation agents — it is not a repository policy. Avoid POSIX-style heredoc examples like `python << 'PY'` in PowerShell shells (they raise a parser error and can leave you in a Python REPL), and prefer these safer alternatives:
+
+- One-liners: `python -c "print('hi')"` (note quoting differs by shell).
+- Multi-line snippets: write the code to a script and run it: `python script.py`.
+- PowerShell multi-line: use a here-string to write to a file, e.g.:
+
+  ```powershell
+  @'
+  print("hello")
+  '@ > script.py
+  python script.py
+  ```
+
+### Quick recovery tips (if you accidentally enter a Python REPL)
+
+- PowerShell: press Ctrl+Z then Enter, or type `exit()` and Enter.
+- POSIX shells: press Ctrl+D, or type `exit()` and Enter.
+
+---
+
+If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
+
+## Big picture
+- Three-part architecture with a **Rust-first core**: the canonical runtime (`runtime-core`) implements geometry, orbit synthesis, feature extraction and runtime visual metrics and is the single source of truth used by both backend and frontend via bindings.
+- **Backend (Python + PyTorch)**: primarily the ML training pipeline and a small FastAPI server that serves model artifacts and metadata; it should delegate algorithmic math/geometry to `runtime-core` rather than reimplementing it.
+- **Frontend (React + Vite + onnxruntime-web)**: real-time inference and rendering; consumes ONNX + metadata and uses `wasm-orbit`/wasm bindings when direct runtime logic is needed in the browser.
+- Current model: **orbit-based control model** (predicts control signals that synthesize Julia seeds). Training exports an ONNX model plus a metadata JSON consumed by the browser.
+- Feature extraction prefers the Rust `runtime_core` extractor for performance; a Python fallback (`backend/src/python_feature_extractor.py`) is used automatically when the Rust extractor fails a short subprocess sanity check (see `runtime_core_bridge._rust_extractor_sanity_check`).
+
+## Key files & responsibilities
+- `runtime-core/` — **Rust crate that implements the shared runtime**. It implements geometry, controller (orbit synthesis), feature extraction, and runtime visual metrics. Tests and bindings live here:
+  - `runtime-core/src/pybindings.rs` — Python/PyO3 bindings used by the backend
+  - `runtime-core/src/wasm_bindings.rs` — wasm-bindgen bindings used by the browser (via `wasm-orbit` / `wasm-pack`)
+  - Run: `cargo test -q` (rust tests) and `maturin develop --release` to install Python wheel for local dev.
+- `backend/train.py` — CLI entrypoint to train the orbit control model (primary way to train).
+- `backend/api/server.py` — lightweight FastAPI server exposing model artifacts:
+  - `/api/model/latest` — download latest `.onnx`
+  - `/api/model/metadata` — latest `*_metadata.json`
+- `backend/src/control_trainer.py`, `control_model.py` — training glue and high-level model wiring (prefer delegating math/geometry to `runtime-core`).
+- `backend/src/export_model.py` — ONNX exporter (opset 18, prefers dynamo exporter, embeds external data, writes `*.onnx_metadata.json`).
+- `backend/src/runtime_core_bridge.py` — thin adapter that calls into `runtime-core` (and runs the extractor sanity check). Keep this small — prefer moving logic into Rust.
+- `backend/src/python_feature_extractor.py` — librosa-based extractor and normalization helpers used as fallback and for stats.
+- `frontend/src/lib/modelInference.ts` — loads ONNX + metadata, supports `orbit_control` and legacy models; expects normalization stats in metadata when present.
+- `checkpoints/` — where checkpoints, ONNX models and metadata are saved.
+
+## Developer workflows (short)
 - Backend setup (Windows):
   - `cd backend`
   - `pip install -r requirements.txt`
-- Start API server (from `backend/`):
-  - Preferred: `python api/server.py`
-  - Alternative: `python -m api.server` (ensure CWD is `backend/`).
-- Training via API:
-  - `POST /api/train/start` JSON body: `{ "data_dir": "data/audio", "epochs": 1, "batch_size": 32, "learning_rate": 0.0001, "window_frames": 10, "include_delta": false, "include_delta_delta": false }`
-  - Optional: set `"include_delta"`/`"include_delta_delta"` to enable derivative features
-  - Velocity-based smoothing is always enabled for natural parameter transitions
-  - Check status: `GET /api/train/status`
-- CLI training:
+- Train locally (CLI):
   - `cd backend`
-  - `python train.py --data-dir data/audio --epochs 100`
-  - With velocity features: `python train.py --data-dir data/audio --epochs 100 --include-delta`
-  - Velocity-based smoothing is always enabled
-- Frontend:
-  - `cd frontend && npm install && npm run dev`
-  - Open `http://localhost:3000`
+  - `python train.py --data-dir data/audio --epochs 100 [--include-delta] [--include-delta-delta] [--no-gpu-rendering]`
+- Start model-serving API (serves artifacts, not training control):
+  - `cd backend` then `python api/server.py` (serves `/api/model/*` endpoints)
+- Frontend dev:
+  - `cd frontend`
+  - `npm install`
+  - `npm run dev` (visit http://localhost:3000)
+- Tests:
+  - `pytest backend`
+  - `npm test --prefix frontend`
+  - `cargo test -q` (runtime-core)
 
 ## Project Conventions
+- **Rust-first policy:** Implement core geometry, synth, feature extraction and visual metrics in `runtime-core`. Avoid duplicating algorithms in Python/TypeScript — add or adjust bindings instead.
 - Audio features are flattened windows: `[centroid, flux, rms, zcr, onset, rolloff] × window_frames` → `input_dim = 6 * window_frames`.
 - **Velocity features**: Optional delta (first-order derivative) and delta-delta (second-order derivative) features can be enabled:
   - Base only: 6 features per frame → `input_dim = 6 * window_frames`
@@ -58,44 +128,77 @@ These instructions make AI agents immediately productive in this repo.
 - Error handling:
   - Model `forward()` validates input dim and raises with a clear message if mismatched.
 
-## Integration Points
-- Backend ↔ Frontend: exported ONNX model consumed by ONNX.js in `frontend/src/lib/modelInference.ts`.
-- Visual metrics: `backend/src/visual_metrics.py` renders Julia sets and computes metrics used by correlation losses.
-- Data: place audio under `backend/data/audio/`; cache in `backend/data/cache/` (ignored by git).
+## Integration points
+- Backend ↔ Frontend: exported ONNX model + `*.onnx_metadata.json` consumed by `frontend/src/lib/modelInference.ts`.
+  - Metadata keys the frontend expects: `input_shape`, `output_dim`, `parameter_names`, `parameter_ranges`, optional `feature_mean` and `feature_std`, `model_type` (`orbit_control`), and `k_bands` (for control models).
+  - `export_to_onnx()` uses opset 18, prefers the dynamo exporter, and attempts to inline external data sidecars so the browser gets a single binary.
+- Frontend build/runtime: `vite.config.ts` copies a canonical `ort-wasm.wasm` into `public/` if present; dev server proxies `/api` → `http://localhost:8000`.
+- Visual metrics and rendering hooks: `backend/src/visual_metrics.py` and `backend/src/julia_gpu.py` (GPU optional).
 
-## Debugging Tips
-- Common server run issues:
-  - If `python -m api.server` fails, ensure you run it from `backend/`.
-  - Use `python api/server.py` for simpler Windows path behavior.
-- Shape mismatches usually originate from `window_frames`; confirm `extract_windowed_features()` returns `n × (6 * window_frames)`.
-- Batch formatting: ensure DataLoader returns `(tensor,)`; extract `batch[0]` to keep shape `(batch_size, input_dim)`.
-- Gradients: avoid `.item()` on tensors used in loss; stack and slice tensors to the minimal common length.
+## Runtime-core (Rust) - guidance for changes and builds
+- `runtime-core` is the canonical implementation of geometry, orbits, features and runtime visual metrics. When adding or changing core behavior:
+  - Implement the logic in `runtime-core/src/*` and add unit tests in `runtime-core/tests` (run with `cargo test -q`).
+  - Update the Python bindings in `runtime-core/src/pybindings.rs` and the wasm bindings in `runtime-core/src/wasm_bindings.rs` as needed.
+  - Rebuild and validate the Python wheel: PowerShell-safe: `Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }` (or run `maturin develop --release` from the `runtime-core` directory).
+  - Rebuild wasm bindings: PowerShell-safe: `Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }` (or run `wasm-pack build --target web` from the `wasm-orbit` directory).
+  - Add or update parity tests that validate exported constants and function signatures (examples: `SAMPLE_RATE`, `WINDOW_FRAMES`, `FeatureExtractor.extract_windowed_features`, `OrbitState.step/synthesize`).
+- Quick sanity checks:
+  - Python: `python -c "import runtime_core as rc; fe=rc.FeatureExtractor(); print(fe.test_simple())"` — `test_simple` exists to confirm bindings load.
+  - The backend bridge runs a short subprocess probe (`runtime_core_bridge._rust_extractor_sanity_check`); replicate that snippet when debugging.
 
-## Examples
+### Core-change checklist
+- Modify runtime behavior in `runtime-core/src/*` and add unit tests under `runtime-core/tests`.
+- Update the Python bindings (`runtime-core/src/pybindings.rs`) and wasm bindings (`runtime-core/src/wasm_bindings.rs`) for any API changes.
+- Add or update parity tests that assert exported constants and round-trip behavior (see example below).
+- Build & validate locally:
+  - `cargo test -q` (rust tests)
+  - `Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }` (PowerShell safe pattern to install Python wheel locally)
+  - `Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }` (rebuild wasm bindings)
+- Update Python/TypeScript consumers and add integration tests where appropriate.
+
+#### Parity test example
+- Rust unit test (add `runtime-core/tests/test_parity.rs`):
+```rust
+use runtime_core::SAMPLE_RATE;
+
+#[test]
+fn sample_rate_parity() {
+    assert_eq!(SAMPLE_RATE, 48000);
+}
+```
+- Quick Python check:
+```bash
+python -c "import runtime_core as rc; assert rc.SAMPLE_RATE == 48000; print('OK')"
+```
+
+## Debugging tips
+- Rust feature extractor: `runtime_core` is preferred but may hang; the bridge runs a short subprocess sanity check and logs a warning on failure — the Python extractor is used automatically on failure.
+- ONNX export: check opset (18) and the generated `*.onnx_metadata.json`; missing `feature_mean`/`feature_std` means the frontend will not auto-normalize inputs.
+- Ports & proxies: frontend dev server (3000) proxies to backend (8000); failing fetches often mean the backend server is not running or metadata path is wrong.
+- Windows specifics: `train.py` forces `mp.set_start_method('spawn', force=True)` to avoid worker handle duplication issues.
+- GPU renderer: `julia_gpu` uses ModernGL/GLFW headless mode and falls back to CPU rendering; use `--no-gpu-rendering` for CI/quick runs.
+
+### Examples
 - Start server then train:
-  - Server: `cd backend && python api/server.py`
-  - Train: `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":1,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":false,"include_delta_delta":false}'`
-  - Status: `curl http://localhost:8000/api/train/status`
-- Train with velocity features:
-  - `curl -X POST http://localhost:8000/api/train/start -H "Content-Type: application/json" -d '{"data_dir":"data/audio","epochs":100,"batch_size":32,"learning_rate":0.0001,"window_frames":10,"include_delta":true,"include_delta_delta":false}'`
+  - Server: `python backend/api/server.py`
 
-## Testing
+# Building
+```ps1
+# PowerShell-safe build sequence (recommended):
+Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }
+Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }
+npm --prefix frontend run build --silent  # frontend
+```
 
+#### Testing
 ```ps1
 pytest backend #  backend
 npm test --prefix frontend  # frontend
 cargo test -q # runtime-core
 ```
 
-## Building
-
+## Training
 ```ps1
-cd runtime-core; maturin develop --release; cd ..  # runtime-core
-cd ../wasm-orbit; wasm-pack build --target web; cd .. # wasm bindings for frontend
-npm --prefix frontend run build --silent  # frontend
-# backend does not need to be built
+python backend/train.py
 ```
 
-**Working-directory note:** Copilot can sometimes assume the repo root even after a `cd` in prior output. To avoid ambiguity prefer commands that set the working directory explicitly (e.g. `npm --prefix frontend ...`) or use single-line chained `cd` commands (e.g. `cd frontend && npm run dev`). This keeps commands consistent across shells and avoids relying on a persistent `cd` state.
-
-If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.

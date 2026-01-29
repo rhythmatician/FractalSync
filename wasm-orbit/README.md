@@ -48,7 +48,7 @@ npm run deploy  # (if configured in package.json)
 ## Development Workflow
 
 1. **Modify Rust code**: Edit `wasm-orbit/src/lib.rs`
-2. **Build WASM**: `cd wasm-orbit && wasm-pack build --target web`
+2. **Build WASM**: PowerShell-safe: `Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }`
 3. **Copy to frontend**: Copy `pkg/*` to `frontend/src/wasm/`
 4. **Test**: Refresh browser (hard refresh: Ctrl+Shift+R)
 
