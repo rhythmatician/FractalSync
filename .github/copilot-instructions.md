@@ -107,4 +107,24 @@ To avoid ambiguity, prefer commands with explicit paths (e.g., `npm --prefix fro
     try { npm run build } finally { Pop-Location }
     ```
 
+**Shell portability note (terminal / agent guidance):** This guidance is intended for safely running commands in terminals or by automation agents — it is not a repository policy. Avoid POSIX-style heredoc examples like `python << 'PY'` in PowerShell shells (they raise a parser error and can leave you in a Python REPL), and prefer these safer alternatives:
+
+- One-liners: `python -c "print('hi')"` (note quoting differs by shell).
+- Multi-line snippets: write the code to a script and run it: `python script.py`.
+- PowerShell multi-line: use a here-string to write to a file, e.g.:
+
+  ```powershell
+  @'
+  print("hello")
+  '@ > script.py
+  python script.py
+  ```
+
+Quick recovery tips (if you accidentally enter a Python REPL):
+
+- PowerShell: press Ctrl+Z then Enter, or type `exit()` and Enter.
+- POSIX shells: press Ctrl+D, or type `exit()` and Enter.
+
+---
+
 If anything here seems off or incomplete (e.g., ports, paths, or training params), tell us and we’ll refine this doc.
