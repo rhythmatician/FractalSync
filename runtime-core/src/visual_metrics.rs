@@ -26,11 +26,18 @@ fn clamp_index(value: isize, max: usize) -> usize {
     }
 }
 
-fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Vec<f64> {
+fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Result<Vec<f64>, &'static str> {
     // Treat channels == 0 as a single-channel (grayscale) image to avoid
     // silently discarding a non-empty buffer and producing misleading metrics.
     let effective_channels = if channels == 0 { 1 } else { channels };
-    let mut gray = vec![0.0; width * height];
+    
+    // Use overflow-safe multiplication to prevent panics on large inputs
+    let pixels = match width.checked_mul(height) {
+        Some(p) => p,
+        None => return Err("image dimensions are too large"),
+    };
+    
+    let mut gray = vec![0.0; pixels];
     for y in 0..height {
         for x in 0..width {
             let base = (y * width + x) * effective_channels;
@@ -45,7 +52,7 @@ fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Vec<f
             gray[y * width + x] = value.clamp(0.0, 1.0);
         }
     }
-    gray
+    Ok(gray)
 }
 
 fn compute_brightness_stats(gray: &[f64]) -> (f64, f64, f64) {
@@ -77,10 +84,10 @@ fn compute_brightness_stats(gray: &[f64]) -> (f64, f64, f64) {
 
 /// Computes edge density using a Sobel filter.
 ///
-/// Note: This function has O(width * height * kernel^2) complexity with nested
-/// kernel loops and pattern matching in the innermost loop. For runtime use at
-/// larger resolutions, consider downsampling the input, using separable kernels,
-/// precomputed weight arrays, or restricting width/height for this API.
+/// Note: This function performs a 3x3 Sobel convolution at each pixel, resulting in
+/// O(width * height) complexity with a constant factor of 9 kernel evaluations per pixel.
+/// For runtime use at larger resolutions, consider downsampling the input or
+/// restricting width/height for this API.
 fn compute_edge_density(gray: &[f64], width: usize, height: usize) -> f64 {
     if gray.is_empty() || width == 0 || height == 0 {
         return 0.0;
@@ -125,9 +132,10 @@ fn compute_edge_density(gray: &[f64], width: usize, height: usize) -> f64 {
 
 /// Computes color uniformity based on local variance.
 ///
-/// Note: This function has O(width * height * kernel^2) complexity with nested
-/// kernel loops. For runtime use at larger resolutions, consider downsampling
-/// the input, using separable kernels, or restricting width/height for this API.
+/// Note: This function performs a 5x5 neighborhood variance computation at each pixel,
+/// resulting in O(width * height) complexity with a constant factor of 25 kernel evaluations
+/// per pixel. For runtime use at larger resolutions, consider downsampling the input or
+/// restricting width/height for this API.
 fn compute_color_uniformity(gray: &[f64], width: usize, height: usize) -> f64 {
     if gray.is_empty() || width == 0 || height == 0 {
         return 0.0;
@@ -206,7 +214,7 @@ pub fn compute_runtime_metrics(
         return Err("image buffer is smaller than expected");
     }
 
-    let gray = to_gray(image, width, height, channels);
+    let gray = to_gray(image, width, height, channels_safe)?;
     let edge_density = compute_edge_density(&gray, width, height);
     let color_uniformity = compute_color_uniformity(&gray, width, height);
     let (brightness_mean, brightness_std, brightness_range) = compute_brightness_stats(&gray);
