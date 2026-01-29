@@ -29,9 +29,8 @@ ENV/
 checkpoints_orbit/training_history.json
 
 # Byte-compiled / optimized / DLL files
-/data/audio/**
+/data/audio/*
 !/data/audio/sample.wav
-/data/audio/skip/*
 /data/cache/*
 /data/supervised/*
 

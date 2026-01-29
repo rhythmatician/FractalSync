@@ -8,6 +8,10 @@ dist/
 dist-ssr/
 *.local
 
+# Playwright test results
+test-results/
+.playwright_backend.pid
+
 # ONNX Runtime WASM binaries and assets
 public/*.mjs
 public/*.wasm

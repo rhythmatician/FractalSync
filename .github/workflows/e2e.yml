@@ -22,10 +22,22 @@ jobs:
               with:
                   python-version: "3.11"
 
+            - name: Set up Rust
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Build runtime-core
+              run: |
+                  cd runtime-core
+                  cargo build --release
+
             - name: Install backend deps
               run: |
                   cd backend
                   python -m pip install --upgrade pip
+                  pip install maturin
+                  cd ../runtime-core
+                  maturin develop --release
+                  cd ../backend
                   pip install -r requirements.txt
 
             - name: Install frontend deps
