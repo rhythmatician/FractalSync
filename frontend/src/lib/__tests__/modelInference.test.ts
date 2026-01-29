@@ -66,7 +66,7 @@ describe("Model Inference Parity", () => {
       session = {
         inputNames: ['audio_features'],
         outputNames: ['visual_parameters'],
-        run: async (feeds: Record<string, any>) => {
+        run: async (_feeds: Record<string, any>) => {
           // Deterministic output vector matching baseline output_dim when available
           const outLen = baseline?.config?.output_dim || 7;
           const out = new Float32Array(outLen);
