@@ -84,23 +84,78 @@ export class ModelInference {
   /**
    * Load ONNX model and metadata.
    */
-  async loadModel(modelPath: string, metadataPath?: string): Promise<void> {
-    // Simple WASM backend configuration
+  async loadModel(modelPath: string | ArrayBuffer | Uint8Array | Blob, metadataPath?: string): Promise<void> {
+    // Simple WASM backend configuration: use a single-threaded, non-SIMD runtime by default so
+    // the WASM initialization is deterministic across browsers (avoids cryptic multi-thread/SIMD failures).
     ort.env.wasm.wasmPaths = '/';
-    
-    this.session = await ort.InferenceSession.create(modelPath, {
-      executionProviders: ['wasm']
-    });
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.simd = false;
+
+    // Normalize input: allow callers to pass bytes (ArrayBuffer/Uint8Array/Blob) or a URL string.
+    let modelBytes: Uint8Array | undefined;
+    let isLikelyUrl = false;
+
+    if (typeof modelPath === 'string') {
+      isLikelyUrl = modelPath.startsWith('http') || modelPath.startsWith('/') || modelPath.startsWith('blob:');
+    } else if (modelPath instanceof Uint8Array) {
+      modelBytes = modelPath as Uint8Array;
+    } else if (modelPath instanceof ArrayBuffer) {
+      modelBytes = new Uint8Array(modelPath);
+    } else if (typeof Blob !== 'undefined' && modelPath instanceof Blob) {
+      modelBytes = new Uint8Array(await modelPath.arrayBuffer());
+    }
+
+    // If we still don't have bytes and we have a URL-like path, fetch and validate the bytes (helps detect 404 HTML pages served as binaries)
+    try {
+      if (!modelBytes && isLikelyUrl) {
+        const resp = await fetch(modelPath as string, { credentials: 'same-origin' });
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch model (${resp.status} ${resp.statusText})`);
+        }
+
+        const contentType = (resp.headers.get('Content-Type') || '').toLowerCase();
+        const ab = await resp.arrayBuffer();
+        if (ab.byteLength < 128) {
+          const snippet = new TextDecoder().decode(new Uint8Array(ab.slice(0, Math.min(128, ab.byteLength))));
+          throw new Error(`Fetched model is too small (${ab.byteLength} bytes), likely not an ONNX binary. Snippet: ${snippet}`);
+        }
+
+        const head = new TextDecoder().decode(new Uint8Array(ab.slice(0, 64)));
+        if (contentType.includes('text') || head.trim().startsWith('<') || head.trim().startsWith('{') || head.trim().startsWith('Error')) {
+          throw new Error(`Fetched model appears to be non-binary (Content-Type: ${contentType}). Snippet: ${head.substring(0, 120)}`);
+        }
+
+        modelBytes = new Uint8Array(ab);
+      }
+
+      // Build session creation options (canonical: wasm EP only — no external .data sidecar support)
+      const sessionOptions: any = { executionProviders: ['wasm'] };
+
+      // Try creating the session. If we have bytes, pass them directly.
+      if (modelBytes) {
+        this.session = await ort.InferenceSession.create(modelBytes, sessionOptions);
+      } else {
+        this.session = await ort.InferenceSession.create(modelPath as string, sessionOptions);
+      }
+    } catch (err) {
+      // Surface a clear error and do not attempt silent retries or configuration changes.
+      throw new Error(`WASM session initialization failed: ${String(err)}`);
+    }
 
     // Load metadata if provided
     if (metadataPath) {
       try {
-        const response = await fetch(metadataPath);
+        const response = await fetch(metadataPath, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`Failed to fetch metadata (${response.status} ${response.statusText})`);
+        const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+        if (!contentType.includes('json') && !contentType.includes('application')) {
+          console.warn(`[ModelInference] metadata Content-Type looks suspicious: ${contentType}`);
+        }
         this.metadata = await response.json() as ModelMetadata;
-        
+
         // Check if this is an orbit-based control model
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
-        
+
         if (this.isOrbitModel) {
           // Initialize orbit synthesizer for control-signal models
           const kBands = this.metadata.k_bands || 6;
@@ -110,7 +165,7 @@ export class ModelInference {
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
-        
+
         // Set up normalization
         if (this.metadata.feature_mean && this.metadata.feature_std) {
           this.featureMean = new Float32Array(this.metadata.feature_mean);

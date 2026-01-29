@@ -42,5 +42,5 @@ This ensures the fractal responds to music in real-time, even before the model i
 ## Notes
 
 - **ONNX Runtime version**: Pinned to 1.14.0 because 1.16+ uses dynamic ES module imports that conflict with Vite's public folder handling
-- **WASM files**: Vite config auto-copies `ort-wasm-simd-threaded.wasm` from node_modules to public on startup
+- **WASM files**: Vite copies the canonical single-thread non‑SIMD `ort-wasm.wasm` from `node_modules` to `public/` on startup. The build will warn if the preferred artifact is missing — there is no runtime automatic fallback.
 - **CORS headers**: Required for SharedArrayBuffer (multi-threaded WASM)
