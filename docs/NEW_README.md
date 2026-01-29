@@ -30,5 +30,5 @@ npm test --prefix frontend  # frontend
 cargo test -q # runtime-core
 
 ## Training
-Push-Location backend; try {python train.py } finally { Pop-Location}
+Push-Location backend; try {python train.py } finally { Pop-Location }
 ```
