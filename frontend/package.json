@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
+    "test:onnx-node": "vitest run src/lib/__tests__/onnx_node.test.ts",
     "pretest:e2e": "node ./scripts/generate-sample-wav.cjs"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "jsdom": "^23.0.0",
     "typescript": "^5.2.0",
     "vite": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "onnxruntime-node": "^1.18.0"
   }
 }

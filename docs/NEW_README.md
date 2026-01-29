@@ -7,7 +7,7 @@ This is the README file that has never been touched by AI.
 ## Install dependenies
 
 ```ps1
-cd frontend; npm install  # frontend
+cd frontend; npm install; cd ..  # frontend
 pip install -r backend/requirements.txt # backend
 winget install --id Rustlang.Rust  # runtime-core
 cargo --version  # verify runtime-core
