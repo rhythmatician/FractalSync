@@ -11,8 +11,13 @@ module.exports = async function globalTeardown() {
                 console.log('Killed backend pid', pid);
             } catch (e) {
                 console.warn('Failed to kill backend pid', pid, e);
+            } finally {
+                try {
+                    fs.unlinkSync(pidFile);
+                } catch (unlinkError) {
+                    console.warn('Failed to remove backend pid file', pidFile, unlinkError);
+                }
             }
-            fs.unlinkSync(pidFile);
         }
     } catch (e) {
         console.warn('Error in globalTeardown', e);

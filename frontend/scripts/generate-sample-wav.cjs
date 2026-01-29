@@ -1,13 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
-// Generate a short silent WAV file in fixtures directory
+// Generate a short WAV file with a 440 Hz tone in fixtures directory
 const outDir = path.resolve(__dirname, '../../backend/data/audio');
 fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, 'sample.wav');
 
 const durationSec = 0.5;
-const sampleRate = 8000;
+const sampleRate = 48000;
 const numChannels = 1;
 const bytesPerSample = 2;
 const numSamples = Math.floor(durationSec * sampleRate);

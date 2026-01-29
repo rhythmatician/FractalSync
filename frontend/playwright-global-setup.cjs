@@ -43,8 +43,7 @@ module.exports = async function globalSetup() {
     console.log('Starting backend server from', backendCwd);
     const proc = spawn('python', ['-m', 'api.server'], {
         cwd: backendCwd,
-        stdio: ['ignore', 'inherit', 'inherit'],
-        detached: true
+        stdio: ['ignore', 'inherit', 'inherit']
     });
 
     fs.writeFileSync(pidFile, String(proc.pid));
@@ -81,9 +80,9 @@ module.exports = async function globalSetup() {
         fs.copyFileSync(fixturePath, wavPath);
     } else {
         console.log('Fixture not found; generating sample WAV for backend training');
-        // Generate a short silent WAV (mono, 8kHz)
+        // Generate a short WAV with silence (mono, 48kHz to match runtime-core SAMPLE_RATE)
         const durationSec = 0.5;
-        const sampleRate = 8000;
+        const sampleRate = 48000;
         const numChannels = 1;
         const bytesPerSample = 2;
         const numSamples = Math.floor(durationSec * sampleRate);
@@ -109,15 +108,64 @@ module.exports = async function globalSetup() {
 
     // Run a quick training: 1 epoch, limited files
     await new Promise((resolve, reject) => {
+        const timeoutMs = 5 * 60 * 1000; // 5 minutes safety timeout
+        let stderrData = '';
+        let settled = false;
         const tproc = spawn('python', ['train.py', '--data-dir', 'data/audio', '--epochs', '1', '--max-files', '1'], {
             cwd: backendCwd,
-            stdio: ['ignore', 'inherit', 'inherit']
+            stdio: ['ignore', 'inherit', 'pipe'] // capture stderr for inspection
         });
-        tproc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('train.py failed with code ' + code))));
-        tproc.on('error', (err) => reject(err));
+        const cleanup = () => {
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+            }
+        };
+        let timeoutId = setTimeout(() => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            try {
+                tproc.kill('SIGKILL');
+            } catch (e) {
+                // ignore kill errors
+            }
+            cleanup();
+            reject(new Error('train.py did not complete within ' + timeoutMs + 'ms and was terminated'));
+        }, timeoutMs);
+
+        if (tproc.stderr) {
+            tproc.stderr.on('data', (chunk) => {
+                stderrData += chunk.toString();
+            });
+        }
+
+        tproc.on('exit', (code) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error('train.py failed with code ' + code + (stderrData ? ' and stderr:\n' + stderrData : '')));
+            }
+        });
+
+        tproc.on('error', (err) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            cleanup();
+            reject(err);
+        });
     });
 
     // Export checkpoint to ONNX using utils.checkpoint_loader
+    // Note: checkpoint_loader infers metadata (window-frames, k-bands, delta flags) from the checkpoint.
+    // If checkpoint metadata is incomplete, it will use default values which may not match the trained model.
     const checkpointPath = path.join(backendCwd, 'checkpoints', 'checkpoint_epoch_1.pt');
     const outputOnnx = path.join(backendCwd, 'checkpoints', 'model.onnx');
     await new Promise((resolve, reject) => {
