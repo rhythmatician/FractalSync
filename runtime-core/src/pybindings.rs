@@ -25,6 +25,7 @@ use crate::controller::{
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// Helper struct to expose a complex number to Python as a tuple.
 #[pyclass]
@@ -279,6 +280,61 @@ fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex 
     rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
 }
 
+/// Runtime visual metrics computed in Rust.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct RuntimeVisualMetrics {
+    #[pyo3(get)]
+    pub edge_density: f64,
+    #[pyo3(get)]
+    pub color_uniformity: f64,
+    #[pyo3(get)]
+    pub brightness_mean: f64,
+    #[pyo3(get)]
+    pub brightness_std: f64,
+    #[pyo3(get)]
+    pub brightness_range: f64,
+    #[pyo3(get)]
+    pub mandelbrot_membership: bool,
+}
+
+impl From<RustRuntimeVisualMetrics> for RuntimeVisualMetrics {
+    fn from(metrics: RustRuntimeVisualMetrics) -> Self {
+        Self {
+            edge_density: metrics.edge_density,
+            color_uniformity: metrics.color_uniformity,
+            brightness_mean: metrics.brightness_mean,
+            brightness_std: metrics.brightness_std,
+            brightness_range: metrics.brightness_range,
+            mandelbrot_membership: metrics.mandelbrot_membership,
+        }
+    }
+}
+
+/// Compute runtime visual metrics from an image buffer and Julia seed.
+#[pyfunction]
+#[pyo3(signature = (image, width, height, channels, c_real, c_imag, max_iter=100))]
+fn compute_runtime_visual_metrics(
+    image: Vec<f64>,
+    width: usize,
+    height: usize,
+    channels: usize,
+    c_real: f64,
+    c_imag: f64,
+    max_iter: usize,
+) -> PyResult<RuntimeVisualMetrics> {
+    let metrics = compute_runtime_metrics(
+        &image,
+        width,
+        height,
+        channels,
+        RustComplex::new(c_real, c_imag),
+        max_iter,
+    )
+    .map_err(|message| pyo3::exceptions::PyValueError::new_err(message))?;
+    Ok(metrics.into())
+}
+
 #[pymodule]
 #[allow(deprecated)]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -297,6 +353,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
     m.add_class::<FeatureExtractor>()?;
+    m.add_class::<RuntimeVisualMetrics>()?;
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     Ok(())
 }

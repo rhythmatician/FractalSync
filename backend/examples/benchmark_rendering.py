@@ -13,12 +13,12 @@ backend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_path))
 
 from src.julia_gpu import GPUJuliaRenderer  # noqa: E402
-from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.visual_metrics import LossVisualMetrics  # noqa: E402
 
 
 def benchmark_old_rendering(num_samples: int = 10):
     """Benchmark old 128x128 rendering with visual_metrics."""
-    visual_metrics = VisualMetrics()
+    visual_metrics = LossVisualMetrics()
 
     seeds = [
         (-0.7, 0.27),

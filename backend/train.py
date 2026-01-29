@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.data_loader import AudioDataset  # noqa: E402
 from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
-from src.visual_metrics import VisualMetrics  # noqa: E402
+from src.visual_metrics import LossVisualMetrics  # noqa: E402
 from src.export_model import export_to_onnx  # noqa: E402
 from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
 
@@ -180,7 +180,7 @@ def main():
     print(f"Found {len(dataset)} audio files")
 
     print("[3/7] Initializing visual metrics...")
-    visual_metrics = VisualMetrics()
+    visual_metrics = LossVisualMetrics()
 
     print("[4/7] Initializing GPU renderer (if enabled)...")
     julia_renderer = None
