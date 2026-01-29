@@ -27,14 +27,14 @@ fn clamp_index(value: isize, max: usize) -> usize {
 }
 
 fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Vec<f64> {
+    // Treat channels == 0 as a single-channel (grayscale) image to avoid
+    // silently discarding a non-empty buffer and producing misleading metrics.
+    let effective_channels = if channels == 0 { 1 } else { channels };
     let mut gray = vec![0.0; width * height];
-    if channels == 0 {
-        return gray;
-    }
     for y in 0..height {
         for x in 0..width {
-            let base = (y * width + x) * channels;
-            let value = if channels == 1 {
+            let base = (y * width + x) * effective_channels;
+            let value = if effective_channels == 1 {
                 image.get(base).copied().unwrap_or(0.0)
             } else {
                 let r = image.get(base).copied().unwrap_or(0.0);
@@ -75,6 +75,12 @@ fn compute_brightness_stats(gray: &[f64]) -> (f64, f64, f64) {
     (mean, std, range)
 }
 
+/// Computes edge density using a Sobel filter.
+///
+/// Note: This function has O(width * height * kernel^2) complexity with nested
+/// kernel loops and pattern matching in the innermost loop. For runtime use at
+/// larger resolutions, consider downsampling the input, using separable kernels,
+/// precomputed weight arrays, or restricting width/height for this API.
 fn compute_edge_density(gray: &[f64], width: usize, height: usize) -> f64 {
     if gray.is_empty() || width == 0 || height == 0 {
         return 0.0;
@@ -117,6 +123,11 @@ fn compute_edge_density(gray: &[f64], width: usize, height: usize) -> f64 {
     edge_count as f64 / (width * height) as f64
 }
 
+/// Computes color uniformity based on local variance.
+///
+/// Note: This function has O(width * height * kernel^2) complexity with nested
+/// kernel loops. For runtime use at larger resolutions, consider downsampling
+/// the input, using separable kernels, or restricting width/height for this API.
 fn compute_color_uniformity(gray: &[f64], width: usize, height: usize) -> f64 {
     if gray.is_empty() || width == 0 || height == 0 {
         return 0.0;
@@ -171,7 +182,26 @@ pub fn compute_runtime_metrics(
     if width == 0 || height == 0 {
         return Err("width and height must be non-zero");
     }
-    let expected_len = width * height * channels.max(1);
+
+    // Use overflow-safe multiplication and guard against unreasonably large images,
+    // since this function can be called from Python/WASM with untrusted inputs.
+    let pixels = match width.checked_mul(height) {
+        Some(p) => p,
+        None => return Err("image dimensions are too large"),
+    };
+
+    // Upper bound to avoid excessive work and potential downstream allocations.
+    // 16_777_216 = 4096 x 4096 pixels, which is more than enough for our use cases.
+    const MAX_PIXELS: usize = 16_777_216;
+    if pixels > MAX_PIXELS {
+        return Err("image dimensions are too large");
+    }
+
+    let channels_safe = channels.max(1);
+    let expected_len = match pixels.checked_mul(channels_safe) {
+        Some(len) => len,
+        None => return Err("image buffer is too large"),
+    };
     if image.len() < expected_len {
         return Err("image buffer is smaller than expected");
     }
