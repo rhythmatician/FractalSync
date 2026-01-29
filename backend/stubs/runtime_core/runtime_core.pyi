@@ -98,6 +98,24 @@ class OrbitState:
         band_gates: Optional[list[float]] = None,
     ) -> Complex: ...
 
+class RuntimeVisualMetrics:
+    edge_density: float
+    color_uniformity: float
+    brightness_mean: float
+    brightness_std: float
+    brightness_range: float
+    mandelbrot_membership: bool
+
+def compute_runtime_visual_metrics(
+    image: Sequence[float],
+    width: int,
+    height: int,
+    channels: int,
+    c_real: float,
+    c_imag: float,
+    max_iter: int = 100,
+) -> RuntimeVisualMetrics: ...
+
 def lobe_point_at_angle(
     period: int, sub_lobe: int, theta: float, s: float = 1.0
 ) -> Complex: ...
