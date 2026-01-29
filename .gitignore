@@ -27,6 +27,8 @@ data/cache/
 # My verbose documents
 docs/ignore/*
 
+# ONNX model files
+models_i_like/*
 
 julia_over_time.png
 
