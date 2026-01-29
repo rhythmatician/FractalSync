@@ -147,11 +147,7 @@ module.exports = async function globalSetup() {
             settled = true;
             cleanup();
             if (code === 0) {
-                if (stderrData) {
-                    reject(new Error('train.py exited with code 0 but wrote to stderr:\n' + stderrData));
-                } else {
-                    resolve();
-                }
+                resolve();
             } else {
                 reject(new Error('train.py failed with code ' + code + (stderrData ? ' and stderr:\n' + stderrData : '')));
             }

@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 
 // Helper: create a short silent WAV file so we can upload it in the test
-function createSilentWav(filePath: string, durationSec = 0.5, sampleRate = 8000) {
+function createSilentWav(filePath: string, durationSec = 0.5, sampleRate = 48000) {
   const numChannels = 1;
   const bytesPerSample = 2;
   const numSamples = Math.floor(durationSec * sampleRate);
