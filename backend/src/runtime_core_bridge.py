@@ -79,9 +79,6 @@ def _rust_extractor_sanity_check(
         return False
 
 
-import numpy as np
-
-
 class FeatureExtractorBridge:
     """Adapter that provides a stable feature extractor API.
 
@@ -168,29 +165,21 @@ def make_feature_extractor(
         include_delta_delta=include_delta_delta,
     )
 
-    try:
-        if _rust_extractor_sanity_check(include_delta, include_delta_delta):
-            logger.info(
-                "Using Rust FeatureExtractor for extraction (sanity check passed)"
-            )
-            rust_fx = rc.FeatureExtractor(
-                sr=SAMPLE_RATE,
-                hop_length=HOP_LENGTH,
-                n_fft=N_FFT,
-                include_delta=include_delta,
-                include_delta_delta=include_delta_delta,
-            )
-            return FeatureExtractorBridge(rust_fx, py_fx)
-        else:
-            logger.warning(
-                "Rust FeatureExtractor failed sanity check; using Python fallback for all operations."
-            )
-    except Exception:  # pragma: no cover - defensive
-        logger.exception(
-            "Error while probing Rust FeatureExtractor; using Python fallback for all operations."
+    if _rust_extractor_sanity_check(include_delta, include_delta_delta):
+        logger.info("Using Rust FeatureExtractor for extraction (sanity check passed)")
+        rust_fx = rc.FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+            include_delta=include_delta,
+            include_delta_delta=include_delta_delta,
         )
-
-    return FeatureExtractorBridge(None, py_fx)
+        return FeatureExtractorBridge(rust_fx, py_fx)
+    else:
+        logger.error(
+            "Falling back to Python FeatureExtractor for extraction (sanity check failed)"
+        )
+        raise RuntimeError("make_feature_extractor: Rust extractor unavailable")
 
 
 def make_residual_params(
@@ -247,20 +236,9 @@ def make_orbit_state(
             residual_omega_scale,
             seed,
         )
-    # Fallback: try calling the main constructor with the seed as the last
-    # positional arg by using a dynamic args tuple to avoid static signature checks.
-    args = (
-        lobe,
-        sub_lobe,
-        theta,
-        omega,
-        s,
-        alpha,
-        k_residuals,
-        residual_omega_scale,
-        seed,
+    raise RuntimeError(
+        "make_orbit_state: seed provided but rc.OrbitState.new_with_seed() not available"
     )
-    return rc.OrbitState(*args)  # type: ignore[call-arg]
 
 
 def step_orbit(

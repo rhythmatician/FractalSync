@@ -14,16 +14,3 @@ disallow_any_expr = false
 disallow_any_decorated = false
 disallow_any_explicit = false
 
-# Runtime core is a Rust extension
-[[tool.mypy.overrides]]
-module = "runtime_core"
-ignore_missing_imports = false
-
-[[tool.mypy.overrides]]
-module = "runtime_core.*"
-ignore_missing_imports = false
-
-# Third-party libraries without stubs
-[[tool.mypy.overrides]]
-module = ["cv2", "librosa", "librosa.*", "glfw", "glfw.*"]
-ignore_missing_imports = true

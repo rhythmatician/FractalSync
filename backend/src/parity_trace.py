@@ -16,7 +16,7 @@ Usage:
 
 import json
 import argparse
-from typing import Dict, Any
+from typing import Dict, Any, cast
 
 import numpy as np
 
@@ -82,7 +82,7 @@ def extract_features_deterministic(
         audio.astype(np.float32), window_frames=WINDOW_FRAMES
     )
 
-    return features
+    return cast(np.ndarray, features)
 
 
 def generate_orbit_sequence_deterministic(

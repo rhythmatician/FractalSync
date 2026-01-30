@@ -36,6 +36,12 @@ wasm = ["wasm-bindgen", "js-sys"]
 
 default = []
 
+[build-dependencies]
+# Use a lightweight build script which invokes the Python-side stub generator
+# if available. We avoid adding a Rust dependency so developers can use their
+# existing Python-based `pyo3-stubgen` installation.
+# (No entries required here unless you prefer a Rust crate integration.)
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -1,11 +1,27 @@
-# Module-style runtime_core stub, used via package-style re-export in __init__.pyi
+"""Type stubs for the ``runtime_core`` native extension.
 
-from __future__ import annotations
+This file is the *authoritative* type stub included in the `runtime_core`
+wheel so that type-checkers (e.g. mypy), editors and CI can inspect the
+Python API exposed by the Rust PyO3 bindings. It documents the public
+Python-facing surface implemented in ``src/pybindings.rs`` and is used
+for static verification only — it carries no runtime behaviour.
+
+Maintenance & workflow
+- During backend development, prefer editing ``backend/stubs/runtime_core/runtime_core.pyi``
+  for fast iteration and local testing.
+- When making a release or preparing CI, ensure this file is updated so
+  the wheel contains the same, authoritative ``.pyi`` that CI installs.
+- Keep the declarations in sync with the Rust bindings in
+  ``runtime-core/src/pybindings.rs``; update tests when adding or
+  removing public symbols.
+
+Note: This file exists solely to aid static tools and should not contain
+executable code or runtime imports.
+"""
 
 from typing import Optional, Sequence
 from numpy.typing import NDArray
 
-# Constants
 SAMPLE_RATE: int
 HOP_LENGTH: int
 N_FFT: int
@@ -19,12 +35,11 @@ DEFAULT_ORBIT_SEED: int
 class Complex:
     re: float
     im: float
-
     def __init__(self, re: float, im: float) -> None: ...
     def __repr__(self) -> str: ...
-    def __add__(self, other: Complex) -> Complex: ...
-    def __sub__(self, other: Complex) -> Complex: ...
-    def __mul__(self, other: Complex) -> Complex: ...
+    def __add__(self, other: "Complex") -> "Complex": ...
+    def __sub__(self, other: "Complex") -> "Complex": ...
+    def __mul__(self, other: "Complex") -> "Complex": ...
     def __complex__(self) -> complex: ...
     @property
     def real(self) -> float: ...
@@ -34,24 +49,26 @@ class Complex:
 class FeatureExtractor:
     def __init__(
         self,
-        sr: int = 48000,
-        hop_length: int = 1024,
-        n_fft: int = 4096,
-        include_delta: bool = False,
-        include_delta_delta: bool = False,
+        sr: int = ...,
+        hop_length: int = ...,
+        n_fft: int = ...,
+        include_delta: bool = ...,
+        include_delta_delta: bool = ...,
     ) -> None: ...
     def num_features_per_frame(self) -> int: ...
     def extract_windowed_features(
-        self,
-        audio: Sequence[float],
-        window_frames: int = 10,
+        self, audio: Sequence[float], window_frames: int = ...
     ) -> NDArray: ...
     def test_simple(self) -> list[float]: ...
 
 class ResidualParams:
     def __init__(
-        self, k_residuals: int = 6, residual_cap: float = 0.5, radius_scale: float = 1.0
+        self,
+        k_residuals: int = ...,
+        residual_cap: float = ...,
+        radius_scale: float = ...,
     ) -> None: ...
+
     k_residuals: int
     residual_cap: float
     radius_scale: float
@@ -68,6 +85,13 @@ class OrbitState:
         k_residuals: int,
         residual_omega_scale: float,
     ) -> None: ...
+
+    lobe: int
+    sub_lobe: int
+    theta: float
+    omega: float
+    s: float
+    alpha: float
     @staticmethod
     def new_with_seed(
         lobe: int,
@@ -79,9 +103,9 @@ class OrbitState:
         k_residuals: int,
         residual_omega_scale: float,
         seed: int,
-    ) -> OrbitState: ...
+    ) -> "OrbitState": ...
     @staticmethod
-    def new_default_seeded(seed: int) -> OrbitState: ...
+    def new_default_seeded(seed: int) -> "OrbitState": ...
     def carrier(self) -> Complex: ...
     def residual_phases(self) -> list[float]: ...
     def residual_omegas(self) -> list[float]: ...
@@ -90,12 +114,10 @@ class OrbitState:
         self,
         dt: float,
         residual_params: ResidualParams,
-        band_gates: Optional[list[float]] = None,
+        band_gates: Optional[list[float]] = ...,
     ) -> Complex: ...
     def synthesize(
-        self,
-        residual_params: ResidualParams,
-        band_gates: Optional[list[float]] = None,
+        self, residual_params: ResidualParams, band_gates: Optional[list[float]] = ...
     ) -> Complex: ...
 
 class RuntimeVisualMetrics:
@@ -105,6 +127,7 @@ class RuntimeVisualMetrics:
     brightness_std: float
     brightness_range: float
     mandelbrot_membership: bool
+    ...
 
 def compute_runtime_visual_metrics(
     image: Sequence[float],
@@ -113,9 +136,8 @@ def compute_runtime_visual_metrics(
     channels: int,
     c_real: float,
     c_imag: float,
-    max_iter: int = 100,
+    max_iter: int = ...,
 ) -> RuntimeVisualMetrics: ...
-
 def lobe_point_at_angle(
-    period: int, sub_lobe: int, theta: float, s: float = 1.0
+    period: int, sub_lobe: int, theta: float, s: float = ...
 ) -> Complex: ...

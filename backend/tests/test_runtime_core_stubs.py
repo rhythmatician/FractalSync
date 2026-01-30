@@ -32,8 +32,8 @@ def compile_classes() -> dict[str, list[str]] | None:
     import ast
     from pathlib import Path
 
-    stub_dir = Path(__file__).parent.parent / "stubs"
-    stub_path = stub_dir / "runtime_core" / "runtime_core.pyi"
+    root_dir = Path(__file__).parent.parent.parent
+    stub_path = root_dir / "runtime-core" / "runtime_core.pyi"
     assert stub_path is not None
 
     try:
@@ -135,9 +135,126 @@ def test_classes_have_expected_members():
 def test_compile_classes_returns_nonempty_dict():
     """Test that compile_classes returns valid structure."""
     result = compile_classes()
-    assert isinstance(result, dict)
     assert result is not None, "compile_classes returned None"
+    assert isinstance(result, dict)
+    assert result != {}, "compile_classes returned empty dict"
     for cls_name, members in result.items():
         assert isinstance(cls_name, str)
         assert isinstance(members, list)
         assert all(isinstance(m, str) for m in members)
+
+
+def test_class_members_have_expected_types():
+
+    classes_with_types = gather_expected_member_types()
+    assert classes_with_types is not None, "Could not gather expected member types"
+    assert classes_with_types != {}, "No classes with expected member types found"
+    for cls_name, member_types in classes_with_types.items():
+        cls = getattr(rc, cls_name)
+
+        # Try to obtain an instance for instance-level checks.
+        inst = None
+        try:
+            inst = cls()
+        except Exception:
+            try:
+                if cls_name == "Complex":
+                    inst = cls(0.0, 0.0)
+                elif cls_name == "FeatureExtractor":
+                    inst = cls()
+            except Exception:
+                inst = None
+
+        type_mismatches = {}
+        for member_name, expected_type in member_types.items():
+            actual_member = None
+            # Check class-level member
+            if hasattr(cls, member_name):
+                actual_member = getattr(cls, member_name)
+            # Check instance-level member
+            elif inst is not None and hasattr(inst, member_name):
+                actual_member = getattr(inst, member_name)
+
+            if actual_member is not None:
+                actual_type = type(actual_member)
+                if not isinstance(actual_member, expected_type):
+                    type_mismatches[member_name] = (expected_type, actual_type)
+
+        if type_mismatches:
+            messages = [
+                f"{m}: expected {et}, got {at}"
+                for m, (et, at) in type_mismatches.items()
+            ]
+            pytest.fail(f"Type mismatches in class {cls_name}:\n" + "\n".join(messages))
+
+
+def test_gather_expected_member_types_returns_nonempty_dict():
+    """Test that gather_expected_member_types returns valid structure."""
+    result = gather_expected_member_types()
+    assert isinstance(result, dict)
+    assert result != {}, "gather_expected_member_types returned empty dict"
+    assert result is not None, "gather_expected_member_types returned None"
+    for cls_name, member_types in result.items():
+        assert isinstance(cls_name, str)
+        assert isinstance(member_types, dict)
+        for member_name, expected_type in member_types.items():
+            assert isinstance(member_name, str)
+            assert isinstance(expected_type, type)
+
+
+def gather_expected_member_types() -> dict[str, dict[str, type]] | None:
+    """Gather expected member types for select classes from the stubs.
+
+    Returns:
+        A mapping of class names to dicts of member names and expected types,
+        or None on failure.
+    """
+    import ast
+    from pathlib import Path
+
+    stub_dir = Path(__file__).parent.parent.parent
+    stub_path = stub_dir / "runtime-core" / "runtime_core.pyi"
+    assert stub_path is not None
+
+    type_map = {
+        "int": int,
+        "float": float,
+        "str": str,
+        "bool": bool,
+        "List": list,
+        "Dict": dict,
+        "Any": object,
+    }
+
+    try:
+        with open(stub_path, "r", encoding="utf-8") as f:
+            stub_source = f.read()
+        tree = ast.parse(stub_source, filename=str(stub_path))
+
+        classes_with_types: dict[str, dict[str, type]] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                member_types: dict[str, type] = {}
+                for body_item in node.body:
+                    if isinstance(body_item, ast.AnnAssign):
+                        if isinstance(body_item.target, ast.Name) and isinstance(
+                            body_item.annotation, ast.Name
+                        ):
+                            member_name = body_item.target.id
+                            type_name = body_item.annotation.id
+                            expected_type = type_map.get(type_name, object)
+                            member_types[member_name] = expected_type
+                    elif isinstance(body_item, ast.FunctionDef):
+                        # Check return annotation
+                        if body_item.returns and isinstance(
+                            body_item.returns, ast.Name
+                        ):
+                            return_type_name = body_item.returns.id
+                            expected_type = type_map.get(return_type_name, object)
+                            member_types[body_item.name] = expected_type
+                if member_types:
+                    classes_with_types[node.name] = member_types
+        return classes_with_types
+    except Exception as e:
+        print(f"[stub-type-parse-error] {e}", file=sys.stderr)
+        return None

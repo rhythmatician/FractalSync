@@ -5,7 +5,7 @@ Data loading utilities for audio files.
 import hashlib
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 import logging
 
 import numpy as np
@@ -57,7 +57,7 @@ class AudioDataset:
         self.audio_files: List[Path] = self._find_audio_files()
 
         if len(self.audio_files) == 0:
-            raise ValueError(f"No audio files found in {data_dir}")
+            raise FileNotFoundError(f"No audio files found in {data_dir}")
 
     def _find_audio_files(self) -> List[Path]:
         """Find all audio files in data directory (non-recursive)."""
@@ -108,7 +108,7 @@ class AudioDataset:
 
         if cache_file and cache_file.exists():
             try:
-                return np.load(cache_file, allow_pickle=False)
+                return cast(np.ndarray, np.load(cache_file, allow_pickle=False))
             except Exception:
                 cache_file.unlink(missing_ok=True)
 
