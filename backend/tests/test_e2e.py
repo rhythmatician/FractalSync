@@ -13,7 +13,7 @@ from typing import Optional, Iterable
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 def test_imports():
@@ -37,12 +37,8 @@ def test_imports():
 
         print("✓ runtime_core imports")
 
-        from src.runtime_core_bridge import (  # noqa: F401
-            make_feature_extractor,
-            FeatureExtractorBridge,
-        )
-
-        print("✓ runtime_core_bridge imports (Deprecated)")
+        # runtime_core_bridge is now deprecated; FeatureExtractor moved to runtime_core
+        print("✓ runtime_core_bridge no longer needed (bridge removed)")
 
         from src.data_loader import AudioDataset  # noqa: F401
 
@@ -75,8 +71,8 @@ def test_feature_extraction():
     print("TEST 2: Feature Extraction")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (  # noqa: F401
-            make_feature_extractor,
+        from runtime_core import (
+            FeatureExtractor,
             SAMPLE_RATE,
             N_FFT,
             HOP_LENGTH,
@@ -84,7 +80,11 @@ def test_feature_extraction():
         import numpy as np
 
         # Create extractor
-        extractor = make_feature_extractor()
+        extractor = FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
         print("✓ Feature extractor created")
 
         # Generate test audio
@@ -93,7 +93,9 @@ def test_feature_extraction():
         audio = np.random.randn(n_samples).astype(np.float32) * 0.1
 
         # Extract features
-        features = extractor.extract_windowed_features(audio, window_frames=10)
+        features = np.array(
+            extractor.extract_windowed_features(audio, window_frames=10)
+        )
         print(f"✓ Extracted features shape: {features.shape}")
         print("  Expected: (n_frames, 6*10=60)")
 

@@ -38,11 +38,9 @@ def test_imports():
         print(f"    - SAMPLE_RATE: {SAMPLE_RATE}")
         print(f"    - DEFAULT_K_RESIDUALS: {DEFAULT_K_RESIDUALS}")
 
-        from src.runtime_core_bridge import (  # noqa: F401
-            make_feature_extractor,
-        )
+        from runtime_core import FeatureExtractor  # noqa: F401
 
-        print("  [OK] runtime_core_bridge imported")
+        print("  [OK] FeatureExtractor available in runtime_core")
         return True
     except ImportError as e:
         print(f"  [FAIL] Import failed: {e}")
@@ -57,9 +55,13 @@ def test_feature_extraction():
     print("\n[Test 2] Testing feature extraction...")
     try:
         import numpy as np
-        from src.runtime_core_bridge import make_feature_extractor
+        from runtime_core import FeatureExtractor, SAMPLE_RATE, HOP_LENGTH, N_FFT
 
-        extractor = make_feature_extractor()
+        extractor = FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
         print("  ✓ Feature extractor created")
 
         # Generate synthetic audio

@@ -27,10 +27,10 @@ from runtime_core import (
     ResidualParams,
     OrbitState,
     DEFAULT_RESIDUAL_CAP,
-)
-from .runtime_core_bridge import (
-    make_feature_extractor,
-    FeatureExtractorBridge,
+    FeatureExtractor,
+    SAMPLE_RATE,
+    HOP_LENGTH,
+    N_FFT,
 )
 from .julia_gpu import GPUJuliaRenderer
 
@@ -75,7 +75,7 @@ class ControlTrainer:
         self,
         model: AudioToControlModel,
         visual_metrics: LossVisualMetrics,
-        feature_extractor: Optional[FeatureExtractorBridge] = None,
+        feature_extractor: Optional[FeatureExtractor] = None,
         device: str = "cpu",
         learning_rate: float = 1e-4,
         use_curriculum: bool = True,
@@ -108,7 +108,11 @@ class ControlTrainer:
         self.model: AudioToControlModel = model.to(device)
 
         # Feature extractor is guaranteed to be present after initialization
-        self.feature_extractor = feature_extractor or make_feature_extractor()
+        self.feature_extractor = feature_extractor or FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
         self.visual_metrics = visual_metrics
         self.device = device
         self.use_curriculum = use_curriculum

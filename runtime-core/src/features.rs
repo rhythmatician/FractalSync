@@ -21,6 +21,8 @@ pub struct FeatureExtractor {
     pub window_size: usize,
     pub include_delta: bool,
     pub include_delta_delta: bool,
+    pub feature_mean: Option<Vec<f64>>,
+    pub feature_std: Option<Vec<f64>>,
 }
 
 impl Default for FeatureExtractor {
@@ -32,6 +34,8 @@ impl Default for FeatureExtractor {
             window_size: 4_096,
             include_delta: false,
             include_delta_delta: false,
+            feature_mean: None,
+            feature_std: None,
         }
     }
 }
@@ -53,6 +57,60 @@ impl FeatureExtractor {
             window_size: n_fft,
             include_delta,
             include_delta_delta,
+            feature_mean: None,
+            feature_std: None,
+        }
+    }
+
+    /// Compute normalization statistics from a collection of feature windows.
+    /// This mutates the internal state of the extractor to store mean and std.
+    pub fn compute_normalization_stats(&mut self, all_features: &[Vec<f64>]) {
+        if all_features.is_empty() {
+            return;
+        }
+        
+        let n_features = all_features[0].len();
+        let n_samples = all_features.len();
+        
+        // Compute mean
+        let mut mean = vec![0.0; n_features];
+        for features in all_features {
+            for (i, &val) in features.iter().enumerate() {
+                mean[i] += val;
+            }
+        }
+        for m in mean.iter_mut() {
+            *m /= n_samples as f64;
+        }
+        
+        // Compute std
+        let mut std = vec![0.0; n_features];
+        for features in all_features {
+            for (i, &val) in features.iter().enumerate() {
+                let diff = val - mean[i];
+                std[i] += diff * diff;
+            }
+        }
+        for s in std.iter_mut() {
+            *s = (*s / n_samples as f64).sqrt() + 1e-8;
+        }
+        
+        self.feature_mean = Some(mean);
+        self.feature_std = Some(std);
+    }
+
+    /// Normalize features using stored mean and std.
+    /// Returns the input unchanged if normalization stats are not available.
+    pub fn normalize_features(&self, features: &[f64]) -> Vec<f64> {
+        match (&self.feature_mean, &self.feature_std) {
+            (Some(mean), Some(std)) => {
+                features
+                    .iter()
+                    .zip(mean.iter().zip(std.iter()))
+                    .map(|(&f, (&m, &s))| (f - m) / s)
+                    .collect()
+            }
+            _ => features.to_vec(),
         }
     }
 

@@ -302,6 +302,28 @@ impl FeatureExtractor {
         eprintln!("[PYBIND] Returned {} windows", features.len());
         Ok(features)
     }
+
+    /// Compute normalization statistics from a collection of feature windows.
+    fn compute_normalization_stats(&mut self, all_features: Vec<Vec<f64>>) {
+        self.inner.compute_normalization_stats(&all_features);
+    }
+
+    /// Normalize features using stored mean and std.
+    fn normalize_features(&self, features: Vec<f64>) -> Vec<f64> {
+        self.inner.normalize_features(&features)
+    }
+
+    /// Get the feature mean (if computed).
+    #[getter]
+    fn feature_mean(&self) -> Option<Vec<f64>> {
+        self.inner.feature_mean.clone()
+    }
+
+    /// Get the feature std (if computed).
+    #[getter]
+    fn feature_std(&self) -> Option<Vec<f64>> {
+        self.inner.feature_std.clone()
+    }
 }
 
 /// Free function: compute a point on the Mandelbrot lobe in Python.
@@ -408,7 +430,6 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         let _ = complex_ty.setattr("im", 0.0);
         let _ = complex_ty.setattr("real", 0.0);
         let _ = complex_ty.setattr("imag", 0.0);
-        let _ = complex_ty.setattr("__repr__", "Complex");
     }
 
     m.add_class::<ResidualParams>()?;
@@ -501,6 +522,10 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     fe_methods.set_item("num_features_per_frame", "() -> int")?;
     fe_methods.set_item("extract_windowed_features", "(audio: Sequence[float], window_frames: int = 10) -> ndarray")?;
     fe_methods.set_item("test_simple", "() -> list[float]")?;
+    fe_methods.set_item("compute_normalization_stats", "(all_features: Sequence[Sequence[float]]) -> None")?;
+    fe_methods.set_item("normalize_features", "(features: Sequence[float]) -> list[float]")?;
+    let fe_attrs = PyList::new_bound(py, ["feature_mean", "feature_std"]);
+    fe.set_item("attributes", fe_attrs)?;
     fe.set_item("methods", fe_methods)?;
     d.set_item("FeatureExtractor", fe)?;
 

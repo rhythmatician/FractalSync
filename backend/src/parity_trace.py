@@ -32,8 +32,8 @@ from runtime_core import (
     DEFAULT_ORBIT_SEED,
     OrbitState,
     ResidualParams,
+    FeatureExtractor,
 )
-from .runtime_core_bridge import make_feature_extractor
 
 
 def dump_constants() -> Dict[str, Any]:
@@ -74,7 +74,11 @@ def extract_features_deterministic(
     audio, _ = librosa.load(audio_path, sr=SAMPLE_RATE, mono=True)
 
     # Create feature extractor
-    extractor = make_feature_extractor()
+    extractor = FeatureExtractor(
+        sr=SAMPLE_RATE,
+        hop_length=HOP_LENGTH,
+        n_fft=N_FFT,
+    )
 
     # Extract windowed features
     features = extractor.extract_windowed_features(

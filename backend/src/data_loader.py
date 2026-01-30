@@ -13,11 +13,9 @@ from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
+    FeatureExtractor,
 )
 
-from .runtime_core_bridge import (
-    make_feature_extractor,
-)
 import librosa
 
 
@@ -47,7 +45,11 @@ class AudioDataset:
         self.max_files = max_files
         self.cache_dir = Path(cache_dir) if cache_dir else None
 
-        self.feature_extractor = feature_extractor or make_feature_extractor()
+        self.feature_extractor = feature_extractor or FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
 
         # Supported audio formats
         self.supported_formats = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
