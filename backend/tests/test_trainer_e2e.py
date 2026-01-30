@@ -1,11 +1,15 @@
 import subprocess
 import pytest
 import re
+import os
+from pathlib import Path
 
 
 def test_trainer_e2e():
     command = "python train.py  --data-dir data/testing"
-    working_dir = "backend"
+    # Use the backend directory (calculated from this test file) so the test
+    # behaves the same regardless of where pytest is invoked from.
+    working_dir = str(Path(__file__).resolve().parent.parent)
 
     result = subprocess.run(
         command,
@@ -29,12 +33,17 @@ def test_trainer_e2e():
         if not line.startswith("[INFO] Model exported successfully to "):
             continue
 
+        # Match either the old logging format or the current print
         match = re.search(
             r"\[INFO\] Model exported successfully to (.+?) \(opset=\d+\)", line
-        )
+        ) or re.search(r"Model exported to: (.+)", line)
         if not match:
             continue
-        path = "backend/" + match.group(1)
+        path = match.group(1).strip()
+        # Make path absolute relative to the backend working dir so checks
+        # work whether pytest was invoked from repo root or the backend dir.
+        if not os.path.isabs(path):
+            path = os.path.join(working_dir, path)
         try:
             with open(path, "rb"):
                 pass
