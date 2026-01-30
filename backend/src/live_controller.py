@@ -777,7 +777,7 @@ class OrbitStateMachine:
         )
         c = self.orbit_state.step(self.dt, rp, band_gates=None)
 
-        return complex(c.re, c.im)
+        return c
 
     def get_debug_info(self) -> Dict[str, Union[float, int, str]]:
         """Get debug information for HUD."""

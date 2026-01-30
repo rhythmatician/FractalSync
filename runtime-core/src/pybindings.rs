@@ -7,6 +7,7 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
+use pyo3::types::PyComplex;
 
 use crate::controller::{
     OrbitState as RustOrbitState,
@@ -26,22 +27,6 @@ use crate::controller::{
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
-
-/// Helper struct to expose a complex number to Python as a tuple.
-#[pyclass]
-#[derive(Clone, Debug)]
-pub struct Complex {
-    #[pyo3(get)]
-    pub real: f64,
-    #[pyo3(get)]
-    pub imag: f64,
-}
-
-impl From<RustComplex> for Complex {
-    fn from(c: RustComplex) -> Self {
-        Self { real: c.real, imag: c.imag }
-    }
-}
 
 /// Python wrapper for `ResidualParams`.
 #[pyclass]
@@ -197,8 +182,9 @@ impl OrbitState {
 
     /// Return the current carrier point (no residuals).  This calls
     /// `lobe_point_at_angle` with the current theta and radial scale.
-    fn carrier(&self) -> Complex {
-        rust_lobe_point_at_angle(self.inner.lobe, self.inner.sub_lobe, self.inner.theta, self.inner.s).into()
+    fn carrier(&self, py: Python) -> PyResult<Py<PyComplex>> {
+        let c = rust_lobe_point_at_angle(self.inner.lobe, self.inner.sub_lobe, self.inner.theta, self.inner.s);
+        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
     }
 
     /// Get a copy of the residual phases.  This can be used by
@@ -216,9 +202,10 @@ impl OrbitState {
     /// provided as a list of floats with length `k_residuals`.  If
     /// omitted each residual is fully enabled.
     #[pyo3(signature = (residual_params, band_gates=None))]
-    fn synthesize(&self, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
+    fn synthesize(&self, py: Python, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
         let gates_ref = band_gates.as_deref();
-        rust_synthesize(&self.inner, residual_params.into(), gates_ref).into()
+        let c = rust_synthesize(&self.inner, residual_params.into(), gates_ref);
+        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
     }
 
     /// Expose core state attributes as read-only Python properties
@@ -255,8 +242,9 @@ impl OrbitState {
     /// Advance time by dt and return the next c(t).  The band gates
     /// are applied to each residual.
     #[pyo3(signature = (dt, residual_params, band_gates=None))]
-    fn step(&mut self, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> Complex {
-        rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref()).into()
+    fn step(&mut self, py: Python, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
+        let c = rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref());
+        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
     }
 }
 
@@ -329,8 +317,9 @@ impl FeatureExtractor {
 /// Free function: compute a point on the Mandelbrot lobe in Python.
 #[pyfunction]
 #[pyo3(signature = (lobe, sub_lobe, theta, s))]
-fn lobe_point_at_angle(lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> Complex {
-    rust_lobe_point_at_angle(lobe, sub_lobe, theta, s).into()
+fn lobe_point_at_angle(py: Python, lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> PyResult<Py<PyComplex>> {
+    let c = rust_lobe_point_at_angle(lobe, sub_lobe, theta, s);
+    Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
 }
 
 /// Runtime visual metrics computed in Rust.
@@ -417,21 +406,6 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
 
-    m.add_class::<Complex>()?;
-
-    // Ensure class-level attributes expected by the Python stubs are present
-    // as plain Python values (not descriptors). Some test harnesses inspect
-    // the class object directly for attributes like `re`/`im` and expect
-    // builtin Python types (float/str). We set them here to maintain
-    // compatibility with the stub tests.
-    if let Ok(complex_ty) = m.getattr("Complex") {
-        // Ignore failures; best-effort shim for test compatibility
-        let _ = complex_ty.setattr("re", 0.0);
-        let _ = complex_ty.setattr("im", 0.0);
-        let _ = complex_ty.setattr("real", 0.0);
-        let _ = complex_ty.setattr("imag", 0.0);
-    }
-
     m.add_class::<ResidualParams>()?;
 
     // Provide class-level defaults for ResidualParams members so the
@@ -483,12 +457,6 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
 
     let d = PyDict::new_bound(py);
 
-    // Complex
-    let complex = PyDict::new_bound(py);
-    complex.set_item("attributes", PyList::new_bound(py, ["real", "imag"]))?;
-    complex.set_item("methods", PyDict::new_bound(py))?;
-    d.set_item("Complex", complex)?;
-
     // ResidualParams
     let rp = PyDict::new_bound(py);
     rp.set_item("attributes", PyList::new_bound(py, ["k_residuals", "residual_cap", "radius_scale"]))?;
@@ -505,11 +473,11 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     os_methods.set_item("new_with_seed", "(lobe: int, sub_lobe: int, theta: float, omega: float, s: float, alpha: float, k_residuals: int, residual_omega_scale: float, seed: int) -> OrbitState")?;
     os_methods.set_item("new_default_seeded", "(seed: int) -> OrbitState")?;
     os_methods.set_item("advance", "(dt: float) -> None")?;
-    os_methods.set_item("carrier", "() -> Complex")?;
+    os_methods.set_item("carrier", "() -> complex")?;
     os_methods.set_item("residual_phases", "() -> list[float]")?;
     os_methods.set_item("residual_omegas", "() -> list[float]")?;
-    os_methods.set_item("synthesize", "(residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> Complex")?;
-    os_methods.set_item("step", "(dt: float, residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> Complex")?;
+    os_methods.set_item("synthesize", "(residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
+    os_methods.set_item("step", "(dt: float, residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
     os.set_item("methods", os_methods)?;
     d.set_item("OrbitState", os)?;
 
@@ -537,7 +505,7 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     // Top-level functions
     let funcs = PyDict::new_bound(py);
     funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c_real: float, c_imag: float, max_iter: int = 100) -> RuntimeVisualMetrics")?;
-    funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> Complex")?;
+    funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation
     let consts = PyDict::new_bound(py);

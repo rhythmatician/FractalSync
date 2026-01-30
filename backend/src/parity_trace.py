@@ -85,7 +85,7 @@ def extract_features_deterministic(
         audio.astype(np.float32), window_frames=WINDOW_FRAMES
     )
 
-    return cast(np.ndarray, features)
+    return features
 
 
 def generate_orbit_sequence_deterministic(
@@ -128,7 +128,7 @@ def generate_orbit_sequence_deterministic(
     )
     for i in range(n_samples):
         c = state.synthesize(rp, None)
-        c_sequence.append({"re": c.re, "im": c.im})
+        c_sequence.append({"re": c.real, "im": c.imag})
         # Advance state for next iteration
         rp = ResidualParams(
             k_residuals=DEFAULT_K_RESIDUALS,

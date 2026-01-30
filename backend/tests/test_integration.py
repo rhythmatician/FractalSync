@@ -19,7 +19,6 @@ from pathlib import Path
 from runtime_core import (
     ResidualParams,
     OrbitState,
-    Complex,
     DEFAULT_K_RESIDUALS,
     DEFAULT_RESIDUAL_CAP,
     SAMPLE_RATE,
@@ -115,7 +114,7 @@ def test_orbit_synthesis():
             state: OrbitState,
             residual_params: Optional[ResidualParams] = None,
             band_gates: Optional[Iterable[float]] = None,
-        ) -> Complex:
+        ) -> complex:
             rp = residual_params or ResidualParams(
                 k_residuals=DEFAULT_K_RESIDUALS,
                 residual_cap=DEFAULT_RESIDUAL_CAP,
