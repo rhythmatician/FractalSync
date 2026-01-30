@@ -268,18 +268,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd frontend
-          npm ci
+          npm ci  --prefix frontend
 
       - name: Build frontend
         run: |
-          cd frontend
-          npm run build
+          npm run build --prefix frontend
 
       - name: Run tests
         run: |
-          cd frontend
-          npm test
+          npm test  --prefix frontend
 
   builds:
     name: Build Artifacts
@@ -354,9 +351,8 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd frontend
-          npm ci
-          npm run build
+          npm ci  --prefix frontend
+          npm run build  --prefix frontend
 
       - name: Compile backend
         run: |
