@@ -24,12 +24,15 @@ def test_trainer_e2e():
     assert return_code == 0, f"Trainer script failed with return code {return_code}"
 
     result_stdout = result.stdout.splitlines()
-    assert not any(
-        line.startswith("[Error]") for line in result_stdout
-    ), "Trainer script output contains errors"
+    errors = []
+    for line in result_stdout:
+        if line.startswith("[ERROR]"):
+            errors.append(line)
+    assert not errors, f"Errors were found in trainer script output: {errors}"
 
     model_exported = False
     for line in result_stdout:
+        print(line)
         if not line.startswith("[INFO] Model exported successfully to "):
             continue
 

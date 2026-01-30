@@ -434,13 +434,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     }
     m.add_class::<FeatureExtractor>()?;
 
-    // Provide a class-level integer for `num_features_per_frame` to match
-    // the stub expectations (tests inspect the class object directly and
-    // expect an `int` value rather than a method descriptor).
-    if let Ok(fe_ty) = m.getattr("FeatureExtractor") {
-        let default_num = RustFeatureExtractor::new(48_000, 1024, 4096, false, false).num_features_per_frame() as usize;
-        let _ = fe_ty.setattr("num_features_per_frame", default_num);
-    }
+
 
     m.add_class::<RuntimeVisualMetrics>()?;
 

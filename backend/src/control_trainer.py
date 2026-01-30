@@ -7,7 +7,7 @@ Trains model to predict control signals that drive deterministic orbit synthesis
 import json
 import os
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -29,6 +29,8 @@ from .runtime_core_bridge import (
     synthesize,
 )
 import runtime_core as rc
+from .runtime_core_bridge import FeatureExtractorBridge
+from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +73,13 @@ class ControlTrainer:
         self,
         model: AudioToControlModel,
         visual_metrics: LossVisualMetrics,
-        feature_extractor: Optional[object] = None,
-        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        feature_extractor: Optional[FeatureExtractorBridge] = None,
+        device: str = "cpu",
         learning_rate: float = 1e-4,
         use_curriculum: bool = True,
         curriculum_weight: float = 1.0,
         correlation_weights: Optional[Dict[str, float]] = None,
-        julia_renderer: Optional[Any] = None,
+        julia_renderer: Optional[GPUJuliaRenderer] = None,
         julia_resolution: int = 128,
         julia_max_iter: int = 100,
         num_workers: int = 0,
@@ -102,10 +104,9 @@ class ControlTrainer:
             k_residuals: Number of residual circles
         """
         self.model: AudioToControlModel = model.to(device)
-        from typing import Any
 
         # Feature extractor is guaranteed to be present after initialization
-        self.feature_extractor: Any = feature_extractor or make_feature_extractor()
+        self.feature_extractor = feature_extractor or make_feature_extractor()
         self.visual_metrics = visual_metrics
         self.device = device
         self.use_curriculum = use_curriculum
@@ -124,9 +125,6 @@ class ControlTrainer:
             "control_loss": 1.0,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
-
-        # Runtime-core feature extractor (shared constants)
-        self.feature_extractor = feature_extractor or make_feature_extractor()
 
         # Loss functions
         self.correlation_loss = CorrelationLoss()

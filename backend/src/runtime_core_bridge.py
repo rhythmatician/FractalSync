@@ -12,70 +12,22 @@ from typing import Iterable, Optional, Sequence
 import logging
 import numpy as np
 
-import runtime_core as rc
+from runtime_core import (
+    Complex,
+    FeatureExtractor,
+    ResidualParams,
+    OrbitState,
+    SAMPLE_RATE,
+    HOP_LENGTH,
+    N_FFT,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_RESIDUAL_CAP,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_ORBIT_SEED,
+)
 
 logger = logging.getLogger(__name__)
-
-SAMPLE_RATE: int = rc.SAMPLE_RATE
-HOP_LENGTH: int = rc.HOP_LENGTH
-N_FFT: int = rc.N_FFT
-WINDOW_FRAMES: int = rc.WINDOW_FRAMES
-DEFAULT_K_RESIDUALS: int = rc.DEFAULT_K_RESIDUALS
-DEFAULT_RESIDUAL_CAP: float = rc.DEFAULT_RESIDUAL_CAP
-DEFAULT_RESIDUAL_OMEGA_SCALE: float = rc.DEFAULT_RESIDUAL_OMEGA_SCALE
-DEFAULT_BASE_OMEGA: float = rc.DEFAULT_BASE_OMEGA
-DEFAULT_ORBIT_SEED: int = rc.DEFAULT_ORBIT_SEED
-
-
-def _rust_extractor_sanity_check(
-    include_delta: bool, include_delta_delta: bool, timeout: float = 2.0
-) -> bool:
-    """Attempt to construct and exercise the Rust FeatureExtractor in a subprocess.
-
-    Using `subprocess` avoids Windows handle duplication / spawn issues (e.g.
-    ``OSError: [WinError 6] The handle is invalid``) and bypasses pickling
-    limitations that arise when passing local functions or complex objects to
-    `multiprocessing.Process`.
-
-    Returns True if the child process completes successfully within `timeout`.
-    """
-    import sys
-    import subprocess
-
-    # Small, self-contained python snippet executed in a fresh process.
-    code = (
-        "import runtime_core as rc, sys\n"
-        f"fe = rc.FeatureExtractor(sr={SAMPLE_RATE}, hop_length={HOP_LENGTH}, n_fft={N_FFT}, include_delta={include_delta}, include_delta_delta={include_delta_delta})\n"
-        f"samples = [0.0]*{max(16, HOP_LENGTH)}\n"
-        f"res = fe.extract_windowed_features(samples, {WINDOW_FRAMES})\n"
-        "# If we reach here the Rust extractor executed successfully\n"
-        "print('RUST_SANITY_OK')\n"
-    )
-
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if proc.returncode == 0 and "RUST_SANITY_OK" in proc.stdout:
-            return True
-        logger.warning(
-            "Rust extractor sanity subprocess failed: rc=%s stdout=%r stderr=%r",
-            proc.returncode,
-            proc.stdout,
-            proc.stderr,
-        )
-        return False
-    except subprocess.TimeoutExpired:
-        logger.warning(
-            "Rust extractor sanity subprocess timed out after %s seconds", timeout
-        )
-        return False
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Unexpected error while probing Rust extractor: %s", exc)
-        return False
 
 
 class FeatureExtractorBridge:
@@ -91,7 +43,7 @@ class FeatureExtractorBridge:
 
     def __init__(
         self,
-        rust_extractor: Optional[rc.FeatureExtractor],
+        rust_extractor: FeatureExtractor,
     ) -> None:
         self._rust = rust_extractor
         self.feature_mean = None
@@ -99,24 +51,12 @@ class FeatureExtractorBridge:
 
     # Basic shape/info
     def num_features_per_frame(self) -> int:
-        if self._rust is not None:
-            return int(self._rust.num_features_per_frame())
-        raise RuntimeError("num_features_per_frame: Rust extractor not available")
+        return int(self._rust.num_features_per_frame())
 
     # Extraction: uses Rust extractor; raises RuntimeError if unavailable or fails
     def extract_windowed_features(self, audio, window_frames: int):
-        # Accept numpy arrays or Python sequences
-        if self._rust is not None:
-            try:
-                # Rust binding expects a sequence of floats; list() is safe for numpy arrays
-                result = self._rust.extract_windowed_features(
-                    list(audio), window_frames
-                )
-                # Rust returns a list-of-lists (Vec<Vec<f64>>); convert to numpy array
-                return np.array(result, dtype=np.float64)
-            except Exception:
-                raise RuntimeError("extract_windowed_features: Rust extractor failed")
-        raise RuntimeError("extract_windowed_features: Rust extractor not available")
+        result = self._rust.extract_windowed_features(list(audio), window_frames)
+        return np.array(result, dtype=np.float64)
 
     # Normalization helpers
     def compute_normalization_stats(self, all_features: list):
@@ -139,37 +79,25 @@ def make_feature_extractor(
     include_delta: bool = False,
     include_delta_delta: bool = False,
 ) -> FeatureExtractorBridge:
-    """Create a FeatureExtractor configured with the shared defaults.
+    """Create a FeatureExtractor configured with the shared defaults."""
 
-    Ensure the native Rust `runtime_core.FeatureExtractor` works for extraction
-
-    A short, timed sanity check is run to avoid calling the Rust extractor from
-    the main process if it is known to hang (see earlier TODO in this file).
-    """
-
-    if _rust_extractor_sanity_check(include_delta, include_delta_delta):
-        logger.info("Using Rust FeatureExtractor for extraction (sanity check passed)")
-        rust_fx = rc.FeatureExtractor(
-            sr=SAMPLE_RATE,
-            hop_length=HOP_LENGTH,
-            n_fft=N_FFT,
-            include_delta=include_delta,
-            include_delta_delta=include_delta_delta,
-        )
-        return FeatureExtractorBridge(rust_fx)
-    else:
-        logger.error(
-            "Falling back to Python FeatureExtractor for extraction (sanity check failed)"
-        )
-        raise RuntimeError("make_feature_extractor: Rust extractor unavailable")
+    logger.info("Using Rust FeatureExtractor for extraction)")
+    rust_fx = FeatureExtractor(
+        sr=SAMPLE_RATE,
+        hop_length=HOP_LENGTH,
+        n_fft=N_FFT,
+        include_delta=include_delta,
+        include_delta_delta=include_delta_delta,
+    )
+    return FeatureExtractorBridge(rust_fx)
 
 
 def make_residual_params(
     k_residuals: int = DEFAULT_K_RESIDUALS,
     residual_cap: float = DEFAULT_RESIDUAL_CAP,
     radius_scale: float = 1.0,
-) -> rc.ResidualParams:
-    return rc.ResidualParams(
+) -> ResidualParams:
+    return ResidualParams(
         k_residuals=k_residuals,
         residual_cap=residual_cap,
         radius_scale=radius_scale,
@@ -187,7 +115,7 @@ def make_orbit_state(
     k_residuals: int = DEFAULT_K_RESIDUALS,
     residual_omega_scale: float = DEFAULT_RESIDUAL_OMEGA_SCALE,
     seed: Optional[int] = DEFAULT_ORBIT_SEED,
-) -> rc.OrbitState:
+) -> OrbitState:
     """Construct a deterministic orbit state using the Rust implementation.
 
     Use positional arguments to avoid relying on a keyword name that may not
@@ -195,7 +123,7 @@ def make_orbit_state(
     Rust constructor that accepts a seed will be used.
     """
     if seed is None:
-        return rc.OrbitState(
+        return OrbitState(
             lobe,
             sub_lobe,
             theta,
@@ -206,8 +134,8 @@ def make_orbit_state(
             residual_omega_scale,
         )
     # Prefer explicit constructor that accepts a seed when available
-    if hasattr(rc.OrbitState, "new_with_seed"):
-        return rc.OrbitState.new_with_seed(
+    if hasattr(OrbitState, "new_with_seed"):
+        return OrbitState.new_with_seed(
             lobe,
             sub_lobe,
             theta,
@@ -219,16 +147,16 @@ def make_orbit_state(
             seed,
         )
     raise RuntimeError(
-        "make_orbit_state: seed provided but rc.OrbitState.new_with_seed() not available"
+        "make_orbit_state: seed provided but OrbitState.new_with_seed() not available"
     )
 
 
 def step_orbit(
-    state: rc.OrbitState,
+    state: OrbitState,
     dt: float,
-    residual_params: Optional[rc.ResidualParams] = None,
+    residual_params: Optional[ResidualParams] = None,
     band_gates: Optional[Sequence[float]] = None,
-) -> rc.Complex:
+) -> Complex:
     rp = residual_params or make_residual_params()
     return state.step(
         dt, rp, band_gates=list(band_gates) if band_gates is not None else None
@@ -236,9 +164,9 @@ def step_orbit(
 
 
 def synthesize(
-    state: rc.OrbitState,
-    residual_params: Optional[rc.ResidualParams] = None,
+    state: OrbitState,
+    residual_params: Optional[ResidualParams] = None,
     band_gates: Optional[Iterable[float]] = None,
-) -> rc.Complex:
+) -> Complex:
     rp = residual_params or make_residual_params()
     return state.synthesize(rp, list(band_gates) if band_gates is not None else None)
