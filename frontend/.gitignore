@@ -21,3 +21,6 @@ public/wasm/*.wasm
 public/wasm/*.js
 public/wasm/*.ts
 public/wasm/.gitignore
+
+# Test results
+test-results/*
