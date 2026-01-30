@@ -13,7 +13,6 @@ import logging
 import numpy as np
 
 import runtime_core as rc
-from .python_feature_extractor import PythonFeatureExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -93,23 +92,18 @@ class FeatureExtractorBridge:
     def __init__(
         self,
         rust_extractor: Optional[rc.FeatureExtractor],
-        python_extractor: PythonFeatureExtractor,
     ) -> None:
         self._rust = rust_extractor
-        self._py = python_extractor
+        self.feature_mean = None
+        self.feature_std = None
 
     # Basic shape/info
     def num_features_per_frame(self) -> int:
         if self._rust is not None:
-            try:
-                return int(self._rust.num_features_per_frame())
-            except Exception:
-                logger.exception(
-                    "Rust num_features_per_frame() failed; falling back to Python"
-                )
-        return self._py.num_features_per_frame()
+            return int(self._rust.num_features_per_frame())
+        raise RuntimeError("num_features_per_frame: Rust extractor not available")
 
-    # Extraction: prefer Rust but fall back to Python on any failure
+    # Extraction: uses Rust extractor; raises RuntimeError if unavailable or fails
     def extract_windowed_features(self, audio, window_frames: int):
         # Accept numpy arrays or Python sequences
         if self._rust is not None:
@@ -121,28 +115,24 @@ class FeatureExtractorBridge:
                 # Rust returns a list-of-lists (Vec<Vec<f64>>); convert to numpy array
                 return np.array(result, dtype=np.float64)
             except Exception:
-                logger.exception(
-                    "Rust extractor failed during extract; falling back to Python"
-                )
-        # Ensure numpy float32 input for Python extractor
-        audio_arr = np.asarray(audio, dtype=np.float32)
-        return self._py.extract_windowed_features(audio_arr, window_frames)
+                raise RuntimeError("extract_windowed_features: Rust extractor failed")
+        raise RuntimeError("extract_windowed_features: Rust extractor not available")
 
-    # Normalization helpers delegated to Python extractor
+    # Normalization helpers
     def compute_normalization_stats(self, all_features: list):
-        return self._py.compute_normalization_stats(all_features)
+        """Compute mean and std for normalization across dataset."""
+        if not all_features:
+            return
+
+        concatenated = np.concatenate(all_features, axis=0)
+        self.feature_mean = np.mean(concatenated, axis=0)
+        self.feature_std = np.std(concatenated, axis=0) + 1e-8
 
     def normalize_features(self, features):
-        return self._py.normalize_features(features)
-
-    # Expose attributes for convenience
-    @property
-    def feature_mean(self):
-        return self._py.feature_mean
-
-    @property
-    def feature_std(self):
-        return self._py.feature_std
+        """Normalize features using computed stats."""
+        if self.feature_mean is None or self.feature_std is None:
+            return features
+        return (features - self.feature_mean) / self.feature_std
 
 
 def make_feature_extractor(
@@ -151,19 +141,11 @@ def make_feature_extractor(
 ) -> FeatureExtractorBridge:
     """Create a FeatureExtractor configured with the shared defaults.
 
-    Prefer the native Rust `runtime_core.FeatureExtractor` for extraction when
-    it is operating correctly; otherwise use the pure-Python `PythonFeatureExtractor`.
+    Ensure the native Rust `runtime_core.FeatureExtractor` works for extraction
 
     A short, timed sanity check is run to avoid calling the Rust extractor from
     the main process if it is known to hang (see earlier TODO in this file).
     """
-    py_fx = PythonFeatureExtractor(
-        sr=SAMPLE_RATE,
-        hop_length=HOP_LENGTH,
-        n_fft=N_FFT,
-        include_delta=include_delta,
-        include_delta_delta=include_delta_delta,
-    )
 
     if _rust_extractor_sanity_check(include_delta, include_delta_delta):
         logger.info("Using Rust FeatureExtractor for extraction (sanity check passed)")
@@ -174,7 +156,7 @@ def make_feature_extractor(
             include_delta=include_delta,
             include_delta_delta=include_delta_delta,
         )
-        return FeatureExtractorBridge(rust_fx, py_fx)
+        return FeatureExtractorBridge(rust_fx)
     else:
         logger.error(
             "Falling back to Python FeatureExtractor for extraction (sanity check failed)"
