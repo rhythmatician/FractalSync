@@ -165,13 +165,22 @@ jobs:
           git rev-parse HEAD > target/.last_built_commit
           echo "Wrote marker to runtime-core/target/.last_built_commit"
 
+      - name: Prepare runtime-core-wheels artifact
+        run: |
+          mkdir -p runtime-core-wheels
+          cp runtime-core/dist/*.whl runtime-core/target/wheels/*.whl runtime-core-wheels/ 2>/dev/null || true
+          ls -la runtime-core-wheels || true
+          if [ -z "$(ls runtime-core-wheels/*.whl 2>/dev/null)" ]; then
+            echo "No wheel found for upload; failing build"
+            ls -la runtime-core || true
+            exit 1
+          fi
+
       - name: Upload runtime-core wheels
         uses: actions/upload-artifact@v4
         with:
           name: runtime-core-wheels
-          path: |
-            runtime-core/dist/*.whl
-            runtime-core/target/wheels/*.whl
+          path: runtime-core-wheels/*.whl
 
   runtime-core-tests:
     name: Runtime-Core Tests (Rust)
