@@ -319,6 +319,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except FileNotFoundError as e:
+        print(f"\n[ERROR] {e}")
     except Exception as e:
         traceback.print_exc()
         print(f"\n[ERROR] Training failed: {e}")

@@ -57,7 +57,7 @@ class AudioDataset:
         self.audio_files: List[Path] = self._find_audio_files()
 
         if len(self.audio_files) == 0:
-            raise ValueError(f"No audio files found in {data_dir}")
+            raise FileNotFoundError(f"No audio files found in {data_dir}")
 
     def _find_audio_files(self) -> List[Path]:
         """Find all audio files in data directory (non-recursive)."""
