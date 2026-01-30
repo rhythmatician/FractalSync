@@ -315,12 +315,23 @@ jobs:
         run: |
           cd runtime-core
           . ../.venv/bin/activate
-          maturin build --release
+          # Explicitly output wheels to dist for consistency with other jobs
+          maturin build --release --out dist
+          ls -la dist || ls -la target/wheels || true
 
       - name: Install runtime-core wheel
         run: |
           . .venv/bin/activate
-          pip install --find-links runtime-core/target/wheels/ runtime_core
+          echo "Looking for built wheels in runtime-core/dist and runtime-core/target/wheels"
+          find runtime-core/dist runtime-core/target/wheels -type f -name "*.whl" -print -quit > /tmp/wheelpath || true
+          WHEEL=$(cat /tmp/wheelpath || true)
+          if [ -z "$WHEEL" ]; then
+            echo "No wheel found; listing runtime-core contents for debug:"
+            ls -la runtime-core || true
+            exit 1
+          fi
+          echo "Installing wheel: $WHEEL"
+          pip install "$WHEEL" || (python -m pip debug --verbose || true; exit 1)
 
       - name: Install backend dependencies
         run: |
