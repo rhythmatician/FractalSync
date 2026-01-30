@@ -63,16 +63,24 @@ jobs:
 
       - name: List downloaded runtime-core wheels
         run: |
+          echo "Runtime & pip info:"
+          python -V || true
+          python -m pip --version || true
           ls -la runtime-core-wheels || true
-          if [ -z "$(ls runtime-core-wheels/*.whl 2>/dev/null)" ]; then
+          if ! find runtime-core-wheels -type f -name "*.whl" -print -quit | grep -q .; then
             echo "No wheel artifact downloaded; failing job."
             exit 1
           fi
+          echo "Found wheel(s):"
+          find runtime-core-wheels -type f -name "*.whl" -print -exec ls -l {} \;
 
       - name: Install runtime-core wheel (artifact)
         run: |
           python -m pip install --upgrade pip
-          pip install runtime-core-wheels/*.whl
+          echo "Installing runtime-core wheel from runtime-core-wheels/"
+          ls -la runtime-core-wheels/*.whl || true
+          set -o pipefail
+          pip install runtime-core-wheels/*.whl || (python -m pip debug --verbose || true; exit 1)
 
       # Removed wasm-orbit and frontend builds to speed up backend test job.
       # Building those artifacts is handled in separate jobs (`frontend-tests`).
@@ -140,11 +148,12 @@ jobs:
       - name: List built wheels
         run: |
           ls -la runtime-core/dist || true
+          ls -la runtime-core/target/wheels || true
 
       - name: Verify wheels exist
         run: |
-          if [ -z "$(ls runtime-core/dist/*.whl 2>/dev/null)" ]; then
-            echo "No wheels found in runtime-core/dist; failing build"
+          if [ -z "$(ls runtime-core/dist/*.whl 2>/dev/null)$(ls runtime-core/target/wheels/*.whl 2>/dev/null)" ]; then
+            echo "No wheels found in runtime-core/dist or runtime-core/target/wheels; failing build"
             ls -la runtime-core || true
             exit 1
           fi
@@ -156,11 +165,22 @@ jobs:
           git rev-parse HEAD > target/.last_built_commit
           echo "Wrote marker to runtime-core/target/.last_built_commit"
 
+      - name: Prepare runtime-core-wheels artifact
+        run: |
+          mkdir -p runtime-core-wheels
+          cp runtime-core/dist/*.whl runtime-core/target/wheels/*.whl runtime-core-wheels/ 2>/dev/null || true
+          ls -la runtime-core-wheels || true
+          if [ -z "$(ls runtime-core-wheels/*.whl 2>/dev/null)" ]; then
+            echo "No wheel found for upload; failing build"
+            ls -la runtime-core || true
+            exit 1
+          fi
+
       - name: Upload runtime-core wheels
         uses: actions/upload-artifact@v4
         with:
           name: runtime-core-wheels
-          path: runtime-core/dist/*.whl
+          path: runtime-core-wheels/*.whl
 
   runtime-core-tests:
     name: Runtime-Core Tests (Rust)
@@ -248,18 +268,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd frontend
-          npm ci
+          npm ci  --prefix frontend
 
       - name: Build frontend
         run: |
-          cd frontend
-          npm run build
+          npm run build --prefix frontend
 
       - name: Run tests
         run: |
-          cd frontend
-          npm test
+          npm test  --prefix frontend
 
   builds:
     name: Build Artifacts
@@ -304,12 +321,23 @@ jobs:
         run: |
           cd runtime-core
           . ../.venv/bin/activate
-          maturin build --release
+          # Explicitly output wheels to dist for consistency with other jobs
+          maturin build --release --out dist
+          ls -la dist || ls -la target/wheels || true
 
       - name: Install runtime-core wheel
         run: |
           . .venv/bin/activate
-          pip install --find-links runtime-core/target/wheels/ runtime_core
+          echo "Looking for built wheels in runtime-core/dist and runtime-core/target/wheels"
+          find runtime-core/dist runtime-core/target/wheels -type f -name "*.whl" -print -quit > /tmp/wheelpath || true
+          WHEEL=$(cat /tmp/wheelpath || true)
+          if [ -z "$WHEEL" ]; then
+            echo "No wheel found; listing runtime-core contents for debug:"
+            ls -la runtime-core || true
+            exit 1
+          fi
+          echo "Installing wheel: $WHEEL"
+          pip install "$WHEEL" || (python -m pip debug --verbose || true; exit 1)
 
       - name: Install backend dependencies
         run: |
@@ -323,9 +351,8 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd frontend
-          npm ci
-          npm run build
+          npm ci  --prefix frontend
+          npm run build  --prefix frontend
 
       - name: Compile backend
         run: |
