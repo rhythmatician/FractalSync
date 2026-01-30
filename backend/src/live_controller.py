@@ -10,7 +10,7 @@ Implements the new architecture with:
 
 import numpy as np
 import librosa
-from typing import Tuple, Dict, List, Optional, Union
+from typing import Tuple, Dict, List, Optional, Union, cast
 from dataclasses import dataclass
 from collections import deque
 
@@ -464,7 +464,7 @@ class NoveltyBoundaryDetector:
         )
         # L2 normalize
         norm = np.linalg.norm(vec)
-        return vec / (norm + 1e-8)
+        return cast(np.ndarray, vec / (norm + 1e-8))
 
     def _compute_baseline(self) -> Optional[np.ndarray]:
         """Compute baseline feature vector from history."""
@@ -474,7 +474,7 @@ class NoveltyBoundaryDetector:
         # Average over history
         vectors = [self._feature_to_vector(f) for f in self.feature_history]
         baseline = np.mean(vectors, axis=0)
-        return baseline
+        return cast(np.ndarray, baseline)
 
     def _compute_novelty(self, features: SlowFeatures) -> float:
         """Compute novelty score for current features."""
@@ -700,23 +700,23 @@ class OrbitStateMachine:
         N = self.control_noisiness
 
         # Mix based on state
+        s_loud = float(self.s_loud)
+        s_quiet_noisy = float(self.s_quiet_noisy)
+        s_quiet_tonal = float(self.s_quiet_tonal)
+
         if L > 0.6:
             # Loud: near boundary
-            return self.s_loud
+            return s_loud
         elif N > 0.6:
             # Quiet + noisy: push outward
-            return self.s_quiet_noisy
+            return s_quiet_noisy
         elif T > 0.6:
             # Quiet + tonal: pull inward
-            return self.s_quiet_tonal
+            return s_quiet_tonal
         else:
             # Mixed state: interpolate
-            quiet_target = (
-                T * self.s_quiet_tonal
-                + N * self.s_quiet_noisy
-                + (1 - T - N) * self.s_loud
-            )
-            return L * self.s_loud + (1 - L) * quiet_target
+            quiet_target = T * s_quiet_tonal + N * s_quiet_noisy + (1 - T - N) * s_loud
+            return float(L * s_loud + (1 - L) * quiet_target)
 
     def _smooth_s(self, s_current: float, s_target: float, dt: float) -> float:
         """Apply exponential smoothing to s."""
@@ -859,8 +859,8 @@ class LiveController:
                 self.impact_envelope.trigger(timestamp)
                 # Log event
                 s_overshoot = self.impact_envelope.s_impulse_hi
-                event = ImpactEvent(timestamp, impact_score, s_overshoot)
-                self.impact_events.append(event)
+                impact_event = ImpactEvent(timestamp, impact_score, s_overshoot)
+                self.impact_events.append(impact_event)
 
             self.last_fast_update = timestamp
 
@@ -892,7 +892,7 @@ class LiveController:
                 prev_dwell = timestamp - (
                     self.boundary_events[-1].timestamp if self.boundary_events else 0.0
                 )
-                event = BoundaryEvent(
+                boundary_event = BoundaryEvent(
                     timestamp,
                     novelty,
                     slow_features.loudness,
@@ -900,7 +900,7 @@ class LiveController:
                     new_sub_lobe,
                     prev_dwell,
                 )
-                self.boundary_events.append(event)
+                self.boundary_events.append(boundary_event)
 
             self.last_control_update = timestamp
 

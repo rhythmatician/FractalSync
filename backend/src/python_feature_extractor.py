@@ -8,6 +8,7 @@ It provides the same interface and output format.
 import numpy as np
 import librosa
 from numpy.typing import NDArray
+from typing import cast
 
 
 class PythonFeatureExtractor:
@@ -55,7 +56,10 @@ class PythonFeatureExtractor:
         n_features, n_frames = features.shape
 
         if n_frames == 0:
-            return np.empty((0, n_features * window_frames), dtype=np.float64)
+            return cast(
+                NDArray[np.float64],
+                np.empty((0, n_features * window_frames), dtype=np.float64),
+            )
 
         # Handle short audio by padding
         if n_frames < window_frames:
@@ -74,7 +78,7 @@ class PythonFeatureExtractor:
             flattened = window.T.flatten()
             windows.append(flattened)
 
-        return np.array(windows, dtype=np.float64)
+        return cast(NDArray[np.float64], np.array(windows, dtype=np.float64))
 
     def _extract_features(self, audio: NDArray[np.float32]) -> NDArray[np.float64]:
         """Extract base features from audio.
@@ -178,11 +182,11 @@ class PythonFeatureExtractor:
     def _normalize(vec: NDArray[np.float64]) -> NDArray[np.float64]:
         """Normalize vector to [0, 1] range."""
         if len(vec) == 0:
-            return vec
+            return cast(NDArray[np.float64], vec)
         vmin, vmax = vec.min(), vec.max()
         if vmax > vmin:
-            return (vec - vmin) / (vmax - vmin)
-        return vec
+            return cast(NDArray[np.float64], (vec - vmin) / (vmax - vmin))
+        return cast(NDArray[np.float64], vec)
 
     @staticmethod
     def _delta(series: NDArray[np.float64]) -> NDArray[np.float64]:

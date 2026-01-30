@@ -12,3 +12,4 @@ license = {text = "MIT"}
 
 [tool.maturin]
 features = ["python"]
+include = ["py.typed", "runtime_core.pyi"]

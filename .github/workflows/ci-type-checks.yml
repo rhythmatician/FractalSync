@@ -1,0 +1,82 @@
+name: Type checks (Python mypy + wasm d.ts verification)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  mypy-check:
+    name: Mypy (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Set up venv
+        run: |
+          python -m venv .venv
+
+      - name: Install backend deps in venv
+        run: |
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install -r backend/requirements-dev.txt
+
+      - name: Build runtime_core wheel (so .pyi is available)
+        run: |
+          source .venv/bin/activate
+          python -m pip install --upgrade pip maturin
+          pushd runtime-core
+          maturin develop --release
+          popd
+
+      - name: Install type stubs
+        run: |
+          source .venv/bin/activate
+          python -m pip install types-tqdm
+          python -m mypy --install-types --non-interactive
+
+      - name: Run mypy
+        run: |
+          source .venv/bin/activate
+          python -m mypy backend/src --show-error-codes
+
+  verify-wasm-dts:
+    name: Verify wasm d.ts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          cargo --version
+
+      - name: Install wasm-pack
+        run: |
+          cargo install wasm-pack --locked
+
+      - name: Build wasm pkg
+        run: |
+          pushd wasm-orbit
+          wasm-pack build --target web
+          popd
+
+      - name: Check for d.ts changes
+        run: |
+          git --no-pager status --porcelain wasm-orbit/pkg || true
+          if [ -n "$(git --no-pager status --porcelain wasm-orbit/pkg)" ]; then
+            echo "Generated wasm TypeScript declarations differ from committed ones.";
+            git --no-pager diff --patch -- wasm-orbit/pkg || true
+            exit 1
+          fi

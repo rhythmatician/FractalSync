@@ -7,7 +7,12 @@ significant audio events (hits, transitions) for synchronization.
 
 import numpy as np
 import librosa
-from typing import Tuple, List, Dict, Union
+from typing import Tuple, List, Dict, Union, cast, Any
+
+
+# Casting helper for numpy-returning third-party functions
+def _cast_ndarray(x: Any) -> np.ndarray:  # pragma: no cover
+    return cast(np.ndarray, x)
 
 
 class SongAnalyzer:
@@ -124,7 +129,7 @@ class SongAnalyzer:
         max_tempo_idx = np.argmax(tempogram, axis=0)
 
         # Map indices to actual tempo values
-        local_tempo = tempo_bins[max_tempo_idx]
+        local_tempo = _cast_ndarray(tempo_bins[max_tempo_idx])
 
         return local_tempo
 
@@ -165,7 +170,7 @@ class SongAnalyzer:
         n_frames = features.shape[1]
         k = max(2, min(10, n_frames // 100))  # Roughly one segment per 100 frames
 
-        boundaries = librosa.segment.agglomerative(features, k=k)
+        boundaries = _cast_ndarray(librosa.segment.agglomerative(features, k=k))
 
         return boundaries
 
@@ -251,7 +256,10 @@ class SongAnalyzer:
         Returns:
             Time in seconds (scalar or array)
         """
-        return librosa.frames_to_time(frames, sr=self.sr, hop_length=self.hop_length)
+        return cast(
+            Union[np.ndarray, float],
+            librosa.frames_to_time(frames, sr=self.sr, hop_length=self.hop_length),
+        )
 
     def time_to_frames(
         self, time_sec: Union[float, np.ndarray]
@@ -265,7 +273,10 @@ class SongAnalyzer:
         Returns:
             Frame index (integer or array)
         """
-        return librosa.time_to_frames(time_sec, sr=self.sr, hop_length=self.hop_length)
+        return cast(
+            Union[int, np.ndarray],
+            librosa.time_to_frames(time_sec, sr=self.sr, hop_length=self.hop_length),
+        )
 
 
 def analyze_audio_file(

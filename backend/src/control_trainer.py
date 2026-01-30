@@ -102,7 +102,10 @@ class ControlTrainer:
             k_residuals: Number of residual circles
         """
         self.model: AudioToControlModel = model.to(device)
-        self.feature_extractor = feature_extractor
+        from typing import Any
+
+        # Feature extractor is guaranteed to be present after initialization
+        self.feature_extractor: Any = feature_extractor or make_feature_extractor()
         self.visual_metrics = visual_metrics
         self.device = device
         self.use_curriculum = use_curriculum
