@@ -20,7 +20,7 @@ from typing import Dict, Any, cast
 
 import numpy as np
 
-from .runtime_core_bridge import (
+from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
@@ -30,6 +30,9 @@ from .runtime_core_bridge import (
     DEFAULT_RESIDUAL_OMEGA_SCALE,
     DEFAULT_BASE_OMEGA,
     DEFAULT_ORBIT_SEED,
+)
+
+from .runtime_core_bridge import (
     make_feature_extractor,
     make_orbit_state,
     synthesize,
