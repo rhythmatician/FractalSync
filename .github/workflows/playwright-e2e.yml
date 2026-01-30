@@ -1,0 +1,70 @@
+name: Playwright E2E
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+
+jobs:
+    e2e:
+        name: Playwright E2E
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Install frontend dependencies
+              working-directory: frontend
+              run: npm ci
+
+            - name: Build frontend
+              working-directory: frontend
+              run: npm run build
+
+            - name: Start static server
+              working-directory: frontend
+              run: npx http-server ./dist -p 3000 &
+
+            - name: Wait for server
+              run: npx wait-on http://localhost:3000 --timeout 60000
+
+            - name: Dump system info
+              run: |
+                  node -v
+                  npm -v
+                  uname -a || true
+
+            - name: Install Playwright browsers
+              working-directory: frontend
+              run: |
+                  npx playwright --version
+                  npx playwright install --with-deps
+
+            - name: List frontend build dir
+              run: |
+                  ls -la frontend || true
+                  ls -la frontend/dist || true
+
+            - name: Run Playwright E2E tests
+              working-directory: frontend
+              env:
+                  CI: true
+              run: |
+                  set -o pipefail
+                  npm run test:e2e -- --config=playwright.config.ts --reporter=list --workers=1 | tee playwright-test-output.txt
+
+            - name: Upload Playwright test artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-test-results
+                  path: |
+                      frontend/test-results/**
+                      frontend/playwright-report/**
+                      frontend/playwright-test-output.txt
