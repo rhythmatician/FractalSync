@@ -13,10 +13,12 @@ import librosa
 from typing import Tuple, Dict, List, Optional, Union, cast
 from dataclasses import dataclass
 from collections import deque
-
-from .runtime_core_bridge import (
-    make_orbit_state,
-    step_orbit,
+from runtime_core import (
+    OrbitState,
+    ResidualParams,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_RESIDUAL_CAP,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
 )
 
 
@@ -652,7 +654,7 @@ class OrbitStateMachine:
         self.s_smoothing_tau = s_smoothing_tau
 
         # Initialize orbit state using runtime_core
-        self.orbit_state = make_orbit_state(
+        self.orbit_state = OrbitState.new_with_seed(
             lobe=1,
             sub_lobe=0,
             theta=0.0,
@@ -660,6 +662,7 @@ class OrbitStateMachine:
             s=1.02,
             alpha=0.3,
             k_residuals=residual_k,
+            residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
             seed=42,
         )
 
@@ -767,7 +770,12 @@ class OrbitStateMachine:
         self.orbit_state.alpha = residual_alpha
 
         # Advance state and synthesize
-        c = step_orbit(self.orbit_state, self.dt)
+        rp = ResidualParams(
+            k_residuals=DEFAULT_K_RESIDUALS,
+            residual_cap=DEFAULT_RESIDUAL_CAP,
+            radius_scale=1.0,
+        )
+        c = self.orbit_state.step(self.dt, rp, band_gates=None)
 
         return complex(c.re, c.im)
 

@@ -9,11 +9,13 @@ from typing import List, Optional, Tuple, cast
 import logging
 
 import numpy as np
-
-from .runtime_core_bridge import (
+from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
+)
+
+from .runtime_core_bridge import (
     make_feature_extractor,
 )
 import librosa

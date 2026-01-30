@@ -9,7 +9,7 @@ Tests:
 4. Model training can run
 5. ONNX export works
 """
-
+from typing import Optional, Iterable
 import os
 import sys
 
@@ -22,17 +22,27 @@ def test_imports():
     print("TEST 1: Backend Imports")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (  # noqa: F401
-            make_feature_extractor,
-            make_orbit_state,
-            synthesize,
+        from runtime_core import (  # noqa: F401
             SAMPLE_RATE,
             HOP_LENGTH,
             N_FFT,
-            WINDOW_FRAMES,
+            DEFAULT_K_RESIDUALS,
+            DEFAULT_RESIDUAL_CAP,
+            DEFAULT_RESIDUAL_OMEGA_SCALE,
+            DEFAULT_BASE_OMEGA,
+            DEFAULT_ORBIT_SEED,
+            OrbitState,
+            ResidualParams,
         )
 
-        print("✓ runtime_core_bridge imports")
+        print("✓ runtime_core imports")
+
+        from src.runtime_core_bridge import (  # noqa: F401
+            make_feature_extractor,
+            FeatureExtractorBridge,
+        )
+
+        print("✓ runtime_core_bridge imports (Deprecated)")
 
         from src.data_loader import AudioDataset  # noqa: F401
 
@@ -109,14 +119,10 @@ def test_orbit_synthesis():
     print("TEST 3: Orbit Synthesis")
     print("=" * 60)
     try:
-        from src.runtime_core_bridge import (
-            make_orbit_state,
-            make_residual_params,
-            synthesize,
-        )
+        from runtime_core import ResidualParams, OrbitState
 
         # Create orbit state with seed for determinism
-        orbit_state = make_orbit_state(
+        orbit_state = OrbitState.new_with_seed(
             lobe=1,
             sub_lobe=0,
             theta=0.0,
@@ -130,10 +136,21 @@ def test_orbit_synthesis():
         print("✓ OrbitState created with seed=42")
 
         # Create residual params
-        residual_params = make_residual_params(
-            k_residuals=10, residual_cap=0.5, radius_scale=1.5
+        residual_params = ResidualParams(
+            k_residuals=10,
+            residual_cap=0.5,
+            radius_scale=1.5,
         )
         print("✓ ResidualParams created")
+
+        def synthesize(
+            state: OrbitState,
+            rp: ResidualParams,
+            band_gates: Optional[Iterable[float]] = None,
+        ):
+            return state.synthesize(
+                rp, list(band_gates) if band_gates is not None else None
+            )
 
         # Synthesize first point
         c1 = synthesize(orbit_state, residual_params, band_gates=None)
@@ -215,9 +232,17 @@ def test_visual_metrics():
         image_float = test_image.astype(np.float64) / 255.0
         flat = image_float.reshape(-1).tolist()
         runtime_metrics = runtime_core.compute_runtime_visual_metrics(
-            flat, test_image.shape[1], test_image.shape[0], test_image.shape[2], 0.0, 0.0, 50
+            flat,
+            test_image.shape[1],
+            test_image.shape[0],
+            test_image.shape[2],
+            0.0,
+            0.0,
+            50,
         )
-        print(f"✓ Runtime metrics computed: edge_density={runtime_metrics.edge_density:.4f}")
+        print(
+            f"✓ Runtime metrics computed: edge_density={runtime_metrics.edge_density:.4f}"
+        )
 
         assert isinstance(result, dict), f"Expected dict, got {type(result)}"
         assert len(result) > 0, "Expected at least one metric"

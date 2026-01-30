@@ -18,18 +18,20 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
-from .runtime_core_bridge import (
+from runtime_core import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
     DEFAULT_RESIDUAL_OMEGA_SCALE,
-    make_feature_extractor,
-    make_orbit_state,
-    make_residual_params,
-    synthesize,
+    lobe_point_at_angle,
+    ResidualParams,
+    OrbitState,
+    DEFAULT_RESIDUAL_CAP,
 )
-import runtime_core as rc
-from .runtime_core_bridge import FeatureExtractorBridge
+from .runtime_core_bridge import (
+    make_feature_extractor,
+    FeatureExtractorBridge,
+)
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
@@ -116,7 +118,11 @@ class ControlTrainer:
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
         self.k_residuals = k_residuals
-        self.residual_params = make_residual_params(k_residuals=k_residuals)
+        self.residual_params = ResidualParams(
+            k_residuals=k_residuals,
+            residual_cap=DEFAULT_RESIDUAL_CAP,
+            radius_scale=1.0,
+        )
 
         # Default correlation weights
         default_weights = {
@@ -157,9 +163,9 @@ class ControlTrainer:
         positions = []
         velocities = []
         for idx, theta in enumerate(thetas):
-            current = rc.lobe_point_at_angle(1, 0, float(theta), 1.02)
+            current = lobe_point_at_angle(1, 0, float(theta), 1.02)
             next_theta = thetas[(idx + 1) % len(thetas)]
-            nxt = rc.lobe_point_at_angle(1, 0, float(next_theta), 1.02)
+            nxt = lobe_point_at_angle(1, 0, float(next_theta), 1.02)
             positions.append([current.real, current.imag])
             velocities.append([nxt.real - current.real, nxt.imag - current.imag])
 
@@ -300,7 +306,7 @@ class ControlTrainer:
             # Synthesize c(t) using runtime_core (cardioid lobe)
             c_values = []
             for i in range(batch_size):
-                state = make_orbit_state(
+                state = OrbitState.new_with_seed(
                     lobe=1,
                     sub_lobe=0,
                     theta=float(i * 2 * np.pi / batch_size),
@@ -311,11 +317,12 @@ class ControlTrainer:
                     residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
                     seed=int(DEFAULT_ORBIT_SEED + i),
                 )
-                c = synthesize(
-                    state,
-                    residual_params=self.residual_params,
-                    band_gates=band_gates[i].detach().cpu().tolist(),
+                rp = self.residual_params or ResidualParams(
+                    k_residuals=DEFAULT_K_RESIDUALS,
+                    residual_cap=DEFAULT_RESIDUAL_CAP,
+                    radius_scale=1.0,
                 )
+                c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
                 c_values.append([c.real, c.imag])
 
             c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)

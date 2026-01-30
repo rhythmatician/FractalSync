@@ -30,14 +30,10 @@ from runtime_core import (
     DEFAULT_RESIDUAL_OMEGA_SCALE,
     DEFAULT_BASE_OMEGA,
     DEFAULT_ORBIT_SEED,
+    OrbitState,
+    ResidualParams,
 )
-
-from .runtime_core_bridge import (
-    make_feature_extractor,
-    make_orbit_state,
-    synthesize,
-    step_orbit,
-)
+from .runtime_core_bridge import make_feature_extractor
 
 
 def dump_constants() -> Dict[str, Any]:
@@ -107,7 +103,7 @@ def generate_orbit_sequence_deterministic(
     n_samples = int(duration / dt)
 
     # Create orbit state with deterministic seed
-    state = make_orbit_state(
+    state = OrbitState.new_with_seed(
         lobe=1,
         sub_lobe=0,
         theta=0.0,
@@ -121,11 +117,21 @@ def generate_orbit_sequence_deterministic(
 
     # Generate sequence
     c_sequence = []
+    rp = ResidualParams(
+        k_residuals=DEFAULT_K_RESIDUALS,
+        residual_cap=DEFAULT_RESIDUAL_CAP,
+        radius_scale=1.0,
+    )
     for i in range(n_samples):
-        c = synthesize(state)
+        c = state.synthesize(rp, None)
         c_sequence.append({"re": c.re, "im": c.im})
         # Advance state for next iteration
-        step_orbit(state, dt)
+        rp = ResidualParams(
+            k_residuals=DEFAULT_K_RESIDUALS,
+            residual_cap=DEFAULT_RESIDUAL_CAP,
+            radius_scale=1.0,
+        )
+        state.step(dt, rp, band_gates=None)
 
     return {
         "duration": duration,
