@@ -133,6 +133,10 @@ def main():
 
     args = parser.parse_args()
 
+    execute_training_workflow(args)
+
+
+def execute_training_workflow(args):
     print("=" * 60)
     print("Orbit-Based Control Signal Model Training")
     print("=" * 60)
