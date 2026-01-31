@@ -139,17 +139,20 @@ class AudioDataset:
                 chunk_features = self.feature_extractor.extract_windowed_features(
                     chunk, window_frames=self.window_frames
                 )
+                # Ensure numpy arrays for downstream consumers
+                chunk_features = np.asarray(chunk_features, dtype=np.float64)
                 all_chunks.append(chunk_features)
                 logging.info(f"  chunk {start//chunk_size + 1}: {chunk_features.shape}")
             features = (
                 np.vstack(all_chunks)
                 if all_chunks
-                else np.empty((0, 6 * self.window_frames), dtype=np.float32)
+                else np.empty((0, 6 * self.window_frames), dtype=np.float64)
             )
         else:
             features = self.feature_extractor.extract_windowed_features(
-                audio.astype(np.float32), window_frames=self.window_frames
+                audio.astype(np.float64), window_frames=self.window_frames
             )
+            features = np.asarray(features, dtype=np.float64)
 
         if cache_file:
             try:
