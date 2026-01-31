@@ -465,10 +465,11 @@ class ControlTrainer:
             raise ValueError("No features loaded from dataset")
 
         logger.info("Computing normalization statistics...")
-        self.feature_extractor.compute_normalization_stats(all_features)
+        all_features_lists = [f.tolist() for f in all_features]
+        self.feature_extractor.compute_normalization_stats(all_features_lists)
 
         normalized_features = [
-            self.feature_extractor.normalize_features(f) for f in all_features
+            self.feature_extractor.normalize_features(f.tolist()) for f in all_features
         ]
 
         try:
