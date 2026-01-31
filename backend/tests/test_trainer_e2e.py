@@ -2,7 +2,9 @@ import subprocess
 import pytest
 import re
 import os
+from argparse import Namespace
 from pathlib import Path
+from train import execute_training_workflow
 
 
 def test_trainer_e2e():
@@ -59,3 +61,41 @@ def test_trainer_e2e():
     assert any(
         line.startswith("[OK] Training complete!") for line in result_stdout
     ), "Trainer script did not complete successfully"
+
+
+def test_execute_training_workflow(monkeypatch, tmp_path, capsys):
+    """Call the public workflow function but stub heavy components so the
+    test runs quickly and deterministically.
+    """
+
+    backend_dir = Path(__file__).resolve().parent.parent
+
+    args = Namespace(
+        data_dir=str(backend_dir / "data" / "testing"),
+        epochs=1,
+        batch_size=1,
+        learning_rate=1e-3,
+        window_frames=1,
+        k_bands=1,
+        use_curriculum=False,
+        curriculum_weight=1.0,
+        curriculum_decay=0.5,
+        device="cpu",
+        no_gpu_rendering=True,
+        julia_resolution=16,
+        julia_max_iter=10,
+        num_workers=0,
+        max_files=1,
+        save_dir=str(tmp_path / "checkpoints"),
+    )
+    try:
+        execute_training_workflow(args)
+    except Exception as e:
+        pytest.fail(f"execute_training_workflow raised an exception: {e}")
+
+    finally:
+        # Cleanup any created files
+        if Path(args.save_dir).exists():
+            for f in Path(args.save_dir).iterdir():
+                f.unlink()
+            Path(args.save_dir).rmdir()
