@@ -72,7 +72,7 @@ class AudioToControlModel(nn.Module):
             encoder_layers.extend(
                 [
                     nn.Linear(prev_dim, hidden_dim),
-                    nn.BatchNorm1d(hidden_dim),
+                    nn.LayerNorm(hidden_dim),
                     nn.ReLU(),
                     nn.Dropout(dropout),
                 ]
@@ -118,7 +118,7 @@ class AudioToControlModel(nn.Module):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm1d):
+            elif isinstance(m, nn.LayerNorm):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 

@@ -465,12 +465,25 @@ class ControlTrainer:
             raise ValueError("No features loaded from dataset")
 
         logger.info("Computing normalization statistics...")
-        all_features_lists = [f.tolist() for f in all_features]
-        self.feature_extractor.compute_normalization_stats(all_features_lists)
+        # Flatten all feature windows into a single sequence of 1D feature vectors
+        # (Rust binding expects Seq[Seq[float]] where the inner seq is a single window).
+        all_windows = [row for f in all_features for row in f.tolist()]
+        self.feature_extractor.compute_normalization_stats(all_windows)
 
-        normalized_features = [
-            self.feature_extractor.normalize_features(f.tolist()) for f in all_features
-        ]
+        # Normalize each window individually and re-stack per-file arrays. Handle
+        # empty feature arrays safely by keeping an empty (0, n_features) array.
+        normalized_features = []
+        for f in all_features:
+            if f.shape[0] == 0:
+                # Preserve feature dimensionality for empty files
+                normalized_features.append(np.empty((0, f.shape[1]), dtype=np.float32))
+            else:
+                normalized_rows = [
+                    self.feature_extractor.normalize_features(row) for row in f.tolist()
+                ]
+                normalized_features.append(
+                    np.vstack(normalized_rows).astype(np.float32)
+                )
 
         try:
             concatenated = np.concatenate(normalized_features, axis=0)
