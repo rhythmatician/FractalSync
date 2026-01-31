@@ -5,17 +5,18 @@ Data loading utilities for audio files.
 import hashlib
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple, cast
+from typing import List, Optional, Tuple
 import logging
 
 import numpy as np
-
-from .runtime_core_bridge import (
+from numpy.typing import NDArray
+from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
-    make_feature_extractor,
+    FeatureExtractor,
 )
+
 import librosa
 
 
@@ -45,7 +46,11 @@ class AudioDataset:
         self.max_files = max_files
         self.cache_dir = Path(cache_dir) if cache_dir else None
 
-        self.feature_extractor = feature_extractor or make_feature_extractor()
+        self.feature_extractor = feature_extractor or FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
 
         # Supported audio formats
         self.supported_formats = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
@@ -98,17 +103,21 @@ class AudioDataset:
         ).hexdigest()
         return self.cache_dir / f"{cache_key}.npy"
 
-    def _load_features(self, audio_file: Path) -> np.ndarray:
+    def _load_features(self, audio_file: Path) -> NDArray[np.float64]:
         """Load features, using cache if available.
 
         For long audio files, performs chunked extraction to avoid large
         arrays causing stalls in the Rust/PyO3 bridge on Windows.
+
+        Returns:
+            A 2D array of shape (n_windows, n_features) with float64 values.
         """
         cache_file = self._cache_path(audio_file) if self.cache_dir else None
 
         if cache_file and cache_file.exists():
             try:
-                return cast(np.ndarray, np.load(cache_file, allow_pickle=False))
+                loaded: NDArray[np.float64] = np.load(cache_file, allow_pickle=False)
+                return loaded
             except Exception:
                 cache_file.unlink(missing_ok=True)
 
@@ -123,24 +132,27 @@ class AudioDataset:
         chunk_seconds = 60  # process in 60s chunks
         if len(audio) > SAMPLE_RATE * max_total_seconds:
             chunk_size = SAMPLE_RATE * chunk_seconds
-            all_chunks: list[np.ndarray] = []
+            all_chunks: List[NDArray[np.float64]] = []
             for start in range(0, len(audio), chunk_size):
                 end = min(start + chunk_size, len(audio))
                 chunk = audio[start:end].astype(np.float32)
                 chunk_features = self.feature_extractor.extract_windowed_features(
                     chunk, window_frames=self.window_frames
                 )
+                # Ensure numpy arrays for downstream consumers
+                chunk_features = np.asarray(chunk_features, dtype=np.float64)
                 all_chunks.append(chunk_features)
                 logging.info(f"  chunk {start//chunk_size + 1}: {chunk_features.shape}")
             features = (
                 np.vstack(all_chunks)
                 if all_chunks
-                else np.empty((0, 6 * self.window_frames), dtype=np.float32)
+                else np.empty((0, 6 * self.window_frames), dtype=np.float64)
             )
         else:
             features = self.feature_extractor.extract_windowed_features(
-                audio.astype(np.float32), window_frames=self.window_frames
+                audio.astype(np.float64), window_frames=self.window_frames
             )
+            features = np.asarray(features, dtype=np.float64)
 
         if cache_file:
             try:
@@ -150,14 +162,15 @@ class AudioDataset:
 
         return features
 
-    def load_all_features(self) -> List[np.ndarray]:
+    def load_all_features(self) -> List[NDArray[np.float64]]:
         """
         Load features from all audio files.
 
         Returns:
-            List of feature arrays, one per audio file
+            List of 2D feature arrays, one per audio file. Each array has
+            shape (n_windows, n_features).
         """
-        all_features: List[np.ndarray] = []
+        all_features: List[NDArray[np.float64]] = []
 
         for audio_file in self.audio_files:
             try:

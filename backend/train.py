@@ -24,7 +24,7 @@ from src.control_model import AudioToControlModel  # noqa: E402
 from src.control_trainer import ControlTrainer  # noqa: E402
 from src.visual_metrics import LossVisualMetrics  # noqa: E402
 from src.export_model import export_to_onnx  # noqa: E402
-from src.runtime_core_bridge import make_feature_extractor  # noqa: E402
+from runtime_core import FeatureExtractor, SAMPLE_RATE, HOP_LENGTH, N_FFT  # noqa: E402
 
 # GPU rendering optimization imports
 try:
@@ -166,7 +166,11 @@ def main():
 
     # Initialize components
     print("\n[1/7] Initializing feature extractor...")
-    feature_extractor = make_feature_extractor()
+    feature_extractor = FeatureExtractor(
+        sr=SAMPLE_RATE,
+        hop_length=HOP_LENGTH,
+        n_fft=N_FFT,
+    )
 
     print("[2/7] Loading audio dataset...")
     dataset = AudioDataset(

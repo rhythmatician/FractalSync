@@ -7,12 +7,12 @@ This is the README file that has never been touched by AI.
 
 ```ps1
 ## Install dependenies
-cd frontend; npm install  # frontend
 pip install -r backend/requirements.txt # backend
 winget install --id Rustlang.Rust  # runtime-core
 cargo --version  # verify runtime-core
 cargo install wasm-pack --locked  # wasm
 wasm-pack --version  # verify wasm
+cd frontend; npm install  # frontend
 
 
 ## Building
@@ -21,6 +21,8 @@ Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Loc
 npm --prefix frontend run build --silent  # frontend
 # backend does not need to be built
 
+## Type-checking
+mypy backend
 
 ## Testing
 pytest backend #  backend

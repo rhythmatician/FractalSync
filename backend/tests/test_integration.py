@@ -12,28 +12,34 @@ Run this test to verify:
   3. Model training pipeline initializes
   4. WASM module loads (frontend ready)
 """
+from typing import Iterable, Optional
 
 import sys
 from pathlib import Path
+from runtime_core import (
+    ResidualParams,
+    OrbitState,
+    DEFAULT_K_RESIDUALS,
+    DEFAULT_RESIDUAL_CAP,
+    SAMPLE_RATE,
+    DEFAULT_BASE_OMEGA,
+    DEFAULT_RESIDUAL_OMEGA_SCALE,
+    DEFAULT_ORBIT_SEED,
+)
 
 
 def test_imports():
     """Test 1: Can we import runtime_core and bridge?"""
     print("\n[Test 1] Testing imports...")
     try:
-        import runtime_core
 
         print("  [OK] runtime_core imported")
-        print(f"    - SAMPLE_RATE: {runtime_core.SAMPLE_RATE}")
-        print(f"    - DEFAULT_K_RESIDUALS: {runtime_core.DEFAULT_K_RESIDUALS}")
+        print(f"    - SAMPLE_RATE: {SAMPLE_RATE}")
+        print(f"    - DEFAULT_K_RESIDUALS: {DEFAULT_K_RESIDUALS}")
 
-        from src.runtime_core_bridge import (  # noqa: F401
-            make_feature_extractor,
-            make_orbit_state,
-            synthesize,
-        )
+        from runtime_core import FeatureExtractor  # noqa: F401
 
-        print("  [OK] runtime_core_bridge imported")
+        print("  [OK] FeatureExtractor available in runtime_core")
         return True
     except ImportError as e:
         print(f"  [FAIL] Import failed: {e}")
@@ -48,9 +54,13 @@ def test_feature_extraction():
     print("\n[Test 2] Testing feature extraction...")
     try:
         import numpy as np
-        from src.runtime_core_bridge import make_feature_extractor
+        from runtime_core import FeatureExtractor, SAMPLE_RATE, HOP_LENGTH, N_FFT
 
-        extractor = make_feature_extractor()
+        extractor = FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+        )
         print("  ✓ Feature extractor created")
 
         # Generate synthetic audio
@@ -69,7 +79,50 @@ def test_orbit_synthesis():
     """Test 3: Can we synthesize orbits deterministically?"""
     print("\n[Test 3] Testing orbit synthesis...")
     try:
-        from src.runtime_core_bridge import make_orbit_state, synthesize
+
+        def make_orbit_state(
+            *,
+            lobe: int = 1,
+            sub_lobe: int = 0,
+            theta: float = 0.0,
+            omega: float = DEFAULT_BASE_OMEGA,
+            s: float = 1.02,
+            alpha: float = 0.3,
+            k_residuals: int = DEFAULT_K_RESIDUALS,
+            residual_omega_scale: float = DEFAULT_RESIDUAL_OMEGA_SCALE,
+            seed: int = DEFAULT_ORBIT_SEED,
+        ) -> OrbitState:
+            """Construct a deterministic orbit state using the Rust implementation.
+
+            Use positional arguments to avoid relying on a keyword name that may not
+            be present in all generated Python bindings. If `seed` is provided the
+            Rust constructor that accepts a seed will be used.
+            """
+            return OrbitState.new_with_seed(
+                lobe,
+                sub_lobe,
+                theta,
+                omega,
+                s,
+                alpha,
+                k_residuals,
+                residual_omega_scale,
+                seed,
+            )
+
+        def synthesize(
+            state: OrbitState,
+            residual_params: Optional[ResidualParams] = None,
+            band_gates: Optional[Iterable[float]] = None,
+        ) -> complex:
+            rp = residual_params or ResidualParams(
+                k_residuals=DEFAULT_K_RESIDUALS,
+                residual_cap=DEFAULT_RESIDUAL_CAP,
+                radius_scale=1.0,
+            )
+            return state.synthesize(
+                rp, list(band_gates) if band_gates is not None else None
+            )
 
         # Create state with seed
         state1 = make_orbit_state(seed=1337)

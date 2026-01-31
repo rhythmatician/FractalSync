@@ -3,7 +3,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from runtime_core import FeatureExtractor, OrbitState, Complex  # noqa: F401
+    from runtime_core import FeatureExtractor, OrbitState  # noqa: F401
 
 
 def test_runtime_core_smoke(runtime_core_module: ModuleType) -> None:
@@ -37,17 +37,13 @@ def test_runtime_core_smoke(runtime_core_module: ModuleType) -> None:
     ), "OrbitState lacks known constructors"
 
     # Construct using the best available constructor (try in order)
-    st: "OrbitState" = orbit_state_instance.new_default_seeded(1337)  # type: ignore[arg-type]
+    st: "OrbitState" = orbit_state_instance.new_default_seeded(1337)
 
     assert st is not None
     assert hasattr(st, "carrier")
-    c: "Complex" = st.carrier()  # type: ignore[attr-defined]
-    # Complex types may expose re/im or real/imag or __complex__
-    assert (
-        (hasattr(c, "re") and hasattr(c, "im"))
-        or (hasattr(c, "real") and hasattr(c, "imag"))
-        or hasattr(c, "__complex__")
-    )
+    c: complex = st.carrier()
+    # Complex types expose real/imag
+    assert hasattr(c, "real") and hasattr(c, "imag")
 
     # Residual params are expected for Orbit-based builds
     assert hasattr(

@@ -30,13 +30,9 @@ from runtime_core import (
     DEFAULT_RESIDUAL_OMEGA_SCALE,
     DEFAULT_BASE_OMEGA,
     DEFAULT_ORBIT_SEED,
-)
-
-from .runtime_core_bridge import (
-    make_feature_extractor,
-    make_orbit_state,
-    synthesize,
-    step_orbit,
+    OrbitState,
+    ResidualParams,
+    FeatureExtractor,
 )
 
 
@@ -78,14 +74,18 @@ def extract_features_deterministic(
     audio, _ = librosa.load(audio_path, sr=SAMPLE_RATE, mono=True)
 
     # Create feature extractor
-    extractor = make_feature_extractor()
+    extractor = FeatureExtractor(
+        sr=SAMPLE_RATE,
+        hop_length=HOP_LENGTH,
+        n_fft=N_FFT,
+    )
 
     # Extract windowed features
     features = extractor.extract_windowed_features(
         audio.astype(np.float32), window_frames=WINDOW_FRAMES
     )
 
-    return cast(np.ndarray, features)
+    return features
 
 
 def generate_orbit_sequence_deterministic(
@@ -107,7 +107,7 @@ def generate_orbit_sequence_deterministic(
     n_samples = int(duration / dt)
 
     # Create orbit state with deterministic seed
-    state = make_orbit_state(
+    state = OrbitState.new_with_seed(
         lobe=1,
         sub_lobe=0,
         theta=0.0,
@@ -121,11 +121,21 @@ def generate_orbit_sequence_deterministic(
 
     # Generate sequence
     c_sequence = []
+    rp = ResidualParams(
+        k_residuals=DEFAULT_K_RESIDUALS,
+        residual_cap=DEFAULT_RESIDUAL_CAP,
+        radius_scale=1.0,
+    )
     for i in range(n_samples):
-        c = synthesize(state)
-        c_sequence.append({"re": c.re, "im": c.im})
+        c = state.synthesize(rp, None)
+        c_sequence.append({"re": c.real, "im": c.imag})
         # Advance state for next iteration
-        step_orbit(state, dt)
+        rp = ResidualParams(
+            k_residuals=DEFAULT_K_RESIDUALS,
+            residual_cap=DEFAULT_RESIDUAL_CAP,
+            radius_scale=1.0,
+        )
+        state.step(dt, rp, band_gates=None)
 
     return {
         "duration": duration,
