@@ -43,10 +43,6 @@ export interface StepController {
   step(state: StepState, delta_real: number, delta_imag: number): StepResult;
 }
 
-interface StepStateConstructor {
-  new (c_real: number, c_imag: number, prev_delta_real: number, prev_delta_imag: number): StepState;
-}
-
 interface StepControllerConstructor {
   new (): StepController;
 }
@@ -54,7 +50,6 @@ interface StepControllerConstructor {
 interface WasmModule {
   default: () => Promise<void>;
   StepController: StepControllerConstructor;
-  StepState: StepStateConstructor;
 }
 
 let modulePromise: Promise<WasmModule> | null = null;
@@ -62,8 +57,12 @@ let cachedModule: WasmModule | null = null;
 
 async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
-    // @ts-ignore Vite serves this from /wasm at runtime.
-    modulePromise = import(/* @vite-ignore */ '/wasm/orbit_synth_wasm.js') as Promise<WasmModule>;
+    // Construct absolute URL at runtime so Vite's static import analysis does not
+    // attempt to resolve the module from the `/public` directory. The file is
+    // copied to `/wasm` and must be loaded via a runtime URL in dev and prod.
+    // @ts-ignore dynamic import from runtime URL
+    const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', window.location.href).toString();
+    modulePromise = import(/* @vite-ignore */ (wasmUrl as any)) as Promise<WasmModule>;
   }
   const mod = await modulePromise;
   cachedModule = mod;
@@ -73,10 +72,45 @@ async function loadModule(): Promise<WasmModule> {
 
 export async function loadStepController(): Promise<StepController> {
   const mod = await loadModule();
-  return new mod.StepController();
+  const wasmController = new mod.StepController();
+
+  // Wrap the raw WASM controller to present the older, JS-friendly API with
+  // `.step(state, dx, dy)` and `.context(state)` methods expected by the
+  // rest of the frontend. The WASM bindings expose `applyStep(...)` and
+  // `contextFeatures(...)` instead.
+  const wrapper: StepController = {
+    step(state: StepState, delta_real: number, delta_imag: number) {
+      // Call WASM applyStep and return the received result object directly.
+      const res = (wasmController as any).applyStep(
+        state.c_real,
+        state.c_imag,
+        delta_real,
+        delta_imag,
+        state.prev_delta_real,
+        state.prev_delta_imag
+      );
+      return res as StepResult;
+    },
+    context(state: StepState) {
+      // Map to WASM contextFeatures which returns a plain object with
+      // feature_vec and other context fields.
+      const ctx = (wasmController as any).contextFeatures(
+        state.c_real,
+        state.c_imag,
+        state.prev_delta_real,
+        state.prev_delta_imag,
+        0
+      );
+      return ctx as StepContext;
+    },
+  };
+
+  return wrapper;
 }
 
 export async function createInitialStepState(): Promise<StepState> {
-  const mod = cachedModule ?? await loadModule();
-  return new mod.StepState(0.0, 0.0, 0.0, 0.0);
+  // The WASM bindings expose `StepController.applyStep(...)` rather than a
+  // `StepState` constructor. Represent the step state as a simple JS object
+  // and pass its numeric fields explicitly to `applyStep`.
+  return { c_real: 0.0, c_imag: 0.0, prev_delta_real: 0.0, prev_delta_imag: 0.0 };
 }

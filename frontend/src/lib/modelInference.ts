@@ -254,7 +254,20 @@ export class ModelInference {
       const dx = params.length > 0 ? params[0] : 0;
       const dy = params.length > 1 ? params[1] : 0;
 
+      // The WASM controller exposes `applyStep(...)` which receives numeric
+      // state fields rather than a `StepState` object. Call it directly and
+      // update the local stepState with the returned result.
       const result = this.stepController.step(this.stepState, dx, dy);
+
+      // Update local state from the returned result so future steps are
+      // applied relative to the current orbit state.
+      if (result) {
+        // Defensive checks in case WASM returns an unexpected shape
+        this.stepState.c_real = typeof result.c_real === 'number' ? result.c_real : this.stepState.c_real;
+        this.stepState.c_imag = typeof result.c_imag === 'number' ? result.c_imag : this.stepState.c_imag;
+        this.stepState.prev_delta_real = typeof result.delta_real === 'number' ? result.delta_real : this.stepState.prev_delta_real;
+        this.stepState.prev_delta_imag = typeof result.delta_imag === 'number' ? result.delta_imag : this.stepState.prev_delta_imag;
+      }
 
       // Extract audio features for color mapping
       const numFeatures = 6;
@@ -269,11 +282,11 @@ export class ModelInference {
       // Expose a telemetry-friendly value for logging
       (this as any)._lastAvgRMS = avgRMS;
 
-      const stepMag = Math.hypot(result.delta_real, result.delta_imag);
+      const stepMag = Math.hypot(this.stepState.prev_delta_real, this.stepState.prev_delta_imag);
       const currentHue = (avgRMS * 2.0) % 1.0;
       visualParams = {
-        juliaReal: result.c_real,
-        juliaImag: result.c_imag,
+        juliaReal: this.stepState.c_real,
+        juliaImag: this.stepState.c_imag,
         colorHue: currentHue,
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
