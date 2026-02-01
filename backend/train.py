@@ -216,6 +216,17 @@ def execute_training_workflow(args):
         dropout=0.2,
     )
 
+    # Quick sanity check: ensure model parameters do not contain NaNs before training
+    nan_params = False
+    for name, p in model.named_parameters():
+        if torch.isnan(p).any():
+            print(
+                f"[ERROR] Model parameter {name} contains NaNs: {int(torch.isnan(p).sum().item())} elements"
+            )
+            nan_params = True
+    if nan_params:
+        raise RuntimeError("Model parameters contain NaNs on initialization; aborting")
+
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Input dimension: {model.input_dim}")
     print(f"Output dimension: {model.output_dim}")
@@ -234,6 +245,14 @@ def execute_training_workflow(args):
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
     )
+
+    # Sanity: check model params after trainer initialization
+    for name, p in trainer.model.named_parameters():
+        if torch.isnan(p).any() or torch.isinf(p).any():
+            print(f"[ERROR] After ControlTrainer init: {name} contains NaNs/Infs")
+            raise RuntimeError(
+                "Model params corrupted after ControlTrainer init; aborting"
+            )
 
     print("[7/7] Starting training...")
     print("=" * 60)
