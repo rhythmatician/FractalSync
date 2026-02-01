@@ -1,7 +1,7 @@
 """
-Trainer for control signal model with orbit-based synthesis.
+Trainer for control signal model with step-based synthesis.
 
-Trains model to predict control signals that drive deterministic orbit synthesis.
+Trains model to predict delta steps that are applied by the runtime controller.
 """
 
 import json
@@ -19,20 +19,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
-from runtime_core import (
-    DEFAULT_BASE_OMEGA,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_ORBIT_SEED,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
-    lobe_point_at_angle,
-    ResidualParams,
-    OrbitState,
-    DEFAULT_RESIDUAL_CAP,
-    FeatureExtractor,
-    SAMPLE_RATE,
-    HOP_LENGTH,
-    N_FFT,
-)
+from runtime_core import FeatureExtractor, SAMPLE_RATE, HOP_LENGTH, N_FFT
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
@@ -70,7 +57,7 @@ class CorrelationLoss(nn.Module):
 
 
 class ControlTrainer:
-    """Trainer for control signal model with orbit synthesis."""
+    """Trainer for control signal model with step-based synthesis."""
 
     def __init__(
         self,
@@ -86,7 +73,6 @@ class ControlTrainer:
         julia_resolution: int = 128,
         julia_max_iter: int = 100,
         num_workers: int = 0,
-        k_residuals: int = DEFAULT_K_RESIDUALS,
     ):
         """
         Initialize control trainer.
@@ -104,7 +90,6 @@ class ControlTrainer:
             julia_resolution: Julia set resolution
             julia_max_iter: Julia set max iterations
             num_workers: DataLoader workers
-            k_residuals: Number of residual circles
         """
         self.model: AudioToControlModel = model.to(device)
 
@@ -122,12 +107,7 @@ class ControlTrainer:
         self.julia_resolution = julia_resolution
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
-        self.k_residuals = k_residuals
-        self.residual_params = ResidualParams(
-            k_residuals=k_residuals,
-            residual_cap=DEFAULT_RESIDUAL_CAP,
-            radius_scale=1.0,
-        )
+        self.context_dim = getattr(model, "context_dim", 0)
 
         # Default correlation weights
         default_weights = {
@@ -162,17 +142,18 @@ class ControlTrainer:
         self.last_checkpoint_path: Optional[str] = None
 
     def _generate_curriculum_data(self, n_samples: int):
-        """Generate curriculum learning data from preset orbits."""
+        """Generate curriculum learning data from a simple circular path."""
         logger.info(f"Generating curriculum data: {n_samples} samples")
         thetas = np.linspace(0.0, 2 * np.pi, n_samples, endpoint=False)
         positions = []
         velocities = []
         for idx, theta in enumerate(thetas):
-            current = lobe_point_at_angle(1, 0, float(theta), 1.02)
+            radius = 0.8
+            current = np.array([radius * np.cos(theta), radius * np.sin(theta)])
             next_theta = thetas[(idx + 1) % len(thetas)]
-            nxt = lobe_point_at_angle(1, 0, float(next_theta), 1.02)
-            positions.append([current.real, current.imag])
-            velocities.append([nxt.real - current.real, nxt.imag - current.imag])
+            nxt = np.array([radius * np.cos(next_theta), radius * np.sin(next_theta)])
+            positions.append(current.tolist())
+            velocities.append((nxt - current).tolist())
 
         self.curriculum_positions = torch.tensor(
             positions, dtype=torch.float32, device=self.device
@@ -190,51 +171,19 @@ class ControlTrainer:
         self, positions: torch.Tensor, velocities: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Extract control signal targets from curriculum positions/velocities.
-
-        This is a simplified mapping - in practice, we derive s, alpha, etc.
-        from the curriculum orbit parameters.
+        Extract delta-step targets from curriculum positions/velocities.
 
         Args:
             positions: Tensor of shape (batch_size, 2) with position data
             velocities: Optional tensor of shape (batch_size, 2) with velocity data
 
         Returns:
-            Tensor of shape (batch_size, output_dim) with control targets
+            Tensor of shape (batch_size, output_dim) with delta targets
         """
-        batch_size = positions.shape[0]
+        if velocities is None:
+            return torch.zeros(positions.shape[0], 2, device=self.device)
 
-        # Compute s from position magnitude (near boundary ~1.0)
-        position_mag = torch.norm(positions, dim=1)
-        s_target = torch.clamp(position_mag * 1.5, 0.2, 3.0)
-
-        # Compute alpha from velocity magnitude (higher velocity = more residual)
-        if velocities is not None:
-            velocity_mag = torch.norm(velocities, dim=1)
-            alpha = torch.clamp(velocity_mag * 2.0, 0.0, 1.0)
-        else:
-            alpha = (
-                torch.ones(batch_size, device=self.device) * 0.3
-            )  # Default amplitude
-
-        # Omega scale from velocity direction changes (placeholder)
-        omega_scale = torch.ones(batch_size, device=self.device) * 1.0
-
-        # Band gates (default to open)
-        band_gates = torch.ones(batch_size, self.k_residuals, device=self.device) * 0.7
-
-        # Stack control targets
-        control_targets = torch.cat(
-            [
-                s_target.unsqueeze(1),
-                alpha.unsqueeze(1),
-                omega_scale.unsqueeze(1),
-                band_gates,
-            ],
-            dim=1,
-        )
-
-        return control_targets
+        return velocities[:, :2]
 
     def train_epoch(
         self, dataloader: DataLoader, epoch: int, curriculum_decay: float = 0.95
@@ -298,39 +247,24 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
+            features_with_context = features
+            if self.context_dim > 0:
+                context = torch.zeros(
+                    (batch_size, self.context_dim),
+                    dtype=features.dtype,
+                    device=self.device,
+                )
+                features_with_context = torch.cat([features, context], dim=1)
+
             # Forward pass
-            predicted_controls = self.model(features)
+            predicted_controls = self.model(features_with_context)
 
-            # Parse control signals
+            # Parse delta outputs
             parsed = self.model.parse_output(predicted_controls)
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
+            delta_real = parsed["delta_real"]
+            delta_imag = parsed["delta_imag"]
 
-            # Synthesize c(t) using runtime_core (cardioid lobe)
-            c_values = []
-            for i in range(batch_size):
-                state = OrbitState.new_with_seed(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
-                )
-                rp = self.residual_params or ResidualParams(
-                    k_residuals=DEFAULT_K_RESIDUALS,
-                    residual_cap=DEFAULT_RESIDUAL_CAP,
-                    radius_scale=1.0,
-                )
-                c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
-                c_values.append([c.real, c.imag])
-
-            c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
+            c_tensor = torch.stack([delta_real, delta_imag], dim=1)
             julia_real = c_tensor[:, 0]
             julia_imag = c_tensor[:, 1]
 
@@ -382,8 +316,8 @@ class ControlTrainer:
                 )
 
                 images.append(image)
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
+                # Use delta_real as proxy for color hue (example correlation)
+                color_hues.append(delta_real[i])
                 temporal_changes.append(
                     torch.tensor(
                         metrics["temporal_change"],
@@ -555,7 +489,7 @@ class ControlTrainer:
             "correlation_weights": self.correlation_weights,
             "julia_resolution": self.julia_resolution,
             "julia_max_iter": self.julia_max_iter,
-            "k_residuals": self.k_residuals,
+            "context_dim": self.context_dim,
         }
 
         checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")

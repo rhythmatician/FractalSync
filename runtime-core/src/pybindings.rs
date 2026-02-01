@@ -26,6 +26,13 @@ use crate::controller::{
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::step_controller::{
+    StepController as RustStepController,
+    StepState as RustStepState,
+    StepContext as RustStepContext,
+    StepDebug as RustStepDebug,
+    StepResult as RustStepResult,
+};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// Python wrapper for `ResidualParams`.
@@ -248,6 +255,258 @@ impl OrbitState {
     }
 }
 
+/// Python wrapper for step controller state.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepState {
+    inner: RustStepState,
+}
+
+#[pymethods]
+impl StepState {
+    #[new]
+    #[pyo3(signature = (c_real=0.0, c_imag=0.0, prev_delta_real=0.0, prev_delta_imag=0.0))]
+    fn py_new(c_real: f64, c_imag: f64, prev_delta_real: f64, prev_delta_imag: f64) -> Self {
+        Self {
+            inner: RustStepState {
+                c: RustComplex::new(c_real, c_imag),
+                prev_delta: RustComplex::new(prev_delta_real, prev_delta_imag),
+            },
+        }
+    }
+
+    #[getter]
+    fn c_real(&self) -> f64 {
+        self.inner.c.real
+    }
+
+    #[setter]
+    fn set_c_real(&mut self, value: f64) {
+        self.inner.c.real = value;
+    }
+
+    #[getter]
+    fn c_imag(&self) -> f64 {
+        self.inner.c.imag
+    }
+
+    #[setter]
+    fn set_c_imag(&mut self, value: f64) {
+        self.inner.c.imag = value;
+    }
+
+    #[getter]
+    fn prev_delta_real(&self) -> f64 {
+        self.inner.prev_delta.real
+    }
+
+    #[setter]
+    fn set_prev_delta_real(&mut self, value: f64) {
+        self.inner.prev_delta.real = value;
+    }
+
+    #[getter]
+    fn prev_delta_imag(&self) -> f64 {
+        self.inner.prev_delta.imag
+    }
+
+    #[setter]
+    fn set_prev_delta_imag(&mut self, value: f64) {
+        self.inner.prev_delta.imag = value;
+    }
+}
+
+/// Snapshot of minimap context used by the step controller.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepContext {
+    inner: RustStepContext,
+}
+
+#[pymethods]
+impl StepContext {
+    #[getter]
+    fn c_real(&self) -> f64 {
+        self.inner.c.real
+    }
+
+    #[getter]
+    fn c_imag(&self) -> f64 {
+        self.inner.c.imag
+    }
+
+    #[getter]
+    fn prev_delta_real(&self) -> f64 {
+        self.inner.prev_delta.real
+    }
+
+    #[getter]
+    fn prev_delta_imag(&self) -> f64 {
+        self.inner.prev_delta.imag
+    }
+
+    #[getter]
+    fn nu_norm(&self) -> f32 {
+        self.inner.nu_norm
+    }
+
+    #[getter]
+    fn membership(&self) -> bool {
+        self.inner.membership
+    }
+
+    #[getter]
+    fn grad_re(&self) -> f32 {
+        self.inner.grad_re
+    }
+
+    #[getter]
+    fn grad_im(&self) -> f32 {
+        self.inner.grad_im
+    }
+
+    #[getter]
+    fn sensitivity(&self) -> f32 {
+        self.inner.sensitivity
+    }
+
+    #[getter]
+    fn patch(&self) -> Vec<f32> {
+        self.inner.patch.clone()
+    }
+
+    #[getter]
+    fn mip_level(&self) -> usize {
+        self.inner.mip_level
+    }
+
+    fn as_feature_vec(&self) -> Vec<f32> {
+        self.inner.as_feature_vec()
+    }
+}
+
+/// Debug info for the step controller.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepDebug {
+    inner: RustStepDebug,
+}
+
+#[pymethods]
+impl StepDebug {
+    #[getter]
+    fn mip_level(&self) -> usize {
+        self.inner.mip_level
+    }
+
+    #[getter]
+    fn scale_g(&self) -> f64 {
+        self.inner.scale_g
+    }
+
+    #[getter]
+    fn scale_df(&self) -> f64 {
+        self.inner.scale_df
+    }
+
+    #[getter]
+    fn scale(&self) -> f64 {
+        self.inner.scale
+    }
+
+    #[getter]
+    fn delta_f_pred(&self) -> f64 {
+        self.inner.delta_f_pred
+    }
+
+    #[getter]
+    fn wall_applied(&self) -> bool {
+        self.inner.wall_applied
+    }
+}
+
+/// Result of a step controller update.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepResult {
+    inner: RustStepResult,
+}
+
+#[pymethods]
+impl StepResult {
+    #[getter]
+    fn c_real(&self) -> f64 {
+        self.inner.c_next.real
+    }
+
+    #[getter]
+    fn c_imag(&self) -> f64 {
+        self.inner.c_next.imag
+    }
+
+    #[getter]
+    fn delta_real(&self) -> f64 {
+        self.inner.delta_applied.real
+    }
+
+    #[getter]
+    fn delta_imag(&self) -> f64 {
+        self.inner.delta_applied.imag
+    }
+
+    #[getter]
+    fn debug(&self) -> StepDebug {
+        StepDebug {
+            inner: self.inner.debug.clone(),
+        }
+    }
+
+    #[getter]
+    fn context(&self) -> StepContext {
+        StepContext {
+            inner: self.inner.context.clone(),
+        }
+    }
+}
+
+/// Python wrapper for the step controller.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct StepController {
+    inner: RustStepController,
+}
+
+#[pymethods]
+impl StepController {
+    #[new]
+    fn py_new() -> Self {
+        Self {
+            inner: RustStepController::new(),
+        }
+    }
+
+    fn context_for_state(&self, state: &StepState) -> StepContext {
+        StepContext {
+            inner: self.inner.context_for_state(&state.inner),
+        }
+    }
+
+    fn step(&self, state: &mut StepState, delta_real: f64, delta_imag: f64) -> StepResult {
+        StepResult {
+            inner: self
+                .inner
+                .step(&mut state.inner, RustComplex::new(delta_real, delta_imag)),
+        }
+    }
+
+    #[pyo3(signature = (c_real, c_imag, mip_level))]
+    fn sample_sensitivity(&self, c_real: f64, c_imag: f64, mip_level: usize) -> f32 {
+        self.inner
+            .minimap()
+            .sample_sensitivity(RustComplex::new(c_real, c_imag), mip_level)
+    }
+}
+
 /// Python wrapper for the feature extractor
 #[pyclass]
 #[derive(Clone)]
@@ -427,6 +686,11 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         let _ = os_ty.setattr("s", 1.02f64);
         let _ = os_ty.setattr("alpha", 0.3f64);
     }
+    m.add_class::<StepState>()?;
+    m.add_class::<StepContext>()?;
+    m.add_class::<StepDebug>()?;
+    m.add_class::<StepResult>()?;
+    m.add_class::<StepController>()?;
     m.add_class::<FeatureExtractor>()?;
 
 
@@ -442,6 +706,38 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         let _ = rvm_ty.setattr("brightness_std", 0.0f64);
         let _ = rvm_ty.setattr("brightness_range", 0.0f64);
         let _ = rvm_ty.setattr("mandelbrot_membership", false);
+    }
+
+    if let Ok(sc_ty) = m.getattr("StepContext") {
+        let _ = sc_ty.setattr("c_real", 0.0f64);
+        let _ = sc_ty.setattr("c_imag", 0.0f64);
+        let _ = sc_ty.setattr("prev_delta_real", 0.0f64);
+        let _ = sc_ty.setattr("prev_delta_imag", 0.0f64);
+        let _ = sc_ty.setattr("nu_norm", 0.0f32);
+        let _ = sc_ty.setattr("membership", false);
+        let _ = sc_ty.setattr("grad_re", 0.0f32);
+        let _ = sc_ty.setattr("grad_im", 0.0f32);
+        let _ = sc_ty.setattr("sensitivity", 0.0f32);
+        let _ = sc_ty.setattr("patch", Vec::<f32>::new());
+        let _ = sc_ty.setattr("mip_level", 0usize);
+    }
+
+    if let Ok(sd_ty) = m.getattr("StepDebug") {
+        let _ = sd_ty.setattr("mip_level", 0usize);
+        let _ = sd_ty.setattr("scale_g", 0.0f64);
+        let _ = sd_ty.setattr("scale_df", 0.0f64);
+        let _ = sd_ty.setattr("scale", 0.0f64);
+        let _ = sd_ty.setattr("delta_f_pred", 0.0f64);
+        let _ = sd_ty.setattr("wall_applied", false);
+    }
+
+    if let Ok(sr_ty) = m.getattr("StepResult") {
+        let _ = sr_ty.setattr("c_real", 0.0f64);
+        let _ = sr_ty.setattr("c_imag", 0.0f64);
+        let _ = sr_ty.setattr("delta_real", 0.0f64);
+        let _ = sr_ty.setattr("delta_imag", 0.0f64);
+        let _ = sr_ty.setattr("debug", None::<usize>);
+        let _ = sr_ty.setattr("context", None::<usize>);
     }
 
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
@@ -480,6 +776,72 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     os_methods.set_item("step", "(dt: float, residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
     os.set_item("methods", os_methods)?;
     d.set_item("OrbitState", os)?;
+
+    // StepState
+    let ss = PyDict::new_bound(py);
+    ss.set_item(
+        "attributes",
+        PyList::new_bound(py, ["c_real", "c_imag", "prev_delta_real", "prev_delta_imag"]),
+    )?;
+    let ss_methods = PyDict::new_bound(py);
+    ss_methods.set_item("__init__", "(c_real: float = 0.0, c_imag: float = 0.0, prev_delta_real: float = 0.0, prev_delta_imag: float = 0.0)")?;
+    ss.set_item("methods", ss_methods)?;
+    d.set_item("StepState", ss)?;
+
+    // StepContext
+    let sc = PyDict::new_bound(py);
+    sc.set_item(
+        "attributes",
+        PyList::new_bound(
+            py,
+            [
+                "c_real",
+                "c_imag",
+                "prev_delta_real",
+                "prev_delta_imag",
+                "nu_norm",
+                "membership",
+                "grad_re",
+                "grad_im",
+                "sensitivity",
+                "patch",
+                "mip_level",
+            ],
+        ),
+    )?;
+    let sc_methods = PyDict::new_bound(py);
+    sc_methods.set_item("as_feature_vec", "() -> list[float]")?;
+    sc.set_item("methods", sc_methods)?;
+    d.set_item("StepContext", sc)?;
+
+    // StepDebug
+    let sd = PyDict::new_bound(py);
+    sd.set_item(
+        "attributes",
+        PyList::new_bound(
+            py,
+            ["mip_level", "scale_g", "scale_df", "scale", "delta_f_pred", "wall_applied"],
+        ),
+    )?;
+    d.set_item("StepDebug", sd)?;
+
+    // StepResult
+    let sr = PyDict::new_bound(py);
+    sr.set_item(
+        "attributes",
+        PyList::new_bound(py, ["c_real", "c_imag", "delta_real", "delta_imag", "debug", "context"]),
+    )?;
+    d.set_item("StepResult", sr)?;
+
+    // StepController
+    let stc = PyDict::new_bound(py);
+    let stc_methods = PyDict::new_bound(py);
+    stc_methods.set_item("__init__", "() -> StepController")?;
+    stc_methods.set_item("context_for_state", "(state: StepState) -> StepContext")?;
+    stc_methods.set_item("step", "(state: StepState, delta_real: float, delta_imag: float) -> StepResult")?;
+    stc_methods.set_item("sample_sensitivity", "(c_real: float, c_imag: float, mip_level: int) -> float")?;
+    stc.set_item("methods", stc_methods)?;
+    d.set_item("StepController", stc)?;
 
     // FeatureExtractor
     let fe = PyDict::new_bound(py);

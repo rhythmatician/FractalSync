@@ -190,17 +190,17 @@ def test_model_init():
             window_frames=10,
             n_features_per_frame=6,
             hidden_dims=[128, 256, 128],
-            k_bands=6,
+            context_dim=265,
         )
         print("✓ Model initialized")
 
         # Test forward pass
-        test_input = torch.randn(1, 60)  # 6 features * 10 frames
+        test_input = torch.randn(1, 325)  # 6 features * 10 frames + 265 context
         output = model(test_input)
         print(f"✓ Forward pass works: input {test_input.shape} → output {output.shape}")
 
         # Verify output shape
-        assert output.shape == (1, 9), f"Expected output (1,9), got {output.shape}"
+        assert output.shape == (1, 2), f"Expected output (1,2), got {output.shape}"
         print("✓ Output shape is correct")
 
         return True

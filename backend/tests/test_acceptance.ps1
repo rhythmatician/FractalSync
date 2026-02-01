@@ -155,7 +155,7 @@ if ($script:failed -eq 0) {
     Write-Host "  1. Start backend API:  python backend/api/server.py"
     Write-Host "  2. Start frontend:     npm --prefix frontend run dev"
     Write-Host "  3. Open browser:       http://localhost:3001"
-    Write-Host "  4. Load model from:    backend/checkpoints/model_orbit_control_*.onnx"
+    Write-Host "  4. Load model from:    backend/checkpoints/model_step_control_*.onnx"
     exit 0
 } else {
     Write-Host "✗ Some tests failed. See details above." -ForegroundColor Red

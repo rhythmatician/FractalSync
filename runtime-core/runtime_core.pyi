@@ -115,6 +115,56 @@ class OrbitState:
         self, residual_params: ResidualParams, band_gates: Optional[list[float]] = ...
     ) -> complex: ...
 
+class StepState:
+    def __init__(
+        self,
+        c_real: float = ...,
+        c_imag: float = ...,
+        prev_delta_real: float = ...,
+        prev_delta_imag: float = ...,
+    ) -> None: ...
+
+    c_real: float
+    c_imag: float
+    prev_delta_real: float
+    prev_delta_imag: float
+
+class StepContext:
+    c_real: float
+    c_imag: float
+    prev_delta_real: float
+    prev_delta_imag: float
+    nu_norm: float
+    membership: bool
+    grad_re: float
+    grad_im: float
+    sensitivity: float
+    patch: list[float]
+    mip_level: int
+    def as_feature_vec(self) -> list[float]: ...
+
+class StepDebug:
+    mip_level: int
+    scale_g: float
+    scale_df: float
+    scale: float
+    delta_f_pred: float
+    wall_applied: bool
+
+class StepResult:
+    c_real: float
+    c_imag: float
+    delta_real: float
+    delta_imag: float
+    debug: StepDebug
+    context: StepContext
+
+class StepController:
+    def __init__(self) -> None: ...
+    def context_for_state(self, state: StepState) -> StepContext: ...
+    def step(self, state: StepState, delta_real: float, delta_imag: float) -> StepResult: ...
+    def sample_sensitivity(self, c_real: float, c_imag: float, mip_level: int) -> float: ...
+
 class RuntimeVisualMetrics:
     edge_density: float
     color_uniformity: float
