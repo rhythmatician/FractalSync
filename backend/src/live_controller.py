@@ -13,7 +13,7 @@ import librosa
 from typing import Tuple, Dict, List, Optional, Union, cast
 from dataclasses import dataclass
 from collections import deque
-from runtime_core import StepController, StepState
+from runtime_core import StepController, StepState, StepResult
 
 
 @dataclass
@@ -628,7 +628,7 @@ class StepStateMachine:
 
         self.controller = StepController()
         self.state = StepState()
-        self.last_result = None
+        self.last_result: Optional[StepResult] = None
 
         # Control inputs (updated by controller)
         self.control_loudness = 0.5
@@ -636,10 +636,14 @@ class StepStateMachine:
         self.control_noisiness = 0.5
         self.heading = 0.0
 
-    def start_transition(self, new_lobe: int, _new_sub_lobe: int, duration: float = 3.0):
+    def start_transition(
+        self, new_lobe: int, _new_sub_lobe: int, duration: float = 3.0
+    ):
         """Adjust heading target based on boundary events."""
         target_heading = (new_lobe % 4) * (np.pi / 2.0)
-        self.heading = (1.0 - self.heading_smoothing) * self.heading + self.heading_smoothing * target_heading
+        self.heading = (
+            1.0 - self.heading_smoothing
+        ) * self.heading + self.heading_smoothing * target_heading
         self.transition_duration = duration
 
     def update_control_inputs(
