@@ -121,6 +121,9 @@ class ControlTrainer:
             "timbre_color": 1.0,
             "transient_impact": 1.0,
             "control_loss": 1.0,
+            # Encourage negative correlation between loudness (rms) and
+            # Mandelbrot distance proxy (larger = further from the set)
+            "loudness_distance": 1.0,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -140,6 +143,7 @@ class ControlTrainer:
 
         # Minimap context controller for on-the-fly context sampling during training
         # (uses the runtime_core minimap via StepController/context_for_state)
+        self.step_controller: Optional[StepController] = None
         try:
             self.step_controller = StepController()
         except Exception:
@@ -154,6 +158,7 @@ class ControlTrainer:
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "loudness_distance_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -212,6 +217,7 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_loudness_distance = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -417,6 +423,39 @@ class ControlTrainer:
                 spectral_flux, temporal_change_tensor
             )
 
+            # Loudness-distance (negative correlation) loss
+            # Loudness proxy: RMS feature (index 2 of avg_features)
+            spectral_rms = avg_features[:, 2]
+
+            # Compute a simple distance proxy per-sample. Use nu_norm from
+            # the minimap when available (distance = 1 - nu_norm), or fail loud.
+            distance_list = []
+            for i in range(batch_size):
+                c_real_val = julia_real[i].detach().item()
+                c_imag_val = julia_imag[i].detach().item()
+                if self.step_controller is None:
+                    raise RuntimeError(
+                        "Minimap StepController not available for loudness-distance loss calculation"
+                    )
+                try:
+                    state = StepState(c_real_val, c_imag_val, 0.0, 0.0)
+                    ctx = self.step_controller.context_for_state(state)
+                    nu_norm = getattr(ctx, "nu_norm", None)
+                    if nu_norm is not None:
+                        distance_list.append(1.0 - float(nu_norm))
+                        continue
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Minimap sampling failed for loudness-distance at batch idx {i}: {e}"
+                    )
+
+            distance_tensor = torch.tensor(
+                distance_list, dtype=torch.float32, device=self.device
+            )
+            loudness_distance_loss = self.correlation_loss(
+                -spectral_rms, distance_tensor
+            )
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -429,6 +468,7 @@ class ControlTrainer:
             total_batch_loss = (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
+                + self.correlation_weights["loudness_distance"] * loudness_distance_loss
                 + current_curriculum_weight * control_loss_val
             )
 
@@ -442,6 +482,7 @@ class ControlTrainer:
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_loudness_distance += loudness_distance_loss.item()
             n_batches += 1
 
         # Average losses
@@ -450,6 +491,7 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "loudness_distance_loss": total_loudness_distance / n_batches,
         }
 
         return avg_losses
@@ -528,7 +570,8 @@ class ControlTrainer:
             logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
-                f'Control: {avg_losses["control_loss"]:.4f}'
+                f'Control: {avg_losses["control_loss"]:.4f}, '
+                f'LoudnessDist: {avg_losses["loudness_distance_loss"]:.4f}'
             )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
