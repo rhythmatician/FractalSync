@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -30,6 +31,57 @@ from runtime_core import (
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
+
+
+class UphillDeltaLoss(nn.Module):
+    """Penalize Δc movement in the uphill direction when gradient is steep.
+
+    Given delta (batch,2) and grad (batch,2):
+      proj = (g · d) / (||g|| + eps)
+      penalty_per_sample = weight * (ReLU(proj))^2 * ReLU(||g|| - grad_thresh)
+
+    Returns average penalty across batch.
+    """
+
+    def __init__(
+        self,
+        weight: float = 1e-2,
+        grad_thresh: float = 1e-3,
+        eps: float = 1e-8,
+    ):
+        super().__init__()
+        self.weight = float(weight)
+        self.grad_thresh = float(grad_thresh)
+        self.eps = float(eps)
+
+    def forward(self, delta: torch.Tensor, grad: torch.Tensor) -> torch.Tensor:
+        """Compute uphill penalty.
+
+        Args:
+            delta: Tensor (batch, 2) - Δc
+            grad: Tensor (batch, 2) - ∇f(c)
+
+        Returns:
+            scalar tensor (mean penalty)
+        """
+        if delta.numel() == 0:
+            return torch.tensor(0.0, device=delta.device)
+
+        # compute dot products and gradient norms
+        dot = torch.sum(grad * delta, dim=1)
+        grad_norm = torch.sqrt(torch.sum(grad * grad, dim=1) + self.eps)
+
+        proj = dot / (grad_norm + self.eps)
+
+        # Only penalize positive projection (moving uphill)
+        uphill = torch.nn.functional.relu(proj)
+
+        # Only apply penalty when gradient magnitude exceeds threshold
+        grad_mask = torch.nn.functional.relu(grad_norm - self.grad_thresh)
+
+        penalty_per_sample = self.weight * (uphill**2) * grad_mask
+
+        return torch.mean(penalty_per_sample)
 
 
 class ControlLoss(nn.Module):
@@ -58,8 +110,16 @@ class CorrelationLoss(nn.Module):
         x_centered = x - torch.mean(x)
         y_centered = y - torch.mean(y)
         numerator = torch.sum(x_centered * y_centered)
-        denominator = torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2))
-        correlation = numerator / (denominator + 1e-8)
+        sx = torch.sum(x_centered**2)
+        sy = torch.sum(y_centered**2)
+        eps = 1e-6
+        # If either input has (near-)zero variance, return zero loss (no gradient
+        # dependency on the inputs) to avoid undefined derivatives.
+        if sx.item() < eps or sy.item() < eps:
+            return torch.tensor(0.0, device=x.device, dtype=x.dtype)
+        denominator = torch.sqrt(sx * sy)
+        denom_clamped = torch.clamp(denominator, min=eps)
+        correlation = numerator / denom_clamped
         return -correlation
 
 
@@ -246,6 +306,23 @@ class ControlTrainer:
             features = features.to(self.device)
             batch_size = features.shape[0]
 
+            # Sanity check: ensure model parameters are healthy before forward
+            for pname, pparam in self.model.named_parameters():
+                try:
+                    if torch.isnan(pparam).any() or torch.isinf(pparam).any():
+                        n_nan = int(torch.isnan(pparam).sum().item())
+                        n_inf = int(torch.isinf(pparam).sum().item())
+                        logger.error(
+                            f"Model parameter {pname} contains NaNs/InFs before forward: NaNs={n_nan}, Infs={n_inf}"
+                        )
+                        # Instead of attempting a noisy reinitialization, abort clearly
+                        raise RuntimeError(
+                            "Model parameters contain NaNs/InFs before forward; aborting"
+                        )
+                except Exception:
+                    logger.exception("Failed checking model parameters for NaN/Inf")
+                    raise
+
             # Get curriculum targets if available
             control_targets = None
             if self.use_curriculum and self.curriculum_positions is not None:
@@ -273,7 +350,7 @@ class ControlTrainer:
             features_with_context = features
             if self.context_dim > 0:
                 # Attempt to populate minimap-based context when curriculum positions
-                # are available. Otherwise, fall back to zeroed context.
+                # are available. Otherwise, fail loud.
                 if (
                     self.step_controller is not None
                     and self.use_curriculum
@@ -332,16 +409,26 @@ class ControlTrainer:
                     )
                     features_with_context = torch.cat([features, context], dim=1)
                 else:
-                    # Zero padding fallback
-                    context = torch.zeros(
-                        (batch_size, self.context_dim),
-                        dtype=features.dtype,
-                        device=self.device,
+                    raise RuntimeError(
+                        "Minimap StepController not available for context sampling during training"
                     )
-                    features_with_context = torch.cat([features, context], dim=1)
 
             # Forward pass
             predicted_controls = self.model(features_with_context)
+
+            # Quick check: detect NaNs in model outputs
+            try:
+                pc_nans = int(torch.isnan(predicted_controls).sum().item())
+                pc_infs = int(torch.isinf(predicted_controls).sum().item())
+                if pc_nans > 0 or pc_infs > 0:
+                    logger.error(
+                        f"predicted_controls contains NaNs/Infs: NaNs={pc_nans}, Infs={pc_infs}"
+                    )
+                    logger.error(
+                        f"predicted_controls sample: {predicted_controls.view(-1)[:10].detach().cpu().numpy().tolist()}"
+                    )
+            except Exception:
+                logger.exception("Failed to inspect predicted_controls for NaN/Inf")
 
             # Parse delta outputs
             parsed = self.model.parse_output(predicted_controls)
@@ -415,6 +502,20 @@ class ControlTrainer:
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
 
+            # Sanitize tensors to avoid NaN/Inf propagation into the loss
+            def _sanitize(t: torch.Tensor) -> torch.Tensor:
+                if not isinstance(t, torch.Tensor):
+                    t = torch.tensor(t, device=self.device, dtype=torch.float32)
+                t = t.to(self.device)
+                t = torch.where(torch.isnan(t), torch.zeros_like(t), t)
+                t = torch.where(torch.isinf(t), torch.sign(t) * 1e6, t)
+                return t
+
+            spectral_centroid = _sanitize(spectral_centroid)
+            color_hue_tensor = _sanitize(color_hue_tensor)
+            spectral_flux = _sanitize(spectral_flux)
+            temporal_change_tensor = _sanitize(temporal_change_tensor)
+
             # Compute correlation losses
             timbre_color_loss = self.correlation_loss(
                 spectral_centroid, color_hue_tensor
@@ -472,10 +573,168 @@ class ControlTrainer:
                 + current_curriculum_weight * control_loss_val
             )
 
+            # Diagnostic: detect NaNs and log key tensors before backward
+            if torch.isnan(total_batch_loss) or torch.isinf(total_batch_loss):
+                logger.error(
+                    f"NaN/Inf detected in total_batch_loss at batch {batch_idx}"
+                )
+                try:
+                    logger.error(
+                        f"timbre_color_loss={timbre_color_loss.item()}, transient_impact_loss={transient_impact_loss.item()}, loudness_distance_loss={loudness_distance_loss.item()}, control_loss={control_loss_val.item()}"
+                    )
+                except Exception:
+                    logger.exception("Failed to read scalar loss items")
+
+                # Scalar stats
+                try:
+                    logger.error(
+                        f"predicted_controls: mean={predicted_controls.mean().item()}, std={predicted_controls.std().item()}"
+                    )
+                except Exception:
+                    logger.exception("Failed to compute predicted_controls stats")
+
+                try:
+                    logger.error(
+                        f"features: mean={features.mean().item()}, std={features.std().item()}"
+                    )
+                except Exception:
+                    logger.exception("Failed to compute features stats")
+
+                try:
+                    logger.error(
+                        f"distance: min={distance_tensor.min().item()}, max={distance_tensor.max().item()}, mean={distance_tensor.mean().item()}"
+                    )
+                except Exception:
+                    logger.exception("Failed to compute distance tensor stats")
+
+                # Check NaNs in key tensors
+                for name, t in (
+                    ("predicted_controls", predicted_controls),
+                    ("color_hue_tensor", color_hue_tensor),
+                    ("spectral_rms", spectral_rms),
+                    ("distance_tensor", distance_tensor),
+                ):
+                    try:
+                        n_nan = int(torch.isnan(t).sum().item())
+                        n_inf = int(torch.isinf(t).sum().item())
+                        logger.error(f"{name}: NaNs={n_nan}, Infs={n_inf}")
+                    except Exception:
+                        logger.exception(f"Failed to check NaN/Inf for {name}")
+
+                # If predicted_controls has NaNs, run a layer-by-layer forward to find where NaNs originate
+                try:
+                    x_debug = features_with_context.clone().detach()
+                    for idx, layer in enumerate(self.model.encoder):
+                        # If the layer has parameters, check them for NaNs/Infs first
+                        try:
+                            if hasattr(layer, "weight"):
+                                w = layer.weight.detach()
+                                b = (
+                                    layer.bias.detach()
+                                    if hasattr(layer, "bias") and layer.bias is not None
+                                    else None
+                                )
+                                w_nan = int(torch.isnan(w).sum().item())
+                                w_inf = int(torch.isinf(w).sum().item())
+                                logger.error(
+                                    f"Encoder layer {idx} ({type(layer).__name__}) params: weight NaNs={w_nan}, Infs={w_inf}"
+                                )
+                                try:
+                                    # sample few weight elements for inspection
+                                    w_sample = w.view(-1)[:10].cpu().numpy().tolist()
+                                    logger.error(
+                                        f"Encoder layer {idx} weight sample: {w_sample}"
+                                    )
+                                except Exception:
+                                    logger.exception("Failed to dump weight sample")
+                                if b is not None:
+                                    b_nan = int(torch.isnan(b).sum().item())
+                                    b_inf = int(torch.isinf(b).sum().item())
+                                    logger.error(
+                                        f"Encoder layer {idx} ({type(layer).__name__}) params: bias NaNs={b_nan}, Infs={b_inf}"
+                                    )
+                                    try:
+                                        b_sample = (
+                                            b.view(-1)[:10].cpu().numpy().tolist()
+                                        )
+                                        logger.error(
+                                            f"Encoder layer {idx} bias sample: {b_sample}"
+                                        )
+                                    except Exception:
+                                        logger.exception("Failed to dump bias sample")
+                        except Exception:
+                            logger.exception("Failed to inspect layer parameters")
+
+                        mean = float(x_debug.mean().detach().cpu().item())
+                        std = float(x_debug.std().detach().cpu().item())
+                        logger.error(
+                            f"Encoder layer {idx} ({type(layer).__name__}): mean={mean:.6f}, std={std:.6f}, NaNs={n_nan}, Infs={n_inf}"
+                        )
+                        if n_nan > 0 or n_inf > 0:
+                            break
+
+                    # Check delta head layers
+                    x_head = x_debug
+                    for idx, layer in enumerate(self.model.delta_head):
+                        x_head = layer(x_head)
+                        n_nan = int(torch.isnan(x_head).sum().item())
+                        n_inf = int(torch.isinf(x_head).sum().item())
+                        mean = float(x_head.mean().detach().cpu().item())
+                        std = float(x_head.std().detach().cpu().item())
+                        logger.error(
+                            f"Delta head layer {idx} ({type(layer).__name__}): mean={mean:.6f}, std={std:.6f}, NaNs={n_nan}, Infs={n_inf}"
+                        )
+                        if n_nan > 0 or n_inf > 0:
+                            break
+                except Exception:
+                    logger.exception("Layerwise forward failed")
+
+                raise RuntimeError(
+                    "Aborting training due to NaN/Inf in total_batch_loss - see logs for details"
+                )
+
             # Backward pass
             self.optimizer.zero_grad()
-            total_batch_loss.backward()
-            self.optimizer.step()
+
+            # If loss does not depend on model parameters (no grad_fn), skip backward
+            if not (
+                hasattr(total_batch_loss, "requires_grad")
+                and total_batch_loss.requires_grad
+            ):
+                logger.info(
+                    "total_batch_loss has no gradient graph; skipping backward and optimizer step for this batch"
+                )
+            else:
+                total_batch_loss.backward()
+
+                # Detect NaN/Inf in gradients to avoid corrupting parameters
+                grad_bad = False
+                for g_name, g_param in self.model.named_parameters():
+                    if g_param.grad is None:
+                        continue
+                    try:
+                        if (
+                            torch.isnan(g_param.grad).any()
+                            or torch.isinf(g_param.grad).any()
+                        ):
+                            n_nan = int(torch.isnan(g_param.grad).sum().item())
+                            n_inf = int(torch.isinf(g_param.grad).sum().item())
+                            logger.error(
+                                f"Gradient for {g_name} contains NaNs/Infs: NaNs={n_nan}, Infs={n_inf}"
+                            )
+                            grad_bad = True
+                    except Exception:
+                        logger.exception(f"Failed to inspect gradient for {g_name}")
+                        grad_bad = True
+
+                if grad_bad:
+                    logger.warning(
+                        "Skipping optimizer.step() due to invalid gradients; aborting training.  Inspect runtime-core and its pybindings and rebuild if needed"
+                    )
+
+                    sys.exit(1)
+                else:
+                    self.optimizer.step()
 
             # Accumulate losses
             total_loss += total_batch_loss.item()
@@ -524,6 +783,16 @@ class ControlTrainer:
         # (Rust binding expects Seq[Seq[float]] where the inner seq is a single window).
         all_windows = [row for f in all_features for row in f.tolist()]
         self.feature_extractor.compute_normalization_stats(all_windows)
+
+        # Quick sanity: Ensure no param corruption happened during feature computations
+        for pname, pparam in self.model.named_parameters():
+            if torch.isnan(pparam).any() or torch.isinf(pparam).any():
+                logger.error(
+                    f"Model parameter {pname} contains NaNs/InFs after compute_normalization_stats: NaNs={int(torch.isnan(pparam).sum().item())}, Infs={int(torch.isinf(pparam).sum().item())}"
+                )
+                raise RuntimeError(
+                    "Model parameters corrupted after compute_normalization_stats; aborting"
+                )
 
         # Normalize each window individually and re-stack per-file arrays. Handle
         # empty feature arrays safely by keeping an empty (0, n_features) array.
