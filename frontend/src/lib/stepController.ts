@@ -53,7 +53,6 @@ interface WasmModule {
 }
 
 let modulePromise: Promise<WasmModule> | null = null;
-let cachedModule: WasmModule | null = null;
 
 async function loadModule(): Promise<WasmModule> {
   if (!modulePromise) {
@@ -65,7 +64,6 @@ async function loadModule(): Promise<WasmModule> {
     modulePromise = import(/* @vite-ignore */ (wasmUrl as any)) as Promise<WasmModule>;
   }
   const mod = await modulePromise;
-  cachedModule = mod;
   await mod.default();
   return mod;
 }

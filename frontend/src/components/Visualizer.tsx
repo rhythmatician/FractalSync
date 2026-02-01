@@ -22,7 +22,7 @@ export function Visualizer() {
   const [showModelInfo, setShowModelInfo] = useState(true);
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [_audioReactiveEnabled, _setAudioReactiveEnabled] = useState(false);
   const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const metricsUpdateRef = useRef<number | null>(null);
 

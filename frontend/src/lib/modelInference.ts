@@ -73,8 +73,6 @@ export class ModelInference {
   private proposalJitter: number = 0.0; // absolute jitter magnitude
 
   // Last observed model outputs (raw) and last scaled values (after proposalScale/jitter)
-  private lastRawModelDX: number | null = null;
-  private lastRawModelDY: number | null = null;
   private lastScaledModelDX: number | null = null;
   private lastScaledModelDY: number | null = null;
 
@@ -275,8 +273,9 @@ export class ModelInference {
       const dy = params.length > 1 ? params[1] : 0;
 
       // Store raw model outputs
-      this.lastRawModelDX = dx;
-      this.lastRawModelDY = dy;
+      // Record raw model outputs for optional telemetry/debugging (kept local)
+      // These were previously stored but not used; keep local logs minimal.
+      void dx; void dy;
 
       // Apply frontend experimental scaling and jitter before passing to the step controller
       let scaled_dx = dx * this.proposalScale;
