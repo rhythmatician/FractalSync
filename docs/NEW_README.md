@@ -9,10 +9,11 @@ This is the README file that has never been touched by AI.
 ## Install dependenies
 pip install -r backend/requirements.txt # backend
 winget install --id Rustlang.Rust  # runtime-core
+Push-Location wasm-orbit; try { cargo update } finally { Pop-Location }
 cargo --version  # verify runtime-core
 cargo install wasm-pack --locked  # wasm
 wasm-pack --version  # verify wasm
-cd frontend; npm install  # frontend
+Push-Location frontend; try { npm install } finally { Pop-Location }  # frontend
 
 
 ## Building
