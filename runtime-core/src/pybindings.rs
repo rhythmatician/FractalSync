@@ -34,6 +34,8 @@ use crate::step_controller::{
     StepResult as RustStepResult,
 };
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
+use crate::distance_field::{load_distance_field, sample_distance_field};
+
 
 /// Python wrapper for `ResidualParams`.
 #[pyclass]
@@ -382,6 +384,50 @@ impl StepContext {
 
     fn as_feature_vec(&self) -> Vec<f32> {
         self.inner.as_feature_vec()
+    }
+}
+
+/// Load a precomputed signed distance field (.npy) and optional .json metadata.
+#[pyfunction]
+fn load_distance_field_py(path: &str) -> PyResult<()> {
+    match load_distance_field(path) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Set the in-memory distance field from a nested Python list of floats.
+/// Accepts a list of rows [[r0c0, r0c1, ...], [r1c0, ...], ...] plus bounding box.
+#[pyfunction]
+fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> PyResult<()> {
+    let rows = data.len();
+    if rows == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("data must be non-empty"));
+    }
+    let cols = data[0].len();
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("data rows must be non-empty"));
+    }
+    // Flatten, validating row lengths
+    let mut flat: Vec<f32> = Vec::with_capacity(rows * cols);
+    for row in &data {
+        if row.len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err("inconsistent row lengths"));
+        }
+        flat.extend(row.iter().cloned());
+    }
+    match crate::distance_field::set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Sample a loaded distance field at arrays of (x_reals, y_imags).
+#[pyfunction]
+fn sample_distance_field_py(x_coords: Vec<f64>, y_coords: Vec<f64>) -> PyResult<Vec<f32>> {
+    match sample_distance_field(&x_coords, &y_coords) {
+        Ok(v) => Ok(v),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
 }
 
@@ -743,6 +789,10 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
+    // Distance-field helpers
+    m.add_function(wrap_pyfunction!(load_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     Ok(())
 }
 

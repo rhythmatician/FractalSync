@@ -29,6 +29,7 @@ pub mod features;
 pub mod minimap;
 pub mod step_controller;
 pub mod visual_metrics;
+pub mod distance_field;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
 // corresponding feature flag has been enabled.
