@@ -56,3 +56,9 @@ rustfft = { version = "6" }
 
 # For deterministic residual initialization (seeded RNG supported).
 rand = { version = "0.8", features = ["std"] }
+ndarray = "0.15"
+ndarray-npy = "0.7"
+once_cell = "1.18"
+
+[dev-dependencies]
+tempfile = "3"
