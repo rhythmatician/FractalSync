@@ -145,7 +145,6 @@ def execute_training_workflow(args):
     print(f"Batch size: {args.batch_size}")
     print(f"Learning rate: {args.learning_rate}")
     print(f"Window frames: {args.window_frames}")
-    print(f"Residual bands (k): {args.k_bands}")
     print(f"Use curriculum: {args.use_curriculum}")
     if args.use_curriculum:
         print(f"  Curriculum weight: {args.curriculum_weight}")
@@ -208,14 +207,25 @@ def execute_training_workflow(args):
     else:
         print("  GPU rendering disabled, using CPU")
 
-    print("[5/7] Creating orbit-based control model...")
+    print("[5/7] Creating step-based control model...")
     model = AudioToControlModel(
         window_frames=args.window_frames,
         n_features_per_frame=6,
         hidden_dims=[128, 256, 128],
-        k_bands=args.k_bands,
+        context_dim=265,
         dropout=0.2,
     )
+
+    # Quick sanity check: ensure model parameters do not contain NaNs before training
+    nan_params = False
+    for name, p in model.named_parameters():
+        if torch.isnan(p).any():
+            print(
+                f"[ERROR] Model parameter {name} contains NaNs: {int(torch.isnan(p).sum().item())} elements"
+            )
+            nan_params = True
+    if nan_params:
+        raise RuntimeError("Model parameters contain NaNs on initialization; aborting")
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(f"Input dimension: {model.input_dim}")
@@ -234,16 +244,23 @@ def execute_training_workflow(args):
         julia_resolution=args.julia_resolution,
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
-        k_residuals=args.k_bands,
     )
+
+    # Sanity: check model params after trainer initialization
+    for name, p in trainer.model.named_parameters():
+        if torch.isnan(p).any() or torch.isinf(p).any():
+            print(f"[ERROR] After ControlTrainer init: {name} contains NaNs/Infs")
+            raise RuntimeError(
+                "Model params corrupted after ControlTrainer init; aborting"
+            )
 
     print("[7/7] Starting training...")
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
     print("\nArchitecture overview:")
-    print("  - Model predicts control signals: s, alpha, omega_scale, band_gates")
-    print("  - Orbit synthesizer generates deterministic c(t) from controls")
-    print("  - Curriculum learning teaches Mandelbrot orbit geometry")
+    print("  - Model predicts delta steps: Delta c_real, Delta c_imag")
+    print("  - Step controller applies throttling and boundary guards")
+    print("  - Curriculum learning teaches stable step trajectories")
     print("  - Correlation losses map audio features to visual parameters")
     print("=" * 60)
 
@@ -278,7 +295,7 @@ def execute_training_workflow(args):
     except Exception as e:
         print(f"Warning: Could not get git hash: {e}")
 
-    onnx_model_filename = f"model_orbit_control_{timestamp}.onnx"
+    onnx_model_filename = f"model_step_control_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
     try:
@@ -298,13 +315,13 @@ def execute_training_workflow(args):
                 else None
             ),
             metadata={
-                "model_type": "orbit_control",
+                "model_type": "step_control",
                 "output_dim": model.output_dim,
-                "k_bands": args.k_bands,
                 "epoch": args.epochs,
                 "window_frames": args.window_frames,
                 "num_features_per_frame": 6,
                 "input_dim": model.input_dim,
+                "context_dim": model.context_dim,
                 "timestamp": iso_timestamp,
                 "git_hash": git_hash,
             },
@@ -321,7 +338,7 @@ def execute_training_workflow(args):
         print("Final checkpoint:", final_checkpoint)
     else:
         print("Final checkpoint saved to:", args.save_dir)
-    print("\n[OK] Training complete! Orbit-based model ready for deployment.")
+    print("\n[OK] Training complete! Step-based model ready for deployment.")
 
 
 if __name__ == "__main__":

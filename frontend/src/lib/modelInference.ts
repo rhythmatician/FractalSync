@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
+import { createInitialStepState, loadStepController, type StepController, type StepState } from './stepController';
 
 export interface VisualParameters {
   juliaReal: number;
@@ -27,7 +27,7 @@ export interface ModelMetadata {
   input_dim?: number;
   timestamp?: string;
   git_hash?: string;
-  model_type?: string; // 'orbit_control' or legacy
+  model_type?: string; // 'step_control' or legacy
   k_bands?: number;
 }
 
@@ -45,17 +45,10 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // Orbit-based synthesis (new architecture)
-  private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitState: OrbitState | null = null;
-  private isOrbitModel: boolean = false;
-  
-  // Color-based section detection for lobe switching
-  private colorHistory: number[] = [];
-  private colorHistorySize: number = 120; // ~2 seconds at 60fps
-  private lastLobeSwitch: number = 0;
-  private lobeSwitchCooldown: number = 180; // ~3 seconds at 60fps (hysteresis)
-  private colorChangeThreshold: number = 0.15; // Hue change threshold
+  // Step-based controller (new architecture)
+  private stepController: StepController | null = null;
+  private stepState: StepState | null = null;
+  private isStepModel: boolean = false;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
   private useAudioReactivePostProcessing: boolean = true;
@@ -70,6 +63,61 @@ export class ModelInference {
     inferenceTime: 0,
     postProcessingTime: 0
   };
+
+  // Telemetry: if enabled, we will POST aggregated telemetry to the local backend
+  private telemetryEnabled: boolean = false;
+  private telemetryCounter: number = 0;
+
+  // Proposal scaling and jitter for frontend experiment toggles
+  private proposalScale: number = 1.0;
+  private proposalJitter: number = 0.0; // absolute jitter magnitude
+
+  // Last observed model outputs (raw) and last scaled values (after proposalScale/jitter)
+  private lastScaledModelDX: number | null = null;
+  private lastScaledModelDY: number | null = null;
+
+  setProposalScale(scale: number): void {
+    this.proposalScale = scale;
+    console.log(`[ModelInference] proposalScale set to ${scale}`);
+  }
+
+  setProposalJitter(jitter: number): void {
+    this.proposalJitter = jitter;
+    console.log(`[ModelInference] proposalJitter set to ${jitter}`);
+  }
+
+  /**
+   * Enable or disable server-side telemetry logging. When enabled, the frontend will
+   * periodically post compact telemetry JSON to POST /api/telemetry.
+   */
+  setTelemetryEnabled(enabled: boolean): void {
+    this.telemetryEnabled = enabled;
+    console.log(`[ModelInference] telemetry ${enabled ? 'enabled' : 'disabled'}`);
+
+    // Send an immediate ping to verify connectivity when enabling telemetry
+    if (enabled) {
+      try {
+        const payload = { type: 'ping', ts: new Date().toISOString(), model_type: this.metadata?.model_type ?? null };
+        void this.sendTelemetry(payload);
+        console.debug('[ModelInference] Sent telemetry ping', payload);
+      } catch (e) {
+        console.warn('[ModelInference] telemetry ping failed', e);
+      }
+    }
+  }
+
+  private async sendTelemetry(payload: any): Promise<void> {
+    if (typeof fetch === 'undefined') return;
+    try {
+      await fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.warn('[ModelInference] telemetry send failed', e);
+    }
+  }
 
   /**
    * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
@@ -153,15 +201,13 @@ export class ModelInference {
         }
         this.metadata = await response.json() as ModelMetadata;
 
-        // Check if this is an orbit-based control model
-        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
+        // Check if this is a step-based control model
+        this.isStepModel = this.metadata.model_type === 'step_control';
 
-        if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
-          const kBands = this.metadata.k_bands || 6;
-          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
-          console.log('[ModelInference] Loaded orbit-based control model');
+        if (this.isStepModel) {
+          this.stepController = await loadStepController();
+          this.stepState = await createInitialStepState();
+          console.log('[ModelInference] Loaded step-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
         }
@@ -188,25 +234,24 @@ export class ModelInference {
     const totalStartTime = performance.now();
     let normStartTime = performance.now();
 
+    const inputFeatures = this.buildModelInput(features);
+
     // Normalize features if normalization stats are available
-    let normalizedFeatures = new Float32Array(features);
+    let normalizedFeatures = new Float32Array(inputFeatures.length);
     if (this.featureMean && this.featureStd) {
-      normalizedFeatures = new Float32Array(features.length);
-      for (let i = 0; i < features.length; i++) {
+      for (let i = 0; i < inputFeatures.length; i++) {
         const mean = this.featureMean[i] || 0;
         const std = this.featureStd[i] || 1;
-        normalizedFeatures[i] = (features[i] - mean) / (std + 1e-8);
+        normalizedFeatures[i] = (inputFeatures[i] - mean) / (std + 1e-8);
       }
+    } else {
+      normalizedFeatures = new Float32Array(inputFeatures);
     }
 
     const normTime = performance.now() - normStartTime;
 
     // Prepare input tensor
-    const inputTensor = new ort.Tensor(
-      'float32',
-      normalizedFeatures,
-      [1, features.length]
-    );
+    const inputTensor = new ort.Tensor('float32', normalizedFeatures, [1, normalizedFeatures.length]);
 
     // Run inference
     const inferStartTime = performance.now();
@@ -222,31 +267,111 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL
-      // Parse control signals from model output
-      const controlSignals: ControlSignals = {
-        sTarget: params[0],
-        alpha: params[1],
-        omegaScale: params[2],
-        bandGates: params.slice(3)
-      };
+    if (this.isStepModel && this.stepController && this.stepState) {
+      // NEW STEP-BASED CONTROL MODEL
+      const dx = params.length > 0 ? params[0] : 0;
+      const dy = params.length > 1 ? params[1] : 0;
 
-      // Update orbit state with new control signals
-      this.orbitState.s = controlSignals.sTarget;
-      this.orbitState.alpha = controlSignals.alpha;
-      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
+      // Store raw model outputs
+      // Record raw model outputs for optional telemetry/debugging (kept local)
+      // These were previously stored but not used; keep local logs minimal.
+      void dx; void dy;
 
-      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
+      // Apply frontend experimental scaling and jitter before passing to the step controller
+      let scaled_dx = dx * this.proposalScale;
+      let scaled_dy = dy * this.proposalScale;
+      if (this.proposalJitter > 0) {
+        // small random jitter in real units
+        const ang = Math.random() * Math.PI * 2;
+        const r = (Math.random() * this.proposalJitter);
+        scaled_dx += Math.cos(ang) * r;
+        scaled_dy += Math.sin(ang) * r;
+      }
 
-      // Synthesize Julia parameter c(t) from orbit
-      const dt = 1.0 / 60.0; // Assume 60 FPS
-      const { c, newState } = this.orbitSynthesizer.step(
-        this.orbitState,
-        dt,
-        controlSignals.bandGates
-      );
-      this.orbitState = newState;
+      // Record scaled values
+      this.lastScaledModelDX = scaled_dx;
+      this.lastScaledModelDY = scaled_dy;
+
+      // Debug: log raw and scaled values occasionally
+      if (Math.random() < 0.05) {
+        console.debug('[ModelInference] model output (raw dx,dy)=', dx.toFixed(6), dy.toFixed(6));
+        console.debug('[ModelInference] model output (scaled dx,dy)=', scaled_dx.toFixed(6), scaled_dy.toFixed(6));
+        console.debug('[ModelInference] stepState before', this.stepState);
+      }
+
+      const result = this.stepController.step(this.stepState, scaled_dx, scaled_dy);
+
+      // Update local state from the returned result so future steps are
+      // applied relative to the current orbit state.
+      if (result) {
+        const prevState = { ...this.stepState };
+        // Defensive checks in case WASM returns an unexpected shape. Some
+        // bindings/serializers produce `c_real`/`c_imag`, others `c_next_real`/`c_next_imag`.
+        // Handle both and fall back to adding the delta if necessary.
+        const c_real_candidates = [
+          (result as any).c_real,
+          (result as any).c_next_real,
+          (result as any).c_next?.real,
+          (result as any).c_next?.c_real,
+        ];
+        const c_imag_candidates = [
+          (result as any).c_imag,
+          (result as any).c_next_imag,
+          (result as any).c_next?.imag,
+          (result as any).c_next?.c_imag,
+        ];
+        const delta_real_candidates = [
+          (result as any).delta_real,
+          (result as any).delta_applied?.real,
+          (result as any).delta?.real,
+        ];
+        const delta_imag_candidates = [
+          (result as any).delta_imag,
+          (result as any).delta_applied?.imag,
+          (result as any).delta?.imag,
+        ];
+
+        const pickNumber = (arr: any[]): number | null => {
+          for (const v of arr) {
+            if (typeof v === 'number') return v;
+          }
+          return null;
+        };
+
+        const maybe_c_real = pickNumber(c_real_candidates);
+        const maybe_c_imag = pickNumber(c_imag_candidates);
+        const maybe_delta_real = pickNumber(delta_real_candidates);
+        const maybe_delta_imag = pickNumber(delta_imag_candidates);
+
+        if (maybe_c_real !== null) this.stepState.c_real = maybe_c_real;
+        if (maybe_c_imag !== null) this.stepState.c_imag = maybe_c_imag;
+
+        // If c_next wasn't provided, fall back to updating by the applied delta
+        if (maybe_c_real === null && typeof maybe_delta_real === 'number') {
+          this.stepState.c_real = this.stepState.c_real + maybe_delta_real;
+        }
+        if (maybe_c_imag === null && typeof maybe_delta_imag === 'number') {
+          this.stepState.c_imag = this.stepState.c_imag + maybe_delta_imag;
+        }
+
+        if (maybe_delta_real !== null) this.stepState.prev_delta_real = maybe_delta_real;
+        if (maybe_delta_imag !== null) this.stepState.prev_delta_imag = maybe_delta_imag;
+
+        if (Math.random() < 0.05) {
+          console.debug('[ModelInference] step result', result);
+          console.debug('[ModelInference] stepState after', this.stepState, 'prev', prevState);
+        }
+
+        // If we couldn't find any of the expected numeric outputs, warn once
+        if (
+          maybe_c_real === null &&
+          maybe_c_imag === null &&
+          maybe_delta_real === null &&
+          maybe_delta_imag === null
+        ) {
+          console.warn('[ModelInference] Unexpected step result shape; result:', result);
+        }
+      }
 
       // Extract audio features for color mapping
       const numFeatures = 6;
@@ -258,21 +383,20 @@ export class ModelInference {
       }
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
+      // Expose a telemetry-friendly value for logging
+      (this as any)._lastAvgRMS = avgRMS;
 
-      // Map to visual parameters
+      const stepMag = Math.hypot(this.stepState.prev_delta_real, this.stepState.prev_delta_imag);
       const currentHue = (avgRMS * 2.0) % 1.0;
       visualParams = {
-        juliaReal: c.real,
-        juliaImag: c.imag,
+        juliaReal: this.stepState.c_real,
+        juliaImag: this.stepState.c_imag,
         colorHue: currentHue,
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
-        zoom: Math.max(1.5, Math.min(4.0, 2.5)), // Fixed zoom for orbit viewing
-        speed: Math.max(0.3, Math.min(0.7, controlSignals.omegaScale / 5.0))
+        zoom: 2.5,
+        speed: Math.max(0.3, Math.min(0.9, stepMag * 10.0))
       };
-      
-      // Color-based section detection for lobe switching
-      this.detectSectionChange(currentHue);
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
@@ -313,6 +437,8 @@ export class ModelInference {
         avgZCR /= windowFrames;
         avgOnset /= windowFrames;
         avgRolloff /= windowFrames;
+        // Expose for telemetry
+        (this as any)._lastAvgRMS = avgRMS;
         
         // Color: Map RMS (loudness) to hue cycling, onset to saturation
         visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0;
@@ -360,11 +486,63 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
+        modelType: this.isStepModel ? 'step_control' : 'legacy'
       });
+
+      // If telemetry is enabled, periodically POST a compact record to the backend
+      if (this.telemetryEnabled) {
+        this.telemetryCounter += 1;
+        if (this.telemetryCounter % 30 === 0) { // ~0.5s at 60fps
+          try {
+            const payload = this.assembleTelemetryEntry(params);
+            // Fire-and-forget; failures are non-fatal
+            void this.sendTelemetry(payload);
+          } catch (e) {
+            console.warn('[ModelInference] telemetry assembly failed', e);
+          }
+        }
+      }
     }
 
     return visualParams;
+  }
+
+  private buildModelInput(features: number[]): number[] {
+    let combined = [...features];
+
+    if (this.isStepModel) {
+      if (this.stepController && this.stepState && typeof (this.stepController as any).context === 'function') {
+        try {
+          const context = (this.stepController as any).context(this.stepState);
+          combined = combined.concat(context?.feature_vec ?? []);
+        } catch (e) {
+          console.warn('[ModelInference] stepController.context threw:', e);
+          combined = combined.concat(new Array(265).fill(0));
+        }
+      } else {
+        if (this.stepController && !(typeof (this.stepController as any).context === 'function')) {
+          console.warn('[ModelInference] stepController.context not available; using zeroed minimap context');
+        }
+        combined = combined.concat(new Array(265).fill(0));
+      }
+    }
+
+    return this.adjustInputLength(combined);
+  }
+
+  private adjustInputLength(features: number[]): number[] {
+    const inputShape = this.metadata?.input_shape;
+    const expected = this.metadata?.input_dim ?? (inputShape ? inputShape[inputShape.length - 1] : undefined);
+    if (!expected || expected <= 0) {
+      return features;
+    }
+    if (features.length > expected) {
+      return features.slice(0, expected);
+    }
+    if (features.length < expected) {
+      return features.concat(new Array(expected - features.length).fill(0));
+    }
+    return features;
   }
 
   /**
@@ -382,64 +560,92 @@ export class ModelInference {
   }
 
   /**
+   * Assemble a compact telemetry payload including model proposals and minimap context.
+   * This is public to make it testable.
+   */
+  assembleTelemetryEntry(params: number[]): Record<string, any> {
+    const model_dx = (params.length > 0 ? params[0] : 0);
+    const model_dy = (params.length > 1 ? params[1] : 0);
+
+    // Base applied delta from state
+    const applied_delta = Math.hypot(this.stepState?.prev_delta_real ?? 0, this.stepState?.prev_delta_imag ?? 0) || 0;
+
+    // Attempt to extract minimap context if available
+    let c_real: number | null = this.stepState?.c_real ?? null;
+    let c_imag: number | null = this.stepState?.c_imag ?? null;
+    let prev_dx: number | null = this.stepState?.prev_delta_real ?? null;
+    let prev_dy: number | null = this.stepState?.prev_delta_imag ?? null;
+    let nu_norm: number | null = null;
+    let membership: number | null = null;
+    let grad_re: number | null = null;
+    let grad_im: number | null = null;
+    let sensitivity: number | null = null;
+    let patch_mean: number | null = null;
+    let patch_max: number | null = null;
+
+    if (this.stepController && this.stepState && typeof (this.stepController as any).context === 'function') {
+      try {
+        const ctx = (this.stepController as any).context(this.stepState);
+        if (ctx && Array.isArray(ctx.feature_vec) && ctx.feature_vec.length >= 9) {
+          const fv: number[] = ctx.feature_vec;
+          c_real = typeof fv[0] === 'number' ? fv[0] : c_real;
+          c_imag = typeof fv[1] === 'number' ? fv[1] : c_imag;
+          prev_dx = typeof fv[2] === 'number' ? fv[2] : prev_dx;
+          prev_dy = typeof fv[3] === 'number' ? fv[3] : prev_dy;
+          nu_norm = typeof fv[4] === 'number' ? fv[4] : null;
+          membership = typeof fv[5] === 'number' ? fv[5] : null;
+          grad_re = typeof fv[6] === 'number' ? fv[6] : null;
+          grad_im = typeof fv[7] === 'number' ? fv[7] : null;
+          sensitivity = typeof fv[8] === 'number' ? fv[8] : null;
+
+          const patch = fv.slice(9);
+          if (patch.length > 0) {
+            let sum = 0;
+            let maxv = -Infinity;
+            for (let i = 0; i < patch.length; i++) {
+              const v = patch[i];
+              sum += v;
+              if (v > maxv) maxv = v;
+            }
+            patch_mean = sum / patch.length;
+            patch_max = maxv === -Infinity ? null : maxv;
+          }
+        }
+      } catch (e) {
+        // ignore context errors for telemetry
+      }
+    }
+
+    return {
+      ts: new Date().toISOString(),
+      model_dx,
+      model_dy,
+      // raw and scaled (after proposalScale/jitter)
+      scaled_model_dx: this.lastScaledModelDX ?? null,
+      scaled_model_dy: this.lastScaledModelDY ?? null,
+      proposal_scale: this.proposalScale,
+      proposal_jitter: this.proposalJitter,
+      applied_delta,
+      c_real,
+      c_imag,
+      prev_dx,
+      prev_dy,
+      nu_norm,
+      membership,
+      grad_re,
+      grad_im,
+      sensitivity,
+      patch_mean,
+      patch_max,
+      avg_rms: (this as any)._lastAvgRMS ?? null,
+      model_type: this.metadata?.model_type ?? null
+    };
+  }
+
+  /**
    * Check if model is loaded.
    */
   isLoaded(): boolean {
     return this.session !== null;
-  }
-  
-  /**
-   * Detect section changes using color moving average with hysteresis.
-   * Switches to a random different lobe when a significant color change is detected.
-   */
-  private detectSectionChange(currentHue: number): void {
-    if (!this.orbitState) return;
-    
-    // Add current hue to history
-    this.colorHistory.push(currentHue);
-    if (this.colorHistory.length > this.colorHistorySize) {
-      this.colorHistory.shift();
-    }
-    
-    // Need enough history to detect changes
-    if (this.colorHistory.length < this.colorHistorySize) return;
-    
-    // Check cooldown (hysteresis)
-    const framesSinceLastSwitch = this.colorHistory.length - this.lastLobeSwitch;
-    if (framesSinceLastSwitch < this.lobeSwitchCooldown) return;
-    
-    // Compute moving average of recent colors
-    const recentWindow = Math.floor(this.colorHistorySize / 4); // Last 30 frames (~0.5s)
-    const oldWindow = Math.floor(this.colorHistorySize / 2); // Middle 60 frames (~1s)
-    
-    let recentAvg = 0;
-    for (let i = this.colorHistory.length - recentWindow; i < this.colorHistory.length; i++) {
-      recentAvg += this.colorHistory[i];
-    }
-    recentAvg /= recentWindow;
-    
-    let oldAvg = 0;
-    const oldStart = this.colorHistory.length - oldWindow - recentWindow;
-    const oldEnd = this.colorHistory.length - recentWindow;
-    for (let i = oldStart; i < oldEnd; i++) {
-      if (i >= 0) oldAvg += this.colorHistory[i];
-    }
-    oldAvg /= oldWindow;
-    
-    // Detect significant change (accounting for hue wraparound)
-    let hueDiff = Math.abs(recentAvg - oldAvg);
-    if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff; // Wraparound correction
-    
-    if (hueDiff > this.colorChangeThreshold) {
-      // Section change detected! Switch to a random different lobe
-      const currentLobe = this.orbitState.lobe;
-      const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
-      const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
-      
-      this.orbitState.lobe = newLobe;
-      this.lastLobeSwitch = this.colorHistory.length;
-      
-      console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);
-    }
   }
 }

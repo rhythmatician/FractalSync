@@ -1,7 +1,7 @@
 """
-Trainer for control signal model with orbit-based synthesis.
+Trainer for control signal model with step-based synthesis.
 
-Trains model to predict control signals that drive deterministic orbit synthesis.
+Trains model to predict delta steps that are applied by the runtime controller.
 """
 
 import json
@@ -20,22 +20,67 @@ from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
 from runtime_core import (
-    DEFAULT_BASE_OMEGA,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_ORBIT_SEED,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
-    lobe_point_at_angle,
-    ResidualParams,
-    OrbitState,
-    DEFAULT_RESIDUAL_CAP,
     FeatureExtractor,
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
+    StepController,
+    StepState,
 )
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
+
+
+class UphillDeltaLoss(nn.Module):
+    """Penalize Δc movement in the uphill direction when gradient is steep.
+
+    Given delta (batch,2) and grad (batch,2):
+      proj = (g · d) / (||g|| + eps)
+      penalty_per_sample = weight * (ReLU(proj))^2 * ReLU(||g|| - grad_thresh)
+
+    Returns average penalty across batch.
+    """
+
+    def __init__(
+        self,
+        weight: float = 1e-2,
+        grad_thresh: float = 1e-3,
+        eps: float = 1e-8,
+    ):
+        super().__init__()
+        self.weight = float(weight)
+        self.grad_thresh = float(grad_thresh)
+        self.eps = float(eps)
+
+    def forward(self, delta: torch.Tensor, grad: torch.Tensor) -> torch.Tensor:
+        """Compute uphill penalty.
+
+        Args:
+            delta: Tensor (batch, 2) - Δc
+            grad: Tensor (batch, 2) - ∇f(c)
+
+        Returns:
+            scalar tensor (mean penalty)
+        """
+        if delta.numel() == 0:
+            return torch.tensor(0.0, device=delta.device)
+
+        # compute dot products and gradient norms
+        dot = torch.sum(grad * delta, dim=1)
+        grad_norm = torch.sqrt(torch.sum(grad * grad, dim=1) + self.eps)
+
+        proj = dot / (grad_norm + self.eps)
+
+        # Only penalize positive projection (moving uphill)
+        uphill = torch.nn.functional.relu(proj)
+
+        # Only apply penalty when gradient magnitude exceeds threshold
+        grad_mask = torch.nn.functional.relu(grad_norm - self.grad_thresh)
+
+        penalty_per_sample = self.weight * (uphill**2) * grad_mask
+
+        return torch.mean(penalty_per_sample)
 
 
 class ControlLoss(nn.Module):
@@ -64,13 +109,29 @@ class CorrelationLoss(nn.Module):
         x_centered = x - torch.mean(x)
         y_centered = y - torch.mean(y)
         numerator = torch.sum(x_centered * y_centered)
-        denominator = torch.sqrt(torch.sum(x_centered**2) * torch.sum(y_centered**2))
-        correlation = numerator / (denominator + 1e-8)
+        sx = torch.sum(x_centered**2)
+        sy = torch.sum(y_centered**2)
+        eps = 1e-6
+        # If either input has (near-)zero variance, return zero loss. Preserve
+        # gradient capability only if inputs require gradients (so backward() is
+        # well-behaved in training & tests).
+        if sx.item() < eps or sy.item() < eps:
+            # Return a zero scalar that preserves a gradient path when one of the
+            # inputs requires gradients so that backward() produces finite (zero)
+            # gradients rather than being disconnected.
+            if x.requires_grad:
+                return (x * 0.0).sum()
+            if y.requires_grad:
+                return (y * 0.0).sum()
+            return torch.tensor(0.0, device=x.device, dtype=x.dtype)
+        denominator = torch.sqrt(sx * sy)
+        denom_clamped = torch.clamp(denominator, min=eps)
+        correlation = numerator / denom_clamped
         return -correlation
 
 
 class ControlTrainer:
-    """Trainer for control signal model with orbit synthesis."""
+    """Trainer for control signal model with step-based synthesis."""
 
     def __init__(
         self,
@@ -86,7 +147,6 @@ class ControlTrainer:
         julia_resolution: int = 128,
         julia_max_iter: int = 100,
         num_workers: int = 0,
-        k_residuals: int = DEFAULT_K_RESIDUALS,
     ):
         """
         Initialize control trainer.
@@ -104,7 +164,6 @@ class ControlTrainer:
             julia_resolution: Julia set resolution
             julia_max_iter: Julia set max iterations
             num_workers: DataLoader workers
-            k_residuals: Number of residual circles
         """
         self.model: AudioToControlModel = model.to(device)
 
@@ -122,18 +181,18 @@ class ControlTrainer:
         self.julia_resolution = julia_resolution
         self.julia_max_iter = julia_max_iter
         self.num_workers = num_workers
-        self.k_residuals = k_residuals
-        self.residual_params = ResidualParams(
-            k_residuals=k_residuals,
-            residual_cap=DEFAULT_RESIDUAL_CAP,
-            radius_scale=1.0,
-        )
+        self.context_dim = getattr(model, "context_dim", 0)
+        # Debug flag: enable verbose diagnostics when True
+        self.debug = False
 
         # Default correlation weights
         default_weights = {
             "timbre_color": 1.0,
             "transient_impact": 1.0,
             "control_loss": 1.0,
+            # Encourage negative correlation between loudness (rms) and
+            # Mandelbrot distance proxy (larger = further from the set)
+            "loudness_distance": 1.0,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
 
@@ -151,28 +210,41 @@ class ControlTrainer:
         self.curriculum_positions: Optional[torch.Tensor] = None
         self.curriculum_velocities: Optional[torch.Tensor] = None
 
+        # Minimap context controller for on-the-fly context sampling during training
+        # (uses the runtime_core minimap via StepController/context_for_state)
+        self.step_controller: Optional[StepController] = None
+        try:
+            self.step_controller = StepController()
+        except Exception:
+            self.step_controller = None
+            logger.warning(
+                "Could not initialize StepController for context sampling; training will use zero context"
+            )
+
         # Training history
         self.history: Dict[str, List[float]] = {
             "loss": [],
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "loudness_distance_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
 
     def _generate_curriculum_data(self, n_samples: int):
-        """Generate curriculum learning data from preset orbits."""
+        """Generate curriculum learning data from a simple circular path."""
         logger.info(f"Generating curriculum data: {n_samples} samples")
         thetas = np.linspace(0.0, 2 * np.pi, n_samples, endpoint=False)
         positions = []
         velocities = []
         for idx, theta in enumerate(thetas):
-            current = lobe_point_at_angle(1, 0, float(theta), 1.02)
+            radius = 0.8
+            current = np.array([radius * np.cos(theta), radius * np.sin(theta)])
             next_theta = thetas[(idx + 1) % len(thetas)]
-            nxt = lobe_point_at_angle(1, 0, float(next_theta), 1.02)
-            positions.append([current.real, current.imag])
-            velocities.append([nxt.real - current.real, nxt.imag - current.imag])
+            nxt = np.array([radius * np.cos(next_theta), radius * np.sin(next_theta)])
+            positions.append(current.tolist())
+            velocities.append((nxt - current).tolist())
 
         self.curriculum_positions = torch.tensor(
             positions, dtype=torch.float32, device=self.device
@@ -190,51 +262,19 @@ class ControlTrainer:
         self, positions: torch.Tensor, velocities: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         """
-        Extract control signal targets from curriculum positions/velocities.
-
-        This is a simplified mapping - in practice, we derive s, alpha, etc.
-        from the curriculum orbit parameters.
+        Extract delta-step targets from curriculum positions/velocities.
 
         Args:
             positions: Tensor of shape (batch_size, 2) with position data
             velocities: Optional tensor of shape (batch_size, 2) with velocity data
 
         Returns:
-            Tensor of shape (batch_size, output_dim) with control targets
+            Tensor of shape (batch_size, output_dim) with delta targets
         """
-        batch_size = positions.shape[0]
+        if velocities is None:
+            return torch.zeros(positions.shape[0], 2, device=self.device)
 
-        # Compute s from position magnitude (near boundary ~1.0)
-        position_mag = torch.norm(positions, dim=1)
-        s_target = torch.clamp(position_mag * 1.5, 0.2, 3.0)
-
-        # Compute alpha from velocity magnitude (higher velocity = more residual)
-        if velocities is not None:
-            velocity_mag = torch.norm(velocities, dim=1)
-            alpha = torch.clamp(velocity_mag * 2.0, 0.0, 1.0)
-        else:
-            alpha = (
-                torch.ones(batch_size, device=self.device) * 0.3
-            )  # Default amplitude
-
-        # Omega scale from velocity direction changes (placeholder)
-        omega_scale = torch.ones(batch_size, device=self.device) * 1.0
-
-        # Band gates (default to open)
-        band_gates = torch.ones(batch_size, self.k_residuals, device=self.device) * 0.7
-
-        # Stack control targets
-        control_targets = torch.cat(
-            [
-                s_target.unsqueeze(1),
-                alpha.unsqueeze(1),
-                omega_scale.unsqueeze(1),
-                band_gates,
-            ],
-            dim=1,
-        )
-
-        return control_targets
+        return velocities[:, :2]
 
     def train_epoch(
         self, dataloader: DataLoader, epoch: int, curriculum_decay: float = 0.95
@@ -246,6 +286,7 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_loudness_distance = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -274,6 +315,23 @@ class ControlTrainer:
             features = features.to(self.device)
             batch_size = features.shape[0]
 
+            # Sanity check: ensure model parameters are healthy before forward
+            for pname, pparam in self.model.named_parameters():
+                try:
+                    if torch.isnan(pparam).any() or torch.isinf(pparam).any():
+                        n_nan = int(torch.isnan(pparam).sum().item())
+                        n_inf = int(torch.isinf(pparam).sum().item())
+                        logger.error(
+                            f"Model parameter {pname} contains NaNs/InFs before forward: NaNs={n_nan}, Infs={n_inf}"
+                        )
+                        # Instead of attempting a noisy reinitialization, abort clearly
+                        raise RuntimeError(
+                            "Model parameters contain NaNs/InFs before forward; aborting"
+                        )
+                except Exception:
+                    logger.exception("Failed checking model parameters for NaN/Inf")
+                    raise
+
             # Get curriculum targets if available
             control_targets = None
             if self.use_curriculum and self.curriculum_positions is not None:
@@ -298,39 +356,99 @@ class ControlTrainer:
 
             sample_idx += batch_size
 
+            features_with_context = features
+            if self.context_dim > 0:
+                # Attempt to populate minimap-based context when curriculum positions
+                # are available. Otherwise, fail loud.
+                if (
+                    self.step_controller is not None
+                    and self.use_curriculum
+                    and self.curriculum_positions is not None
+                ):
+                    # Build context per-sample from curriculum positions/velocities
+                    ctx_list = []
+                    for i in range(batch_size):
+                        # Determine corresponding curriculum index (we generated positions earlier)
+                        idx_in_curr = sample_idx - batch_size + i
+                        # Clamp
+                        idx_in_curr = max(
+                            0, min(len(self.curriculum_positions) - 1, idx_in_curr)
+                        )
+                        pos = (
+                            self.curriculum_positions[idx_in_curr]
+                            .detach()
+                            .cpu()
+                            .numpy()
+                        )
+                        vel = (
+                            self.curriculum_velocities[idx_in_curr]
+                            .detach()
+                            .cpu()
+                            .numpy()
+                            if self.curriculum_velocities is not None
+                            else np.array([0.0, 0.0])
+                        )
+                        try:
+                            # pos may be a numpy array or tensor; extract floats
+                            c_real = float(pos[0])
+                            c_imag = float(pos[1])
+                            vd0 = float(vel[0])
+                            vd1 = float(vel[1])
+                            state = StepState(c_real, c_imag, vd0, vd1)
+                            ctx = self.step_controller.context_for_state(state)
+                            # ctx may be a StepContext object; prefer as_feature_vec if present
+                            if hasattr(ctx, "as_feature_vec"):
+                                fv = ctx.as_feature_vec()
+                            elif isinstance(ctx, dict) and "feature_vec" in ctx:
+                                fv = ctx["feature_vec"]
+                            else:
+                                fv = (
+                                    getattr(ctx, "feature_vec", None)
+                                    or [0.0] * self.context_dim
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"Minimap context sampling failed for curriculum idx {idx_in_curr}: {e}"
+                            )
+                            fv = [0.0] * self.context_dim
+                        ctx_list.append(fv)
+                    # Convert to tensor
+                    context = torch.tensor(
+                        ctx_list, dtype=features.dtype, device=self.device
+                    )
+                    features_with_context = torch.cat([features, context], dim=1)
+                else:
+                    # Zero padding fallback (don't require minimap unless curriculum is enabled)
+                    context = torch.zeros(
+                        (batch_size, self.context_dim),
+                        dtype=features.dtype,
+                        device=self.device,
+                    )
+                    features_with_context = torch.cat([features, context], dim=1)
+
             # Forward pass
-            predicted_controls = self.model(features)
+            predicted_controls = self.model(features_with_context)
 
-            # Parse control signals
+            # Quick check: detect NaNs in model outputs
+            try:
+                pc_nans = int(torch.isnan(predicted_controls).sum().item())
+                pc_infs = int(torch.isinf(predicted_controls).sum().item())
+                if pc_nans > 0 or pc_infs > 0:
+                    logger.error(
+                        f"predicted_controls contains NaNs/Infs: NaNs={pc_nans}, Infs={pc_infs}"
+                    )
+                    logger.error(
+                        f"predicted_controls sample: {predicted_controls.view(-1)[:10].detach().cpu().numpy().tolist()}"
+                    )
+            except Exception:
+                logger.exception("Failed to inspect predicted_controls for NaN/Inf")
+
+            # Parse delta outputs
             parsed = self.model.parse_output(predicted_controls)
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
+            delta_real = parsed["delta_real"]
+            delta_imag = parsed["delta_imag"]
 
-            # Synthesize c(t) using runtime_core (cardioid lobe)
-            c_values = []
-            for i in range(batch_size):
-                state = OrbitState.new_with_seed(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
-                )
-                rp = self.residual_params or ResidualParams(
-                    k_residuals=DEFAULT_K_RESIDUALS,
-                    residual_cap=DEFAULT_RESIDUAL_CAP,
-                    radius_scale=1.0,
-                )
-                c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
-                c_values.append([c.real, c.imag])
-
-            c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
+            c_tensor = torch.stack([delta_real, delta_imag], dim=1)
             julia_real = c_tensor[:, 0]
             julia_imag = c_tensor[:, 1]
 
@@ -382,8 +500,8 @@ class ControlTrainer:
                 )
 
                 images.append(image)
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
+                # Use delta_real as proxy for color hue (example correlation)
+                color_hues.append(delta_real[i])
                 temporal_changes.append(
                     torch.tensor(
                         metrics["temporal_change"],
@@ -397,12 +515,41 @@ class ControlTrainer:
             color_hue_tensor = torch.stack(color_hues)
             temporal_change_tensor = torch.stack(temporal_changes)
 
+            # Sanitize tensors to avoid NaN/Inf propagation into the loss
+            def _sanitize(t: torch.Tensor) -> torch.Tensor:
+                if not isinstance(t, torch.Tensor):
+                    t = torch.tensor(t, device=self.device, dtype=torch.float32)
+                t = t.to(self.device)
+                t = torch.where(torch.isnan(t), torch.zeros_like(t), t)
+                t = torch.where(torch.isinf(t), torch.sign(t) * 1e6, t)
+                return t
+
+            spectral_centroid = _sanitize(spectral_centroid)
+            color_hue_tensor = _sanitize(color_hue_tensor)
+            spectral_flux = _sanitize(spectral_flux)
+            temporal_change_tensor = _sanitize(temporal_change_tensor)
+
             # Compute correlation losses
             timbre_color_loss = self.correlation_loss(
                 spectral_centroid, color_hue_tensor
             )
             transient_impact_loss = self.correlation_loss(
                 spectral_flux, temporal_change_tensor
+            )
+
+            # Loudness-distance (negative correlation) loss
+            # Loudness proxy: RMS feature (index 2 of avg_features)
+            spectral_rms = avg_features[:, 2]
+
+            # Calculate the distance between `c` and the Mandelbrot set boundary
+            c = torch.stack([julia_real, julia_imag], dim=1)
+            distance_tensor = (
+                self.visual_metrics.mandelbrot_distance_estimate(c)
+                .to(self.device)
+                .to(torch.float32)
+            )
+            loudness_distance_loss = self.correlation_loss(
+                -spectral_rms, distance_tensor
             )
 
             # Control loss (curriculum learning)
@@ -417,19 +564,196 @@ class ControlTrainer:
             total_batch_loss = (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
+                + self.correlation_weights["loudness_distance"] * loudness_distance_loss
                 + current_curriculum_weight * control_loss_val
             )
 
+            # Diagnostic: detect NaNs and log key tensors before backward
+            if torch.isnan(total_batch_loss) or torch.isinf(total_batch_loss):
+                # Minimal reporting in normal runs; verbose output only when debug=True
+                try:
+                    # Always log top-level scalar losses so failures are visible
+                    logger.error(
+                        f"NaN/Inf detected in total_batch_loss at batch {batch_idx}: "
+                        f"timbre_color={getattr(timbre_color_loss, 'item', lambda: 'NA')()}, "
+                        f"transient_impact={getattr(transient_impact_loss, 'item', lambda: 'NA')()}, "
+                        f"loudness_distance={getattr(loudness_distance_loss, 'item', lambda: 'NA')()}, "
+                        f"control_loss={getattr(control_loss_val, 'item', lambda: 'NA')()}"
+                    )
+                except Exception:
+                    logger.exception("Failed to read scalar loss items")
+
+                if self.debug:
+                    # Scalar stats
+                    try:
+                        logger.debug(
+                            f"predicted_controls: mean={predicted_controls.mean().item()}, std={predicted_controls.std().item()}"
+                        )
+                    except Exception:
+                        logger.exception("Failed to compute predicted_controls stats")
+
+                    try:
+                        logger.debug(
+                            f"features: mean={features.mean().item()}, std={features.std().item()}"
+                        )
+                    except Exception:
+                        logger.exception("Failed to compute features stats")
+
+                    try:
+                        logger.debug(
+                            f"distance: min={distance_tensor.min().item()}, max={distance_tensor.max().item()}, mean={distance_tensor.mean().item()}"
+                        )
+                    except Exception:
+                        logger.exception("Failed to compute distance tensor stats")
+
+                    # Check NaNs in key tensors
+                    for name, t in (
+                        ("predicted_controls", predicted_controls),
+                        ("color_hue_tensor", color_hue_tensor),
+                        ("spectral_rms", spectral_rms),
+                        ("distance_tensor", distance_tensor),
+                    ):
+                        try:
+                            n_nan = int(torch.isnan(t).sum().item())
+                            n_inf = int(torch.isinf(t).sum().item())
+                            logger.debug(f"{name}: NaNs={n_nan}, Infs={n_inf}")
+                        except Exception:
+                            logger.exception(f"Failed to check NaN/Inf for {name}")
+
+                    # If predicted_controls has NaNs, run a layer-by-layer forward to find where NaNs originate
+                    try:
+                        x_debug = features_with_context.clone().detach()
+                        for idx, layer in enumerate(self.model.encoder):
+                            # If the layer has parameters, check them for NaNs/Infs first
+                            try:
+                                if hasattr(layer, "weight"):
+                                    w = layer.weight.detach()
+                                    b = (
+                                        layer.bias.detach()
+                                        if hasattr(layer, "bias")
+                                        and layer.bias is not None
+                                        else None
+                                    )
+                                    w_nan = int(torch.isnan(w).sum().item())
+                                    w_inf = int(torch.isinf(w).sum().item())
+                                    logger.debug(
+                                        f"Encoder layer {idx} ({type(layer).__name__}) params: weight NaNs={w_nan}, Infs={w_inf}"
+                                    )
+                                    try:
+                                        # sample few weight elements for inspection
+                                        w_sample = (
+                                            w.view(-1)[:10].cpu().numpy().tolist()
+                                        )
+                                        logger.debug(
+                                            f"Encoder layer {idx} weight sample: {w_sample}"
+                                        )
+                                    except Exception:
+                                        logger.exception("Failed to dump weight sample")
+                                    if b is not None:
+                                        b_nan = int(torch.isnan(b).sum().item())
+                                        b_inf = int(torch.isinf(b).sum().item())
+                                        logger.debug(
+                                            f"Encoder layer {idx} ({type(layer).__name__}) params: bias NaNs={b_nan}, Infs={b_inf}"
+                                        )
+                                        try:
+                                            b_sample = (
+                                                b.view(-1)[:10].cpu().numpy().tolist()
+                                            )
+                                            logger.debug(
+                                                f"Encoder layer {idx} bias sample: {b_sample}"
+                                            )
+                                        except Exception:
+                                            logger.exception(
+                                                "Failed to dump bias sample"
+                                            )
+                            except Exception:
+                                logger.exception("Failed to inspect layer parameters")
+
+                            mean = float(x_debug.mean().detach().cpu().item())
+                            std = float(x_debug.std().detach().cpu().item())
+                            logger.debug(
+                                f"Encoder layer {idx} ({type(layer).__name__}): mean={mean:.6f}, std={std:.6f}"
+                            )
+
+                        # Check delta head layers
+                        x_head = x_debug
+                        for idx, layer in enumerate(self.model.delta_head):
+                            x_head = layer(x_head)
+                            n_nan = int(torch.isnan(x_head).sum().item())
+                            n_inf = int(torch.isinf(x_head).sum().item())
+                            mean = float(x_head.mean().detach().cpu().item())
+                            std = float(x_head.std().detach().cpu().item())
+                            logger.debug(
+                                f"Delta head layer {idx} ({type(layer).__name__}): mean={mean:.6f}, std={std:.6f}, NaNs={n_nan}, Infs={n_inf}"
+                            )
+                            if n_nan > 0 or n_inf > 0:
+                                break
+                    except Exception:
+                        logger.exception("Layerwise forward failed")
+
+                # Always abort this batch so upstream code can handle the failure
+                raise RuntimeError(
+                    "Aborting training due to NaN/Inf in total_batch_loss - see logs for details"
+                )
+
             # Backward pass
             self.optimizer.zero_grad()
-            total_batch_loss.backward()
-            self.optimizer.step()
+
+            # If loss does not depend on model parameters (no grad_fn), skip backward
+            if not (
+                hasattr(total_batch_loss, "requires_grad")
+                and total_batch_loss.requires_grad
+            ):
+                logger.info(
+                    "total_batch_loss has no gradient graph; skipping backward and optimizer step for this batch"
+                )
+            else:
+                total_batch_loss.backward()
+
+                # Detect NaN/Inf in gradients to avoid corrupting parameters
+                grad_bad = False
+                for g_name, g_param in self.model.named_parameters():
+                    if g_param.grad is None:
+                        continue
+                    try:
+                        if (
+                            torch.isnan(g_param.grad).any()
+                            or torch.isinf(g_param.grad).any()
+                        ):
+                            n_nan = int(torch.isnan(g_param.grad).sum().item())
+                            n_inf = int(torch.isinf(g_param.grad).sum().item())
+                            logger.error(
+                                f"Gradient for {g_name} contains NaNs/Infs: NaNs={n_nan}, Infs={n_inf}"
+                            )
+                            grad_bad = True
+                    except Exception:
+                        logger.exception(f"Failed to inspect gradient for {g_name}")
+                        grad_bad = True
+
+                if grad_bad:
+                    logger.warning(
+                        "Invalid gradients detected; aborting training. Inspect runtime-core and its pybindings if this persists"
+                    )
+                    # Raise an exception instead of exiting the process to allow
+                    # test harnesses and higher-level callers to handle/fail gracefully.
+                    raise RuntimeError("Invalid gradients detected; aborting training")
+                else:
+                    self.optimizer.step()
 
             # Accumulate losses
             total_loss += total_batch_loss.item()
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_loudness_distance += loudness_distance_loss.item()
+            n_batches += 1
+
+            # Accumulate losses
+            total_loss += total_batch_loss.item()
+            total_control_loss += control_loss_val.item()
+            total_timbre_color += timbre_color_loss.item()
+            total_transient_impact += transient_impact_loss.item()
+            total_loudness_distance += loudness_distance_loss.item()
             n_batches += 1
 
         # Average losses
@@ -438,6 +762,7 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "loudness_distance_loss": total_loudness_distance / n_batches,
         }
 
         return avg_losses
@@ -470,6 +795,16 @@ class ControlTrainer:
         # (Rust binding expects Seq[Seq[float]] where the inner seq is a single window).
         all_windows = [row for f in all_features for row in f.tolist()]
         self.feature_extractor.compute_normalization_stats(all_windows)
+
+        # Quick sanity: Ensure no param corruption happened during feature computations
+        for pname, pparam in self.model.named_parameters():
+            if torch.isnan(pparam).any() or torch.isinf(pparam).any():
+                logger.error(
+                    f"Model parameter {pname} contains NaNs/InFs after compute_normalization_stats: NaNs={int(torch.isnan(pparam).sum().item())}, Infs={int(torch.isinf(pparam).sum().item())}"
+                )
+                raise RuntimeError(
+                    "Model parameters corrupted after compute_normalization_stats; aborting"
+                )
 
         # Normalize each window individually and re-stack per-file arrays. Handle
         # empty feature arrays safely by keeping an empty (0, n_features) array.
@@ -516,7 +851,8 @@ class ControlTrainer:
             logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
-                f'Control: {avg_losses["control_loss"]:.4f}'
+                f'Control: {avg_losses["control_loss"]:.4f}, '
+                f'LoudnessDist: {avg_losses["loudness_distance_loss"]:.4f}'
             )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
@@ -555,7 +891,7 @@ class ControlTrainer:
             "correlation_weights": self.correlation_weights,
             "julia_resolution": self.julia_resolution,
             "julia_max_iter": self.julia_max_iter,
-            "k_residuals": self.k_residuals,
+            "context_dim": self.context_dim,
         }
 
         checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")

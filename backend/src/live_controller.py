@@ -13,13 +13,7 @@ import librosa
 from typing import Tuple, Dict, List, Optional, Union, cast
 from dataclasses import dataclass
 from collections import deque
-from runtime_core import (
-    OrbitState,
-    ResidualParams,
-    DEFAULT_K_RESIDUALS,
-    DEFAULT_RESIDUAL_CAP,
-    DEFAULT_RESIDUAL_OMEGA_SCALE,
-)
+from runtime_core import StepController, StepState, StepResult
 
 
 @dataclass
@@ -269,6 +263,10 @@ class ImpactDetector:
         # State
         self.last_impact_time = -999.0
         self.in_refractory = False
+        # Hysteresis state: when a high score has been seen we latch until
+        # the score falls below the hysteresis threshold to avoid rapid
+        # retriggering near the threshold.
+        self._above_threshold = False
 
     def compute_impact_score(self, features: FastFeatures) -> float:
         """
@@ -317,10 +315,19 @@ class ImpactDetector:
         threshold = np.percentile(list(self.score_history), self.threshold_percentile)
         hysteresis_threshold = threshold * self.hysteresis_ratio
 
-        # Detect impact
-        is_impact = bool(score > threshold) and not self.in_refractory
+        # Hysteresis: clear above-threshold latch once the score falls below the
+        # lower hysteresis threshold so brief dips don't immediately re-enable
+        # another trigger.
+        if score < hysteresis_threshold:
+            self._above_threshold = False
 
-        if is_impact:
+        # Detect impact only on a rising edge above the main threshold and when
+        # not in refractory; once triggered, set the latch so we require the
+        # score to drop below the hysteresis threshold before triggering again.
+        is_impact = False
+        if score > threshold and not self.in_refractory and not self._above_threshold:
+            is_impact = True
+            self._above_threshold = True
             self.last_impact_time = features.timestamp
 
         return is_impact, score
@@ -616,76 +623,40 @@ class LobeScheduler:
         return selected
 
 
-class OrbitStateMachine:
+class StepStateMachine:
     """
-    Main orbit state machine managing carrier + residual synthesis.
-    Outputs c(t) at render rate using OrbitSynthesizer.
+    Main step controller state machine for navigating the c-plane.
     """
 
     def __init__(
         self,
         render_rate: float = 60.0,
-        residual_k: int = 6,
-        residual_cap: float = 0.5,
-        s_loud: float = 1.02,
-        s_quiet_noisy: float = 2.5,
-        s_quiet_tonal: float = 0.4,
-        s_smoothing_tau: float = 1.0,
+        base_step: float = 0.01,
+        heading_smoothing: float = 0.2,
     ):
-        """
-        Initialize orbit state machine.
-
-        Args:
-            render_rate: Render rate in Hz
-            residual_k: Number of residual circles
-            residual_cap: Maximum residual amplitude relative to lobe radius
-            s_loud: Target s for loud sections
-            s_quiet_noisy: Target s for quiet+noisy
-            s_quiet_tonal: Target s for quiet+tonal
-            s_smoothing_tau: Time constant for s smoothing (seconds)
-        """
         self.render_rate = render_rate
         self.dt = 1.0 / render_rate
-        self.residual_k = residual_k
-        self.residual_cap = residual_cap
-        self.s_loud = s_loud
-        self.s_quiet_noisy = s_quiet_noisy
-        self.s_quiet_tonal = s_quiet_tonal
-        self.s_smoothing_tau = s_smoothing_tau
+        self.base_step = base_step
+        self.heading_smoothing = heading_smoothing
 
-        # Initialize orbit state using runtime_core
-        self.orbit_state = OrbitState.new_with_seed(
-            lobe=1,
-            sub_lobe=0,
-            theta=0.0,
-            omega=1.0,
-            s=1.02,
-            alpha=0.3,
-            k_residuals=residual_k,
-            residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-            seed=42,
-        )
-
-        self.s_target = 1.02
-
-        # Transition state
-        self.in_transition = False
-        self.transition_start_lobe = (1, 0)
-        self.transition_end_lobe = (1, 0)
-        self.transition_progress = 0.0
-        self.transition_duration = 3.0  # seconds
+        self.controller = StepController()
+        self.state = StepState()
+        self.last_result: Optional[StepResult] = None
 
         # Control inputs (updated by controller)
         self.control_loudness = 0.5
         self.control_tonalness = 0.5
         self.control_noisiness = 0.5
+        self.heading = 0.0
 
-    def start_transition(self, new_lobe: int, new_sub_lobe: int, duration: float = 3.0):
-        """Start transition to new lobe."""
-        self.in_transition = True
-        self.transition_start_lobe = (self.orbit_state.lobe, self.orbit_state.sub_lobe)
-        self.transition_end_lobe = (new_lobe, new_sub_lobe)
-        self.transition_progress = 0.0
+    def start_transition(
+        self, new_lobe: int, _new_sub_lobe: int, duration: float = 3.0
+    ):
+        """Adjust heading target based on boundary events."""
+        target_heading = (new_lobe % 4) * (np.pi / 2.0)
+        self.heading = (
+            1.0 - self.heading_smoothing
+        ) * self.heading + self.heading_smoothing * target_heading
         self.transition_duration = duration
 
     def update_control_inputs(
@@ -696,103 +667,42 @@ class OrbitStateMachine:
         self.control_tonalness = tonalness
         self.control_noisiness = noisiness
 
-    def _compute_s_target(self) -> float:
-        """Compute target s based on audio state."""
-        L = self.control_loudness
-        T = self.control_tonalness
-        N = self.control_noisiness
+    def _compute_delta(self, impact_envelope_value: float) -> Tuple[float, float]:
+        """Compute a naive delta proposal from audio cues."""
+        magnitude = self.base_step * (0.4 + 0.6 * self.control_loudness)
+        magnitude += self.base_step * 0.5 * impact_envelope_value
 
-        # Mix based on state
-        s_loud = float(self.s_loud)
-        s_quiet_noisy = float(self.s_quiet_noisy)
-        s_quiet_tonal = float(self.s_quiet_tonal)
+        angle = self.heading
+        angle += (self.control_tonalness - 0.5) * np.pi
+        angle += (self.control_noisiness - 0.5) * (np.pi / 2.0)
 
-        if L > 0.6:
-            # Loud: near boundary
-            return s_loud
-        elif N > 0.6:
-            # Quiet + noisy: push outward
-            return s_quiet_noisy
-        elif T > 0.6:
-            # Quiet + tonal: pull inward
-            return s_quiet_tonal
-        else:
-            # Mixed state: interpolate
-            quiet_target = T * s_quiet_tonal + N * s_quiet_noisy + (1 - T - N) * s_loud
-            return float(L * s_loud + (1 - L) * quiet_target)
-
-    def _smooth_s(self, s_current: float, s_target: float, dt: float) -> float:
-        """Apply exponential smoothing to s."""
-        alpha = 1.0 - np.exp(-dt / self.s_smoothing_tau)
-        return s_current + alpha * (s_target - s_current)
+        dx = magnitude * np.cos(angle)
+        dy = magnitude * np.sin(angle)
+        return float(dx), float(dy)
 
     def step(self, impact_envelope_value: float = 0.0) -> complex:
-        """
-        Step the orbit state machine by one render frame.
-
-        Args:
-            impact_envelope_value: Current impact envelope value [0, 1]
-
-        Returns:
-            Complex Julia parameter c(t)
-        """
-        # Update s target and smooth
-        base_s_target = self._compute_s_target()
-
-        # Apply impact envelope override
-        if impact_envelope_value > 0.0:
-            # Push s outward during impact
-            impact_s = 1.15
-            self.s_target = (
-                base_s_target + (impact_s - base_s_target) * impact_envelope_value
-            )
-        else:
-            self.s_target = base_s_target
-
-        smoothed_s = self._smooth_s(self.orbit_state.s, self.s_target, self.dt)
-
-        # Update residual alpha (boosted by impact)
-        base_alpha = 0.3  # Base residual strength
-        impact_alpha_boost = 0.5 * impact_envelope_value
-        residual_alpha = base_alpha + impact_alpha_boost
-
-        # Handle transitions - just update lobe/sub_lobe for now
-        if self.in_transition:
-            self.transition_progress += self.dt / self.transition_duration
-            if self.transition_progress >= 1.0:
-                # Transition complete
-                self.orbit_state.lobe = self.transition_end_lobe[0]
-                self.orbit_state.sub_lobe = self.transition_end_lobe[1]
-                self.in_transition = False
-
-        # Update orbit state parameters (mutation happens via runtime_core)
-        self.orbit_state.s = smoothed_s
-        self.orbit_state.alpha = residual_alpha
-
-        # Advance state and synthesize
-        rp = ResidualParams(
-            k_residuals=DEFAULT_K_RESIDUALS,
-            residual_cap=DEFAULT_RESIDUAL_CAP,
-            radius_scale=1.0,
-        )
-        c = self.orbit_state.step(self.dt, rp, band_gates=None)
-
-        return c
+        dx, dy = self._compute_delta(impact_envelope_value)
+        result = self.controller.step(self.state, dx, dy)
+        self.last_result = result
+        return complex(result.c_real, result.c_imag)
 
     def get_debug_info(self) -> Dict[str, Union[float, int, str]]:
         """Get debug information for HUD."""
+        context = self.last_result.context if self.last_result else None
         return {
-            "lobe": self.orbit_state.lobe,
-            "sub_lobe": self.orbit_state.sub_lobe,
-            "theta": self.orbit_state.theta,
-            "omega": self.orbit_state.omega,
-            "s": self.orbit_state.s,
-            "s_target": self.s_target,
-            "residual_alpha": self.orbit_state.alpha,
-            "in_transition": self.in_transition,
+            "c_real": self.state.c_real,
+            "c_imag": self.state.c_imag,
+            "prev_delta_real": self.state.prev_delta_real,
+            "prev_delta_imag": self.state.prev_delta_imag,
             "loudness": self.control_loudness,
             "tonalness": self.control_tonalness,
             "noisiness": self.control_noisiness,
+            "nu_norm": context.nu_norm if context else 0.0,
+            "membership": context.membership if context else False,
+            "grad_re": context.grad_re if context else 0.0,
+            "grad_im": context.grad_im if context else 0.0,
+            "sensitivity": context.sensitivity if context else 0.0,
+            "mip_level": context.mip_level if context else 0,
         }
 
 
@@ -829,7 +739,7 @@ class LiveController:
         self.impact_envelope = ImpactEnvelope()
         self.boundary_detector = NoveltyBoundaryDetector()
         self.lobe_scheduler = LobeScheduler()
-        self.orbit_state = OrbitStateMachine(render_rate=render_rate)
+        self.step_state = StepStateMachine(render_rate=render_rate)
 
         # Event logs
         self.impact_events: List[ImpactEvent] = []
@@ -880,7 +790,7 @@ class LiveController:
             self.latest_slow_features = slow_features
 
             # Update orbit control inputs
-            self.orbit_state.update_control_inputs(
+            self.step_state.update_control_inputs(
                 slow_features.loudness, slow_features.tonalness, slow_features.noisiness
             )
 
@@ -894,7 +804,7 @@ class LiveController:
                 )
 
                 # Start transition
-                self.orbit_state.start_transition(new_lobe, new_sub_lobe, duration=3.0)
+                self.step_state.start_transition(new_lobe, new_sub_lobe, duration=3.0)
 
                 # Log event
                 prev_dwell = timestamp - (
@@ -915,14 +825,14 @@ class LiveController:
         # Update impact envelope
         envelope_value = self.impact_envelope.update(timestamp)
 
-        # Step orbit state machine
-        c = self.orbit_state.step(envelope_value)
+        # Step controller state machine
+        c = self.step_state.step(envelope_value)
 
         return c
 
     def get_debug_overlay(self) -> str:
         """Get debug overlay string for HUD."""
-        info = self.orbit_state.get_debug_info()
+        info = self.step_state.get_debug_info()
 
         recent_impacts = len(
             [e for e in self.impact_events if self.current_time - e.timestamp < 5.0]
@@ -932,8 +842,10 @@ class LiveController:
         )
 
         overlay = f"""FractalSync Live
-Lobe: {info['lobe']}-{info['sub_lobe']} {'[TRANSITION]' if info['in_transition'] else ''}
-s: {info['s']:.3f} → {info['s_target']:.3f}
+c: {info['c_real']:.3f} + {info['c_imag']:.3f}i
+Δc: {info['prev_delta_real']:.4f} + {info['prev_delta_imag']:.4f}i
+ν_norm: {info['nu_norm']:.3f} | member: {info['membership']}
+∇F: ({info['grad_re']:.3f}, {info['grad_im']:.3f}) S: {info['sensitivity']:.3f} mip: {info['mip_level']}
 L/T/N: {info['loudness']:.2f}/{info['tonalness']:.2f}/{info['noisiness']:.2f}
 Impacts (5s): {recent_impacts}
 Boundaries (30s): {recent_boundaries}

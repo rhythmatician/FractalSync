@@ -16,7 +16,7 @@ Usage:
 
 import json
 import argparse
-from typing import Dict, Any, cast
+from typing import Dict, Any
 
 import numpy as np
 

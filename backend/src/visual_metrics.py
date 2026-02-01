@@ -3,10 +3,165 @@ Visual metrics computation for evaluating Julia set renderings.
 Measures perceptual qualities like roughness, smoothness, brightness, etc.
 """
 
+from dataclasses import dataclass
 from typing import Optional
 
 import cv2
 import numpy as np
+import torch
+from pathlib import Path
+import json
+import runtime_core  # type: ignore
+
+
+@dataclass
+class DistanceFieldMeta:
+    xmin: float
+    xmax: float
+    ymin: float
+    ymax: float
+    res: int
+
+
+# Module-level cached distance field (signed distances, float32)
+_distance_field_tensor: Optional[torch.Tensor] = None
+_distance_field_meta: Optional[DistanceFieldMeta] = None
+
+
+def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
+    """Load a signed distance field (.npy) with optional metadata (.json next to it).
+
+    Args:
+        npy_path: Path to .npy file containing distance field
+
+    The .npy is expected shape (H, W) with row-major Y (increasing) and columns X.
+    Metadata file (same stem, .json) should contain xmin/xmax/ymin/ymax to map coords.
+    """
+    global _distance_field_tensor, _distance_field_meta
+    if npy_path:
+        npy_path = Path(npy_path)
+    else:
+        # Try a few canonical locations (src/data, backend/data, repo-root data)
+        candidates = [
+            Path(__file__).parent / "data" / "mandelbrot_distance_2048.npy",
+            Path(__file__).parent.parent / "data" / "mandelbrot_distance_2048.npy",
+            Path(__file__).parent.parent.parent / "data" / "mandelbrot_distance_2048.npy",
+        ]
+        found = None
+        for p in candidates:
+            if p.exists():
+                found = p
+                break
+        if found is not None:
+            npy_path = found
+        else:
+            # As a last resort, build a modest distance field on-the-fly for tests/dev.
+            import tempfile
+            import subprocess
+            import sys
+
+            base = Path(tempfile.mkdtemp(prefix="distfield_"))
+            out = base / "distfield.npy"
+            # script lives at repository root 'scripts/build_distance_field.py'
+            script = Path(__file__).parent.parent.parent / "scripts" / "build_distance_field.py"
+            cmd = [
+                sys.executable,
+                str(script),
+                "--out",
+                str(out),
+                "--res",
+                "1024",
+                "--xmin",
+                "-2.5",
+                "--xmax",
+                "1.5",
+                "--ymin",
+                "-2.0",
+                "--ymax",
+                "2.0",
+                "--max-iter",
+                "512",
+            ]
+            subprocess.check_call(cmd)
+            npy_path = out
+
+    arr = np.load(npy_path)
+    if arr.ndim != 2:
+        raise ValueError("distance field must be 2D")
+    meta_path = npy_path.with_suffix(".json")
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        meta = DistanceFieldMeta(
+            xmin=float(d.get("xmin", -2.5)),
+            xmax=float(d.get("xmax", 1.5)),
+            ymin=float(d.get("ymin", -2.0)),
+            ymax=float(d.get("ymax", 2.0)),
+            res=int(d.get("res", arr.shape[0])),
+        )
+    else:
+        # Use reasonable defaults when metadata is not provided
+        meta = DistanceFieldMeta(
+            xmin=-2.5,
+            xmax=1.5,
+            ymin=-2.0,
+            ymax=2.0,
+            res=int(arr.shape[0]),
+        )
+
+    H, W = arr.shape
+    tensor = (
+        torch.from_numpy(arr.astype(np.float32)).unsqueeze(0).unsqueeze(0)
+    )  # 1,1,H,W
+    _distance_field_tensor = tensor  # CPU tensor, requires_grad=False
+    _distance_field_meta = meta
+
+    if not _distance_field_meta:
+        raise RuntimeError("Distance field metadata not loaded")
+    # Register the field with runtime_core for fast Rust sampling; require it to succeed.
+    # We call the Rust loader which accepts a path to the .npy (it reads the .json if present).
+    if not hasattr(runtime_core, "set_distance_field_py"):
+        raise RuntimeError(
+            "runtime_core missing set_distance_field_py. Rebuild runtime-core with `maturin develop --release`."
+        )
+    # pass nested lists (rows) and bbox; this uses the new Rust setter
+    runtime_core.set_distance_field_py(
+        arr.astype(np.float32).tolist(),
+        float(meta.xmin),
+        float(meta.xmax),
+        float(meta.ymin),
+        float(meta.ymax),
+    )
+
+
+def _sample_distance_field(c_complex: torch.Tensor) -> torch.Tensor:
+    """Sample the precomputed signed distance field at complex coordinates c_complex.
+
+    This implementation requires the Rust runtime-core sampler to be available
+    and will raise if `runtime_core.sample_distance_field_py` is not exposed.
+
+    Returns unsigned distances (abs of signed distance) as float tensor (N,).
+    """
+    if _distance_field_tensor is None or _distance_field_meta is None:
+        load_distance_field()
+    if not _distance_field_meta:
+        raise RuntimeError("Distance field metadata not loaded")
+
+    real = c_complex.real.to(torch.float32)
+    imag = c_complex.imag.to(torch.float32)
+
+    # Use Rust sampler (required). If the runtime_core extension does not expose the
+    # sampler, raise an informative error so developers rebuild/install the extension.
+    if not hasattr(runtime_core, "sample_distance_field_py"):
+        raise RuntimeError(
+            "runtime_core missing sample_distance_field_py. Rebuild runtime-core with `maturin develop --release`."
+        )
+
+    xs = real.detach().cpu().numpy().tolist()
+    ys = imag.detach().cpu().numpy().tolist()
+    sampled_list = runtime_core.sample_distance_field_py(xs, ys)
+    sampled = torch.tensor(sampled_list, dtype=torch.float32, device=c_complex.device)
+    return sampled.abs()
 
 
 class LossVisualMetrics:
@@ -141,6 +296,44 @@ class LossVisualMetrics:
 
         return image_rgb
 
+    @staticmethod
+    def mandelbrot_distance_estimate(
+        c: torch.Tensor,
+        max_iter=128,
+        bailout=10.0,
+        eps=1e-8,
+    ) -> torch.Tensor:
+        """Estimate distance to the Mandelbrot boundary for a batch of points.
 
-# Backwards-compatible alias for loss metrics.
-VisualMetrics = LossVisualMetrics
+        Accepts either:
+        - a complex-valued tensor of shape (batch,) (dtype=torch.cfloat or torch.cdouble),
+        - a real tensor of shape (batch, 2) where columns are (real, imag),
+        - a real tensor of shape (batch,) (imag part assumed 0), or
+        - a scalar/python complex which will be converted to a single-element tensor.
+
+        This estimator samples the precomputed signed distance field via the
+        runtime-core sampler (fast, non-differentiable). If the sampler is not
+        available the function will raise an error instructing developers to
+        rebuild the runtime-core Python extension.
+
+        Returns a real float tensor of shape (batch,) with non-negative distances.
+        """
+        if c.dtype.is_complex:
+            c_complex = c.view(-1)
+        else:
+            # handle (N, 2) real/imag pairs
+            if c.dim() == 2 and c.shape[1] == 2:
+                real = c[:, 0].to(torch.get_default_dtype())
+                imag = c[:, 1].to(torch.get_default_dtype())
+                c_complex = torch.complex(real, imag).to(torch.complex64)
+            else:
+                raise TypeError(
+                    "Unsupported tensor shape for mandelbrot_distance_estimate: expected (N,2) or (N,)"
+                )
+
+        # If a precomputed distance field not is loaded, raise error
+        if _distance_field_tensor is None or _distance_field_meta is None:
+            load_distance_field()
+
+        sampled = _sample_distance_field(c_complex)
+        return sampled.clamp_min(0.0)

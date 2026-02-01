@@ -158,7 +158,7 @@ def test_model_init():
             window_frames=10,
             n_features_per_frame=6,
             hidden_dims=[128, 256, 128],
-            k_bands=6,
+            context_dim=265,
         )
         print("  ✓ AudioToControlModel created")
 

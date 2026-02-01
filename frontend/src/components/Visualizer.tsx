@@ -22,7 +22,8 @@ export function Visualizer() {
   const [showModelInfo, setShowModelInfo] = useState(true);
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [_audioReactiveEnabled, _setAudioReactiveEnabled] = useState(false);
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -292,28 +293,58 @@ export function Visualizer() {
           >
             {showModelInfo ? 'Hide' : 'Show'} Model
           </button>
-          
+
+          {/* Quick experiment controls for proposal scaling/jitter */}
+          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', marginLeft: '10px' }}>
+            <span style={{ color: '#ccc', fontSize: '12px' }}>Scale</span>
+            <button onClick={() => {
+                if (modelRef.current) {
+                  const cur = (modelRef.current as any).__proposalScale ?? 1;
+                  const next = cur === 1 ? 2 : cur === 2 ? 4 : cur === 4 ? 8 : 1;
+                  (modelRef.current as any).setProposalScale(next);
+                  (modelRef.current as any).__proposalScale = next;
+                }
+              }}
+              style={{ padding: '4px 8px', background: '#222', color: '#fff', borderRadius: '4px', border: '1px solid #555' }}>
+              x1/x2/x4/x8
+            </button>
+
+            <span style={{ color: '#ccc', fontSize: '12px' }}>Jitter</span>
+            <button onClick={() => {
+                if (modelRef.current) {
+                  const cur = (modelRef.current as any).__proposalJitter ?? 0;
+                  const next = cur === 0 ? 0.002 : cur === 0.002 ? 0.005 : cur === 0.005 ? 0.01 : 0;
+                  (modelRef.current as any).setProposalJitter(next);
+                  (modelRef.current as any).__proposalJitter = next;
+                }
+              }}
+              style={{ padding: '4px 8px', background: '#222', color: '#fff', borderRadius: '4px', border: '1px solid #555' }}>
+              0/0.002/0.005/0.01
+            </button>
+          </div>
+
           <button
             onClick={() => {
-              const newState = !audioReactiveEnabled;
-              setAudioReactiveEnabled(newState);
+              const next = !telemetryEnabled;
+              setTelemetryEnabled(next);
               if (modelRef.current) {
-                modelRef.current.setAudioReactivePostProcessing(newState);
+                (modelRef.current as any).setTelemetryEnabled(next);
+                (modelRef.current as any).__telemetryEnabled = next;
               }
             }}
             style={{
               padding: '5px 10px',
-              background: audioReactiveEnabled ? '#4CAF50' : '#666',
+              background: telemetryEnabled ? '#4CAF50' : '#222',
               color: '#fff',
-              border: 'none',
+              border: '1px solid #888',
               borderRadius: '3px',
               cursor: 'pointer',
               fontSize: '12px',
               marginLeft: '10px'
             }}
-            title="Toggle audio-reactive post-processing (MR #8 / commit 75c1a43)"
+            title="Toggle server-side telemetry logging"
           >
-            Audio-Reactive: {audioReactiveEnabled ? 'ON' : 'OFF'}
+            Telemetry: {telemetryEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
 
