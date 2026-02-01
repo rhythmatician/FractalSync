@@ -71,6 +71,43 @@ export class ModelInference {
     postProcessingTime: 0
   };
 
+  // Telemetry: if enabled, we will POST aggregated telemetry to the local backend
+  private telemetryEnabled: boolean = false;
+  private telemetryCounter: number = 0;
+
+  /**
+   * Enable or disable server-side telemetry logging. When enabled, the frontend will
+   * periodically post compact telemetry JSON to POST /api/telemetry.
+   */
+  setTelemetryEnabled(enabled: boolean): void {
+    this.telemetryEnabled = enabled;
+    console.log(`[ModelInference] telemetry ${enabled ? 'enabled' : 'disabled'}`);
+
+    // Send an immediate ping to verify connectivity when enabling telemetry
+    if (enabled) {
+      try {
+        const payload = { type: 'ping', ts: new Date().toISOString(), model_type: this.metadata?.model_type ?? null };
+        void this.sendTelemetry(payload);
+        console.debug('[ModelInference] Sent telemetry ping', payload);
+      } catch (e) {
+        console.warn('[ModelInference] telemetry ping failed', e);
+      }
+    }
+  }
+
+  private async sendTelemetry(payload: any): Promise<void> {
+    if (typeof fetch === 'undefined') return;
+    try {
+      await fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.warn('[ModelInference] telemetry send failed', e);
+    }
+  }
+
   /**
    * Enable or disable audio-reactive post-processing (MR #8 / commit 75c1a43).
    * When enabled, mixes model outputs with raw audio features for dynamic visuals.
@@ -258,6 +295,8 @@ export class ModelInference {
       }
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
+      // Expose a telemetry-friendly value for logging
+      (this as any)._lastAvgRMS = avgRMS;
 
       // Map to visual parameters
       const currentHue = (avgRMS * 2.0) % 1.0;
@@ -313,6 +352,8 @@ export class ModelInference {
         avgZCR /= windowFrames;
         avgOnset /= windowFrames;
         avgRolloff /= windowFrames;
+        // Expose for telemetry
+        (this as any)._lastAvgRMS = avgRMS;
         
         // Color: Map RMS (loudness) to hue cycling, onset to saturation
         visualParams.colorHue = (params[2] + avgRMS * 2.0) % 1.0;
@@ -362,6 +403,20 @@ export class ModelInference {
         speed: visualParams.speed.toFixed(3),
         modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
       });
+
+      // If telemetry is enabled, periodically POST a compact record to the backend
+      if (this.telemetryEnabled) {
+        this.telemetryCounter += 1;
+        if (this.telemetryCounter % 30 === 0) { // ~0.5s at 60fps
+          try {
+            const payload = this.assembleTelemetryEntry(params);
+            // Fire-and-forget; failures are non-fatal
+            void this.sendTelemetry(payload);
+          } catch (e) {
+            console.warn('[ModelInference] telemetry assembly failed', e);
+          }
+        }
+      }
     }
 
     return visualParams;
@@ -379,6 +434,84 @@ export class ModelInference {
    */
   getMetadata(): ModelMetadata | null {
     return this.metadata;
+  }
+
+  /**
+   * Assemble a compact telemetry payload including model proposals and minimap context.
+   * This is public to make it testable.
+   */
+  assembleTelemetryEntry(params: number[]): Record<string, any> {
+    const model_dx = (params.length > 0 ? params[0] : 0);
+    const model_dy = (params.length > 1 ? params[1] : 0);
+
+    // Base applied delta from state
+    const applied_delta = Math.hypot(this.stepState?.prev_delta_real ?? 0, this.stepState?.prev_delta_imag ?? 0) || 0;
+
+    // Attempt to extract minimap context if available
+    let c_real: number | null = this.stepState?.c_real ?? null;
+    let c_imag: number | null = this.stepState?.c_imag ?? null;
+    let prev_dx: number | null = this.stepState?.prev_delta_real ?? null;
+    let prev_dy: number | null = this.stepState?.prev_delta_imag ?? null;
+    let nu_norm: number | null = null;
+    let membership: number | null = null;
+    let grad_re: number | null = null;
+    let grad_im: number | null = null;
+    let sensitivity: number | null = null;
+    let patch_mean: number | null = null;
+    let patch_max: number | null = null;
+
+    if (this.stepController && this.stepState && typeof (this.stepController as any).context === 'function') {
+      try {
+        const ctx = (this.stepController as any).context(this.stepState);
+        if (ctx && Array.isArray(ctx.feature_vec) && ctx.feature_vec.length >= 9) {
+          const fv: number[] = ctx.feature_vec;
+          c_real = typeof fv[0] === 'number' ? fv[0] : c_real;
+          c_imag = typeof fv[1] === 'number' ? fv[1] : c_imag;
+          prev_dx = typeof fv[2] === 'number' ? fv[2] : prev_dx;
+          prev_dy = typeof fv[3] === 'number' ? fv[3] : prev_dy;
+          nu_norm = typeof fv[4] === 'number' ? fv[4] : null;
+          membership = typeof fv[5] === 'number' ? fv[5] : null;
+          grad_re = typeof fv[6] === 'number' ? fv[6] : null;
+          grad_im = typeof fv[7] === 'number' ? fv[7] : null;
+          sensitivity = typeof fv[8] === 'number' ? fv[8] : null;
+
+          const patch = fv.slice(9);
+          if (patch.length > 0) {
+            let sum = 0;
+            let maxv = -Infinity;
+            for (let i = 0; i < patch.length; i++) {
+              const v = patch[i];
+              sum += v;
+              if (v > maxv) maxv = v;
+            }
+            patch_mean = sum / patch.length;
+            patch_max = maxv === -Infinity ? null : maxv;
+          }
+        }
+      } catch (e) {
+        // ignore context errors for telemetry
+      }
+    }
+
+    return {
+      ts: new Date().toISOString(),
+      model_dx,
+      model_dy,
+      applied_delta,
+      c_real,
+      c_imag,
+      prev_dx,
+      prev_dy,
+      nu_norm,
+      membership,
+      grad_re,
+      grad_im,
+      sensitivity,
+      patch_mean,
+      patch_max,
+      avg_rms: (this as any)._lastAvgRMS ?? null,
+      model_type: this.metadata?.model_type ?? null
+    };
   }
 
   /**
