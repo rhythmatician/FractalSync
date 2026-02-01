@@ -541,30 +541,12 @@ class ControlTrainer:
             # Loudness proxy: RMS feature (index 2 of avg_features)
             spectral_rms = avg_features[:, 2]
 
-            # Compute a simple distance proxy per-sample. Use nu_norm from
-            # the minimap when available (distance = 1 - nu_norm), or fail loud.
-            distance_list = []
-            for i in range(batch_size):
-                c_real_val = julia_real[i].detach().item()
-                c_imag_val = julia_imag[i].detach().item()
-                if self.step_controller is None:
-                    raise RuntimeError(
-                        "Minimap StepController not available for loudness-distance loss calculation"
-                    )
-                try:
-                    state = StepState(c_real_val, c_imag_val, 0.0, 0.0)
-                    ctx = self.step_controller.context_for_state(state)
-                    nu_norm = getattr(ctx, "nu_norm", None)
-                    if nu_norm is not None:
-                        distance_list.append(1.0 - float(nu_norm))
-                        continue
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Minimap sampling failed for loudness-distance at batch idx {i}: {e}"
-                    )
-
-            distance_tensor = torch.tensor(
-                distance_list, dtype=torch.float32, device=self.device
+            # Calculate the distance between `c` and the Mandelbrot set boundary
+            c = torch.stack([julia_real, julia_imag], dim=1)
+            distance_tensor = (
+                self.visual_metrics.mandelbrot_distance_estimate(c)
+                .to(self.device)
+                .to(torch.float32)
             )
             loudness_distance_loss = self.correlation_loss(
                 -spectral_rms, distance_tensor
