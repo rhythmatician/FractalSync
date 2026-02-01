@@ -105,6 +105,13 @@ export async function loadStepController(): Promise<StepController> {
     },
   };
 
+  // Debug: surface wrapper shape to console (helps catch runtime mismatches)
+  try {
+    console.debug('[stepController] created wrapper, methods:', Object.keys(wrapper));
+  } catch (e) {
+    console.warn('[stepController] created wrapper, could not enumerate methods');
+  }
+
   return wrapper;
 }
 

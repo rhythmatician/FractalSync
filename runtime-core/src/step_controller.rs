@@ -240,4 +240,23 @@ mod tests {
             .sqrt();
         assert!(mag <= MAX_STEP_BASE + 1e-6);
     }
+
+    #[test]
+    fn controller_applies_throttle_and_updates_state() {
+        let minimap = Minimap::new_with_resolution(64);
+        let controller = StepController::new_with_minimap(minimap);
+        let mut state = StepState::default();
+        let delta_model = Complex::new(0.01, 0.0);
+        let result = controller.step(&mut state, delta_model);
+
+        // Ensure state was updated
+        assert!(state.c.real != 0.0 || state.c.imag != 0.0, "state should move");
+
+        // Ensure delta_applied is not larger than delta_model after throttling
+        let applied_mag = (result.delta_applied.real * result.delta_applied.real
+            + result.delta_applied.imag * result.delta_applied.imag)
+            .sqrt();
+        let model_mag = (delta_model.real * delta_model.real + delta_model.imag * delta_model.imag).sqrt();
+        assert!(applied_mag <= model_mag + 1e-6);
+    }
 }

@@ -283,4 +283,34 @@ mod tests {
         let (_nu_out, inside_flag_out) = escape_time(outside);
         assert!(!inside_flag_out);
     }
+
+    #[test]
+    fn gradient_matches_finite_difference() {
+        let minimap = Minimap::new_with_resolution(64);
+        let level = &minimap.levels[0];
+        let c = Complex::new(-0.7, 0.0);
+        let (gx, gy) = gradient(level, c);
+
+        // Finite difference approx from nearby samples
+        let eps_re = (RE_MAX - RE_MIN) / (level.width.saturating_sub(1).max(1) as f64);
+        let eps_im = (IM_MAX - IM_MIN) / (level.height.saturating_sub(1).max(1) as f64);
+        let c_left = Complex::new(c.real - eps_re, c.imag);
+        let c_right = Complex::new(c.real + eps_re, c.imag);
+        let c_down = Complex::new(c.real, c.imag - eps_im);
+        let c_up = Complex::new(c.real, c.imag + eps_im);
+
+        let f_left = bilinear_sample(level, c_left);
+        let f_right = bilinear_sample(level, c_right);
+        let f_down = bilinear_sample(level, c_down);
+        let f_up = bilinear_sample(level, c_up);
+
+        let approx_gx = (f_right - f_left) as f64 / (2.0 * eps_re);
+        let approx_gy = (f_up - f_down) as f64 / (2.0 * eps_im);
+
+        let diff_gx = (gx as f64 - approx_gx).abs();
+        let diff_gy = (gy as f64 - approx_gy).abs();
+
+        assert!(diff_gx < 1e-3, "grad_re mismatch: {}", diff_gx);
+        assert!(diff_gy < 1e-3, "grad_im mismatch: {}", diff_gy);
+    }
 }

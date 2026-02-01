@@ -254,19 +254,84 @@ export class ModelInference {
       const dx = params.length > 0 ? params[0] : 0;
       const dy = params.length > 1 ? params[1] : 0;
 
-      // The WASM controller exposes `applyStep(...)` which receives numeric
-      // state fields rather than a `StepState` object. Call it directly and
-      // update the local stepState with the returned result.
+      // Debug: log raw model outputs occasionally and inspect state transitions
+      if (Math.random() < 0.05) {
+        console.debug('[ModelInference] model output (dx,dy)=', dx.toFixed(6), dy.toFixed(6));
+        console.debug('[ModelInference] stepState before', this.stepState);
+      }
+
       const result = this.stepController.step(this.stepState, dx, dy);
 
       // Update local state from the returned result so future steps are
       // applied relative to the current orbit state.
       if (result) {
-        // Defensive checks in case WASM returns an unexpected shape
-        this.stepState.c_real = typeof result.c_real === 'number' ? result.c_real : this.stepState.c_real;
-        this.stepState.c_imag = typeof result.c_imag === 'number' ? result.c_imag : this.stepState.c_imag;
-        this.stepState.prev_delta_real = typeof result.delta_real === 'number' ? result.delta_real : this.stepState.prev_delta_real;
-        this.stepState.prev_delta_imag = typeof result.delta_imag === 'number' ? result.delta_imag : this.stepState.prev_delta_imag;
+        const prevState = { ...this.stepState };
+        // Defensive checks in case WASM returns an unexpected shape. Some
+        // bindings/serializers produce `c_real`/`c_imag`, others `c_next_real`/`c_next_imag`.
+        // Handle both and fall back to adding the delta if necessary.
+        const c_real_candidates = [
+          (result as any).c_real,
+          (result as any).c_next_real,
+          (result as any).c_next?.real,
+          (result as any).c_next?.c_real,
+        ];
+        const c_imag_candidates = [
+          (result as any).c_imag,
+          (result as any).c_next_imag,
+          (result as any).c_next?.imag,
+          (result as any).c_next?.c_imag,
+        ];
+        const delta_real_candidates = [
+          (result as any).delta_real,
+          (result as any).delta_applied?.real,
+          (result as any).delta?.real,
+        ];
+        const delta_imag_candidates = [
+          (result as any).delta_imag,
+          (result as any).delta_applied?.imag,
+          (result as any).delta?.imag,
+        ];
+
+        const pickNumber = (arr: any[]): number | null => {
+          for (const v of arr) {
+            if (typeof v === 'number') return v;
+          }
+          return null;
+        };
+
+        const maybe_c_real = pickNumber(c_real_candidates);
+        const maybe_c_imag = pickNumber(c_imag_candidates);
+        const maybe_delta_real = pickNumber(delta_real_candidates);
+        const maybe_delta_imag = pickNumber(delta_imag_candidates);
+
+        if (maybe_c_real !== null) this.stepState.c_real = maybe_c_real;
+        if (maybe_c_imag !== null) this.stepState.c_imag = maybe_c_imag;
+
+        // If c_next wasn't provided, fall back to updating by the applied delta
+        if (maybe_c_real === null && typeof maybe_delta_real === 'number') {
+          this.stepState.c_real = this.stepState.c_real + maybe_delta_real;
+        }
+        if (maybe_c_imag === null && typeof maybe_delta_imag === 'number') {
+          this.stepState.c_imag = this.stepState.c_imag + maybe_delta_imag;
+        }
+
+        if (maybe_delta_real !== null) this.stepState.prev_delta_real = maybe_delta_real;
+        if (maybe_delta_imag !== null) this.stepState.prev_delta_imag = maybe_delta_imag;
+
+        if (Math.random() < 0.05) {
+          console.debug('[ModelInference] step result', result);
+          console.debug('[ModelInference] stepState after', this.stepState, 'prev', prevState);
+        }
+
+        // If we couldn't find any of the expected numeric outputs, warn once
+        if (
+          maybe_c_real === null &&
+          maybe_c_imag === null &&
+          maybe_delta_real === null &&
+          maybe_delta_imag === null
+        ) {
+          console.warn('[ModelInference] Unexpected step result shape; result:', result);
+        }
       }
 
       // Extract audio features for color mapping
@@ -407,10 +472,18 @@ export class ModelInference {
     let combined = [...features];
 
     if (this.isStepModel) {
-      if (this.stepController && this.stepState) {
-        const context = this.stepController.context(this.stepState);
-        combined = combined.concat(context.feature_vec ?? []);
+      if (this.stepController && this.stepState && typeof (this.stepController as any).context === 'function') {
+        try {
+          const context = (this.stepController as any).context(this.stepState);
+          combined = combined.concat(context?.feature_vec ?? []);
+        } catch (e) {
+          console.warn('[ModelInference] stepController.context threw:', e);
+          combined = combined.concat(new Array(265).fill(0));
+        }
       } else {
+        if (this.stepController && !(typeof (this.stepController as any).context === 'function')) {
+          console.warn('[ModelInference] stepController.context not available; using zeroed minimap context');
+        }
         combined = combined.concat(new Array(265).fill(0));
       }
     }
