@@ -10,6 +10,7 @@ import logging
 from typing import Dict, List, Optional
 from tqdm import tqdm
 import numpy as np
+from numpy.typing import NDArray
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -472,7 +473,7 @@ class ControlTrainer:
 
         # Normalize each window individually and re-stack per-file arrays. Handle
         # empty feature arrays safely by keeping an empty (0, n_features) array.
-        normalized_features = []
+        normalized_features: List[NDArray[np.floating]] = []
         for f in all_features:
             if f.shape[0] == 0:
                 # Preserve feature dimensionality for empty files
