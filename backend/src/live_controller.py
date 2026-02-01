@@ -263,6 +263,10 @@ class ImpactDetector:
         # State
         self.last_impact_time = -999.0
         self.in_refractory = False
+        # Hysteresis state: when a high score has been seen we latch until
+        # the score falls below the hysteresis threshold to avoid rapid
+        # retriggering near the threshold.
+        self._above_threshold = False
 
     def compute_impact_score(self, features: FastFeatures) -> float:
         """
@@ -311,10 +315,19 @@ class ImpactDetector:
         threshold = np.percentile(list(self.score_history), self.threshold_percentile)
         hysteresis_threshold = threshold * self.hysteresis_ratio
 
-        # Detect impact
-        is_impact = bool(score > threshold) and not self.in_refractory
+        # Hysteresis: clear above-threshold latch once the score falls below the
+        # lower hysteresis threshold so brief dips don't immediately re-enable
+        # another trigger.
+        if score < hysteresis_threshold:
+            self._above_threshold = False
 
-        if is_impact:
+        # Detect impact only on a rising edge above the main threshold and when
+        # not in refractory; once triggered, set the latch so we require the
+        # score to drop below the hysteresis threshold before triggering again.
+        is_impact = False
+        if score > threshold and not self.in_refractory and not self._above_threshold:
+            is_impact = True
+            self._above_threshold = True
             self.last_impact_time = features.timestamp
 
         return is_impact, score
