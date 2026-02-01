@@ -239,7 +239,7 @@ def execute_training_workflow(args):
     print("=" * 60)
     print(f"\nTraining will save checkpoints every 10 epochs to: {args.save_dir}")
     print("\nArchitecture overview:")
-    print("  - Model predicts delta steps: Δc_real, Δc_imag")
+    print("  - Model predicts delta steps: Delta c_real, Delta c_imag")
     print("  - Step controller applies throttling and boundary guards")
     print("  - Curriculum learning teaches stable step trajectories")
     print("  - Correlation losses map audio features to visual parameters")
