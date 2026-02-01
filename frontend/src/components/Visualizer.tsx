@@ -23,6 +23,7 @@ export function Visualizer() {
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -314,6 +315,30 @@ export function Visualizer() {
             title="Toggle audio-reactive post-processing (MR #8 / commit 75c1a43)"
           >
             Audio-Reactive: {audioReactiveEnabled ? 'ON' : 'OFF'}
+          </button>
+
+          <button
+            onClick={() => {
+              const next = !telemetryEnabled;
+              setTelemetryEnabled(next);
+              if (modelRef.current) {
+                (modelRef.current as any).setTelemetryEnabled(next);
+                (modelRef.current as any).__telemetryEnabled = next;
+              }
+            }}
+            style={{
+              padding: '5px 10px',
+              background: telemetryEnabled ? '#4CAF50' : '#222',
+              color: '#fff',
+              border: '1px solid #888',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginLeft: '10px'
+            }}
+            title="Toggle server-side telemetry logging"
+          >
+            Telemetry: {telemetryEnabled ? 'ON' : 'OFF'}
           </button>
         </div>
 
