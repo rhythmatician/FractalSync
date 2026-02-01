@@ -19,7 +19,14 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
-from runtime_core import FeatureExtractor, SAMPLE_RATE, HOP_LENGTH, N_FFT
+from runtime_core import (
+    FeatureExtractor,
+    SAMPLE_RATE,
+    HOP_LENGTH,
+    N_FFT,
+    StepController,
+    StepState,
+)
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
@@ -130,6 +137,16 @@ class ControlTrainer:
         # Curriculum data
         self.curriculum_positions: Optional[torch.Tensor] = None
         self.curriculum_velocities: Optional[torch.Tensor] = None
+
+        # Minimap context controller for on-the-fly context sampling during training
+        # (uses the runtime_core minimap via StepController/context_for_state)
+        try:
+            self.step_controller = StepController()
+        except Exception:
+            self.step_controller = None
+            logger.warning(
+                "Could not initialize StepController for context sampling; training will use zero context"
+            )
 
         # Training history
         self.history: Dict[str, List[float]] = {
@@ -249,12 +266,73 @@ class ControlTrainer:
 
             features_with_context = features
             if self.context_dim > 0:
-                context = torch.zeros(
-                    (batch_size, self.context_dim),
-                    dtype=features.dtype,
-                    device=self.device,
-                )
-                features_with_context = torch.cat([features, context], dim=1)
+                # Attempt to populate minimap-based context when curriculum positions
+                # are available. Otherwise, fall back to zeroed context.
+                if (
+                    self.step_controller is not None
+                    and self.use_curriculum
+                    and self.curriculum_positions is not None
+                ):
+                    # Build context per-sample from curriculum positions/velocities
+                    ctx_list = []
+                    for i in range(batch_size):
+                        # Determine corresponding curriculum index (we generated positions earlier)
+                        idx_in_curr = sample_idx - batch_size + i
+                        # Clamp
+                        idx_in_curr = max(
+                            0, min(len(self.curriculum_positions) - 1, idx_in_curr)
+                        )
+                        pos = (
+                            self.curriculum_positions[idx_in_curr]
+                            .detach()
+                            .cpu()
+                            .numpy()
+                        )
+                        vel = (
+                            self.curriculum_velocities[idx_in_curr]
+                            .detach()
+                            .cpu()
+                            .numpy()
+                            if self.curriculum_velocities is not None
+                            else np.array([0.0, 0.0])
+                        )
+                        try:
+                            # pos may be a numpy array or tensor; extract floats
+                            c_real = float(pos[0])
+                            c_imag = float(pos[1])
+                            vd0 = float(vel[0])
+                            vd1 = float(vel[1])
+                            state = StepState(c_real, c_imag, vd0, vd1)
+                            ctx = self.step_controller.context_for_state(state)
+                            # ctx may be a StepContext object; prefer as_feature_vec if present
+                            if hasattr(ctx, "as_feature_vec"):
+                                fv = ctx.as_feature_vec()
+                            elif isinstance(ctx, dict) and "feature_vec" in ctx:
+                                fv = ctx["feature_vec"]
+                            else:
+                                fv = (
+                                    getattr(ctx, "feature_vec", None)
+                                    or [0.0] * self.context_dim
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"Minimap context sampling failed for curriculum idx {idx_in_curr}: {e}"
+                            )
+                            fv = [0.0] * self.context_dim
+                        ctx_list.append(fv)
+                    # Convert to tensor
+                    context = torch.tensor(
+                        ctx_list, dtype=features.dtype, device=self.device
+                    )
+                    features_with_context = torch.cat([features, context], dim=1)
+                else:
+                    # Zero padding fallback
+                    context = torch.zeros(
+                        (batch_size, self.context_dim),
+                        dtype=features.dtype,
+                        device=self.device,
+                    )
+                    features_with_context = torch.cat([features, context], dim=1)
 
             # Forward pass
             predicted_controls = self.model(features_with_context)
