@@ -293,29 +293,35 @@ export function Visualizer() {
           >
             {showModelInfo ? 'Hide' : 'Show'} Model
           </button>
-          
-          <button
-            onClick={() => {
-              const newState = !audioReactiveEnabled;
-              setAudioReactiveEnabled(newState);
-              if (modelRef.current) {
-                modelRef.current.setAudioReactivePostProcessing(newState);
-              }
-            }}
-            style={{
-              padding: '5px 10px',
-              background: audioReactiveEnabled ? '#4CAF50' : '#666',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              marginLeft: '10px'
-            }}
-            title="Toggle audio-reactive post-processing (MR #8 / commit 75c1a43)"
-          >
-            Audio-Reactive: {audioReactiveEnabled ? 'ON' : 'OFF'}
-          </button>
+
+          {/* Quick experiment controls for proposal scaling/jitter */}
+          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', marginLeft: '10px' }}>
+            <span style={{ color: '#ccc', fontSize: '12px' }}>Scale</span>
+            <button onClick={() => {
+                if (modelRef.current) {
+                  const cur = (modelRef.current as any).__proposalScale ?? 1;
+                  const next = cur === 1 ? 2 : cur === 2 ? 4 : cur === 4 ? 8 : 1;
+                  (modelRef.current as any).setProposalScale(next);
+                  (modelRef.current as any).__proposalScale = next;
+                }
+              }}
+              style={{ padding: '4px 8px', background: '#222', color: '#fff', borderRadius: '4px', border: '1px solid #555' }}>
+              x1/x2/x4/x8
+            </button>
+
+            <span style={{ color: '#ccc', fontSize: '12px' }}>Jitter</span>
+            <button onClick={() => {
+                if (modelRef.current) {
+                  const cur = (modelRef.current as any).__proposalJitter ?? 0;
+                  const next = cur === 0 ? 0.002 : cur === 0.002 ? 0.005 : cur === 0.005 ? 0.01 : 0;
+                  (modelRef.current as any).setProposalJitter(next);
+                  (modelRef.current as any).__proposalJitter = next;
+                }
+              }}
+              style={{ padding: '4px 8px', background: '#222', color: '#fff', borderRadius: '4px', border: '1px solid #555' }}>
+              0/0.002/0.005/0.01
+            </button>
+          </div>
 
           <button
             onClick={() => {

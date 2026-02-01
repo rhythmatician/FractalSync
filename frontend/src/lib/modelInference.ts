@@ -68,6 +68,26 @@ export class ModelInference {
   private telemetryEnabled: boolean = false;
   private telemetryCounter: number = 0;
 
+  // Proposal scaling and jitter for frontend experiment toggles
+  private proposalScale: number = 1.0;
+  private proposalJitter: number = 0.0; // absolute jitter magnitude
+
+  // Last observed model outputs (raw) and last scaled values (after proposalScale/jitter)
+  private lastRawModelDX: number | null = null;
+  private lastRawModelDY: number | null = null;
+  private lastScaledModelDX: number | null = null;
+  private lastScaledModelDY: number | null = null;
+
+  setProposalScale(scale: number): void {
+    this.proposalScale = scale;
+    console.log(`[ModelInference] proposalScale set to ${scale}`);
+  }
+
+  setProposalJitter(jitter: number): void {
+    this.proposalJitter = jitter;
+    console.log(`[ModelInference] proposalJitter set to ${jitter}`);
+  }
+
   /**
    * Enable or disable server-side telemetry logging. When enabled, the frontend will
    * periodically post compact telemetry JSON to POST /api/telemetry.
@@ -254,13 +274,33 @@ export class ModelInference {
       const dx = params.length > 0 ? params[0] : 0;
       const dy = params.length > 1 ? params[1] : 0;
 
-      // Debug: log raw model outputs occasionally and inspect state transitions
+      // Store raw model outputs
+      this.lastRawModelDX = dx;
+      this.lastRawModelDY = dy;
+
+      // Apply frontend experimental scaling and jitter before passing to the step controller
+      let scaled_dx = dx * this.proposalScale;
+      let scaled_dy = dy * this.proposalScale;
+      if (this.proposalJitter > 0) {
+        // small random jitter in real units
+        const ang = Math.random() * Math.PI * 2;
+        const r = (Math.random() * this.proposalJitter);
+        scaled_dx += Math.cos(ang) * r;
+        scaled_dy += Math.sin(ang) * r;
+      }
+
+      // Record scaled values
+      this.lastScaledModelDX = scaled_dx;
+      this.lastScaledModelDY = scaled_dy;
+
+      // Debug: log raw and scaled values occasionally
       if (Math.random() < 0.05) {
-        console.debug('[ModelInference] model output (dx,dy)=', dx.toFixed(6), dy.toFixed(6));
+        console.debug('[ModelInference] model output (raw dx,dy)=', dx.toFixed(6), dy.toFixed(6));
+        console.debug('[ModelInference] model output (scaled dx,dy)=', scaled_dx.toFixed(6), scaled_dy.toFixed(6));
         console.debug('[ModelInference] stepState before', this.stepState);
       }
 
-      const result = this.stepController.step(this.stepState, dx, dy);
+      const result = this.stepController.step(this.stepState, scaled_dx, scaled_dy);
 
       // Update local state from the returned result so future steps are
       // applied relative to the current orbit state.
@@ -581,6 +621,11 @@ export class ModelInference {
       ts: new Date().toISOString(),
       model_dx,
       model_dy,
+      // raw and scaled (after proposalScale/jitter)
+      scaled_model_dx: this.lastScaledModelDX ?? null,
+      scaled_model_dy: this.lastScaledModelDY ?? null,
+      proposal_scale: this.proposalScale,
+      proposal_jitter: this.proposalJitter,
       applied_delta,
       c_real,
       c_imag,
