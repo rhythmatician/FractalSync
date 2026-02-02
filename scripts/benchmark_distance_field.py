@@ -37,9 +37,19 @@ def benchmark_resolution(res, max_iter):
     # GPU benchmark (will fall back to CPU if GPU unavailable)
     print("Running GPU implementation...")
     start = time.time()
-    gpu_mask = build_mask_gpu(**params)
+    result = build_mask_gpu(**params)
     gpu_time = time.time() - start
-    print(f"  GPU time: {gpu_time:.3f}s")
+    
+    # Handle tuple return value
+    if isinstance(result, tuple):
+        gpu_mask, actually_used_gpu = result
+        if actually_used_gpu:
+            print(f"  GPU time: {gpu_time:.3f}s (actual GPU)")
+        else:
+            print(f"  GPU time: {gpu_time:.3f}s (fell back to CPU)")
+    else:
+        gpu_mask = result
+        print(f"  GPU time: {gpu_time:.3f}s")
     
     # Speedup
     if gpu_time > 0:

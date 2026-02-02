@@ -13,7 +13,7 @@ import numpy as np
 def visualize_distance_field(npy_path: Path, save_path: Path = None):
     """
     Load and visualize a distance field.
-    
+
     Args:
         npy_path: Path to the .npy distance field file
         save_path: Optional path to save the visualization as an image

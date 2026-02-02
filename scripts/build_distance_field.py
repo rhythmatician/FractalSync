@@ -89,14 +89,16 @@ def build_mask_gpu(
     """
     GPU-accelerated Mandelbrot mask generation using OpenGL.
     
-    Returns a boolean mask where True indicates points inside the Mandelbrot set.
-    Falls back to CPU implementation if GPU is unavailable.
+    Returns:
+        tuple: (mask, used_gpu) where mask is a boolean array and used_gpu
+               indicates whether GPU was actually used (True) or fell back to CPU (False)
     """
     try:
         import moderngl
     except ImportError:
         logger.warning("moderngl not available, falling back to CPU implementation")
-        return build_mask(res, xmin, xmax, ymin, ymax, max_iter, bailout)
+        cpu_mask = build_mask(res, xmin, xmax, ymin, ymax, max_iter, bailout)
+        return cpu_mask, False
 
     try:
         # Create headless OpenGL context
@@ -198,11 +200,12 @@ def build_mask_gpu(
         program.release()
         ctx.release()
 
-        return inside.astype(np.bool_)
+        return inside.astype(np.bool_), True
 
     except Exception as e:
         logger.warning(f"GPU rendering failed ({e}), falling back to CPU")
-        return build_mask(res, xmin, xmax, ymin, ymax, max_iter, bailout)
+        cpu_mask = build_mask(res, xmin, xmax, ymin, ymax, max_iter, bailout)
+        return cpu_mask, False
 
 
 def build_signed_distance(inside_mask: np.ndarray, pixel_scale: float):
@@ -231,8 +234,9 @@ def main():
     
     start_time = time.time()
     
+    actually_used_gpu = False
     if args.use_gpu:
-        inside = build_mask_gpu(
+        inside, actually_used_gpu = build_mask_gpu(
             res, args.xmin, args.xmax, args.ymin, args.ymax, args.max_iter, args.bailout
         )
     else:
@@ -262,7 +266,7 @@ def main():
         "ymax": args.ymax,
         "res": res,
         "max_iter": args.max_iter,
-        "used_gpu": args.use_gpu,
+        "used_gpu": actually_used_gpu,
     }
     with open(out.with_suffix(".json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)

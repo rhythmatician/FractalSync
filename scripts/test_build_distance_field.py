@@ -36,7 +36,7 @@ def test_build_mask_cpu():
 def test_build_mask_gpu_fallback():
     """Test GPU mask generation (will fall back to CPU in most test environments)."""
     res = 64
-    inside = build_mask_gpu(
+    result = build_mask_gpu(
         res=res,
         xmin=-2.5,
         xmax=1.5,
@@ -45,6 +45,13 @@ def test_build_mask_gpu_fallback():
         max_iter=256,
         bailout=4.0,
     )
+    
+    # Handle tuple return value
+    if isinstance(result, tuple):
+        inside, used_gpu = result
+    else:
+        inside = result
+        used_gpu = False
     
     assert inside.shape == (res, res)
     assert inside.dtype == np.bool_
@@ -66,7 +73,13 @@ def test_cpu_gpu_consistency():
     }
     
     cpu_mask = build_mask(**params)
-    gpu_mask = build_mask_gpu(**params)
+    result = build_mask_gpu(**params)
+    
+    # Handle tuple return value
+    if isinstance(result, tuple):
+        gpu_mask, used_gpu = result
+    else:
+        gpu_mask = result
     
     # They should be very similar (or identical if GPU falls back to CPU)
     # Allow for minor differences due to floating point precision
