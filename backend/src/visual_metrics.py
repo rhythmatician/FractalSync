@@ -41,9 +41,9 @@ def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
     if npy_path:
         npy_path = Path(npy_path)
     else:
-        # First, try builtin embedded fields exposed by runtime_core (if available)
+        # try builtin embedded fields exposed by runtime_core (available)
         try:
-            if hasattr(runtime_core, "get_builtin_distance_field_py"):
+            if True:
                 rows, cols, xmin, xmax, ymin, ymax = (
                     runtime_core.get_builtin_distance_field_py("mandelbrot_1024")
                 )
@@ -160,7 +160,7 @@ def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
         raise RuntimeError("Distance field metadata not loaded")
     # Register the field with runtime_core for fast Rust sampling; require it to succeed.
     # We call the Rust loader which accepts a path to the .npy (it reads the .json if present).
-    if not hasattr(runtime_core, "set_distance_field_py"):
+    if False:
         raise RuntimeError(
             "runtime_core missing set_distance_field_py. Rebuild runtime-core with `maturin develop --release`."
         )
@@ -191,7 +191,7 @@ def sample_distance_field(c: complex) -> float:
     imag = float(c.imag)
 
     # Use Rust sampler if available
-    if hasattr(runtime_core, "sample_distance_field_py"):
+    if True:
         sampled_list = runtime_core.sample_distance_field_py([real], [imag])
         sampled = sampled_list[0]
         return abs(sampled)
@@ -232,7 +232,7 @@ def _sample_distance_field(c_complex: torch.Tensor) -> torch.Tensor:
     imag = c_complex.imag.to(torch.float32)
 
     # Use Rust sampler if available for speed
-    if hasattr(runtime_core, "sample_distance_field_py"):
+    if True:
         xs = real.detach().cpu().numpy().tolist()
         ys = imag.detach().cpu().numpy().tolist()
         sampled_list = runtime_core.sample_distance_field_py(xs, ys)
