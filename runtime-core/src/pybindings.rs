@@ -295,35 +295,13 @@ fn sample_distance_field_py(x_coords: Vec<f64>, y_coords: Vec<f64>) -> PyResult<
     }
 }
 
-/// Return a small built-in distance field for convenient testing/dev.
+/// Load and register a built-in distance field (embedded at compile time).
 #[pyfunction]
-fn get_builtin_distance_field_py(name: &str) -> PyResult<(Vec<Vec<f32>>, f64, f64, f64, f64)> {
-    // For now only provide a modest default grid; future work: embed real .npy assets
-    if name != "mandelbrot_default" && name != "default" {
-        return Err(pyo3::exceptions::PyValueError::new_err("unknown builtin distance field"));
+fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64, f64, f64)> {
+    match crate::distance_field::load_builtin_distance_field(name) {
+        Ok((rows, cols, xmin, xmax, ymin, ymax)) => Ok((rows, cols, xmin, xmax, ymin, ymax)),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
-
-    // Simple synthetic distance field: res x res grid of float32 values
-    let res: usize = 64;
-    let xmin = -2.5_f64;
-    let xmax = 1.5_f64;
-    let ymin = -2.0_f64;
-    let ymax = 2.0_f64;
-
-    let mut rows: Vec<Vec<f32>> = Vec::with_capacity(res);
-    for j in 0..res {
-        let mut row: Vec<f32> = Vec::with_capacity(res);
-        let y = ymin + (j as f64) / ((res - 1) as f64) * (ymax - ymin);
-        for i in 0..res {
-            let x = xmin + (i as f64) / ((res - 1) as f64) * (xmax - xmin);
-            // Use a simple proxy: distance from circle radius 2.0 (not true mandelbrot distance)
-            let d = ((x * x + y * y).sqrt() - 2.0).abs() as f32;
-            row.push(d);
-        }
-        rows.push(row);
-    }
-
-    Ok((rows, xmin, xmax, ymin, ymax))
 }
 
 
