@@ -28,6 +28,41 @@ pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmi
     *guard = Some(df);
     Ok(())
 }
+
+/// Load a built-in distance field embedded at compile time or fall back to external file.
+pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64, f64, f64), String> {
+    match name {
+        "mandelbrot_1024" | "mandelbrot_default" | "default" => {
+            // Use raw embedded binary (.bin) with little-endian float32 values for fast compile-time embedding.
+            let bin_bytes: &[u8] = include_bytes!("../data/mandelbrot_distance_1024.bin");
+            let json_str: &str = include_str!("../data/mandelbrot_distance_1024.json");
+
+            if bin_bytes.len() % 4 != 0 {
+                return Err("embedded bin size is not a multiple of 4".into());
+            }
+            let mut flat: Vec<f32> = Vec::with_capacity(bin_bytes.len() / 4);
+            for chunk in bin_bytes.chunks_exact(4) {
+                let v = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                flat.push(v);
+            }
+
+            // Parse metadata JSON
+            let meta: serde_json::Value = serde_json::from_str(json_str).map_err(|e| format!("meta parse error: {}", e))?;
+            let res = meta.get("res").and_then(|v| v.as_u64()).ok_or_else(|| "meta missing res".to_string())? as usize;
+            let rows = res;
+            let cols = res;
+            let xmin = meta["xmin"].as_f64().unwrap_or(-2.5);
+            let xmax = meta["xmax"].as_f64().unwrap_or(1.5);
+            let ymin = meta["ymin"].as_f64().unwrap_or(-2.0);
+            let ymax = meta["ymax"].as_f64().unwrap_or(2.0);
+
+            // Set into in-memory field
+            set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax)?;
+            Ok((rows, cols, xmin, xmax, ymin, ymax))
+        }
+        other => Err(format!("unknown builtin distance field: {}", other)),
+    }
+}
 pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String> {
     if xs.len() != ys.len() {
         return Err("xs and ys must have the same length".into());
