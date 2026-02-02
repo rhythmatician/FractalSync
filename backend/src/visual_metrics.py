@@ -41,6 +41,29 @@ def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
     if npy_path:
         npy_path = Path(npy_path)
     else:
+        # First, try builtin embedded fields exposed by runtime_core (if available)
+        try:
+            if hasattr(runtime_core, "get_builtin_distance_field_py"):
+                rows, xmin, xmax, ymin, ymax = (
+                    runtime_core.get_builtin_distance_field_py("mandelbrot_1024")
+                )
+                # Build tensor and meta like below
+                import numpy as _np
+
+                arr = _np.array(rows, dtype=_np.float32)
+                _distance_field_tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)
+                _distance_field_meta = DistanceFieldMeta(
+                    xmin=xmin,
+                    xmax=xmax,
+                    ymin=ymin,
+                    ymax=ymax,
+                    res=arr.shape[0],
+                )
+                return
+        except Exception:
+            # Ignore — fallback to file candidates
+            pass
+
         # Try a few canonical locations (src/data, backend/data, repo-root data)
         candidates = [
             Path(__file__).parent / "data" / "mandelbrot_distance_2048.npy",
@@ -49,6 +72,16 @@ def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
             / "data"
             / "mandelbrot_distance_2048.npy",
         ]
+        # Also include repo-root 1024 which we added
+        candidates.extend(
+            [
+                Path(__file__).parent.parent.parent
+                / "data"
+                / "mandelbrot_distance_1024.npy",
+                Path(__file__).parent / "data" / "mandelbrot_distance_1024.npy",
+                Path(__file__).parent.parent / "data" / "mandelbrot_distance_1024.npy",
+            ]
+        )
         found = None
         for p in candidates:
             if p.exists():
