@@ -181,9 +181,6 @@ class LossVisualMetrics:
     @staticmethod
     def mandelbrot_distance_estimate(
         c: torch.Tensor,
-        max_iter=128,
-        bailout=10.0,
-        eps=1e-8,
     ) -> torch.Tensor:
         """Estimate distance to the Mandelbrot boundary for a batch of points.
 
