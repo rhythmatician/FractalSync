@@ -4,45 +4,31 @@ Unit tests for visual metrics computation.
 
 import pytest
 import numpy as np
-import sys
 from pathlib import Path
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+import runtime_core
+from src.visual_metrics import load_distance_field  # noqa: E402
 from src.visual_metrics import LossVisualMetrics  # noqa: E402
 
 
 @pytest.fixture(scope="module")
-def distance_field(tmp_path_factory):
-    """Ensure a distance field is loaded for testing."""
-    # 1) explicit path via env var
-    import os
+def distance_field(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Fixture to provide path to builtin mandelbrot distance field.
 
-    env_path = os.environ.get("FRACSYNC_DISTFIELD")
-    if env_path:
-        p = Path(env_path)
-        if p.exists():
-            from src.visual_metrics import load_distance_field
+    Args:
+        tmp_path_factory (pytest.TempPathFactory): Temporary path factory for creating temporary directories.
 
-            load_distance_field(p)
-            return p
-
-    # 2) look for a canonical file in data/
-    candidates = [
-        Path("data/mandelbrot_distance_2048.npy"),
-        Path("data/mandelbrot_distance_1024.npy"),
-        Path("data/mandelbrot_distance.npy"),
-    ]
-    for p in candidates:
-        if p.exists():
-            from src.visual_metrics import load_distance_field
-
-            load_distance_field(p)
-            return p
-
-    raise RuntimeError(
-        "No distance field found for tests. Please build one with scripts/build_distance_field.py and place it in data/, or set FRACSYNC_DISTFIELD to its path."
+    Returns:
+        Path: Path to the builtin mandelbrot distance field file.
+    """
+    if not hasattr(runtime_core, "get_builtin_distance_field_py"):
+        pytest.fail("runtime_core missing get_builtin_distance_field_py")
+    # Get builtin distance field info
+    load_distance_field()
+    return (
+        Path(__file__).parent.parent.parent
+        / "runtime-core"
+        / "data"
+        / "mandelbrot_distance_1024.npy"
     )
 
 
