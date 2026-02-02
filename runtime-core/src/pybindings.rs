@@ -335,16 +335,16 @@ impl FeatureExtractor {
     
     /// Simple test function to verify Rust execution
     fn test_simple(&self) -> Vec<f32> {
-        eprintln!("[DEBUG] test_simple called");
+        log::debug!("[DEBUG] test_simple called");
         vec![1.0, 2.0, 3.0]
     }
 
     /// Extract windowed features from audio samples as a Python list.
     #[pyo3(signature = (audio, window_frames))]
     fn extract_windowed_features(&self, audio: Vec<f32>, window_frames: usize) -> PyResult<Vec<Vec<f64>>> {
-        eprintln!("[PYBIND] extract_windowed_features called with {} samples", audio.len());
+        log::debug!("[PYBIND] extract_windowed_features called with {} samples", audio.len());
         let features = self.inner.extract_windowed_features(&audio, window_frames);
-        eprintln!("[PYBIND] Returned {} windows", features.len());
+        log::debug!("[PYBIND] Returned {} windows", features.len());
         Ok(features)
     }
 

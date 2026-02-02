@@ -44,13 +44,13 @@ mod tests {
         // Read numpy array (simple .npy format parser for f32)
         let audio = read_npy_f32(&audio_path).expect("Failed to read audio file");
         
-        eprintln!("Loaded {} audio samples from {}", audio.len(), audio_path);
+        log::debug!("Loaded {} audio samples from {}", audio.len(), audio_path);
         
         // Extract features with same params as Python test
         let extractor = FeatureExtractor::new(48000, 1024, 4096, false, false);
         let features = extractor.extract_windowed_features(&audio, 10);
         
-        eprintln!("Extracted {} windows with {} features each", 
+        log::debug!("Extracted {} windows with {} features each", 
                   features.len(), 
                   if features.is_empty() { 0 } else { features[0].len() });
         
@@ -59,7 +59,7 @@ mod tests {
         let output_path = Path::new("../backend/data/cache/parity_test_features.json");
         fs::write(output_path, json).expect("Failed to write output");
         
-        eprintln!("Wrote features to {}", output_path.display());
+        log::debug!("Wrote features to {}", output_path.display());
     }
     
     // Simple .npy reader for f32 arrays (header + data)

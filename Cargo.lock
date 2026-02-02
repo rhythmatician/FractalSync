@@ -199,6 +199,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "log"
+version = "0.4.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
 name = "matrixmultiply"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -597,6 +603,7 @@ name = "runtime_core"
 version = "0.1.0"
 dependencies = [
  "js-sys",
+ "log",
  "ndarray 0.15.6",
  "ndarray-npy",
  "once_cell",

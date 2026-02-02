@@ -135,9 +135,9 @@ impl FeatureExtractor {
     /// needs to be processed please downmix to mono before calling this
     /// function.
     pub fn extract_features(&self, audio: &[f32]) -> Vec<Vec<f64>> {
-        eprintln!("[DEBUG] extract_features: audio.len()={}", audio.len());
+        log::debug!("[DEBUG] extract_features: audio.len()={}", audio.len());
         let frames = self.stft_magnitude(audio);
-        eprintln!("[DEBUG] stft_magnitude returned {} frames", frames.len());
+        log::debug!("[DEBUG] stft_magnitude returned {} frames", frames.len());
         let mut spectral_centroid: Vec<f64> = Vec::new();
         let mut spectral_flux: Vec<f64> = Vec::new();
         let mut rms_energy: Vec<f64> = Vec::new();
@@ -161,7 +161,7 @@ impl FeatureExtractor {
         let mut onset_env: Vec<f64> = Vec::new();
 
         for (frame_idx, mag) in frames.iter().enumerate() {
-            eprintln!("[DEBUG] Processing frame {}/{}", frame_idx + 1, frames.len());
+            log::debug!("[DEBUG] Processing frame {}/{}", frame_idx + 1, frames.len());
             // Spectral centroid: centre of mass of magnitude spectrum
             let sum_mag: f64 = mag.iter().sum();
             if sum_mag > 0.0 {
@@ -299,9 +299,9 @@ impl FeatureExtractor {
         audio: &[f32],
         window_frames: usize,
     ) -> Vec<Vec<f64>> {
-        eprintln!("[DEBUG] extract_windowed_features: audio.len()={}, window_frames={}", audio.len(), window_frames);
+        log::debug!("[DEBUG] extract_windowed_features: audio.len()={}, window_frames={}", audio.len(), window_frames);
         let features = self.extract_features(audio);
-        eprintln!("[DEBUG] extract_features returned: n_features={}, n_frames={}", features.len(), if features.is_empty() { 0 } else { features[0].len() });
+        log::debug!("[DEBUG] extract_features returned: n_features={}, n_frames={}", features.len(), if features.is_empty() { 0 } else { features[0].len() });
         let n_features = features.len();
         let n_frames = if features.is_empty() { 0 } else { features[0].len() };
 
