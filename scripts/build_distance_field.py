@@ -10,11 +10,12 @@ Usage (from repo root):
 This script depends on numpy and scipy.
 """
 
+# TODO: Use GPU acceleration for high res builds (Important: OpenGL, not CUDA)
+
 from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 
 import numpy as np
@@ -87,14 +88,21 @@ def main():
         res, args.xmin, args.xmax, args.ymin, args.ymax, args.max_iter, args.bailout
     )
 
-    # pixel scale: approximate Euclidean distance per pixel; assume square pixels
-    pixel_scale = math.hypot(args.xmax - args.xmin, args.ymax - args.ymin) / float(res)
+    # pixel scale: Euclidean distance per pixel in X - use (res - 1) because
+    # numpy.linspace includes both endpoints so pixel spacing is (xmax-xmin)/(res-1).
+    # Assume square pixels and use the X axis spacing as the pixel scale.
+    if res <= 1:
+        raise ValueError("res must be > 1")
+    pixel_scale = (args.xmax - args.xmin) / float(res - 1)
 
     print("Computing signed distance transform...")
     signed = build_signed_distance(inside, pixel_scale)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     np.save(out.with_suffix(".npy"), signed)
+    # Also write raw little-endian float32 binary suitable for embedding in Rust.
+    with open(out.with_suffix(".bin"), "wb") as f:
+        f.write(signed.astype("<f4").tobytes())
 
     meta = {
         "xmin": args.xmin,
