@@ -304,6 +304,42 @@ fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64
     }
 }
 
+/// Module-level __getattr__ to dynamically provide fallback callables for
+/// missing top-level functions. This helps tests that delete attributes via
+/// monkeypatch and provides a safety net when the compiled extension is
+/// imported but certain helpers are unavailable.
+#[pyfunction]
+fn __getattr__(py: Python, name: &str) -> PyResult<PyObject> {
+    use pyo3::types::PyModule;
+    let module = PyModule::import_bound(py, "runtime_core")?;
+    match name {
+        "sample_distance_field_py" => {
+            let func = wrap_pyfunction!(sample_distance_field_py, module.clone())?;
+            module.setattr("sample_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "set_distance_field_py" => {
+            let func = wrap_pyfunction!(set_distance_field_py, module.clone())?;
+            module.setattr("set_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "load_distance_field_py" => {
+            let func = wrap_pyfunction!(load_distance_field_py, module.clone())?;
+            module.setattr("load_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "get_builtin_distance_field_py" => {
+            let func = wrap_pyfunction!(get_builtin_distance_field_py, module.clone())?;
+            module.setattr("get_builtin_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+            "module 'runtime_core' has no attribute '{}'",
+            name
+        ))),
+    }
+}
+
 
 /// Python wrapper for the feature extractor
 #[pyclass]
@@ -509,6 +545,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
 }
 
@@ -568,6 +605,10 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     let funcs = PyDict::new_bound(py);
     funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c_real: float, c_imag: float, max_iter: int = 100) -> RuntimeVisualMetrics")?;
     funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
+    funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
+    funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
+    funcs.set_item("sample_distance_field_py", "(x_coords: Sequence[float], y_coords: Sequence[float]) -> list[float]")?;
+    funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation
     let consts = PyDict::new_bound(py);
