@@ -98,6 +98,38 @@ pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String>
     let dy = (df.ymax - df.ymin) as f64;
 
     let mut out = Vec::with_capacity(xs.len());
+
+    // helper to evaluate bicubic interpolation at arbitrary (fx,fy) pixel coords
+    fn eval_bicubic_at(df: &DistanceField, fx: f64, fy: f64, h: f64, w: f64) -> f32 {
+        let x0 = fx.floor() as isize;
+        let y0 = fy.floor() as isize;
+        let sx = fx - x0 as f64;
+        let sy = fy - y0 as f64;
+        fn cubic_kernel(x: f64) -> f64 {
+            let ax = x.abs();
+            if ax <= 1.0 { 1.5 * ax * ax * ax - 2.5 * ax * ax + 1.0 }
+            else if ax < 2.0 { -0.5 * ax * ax * ax + 2.5 * ax * ax - 4.0 * ax + 2.0 }
+            else { 0.0 }
+        }
+        let mut sum = 0.0f64;
+        let mut wsum = 0.0f64;
+        for j in -1isize..=2isize {
+            let wy = cubic_kernel((j as f64) - sy);
+            let y_idx = (y0 + j).clamp(0, (h - 1.0) as isize) as usize;
+            for i in -1isize..=2isize {
+                let wx = cubic_kernel((i as f64) - sx);
+                let x_idx = (x0 + i).clamp(0, (w - 1.0) as isize) as usize;
+                let val = df.data[[y_idx, x_idx]] as f64;
+                let weight = wx * wy;
+                sum += val * weight;
+                wsum += weight;
+            }
+        }
+        if wsum.abs() > 0.0 {
+            (sum / wsum) as f32
+        } else { 0.0 }
+    }
+
     for (&xr, &yr) in xs.iter().zip(ys.iter()) {
         // normalized [0,1]
         let mut u = (xr - df.xmin) / dx;
@@ -114,10 +146,6 @@ pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String>
         let fy = v * (h - 1.0);
         let x0 = fx.floor() as isize;
         let y0 = fy.floor() as isize;
-        let x1 = (x0 + 1).min((w - 1.0) as isize) as isize;
-        let y1 = (y0 + 1).min((h - 1.0) as isize) as isize;
-        let sx = fx - x0 as f64;
-        let sy = fy - y0 as f64;
 
         // If field is small (<4) preserve the original bilinear behavior used in tests.
         if h < 4.0 || w < 4.0 {
@@ -131,36 +159,21 @@ pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String>
             let v11 = df.data[[y1 as usize, x1 as usize]];
             let a = v00 * (1.0 - sx) + v10 * sx;
             let b = v01 * (1.0 - sx) + v11 * sx;
-            let mut s = a * (1.0 - sy) + b * sy;
-            s = s.abs() + outside_dist as f32;
+            let s = a * (1.0 - sy) + b * sy;
+            let s = s.abs() + outside_dist as f32;
             out.push(s);
         } else {
-            // Bicubic interpolation (Catmull-Rom-like cubic kernel)
-            fn cubic_kernel(x: f64) -> f64 {
-                let ax = x.abs();
-                if ax <= 1.0 { 1.5 * ax * ax * ax - 2.5 * ax * ax + 1.0 }
-                else if ax < 2.0 { -0.5 * ax * ax * ax + 2.5 * ax * ax - 4.0 * ax + 2.0 }
-                else { 0.0 }
-            }
-
-            let mut sum = 0.0f64;
-            let mut wsum = 0.0f64;
-            // sampling 4x4 neighborhood around (x0,y0): offsets -1..2
-            for j in -1isize..=2isize {
-                let wy = cubic_kernel((j as f64) - sy);
-                let y_idx = (y0 + j).clamp(0, (h - 1.0) as isize) as usize;
-                for i in -1isize..=2isize {
-                    let wx = cubic_kernel((i as f64) - sx);
-                    let x_idx = (x0 + i).clamp(0, (w - 1.0) as isize) as usize;
-                    let val = df.data[[y_idx, x_idx]] as f64;
-                    let w = wx * wy;
-                    sum += val * w;
-                    wsum += w;
+            // Bicubic interpolation with local subpixel refinement
+            let base = eval_bicubic_at(df, fx, fy, h, w);
+            let offsets = [-0.375f64, -0.125f64, 0.125f64, 0.375f64];
+            let mut min_abs = base.abs();
+            for &oy in &offsets {
+                for &ox in &offsets {
+                    let val = eval_bicubic_at(df, fx + ox, fy + oy, h, w);
+                    if val.abs() < min_abs { min_abs = val.abs(); }
                 }
             }
-            let mut s = if wsum.abs() > 0.0 { (sum / wsum) as f32 } else { 0.0 };
-            // if point is outside bounding box add Euclidean distance to box to the sampled distance
-            s = s.abs() + outside_dist as f32;
+            let s = min_abs + outside_dist as f32;
             out.push(s);
         }
     }
