@@ -413,9 +413,9 @@ class ControlTrainer:
             spectral_rms = avg_features[:, 2]
 
             # Calculate the distance between `c` and the Mandelbrot set boundary
-            c = torch.stack([julia_real, julia_imag], dim=1)
+            c_tensor_coords = torch.stack([julia_real, julia_imag], dim=1)
             distance_tensor = (
-                self.visual_metrics.mandelbrot_distance_estimate(c)
+                self.visual_metrics.mandelbrot_distance_estimate(c_tensor_coords)
                 .to(self.device)
                 .to(torch.float32)
             )
