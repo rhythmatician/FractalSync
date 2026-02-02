@@ -23,3 +23,13 @@ def test_load_builtin_distance_field(monkeypatch):
     d2 = vm.sample_distance_field(1.0 + 1.0j)
     assert isinstance(d1, float) and d1 >= 0.0
     assert isinstance(d2, float) and d2 >= 0.0
+
+
+def test_runtime_core_auto_loads_builtin():
+    import importlib
+
+    importlib.reload(runtime_core)
+    # After reload, no field has been explicitly registered in Rust; sampling
+    # should auto-load the canonical builtin and return a finite float.
+    out = runtime_core.sample_distance_field_py([0.0], [0.0])
+    assert isinstance(out, list) and isinstance(out[0], float) and out[0] >= 0.0

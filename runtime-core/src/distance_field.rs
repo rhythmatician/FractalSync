@@ -14,6 +14,16 @@ struct DistanceField {
 
 static DIST_FIELD: Lazy<RwLock<Option<DistanceField>>> = Lazy::new(|| RwLock::new(None));
 
+/// Clear the in-memory distance field (test helper)
+///
+/// Public so integration tests can reset state; callers outside tests should
+/// avoid calling this in production code.
+pub fn clear_distance_field() {
+    if let Ok(mut g) = DIST_FIELD.write() {
+        *g = None;
+    }
+}
+
 pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
     Err("loading .npy from Rust is not implemented on this build; call set_distance_field_from_vec from Python instead".into())
 }
@@ -56,8 +66,9 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
             let ymin = meta["ymin"].as_f64().unwrap_or(-2.0);
             let ymax = meta["ymax"].as_f64().unwrap_or(2.0);
 
-            // Set into in-memory field
-            set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax)?;
+            // Set into in-memory field. If this fails return a descriptive error.
+            set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax)
+                .map_err(|e| format!("failed to set builtin distance field: {}", e))?;
             Ok((rows, cols, xmin, xmax, ymin, ymax))
         }
         other => Err(format!("unknown builtin distance field: {}", other)),
@@ -66,6 +77,18 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
 pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String> {
     if xs.len() != ys.len() {
         return Err("xs and ys must have the same length".into());
+    }
+    // If no distance field is loaded, try loading the canonical builtin
+    // so callers (like tests) can sample without an explicit prior set.
+    let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
+    if guard.is_none() {
+        drop(guard);
+        // Best-effort: try to load the canonical built-in. If that fails still
+        // return the original 'not loaded' error to the caller.
+        match load_builtin_distance_field("mandelbrot_default") {
+            Ok(_) => {}
+            Err(e) => return Err(format!("could not auto-load builtin: {}", e)),
+        }
     }
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
     let df = guard.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
