@@ -44,20 +44,21 @@ def load_distance_field(npy_path: Optional[str | Path] = None) -> None:
         # First, try builtin embedded fields exposed by runtime_core (if available)
         try:
             if hasattr(runtime_core, "get_builtin_distance_field_py"):
-                rows, xmin, xmax, ymin, ymax = (
+                rows, cols, xmin, xmax, ymin, ymax = (
                     runtime_core.get_builtin_distance_field_py("mandelbrot_1024")
                 )
-                # Build tensor and meta like below
+                # The Rust loader registers the builtin field; construct a placeholder
+                # Python tensor (zeros) so Python-side sampling/fallback can operate.
                 import numpy as _np
 
-                arr = _np.array(rows, dtype=_np.float32)
+                arr = _np.zeros((rows, cols), dtype=_np.float32)
                 _distance_field_tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)
                 _distance_field_meta = DistanceFieldMeta(
                     xmin=xmin,
                     xmax=xmax,
                     ymin=ymin,
                     ymax=ymax,
-                    res=arr.shape[0],
+                    res=int(rows),
                 )
                 return
         except Exception:
@@ -195,9 +196,6 @@ def sample_distance_field(c: complex) -> float:
         sampled = sampled_list[0]
         return abs(sampled)
 
-    # Fallback: sample from loaded numpy distance field directly (nearest-neighbor)
-    if _distance_field_tensor is None or _distance_field_meta is None:
-        load_distance_field()
     meta = _distance_field_meta
     xmin, xmax = meta.xmin, meta.xmax
     ymin, ymax = meta.ymin, meta.ymax
