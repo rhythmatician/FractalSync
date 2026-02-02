@@ -133,6 +133,7 @@ class ControlTrainer:
         default_weights = {
             "timbre_color": 1.0,
             "transient_impact": 1.0,
+            "loudness_distance": 1.0,
             "control_loss": 1.0,
         }
         self.correlation_weights = {**default_weights, **(correlation_weights or {})}
@@ -157,6 +158,7 @@ class ControlTrainer:
             "control_loss": [],
             "timbre_color_loss": [],
             "transient_impact_loss": [],
+            "loudness_distance_loss": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
@@ -246,6 +248,7 @@ class ControlTrainer:
         total_control_loss = 0.0
         total_timbre_color = 0.0
         total_transient_impact = 0.0
+        total_loudness_distance = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -405,6 +408,21 @@ class ControlTrainer:
                 spectral_flux, temporal_change_tensor
             )
 
+            # Loudness-distance (negative correlation) loss
+            # Loudness proxy: RMS feature (index 2 of avg_features)
+            spectral_rms = avg_features[:, 2]
+
+            # Calculate the distance between `c` and the Mandelbrot set boundary
+            c = torch.stack([julia_real, julia_imag], dim=1)
+            distance_tensor = (
+                self.visual_metrics.mandelbrot_distance_estimate(c)
+                .to(self.device)
+                .to(torch.float32)
+            )
+            loudness_distance_loss = self.correlation_loss(
+                -spectral_rms, distance_tensor
+            )
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -417,6 +435,7 @@ class ControlTrainer:
             total_batch_loss = (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
+                + self.correlation_weights["loudness_distance"] * loudness_distance_loss
                 + current_curriculum_weight * control_loss_val
             )
 
@@ -430,6 +449,7 @@ class ControlTrainer:
             total_control_loss += control_loss_val.item()
             total_timbre_color += timbre_color_loss.item()
             total_transient_impact += transient_impact_loss.item()
+            total_loudness_distance += loudness_distance_loss.item()
             n_batches += 1
 
         # Average losses
@@ -438,6 +458,7 @@ class ControlTrainer:
             "control_loss": total_control_loss / n_batches,
             "timbre_color_loss": total_timbre_color / n_batches,
             "transient_impact_loss": total_transient_impact / n_batches,
+            "loudness_distance_loss": total_loudness_distance / n_batches,
         }
 
         return avg_losses

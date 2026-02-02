@@ -43,3 +43,18 @@ fn load_and_sample_small_field() {
     // a=1*(1-sx)+2*sx = 1.5; b=4*(1-sx)+5*sx=4.5; s = a*(1-sy)+b*sy = 3.0
     assert!((out[0] - 3.0).abs() < 1e-6);
 }
+
+#[test]
+fn load_builtin_and_sample() {
+    // Should succeed for embedded mandelbrot_1024
+    let meta = runtime_core::distance_field::load_builtin_distance_field("mandelbrot_1024");
+    assert!(meta.is_ok(), "load builtin failed: {:?}", meta.err());
+
+    // sample at origin
+    let xs = [0.0f64];
+    let ys = [0.0f64];
+    let out = sample_distance_field(&xs, &ys).expect("sample builtin");
+    assert_eq!(out.len(), 1);
+    assert!(out[0].is_finite());
+    assert!(out[0] >= 0.0);
+}
