@@ -46,8 +46,8 @@ fn load_and_sample_small_field() {
 
 #[test]
 fn load_builtin_and_sample() {
-    // Should succeed for embedded mandelbrot_1024
-    let meta = runtime_core::distance_field::load_builtin_distance_field("mandelbrot_1024");
+    // Should succeed for embedded mandelbrot_8192
+    let meta = runtime_core::distance_field::load_builtin_distance_field("mandelbrot_8192");
     assert!(meta.is_ok(), "load builtin failed: {:?}", meta.err());
 
     // sample at origin
