@@ -132,6 +132,41 @@ def test_classes_have_expected_members():
         pytest.fail("Runtime core API differs from stubs:\n" + "\n".join(messages))
 
 
+# New: ensure top-level functions described in the stub are present on the module
+def compile_module_functions() -> list[str] | None:
+    """Parse top-level functions from the stub file and return their names."""
+    import ast
+    from pathlib import Path
+
+    root_dir = Path(__file__).parent.parent.parent
+    stub_path = root_dir / "runtime-core" / "runtime_core.pyi"
+    try:
+        with open(stub_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=str(stub_path))
+        funcs: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                # Skip private helpers
+                if node.name.startswith("_"):
+                    continue
+                funcs.append(node.name)
+        return funcs
+    except Exception as e:
+        print(f"[stub-parse-error] {e}", file=sys.stderr)
+        return None
+
+
+def test_module_functions_exist():
+    """Verify top-level functions in the stubs exist on the compiled module."""
+    assert rc is not None, "runtime_core fixture did not provide module `rc`"
+    funcs = compile_module_functions()
+    if funcs is None:
+        pytest.fail("Could not compile module-level functions from runtime_core stubs")
+    missing = [f for f in funcs if not hasattr(rc, f)]
+    if missing:
+        pytest.fail("Missing module-level functions: " + ", ".join(sorted(missing)))
+
+
 def test_compile_classes_returns_nonempty_dict():
     """Test that compile_classes returns valid structure."""
     result = compile_classes()
