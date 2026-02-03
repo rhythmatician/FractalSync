@@ -25,7 +25,7 @@ Dependencies:
 - moderngl (for GPU path)
 
 Example:
-  python scripts/build_distance_field.py \
+  python -m scripts.build_distance_field \
     --out data/mandelbrot_distance_512 \
     --res 512 \
     --xmin -2.5 --xmax 1.5 --ymin -2.0 --ymax 2.0 \
@@ -268,15 +268,14 @@ def _try_build_mask_gpu(
             prog["u_tile_y0"].value = int(y0)
             prog["u_res"].value = int(res)
 
-            # doubles: moderngl supports float uniforms; for double uniforms it depends on driver.
-            # Many drivers accept .value for double uniforms; if not, GPU path will fail.
-            prog["u_xmin"].value = xmin  # FIXME: "float" is not assignable to "int"
-            prog["u_xmax"].value = xmax  # FIXME: "float" is not assignable to "int"
-            prog["u_ymin"].value = ymin  # FIXME: "float" is not assignable to "int"
-            prog["u_ymax"].value = ymax  # FIXME: "float" is not assignable to "int"
+            # Coordinate bounds (float/double uniforms)
+            prog["u_xmin"].value = float(xmin)
+            prog["u_xmax"].value = float(xmax)
+            prog["u_ymin"].value = float(ymin)
+            prog["u_ymax"].value = float(ymax)
 
             prog["u_max_iter"].value = int(max_iter)
-            prog["u_bailout2"].value = bailout2  # FIXME: float not assignable to int
+            prog["u_bailout2"].value = float(bailout2)
 
             # Dispatch
             groups_x = (tile_w + local_size - 1) // local_size
@@ -360,10 +359,11 @@ def main() -> None:
     if res <= 1:
         raise ValueError("--res must be > 1")
 
-    max_batch_size = 1024 / int(args.supersample)
-    if args.batch > max_batch_size:
-        print(f"Warning: Reducing --batch from {args.batch} to {int(max_batch_size)} ")
-        args.batch = int(max_batch_size)
+    supersample = int(args.supersample)
+    max_batch_size = max(1, 2048 // supersample)
+    if int(args.batch) > max_batch_size:
+        print(f"Warning: Reducing --batch from {args.batch} to {max_batch_size}")
+        args.batch = max_batch_size
 
     print(
         f"Building inside mask (res={res}) in box "

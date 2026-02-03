@@ -368,9 +368,15 @@ pub fn default_orbit_seed() -> u64 {
 
 /// Load a precomputed distance field (.npy) and optional .json metadata from
 /// the host file system (when running under a host that provides a file API).
+///
+/// Note: This operation is not currently supported in the WASM runtime.
+/// Use `set_distance_field` to provide an in-memory distance field, or
+/// `get_builtin_distance_field` to use an embedded distance field instead.
 #[wasm_bindgen]
-pub fn load_distance_field(path: &str) -> Result<(), JsValue> {
-    crate::distance_field::load_distance_field(path).map_err(|e| JsValue::from_str(&e))
+pub fn load_distance_field(_: &str) -> Result<(), JsValue> {
+    Err(JsValue::from_str(
+        "load_distance_field is not supported in the WASM runtime; use set_distance_field or get_builtin_distance_field instead.",
+    ))
 }
 
 /// Set an in-memory distance field from a flat buffer with explicit
