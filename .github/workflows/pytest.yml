@@ -3,7 +3,7 @@ name: Run all test suites
 on:
   pull_request:
     branches:
-      - main
+      - '*'
 
 jobs:
   backend-tests:
