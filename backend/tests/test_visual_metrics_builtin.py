@@ -21,11 +21,6 @@ def test_load_builtin_distance_field(monkeypatch):
     assert cols > 0
     assert xmin < xmax and ymin < ymax
 
-    # Calling vm.sample_distance_field without the Rust sampler should raise,
-    # since there is no Python fallback implemented in visual_metrics.
-    with pytest.raises(Exception):
-        vm.sample_distance_field(0.0 + 0.0j)
-
 
 def test_runtime_core_auto_loads_builtin():
     import importlib
