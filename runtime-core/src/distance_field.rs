@@ -40,6 +40,16 @@ pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmi
 }
 
 /// Load a built-in distance field embedded at compile time or fall back to external file.
+///
+/// # Performance Note
+/// The embedded distance field (~4MB for the 1024x1024 resolution) is included directly
+/// in the compiled binary using `include_bytes!`. This can significantly increase the size
+/// of the runtime-core binary and WASM bundle, potentially impacting load times in browser
+/// environments. Consider:
+/// - Using a Cargo feature flag to conditionally disable the embedded field for WASM builds
+/// - Providing a smaller default field for WASM (e.g., 256x256) and keeping the large one
+///   for native builds
+/// - Loading the field dynamically at runtime instead of embedding it at compile time
 pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64, f64, f64), String> {
     match name {
         "mandelbrot_1024" | "mandelbrot_default" | "default" => {
@@ -74,6 +84,31 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
         other => Err(format!("unknown builtin distance field: {}", other)),
     }
 }
+
+/// Sample the in-memory distance field at the given (x,y) real-valued coordinates.
+///
+/// This function returns **unsigned** (absolute) distances to the Mandelbrot boundary,
+/// plus any additional distance for points outside the field's bounding box. The underlying
+/// field stores signed distances (positive outside, negative inside), but this sampler
+/// applies `.abs()` to the interpolated value before returning it. This means callers
+/// cannot distinguish inside vs. outside using the sign; they only receive the magnitude
+/// of the distance to the boundary.
+///
+/// - For points within the field's bounding box, bicubic interpolation (with subpixel
+///   refinement for fields >= 4x4) or bilinear interpolation (for smaller fields) is used.
+/// - For points outside the bounding box, the returned distance is the sum of the
+///   Euclidean distance from the point to the nearest edge of the box, plus the unsigned
+///   distance at that edge.
+///
+/// If the distance field is not loaded, this function will attempt to auto-load the
+/// built-in "mandelbrot_default" field.
+///
+/// # Arguments
+/// * `xs` - x-coordinates (real part) in the complex plane
+/// * `ys` - y-coordinates (imaginary part) in the complex plane
+///
+/// # Returns
+/// A vector of unsigned distances (non-negative floats) to the Mandelbrot boundary.
 pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String> {
     if xs.len() != ys.len() {
         return Err("xs and ys must have the same length".into());

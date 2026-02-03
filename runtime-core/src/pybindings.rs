@@ -252,6 +252,12 @@ impl OrbitState {
 
 
 /// Load a precomputed signed distance field (.npy) and optional .json metadata.
+///
+/// Note: This function is not currently implemented and will always return an error.
+/// The underlying Rust implementation (`crate::distance_field::load_distance_field`)
+/// does not support loading .npy files. Use `set_distance_field_py` to provide an
+/// in-memory distance field, or `get_builtin_distance_field_py` to use an embedded
+/// distance field instead.
 #[pyfunction]
 fn load_distance_field_py(path: &str) -> PyResult<()> {
     match load_distance_field(path) {
