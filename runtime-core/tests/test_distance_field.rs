@@ -1,8 +1,6 @@
 use ndarray::Array2;
-use std::path::PathBuf;
 
 use runtime_core::distance_field::{set_distance_field_from_vec, sample_distance_field};
-
 #[test]
 fn load_and_sample_small_field() {
     // create a small 3x3 field with known values
