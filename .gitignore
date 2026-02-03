@@ -46,3 +46,5 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+batch_all.scp
