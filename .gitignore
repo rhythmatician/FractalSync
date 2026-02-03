@@ -48,3 +48,5 @@ __pycache__/
 .ruff_cache/
 
 batch_all.scp
+
+outputs_songformer/*
