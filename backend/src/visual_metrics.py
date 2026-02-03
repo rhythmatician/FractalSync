@@ -185,10 +185,8 @@ class LossVisualMetrics:
         """Estimate distance to the Mandelbrot boundary for a batch of points.
 
         Accepts either:
-        - a complex-valued tensor of shape (batch,) (dtype=torch.cfloat or torch.cdouble),
-        - a real tensor of shape (batch, 2) where columns are (real, imag),
-        - a real tensor of shape (batch,) (imag part assumed 0), or
-        - a scalar/python complex which will be converted to a single-element tensor.
+        - a complex-valued tensor of shape (batch,) (dtype=torch.cfloat or torch.cdouble), or
+        - a real tensor of shape (batch, 2) where columns are (real, imag).
 
         This estimator samples the precomputed signed distance field via the
         runtime-core sampler (fast, non-differentiable). If the sampler is not
@@ -207,7 +205,7 @@ class LossVisualMetrics:
                 c_complex = torch.complex(real, imag).to(torch.complex64)
             else:
                 raise TypeError(
-                    "Unsupported tensor shape for mandelbrot_distance_estimate: expected (N,2) or (N,)"
+                    "Unsupported tensor shape for mandelbrot_distance_estimate: expected (N,2) complex-valued or (N,) real-valued with shape (N,2)"
                 )
 
         sampled = _sample_distance_field(c_complex)
