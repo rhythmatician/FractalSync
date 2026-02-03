@@ -365,3 +365,49 @@ pub fn default_base_omega() -> f64 {
 pub fn default_orbit_seed() -> u64 {
     DEFAULT_ORBIT_SEED
 }
+
+/// Load a precomputed distance field (.npy) and optional .json metadata from
+/// the host file system (when running under a host that provides a file API).
+///
+/// Note: This operation is not currently supported in the WASM runtime.
+/// Use `set_distance_field` to provide an in-memory distance field, or
+/// `get_builtin_distance_field` to use an embedded distance field instead.
+#[wasm_bindgen]
+pub fn load_distance_field(_: &str) -> Result<(), JsValue> {
+    Err(JsValue::from_str(
+        "load_distance_field is not supported in the WASM runtime; use set_distance_field or get_builtin_distance_field instead.",
+    ))
+}
+
+/// Set an in-memory distance field from a flat buffer with explicit
+/// dimensions and bounding box. The flat buffer is row-major.
+#[wasm_bindgen]
+pub fn set_distance_field(flat: Vec<f32>, rows: usize, cols: usize, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> Result<(), JsValue> {
+    crate::distance_field::set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax)
+        .map_err(|e| JsValue::from_str(&e))
+}
+
+/// Sample the currently-loaded distance field at arrays of x and y coords.
+#[wasm_bindgen]
+pub fn sample_distance_field(x_coords: Vec<f64>, y_coords: Vec<f64>) -> Result<Vec<f32>, JsValue> {
+    crate::distance_field::sample_distance_field(&x_coords, &y_coords).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Load a built-in distance field (embedded at compile time) and return its
+/// metadata as a JS array [rows, cols, xmin, xmax, ymin, ymax].
+#[wasm_bindgen]
+pub fn get_builtin_distance_field(name: &str) -> Result<Array, JsValue> {
+    match crate::distance_field::load_builtin_distance_field(name) {
+        Ok((rows, cols, xmin, xmax, ymin, ymax)) => {
+            let arr = Array::new();
+            arr.push(&JsValue::from_f64(rows as f64));
+            arr.push(&JsValue::from_f64(cols as f64));
+            arr.push(&JsValue::from_f64(xmin));
+            arr.push(&JsValue::from_f64(xmax));
+            arr.push(&JsValue::from_f64(ymin));
+            arr.push(&JsValue::from_f64(ymax));
+            Ok(arr)
+        }
+        Err(e) => Err(JsValue::from_str(&e)),
+    }
+}

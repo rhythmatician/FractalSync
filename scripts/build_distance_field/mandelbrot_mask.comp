@@ -1,0 +1,80 @@
+#version 430
+
+layout (local_size_x = LOCAL_SIZE, local_size_y = LOCAL_SIZE) in;
+
+// Output mask: 1 = inside (did not escape), 0 = escaped (outside)
+layout(std430, binding = 0) buffer OutMask {
+    uint mask[];
+} outMask;
+
+// Uniforms
+uniform int  u_tile_w;
+uniform int  u_tile_h;
+uniform int  u_tile_x0;
+uniform int  u_tile_y0;
+uniform int  u_res;
+
+uniform double u_xmin;
+uniform double u_xmax;
+uniform double u_ymin;
+uniform double u_ymax;
+
+uniform int    u_max_iter;
+uniform double u_bailout2;
+
+// Map global pixel index -> complex c
+dvec2 pixel_to_c(int gx, int gy) {
+    // Match numpy.linspace endpoints behavior:
+    // x = xmin + gx * (xmax-xmin)/(res-1)
+    // y = ymin + gy * (ymax-ymin)/(res-1)
+    double fx = double(gx) / double(u_res - 1);
+    double fy = double(gy) / double(u_res - 1);
+    double x = u_xmin + fx * (u_xmax - u_xmin);
+    double y = u_ymin + fy * (u_ymax - u_ymin);
+    return dvec2(x, y);
+}
+
+void main() {
+    uint lx = gl_GlobalInvocationID.x;
+    uint ly = gl_GlobalInvocationID.y;
+
+    if (int(lx) >= u_tile_w || int(ly) >= u_tile_h) {
+        return;
+    }
+
+    int gx = u_tile_x0 + int(lx);
+    int gy = u_tile_y0 + int(ly);
+
+    // Safety in case of edge tiles
+    if (gx < 0 || gy < 0 || gx >= u_res || gy >= u_res) {
+        return;
+    }
+
+    dvec2 c = pixel_to_c(gx, gy);
+
+    // Iterate z_{n+1} = z_n^2 + c from z0 = 0
+    dvec2 z = dvec2(0.0, 0.0);
+
+    bool escaped = false;
+    for (int i = 0; i < u_max_iter; i++) {
+        // z^2: (a+bi)^2 = (a^2-b^2) + 2abi
+        double a = z.x;
+        double b = z.y;
+        double aa = a*a;
+        double bb = b*b;
+        double twoab = 2.0*a*b;
+
+        z = dvec2(aa - bb + c.x, twoab + c.y);
+
+        double r2 = z.x*z.x + z.y*z.y;
+        if (r2 > u_bailout2) {
+            escaped = true;
+            break;
+        }
+    }
+
+    // output 1 if inside (not escaped), else 0
+    uint v = escaped ? 0u : 1u;
+    uint idx = ly * uint(u_tile_w) + lx;
+    outMask.mask[idx] = v;
+}

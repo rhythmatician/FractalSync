@@ -7,3 +7,5 @@ Cargo.lock
 *.pyd
 *.egg-info/
 .eggs/
+
+data/*.png

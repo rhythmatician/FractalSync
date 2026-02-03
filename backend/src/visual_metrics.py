@@ -7,6 +7,43 @@ from typing import Optional
 
 import cv2
 import numpy as np
+import torch
+import runtime_core
+
+
+def sample_distance_field(c: complex) -> float:
+    """Sample the precomputed signed distance field at complex coordinate c.
+
+    This implementation requires the Rust runtime-core sampler to be available
+    and will raise if `runtime_core.sample_distance_field_py` is not exposed.
+
+    Returns unsigned distance (abs of signed distance) as float.
+    """
+    real = float(c.real)
+    imag = float(c.imag)
+
+    sampled_list = runtime_core.sample_distance_field_py([real], [imag])
+    sampled = sampled_list[0]
+    return abs(sampled)
+
+
+def _sample_distance_field(c_complex: torch.Tensor) -> torch.Tensor:
+    """Sample the precomputed signed distance field at complex coordinates c_complex.
+
+    This implementation requires the Rust runtime-core sampler to be available
+    and will raise if `runtime_core.sample_distance_field_py` is not exposed.
+
+    Returns unsigned distances (abs of signed distance) as float tensor (N,).
+    """
+    real = c_complex.real.to(torch.float32)
+    imag = c_complex.imag.to(torch.float32)
+
+    # Use Rust sampler if available for speed
+    xs = real.detach().cpu().numpy().tolist()
+    ys = imag.detach().cpu().numpy().tolist()
+    sampled_list = runtime_core.sample_distance_field_py(xs, ys)
+    sampled = torch.tensor(sampled_list, dtype=torch.float32, device=c_complex.device)
+    return sampled.abs()
 
 
 class LossVisualMetrics:
@@ -87,8 +124,8 @@ class LossVisualMetrics:
         self,
         seed_real: float,
         seed_imag: float,
-        width: int = 512,
-        height: int = 512,
+        width: int = 64,
+        height: int = 64,
         zoom: float = 1.0,
         max_iter: int = 100,
         center_x: float = 0.0,
@@ -141,6 +178,36 @@ class LossVisualMetrics:
 
         return image_rgb
 
+    @staticmethod
+    def mandelbrot_distance_estimate(
+        c: torch.Tensor,
+    ) -> torch.Tensor:
+        """Estimate distance to the Mandelbrot boundary for a batch of points.
 
-# Backwards-compatible alias for loss metrics.
-VisualMetrics = LossVisualMetrics
+        Accepts either:
+        - a complex-valued tensor of shape (batch,) (dtype=torch.cfloat or torch.cdouble), or
+        - a real tensor of shape (batch, 2) where columns are (real, imag).
+
+        This estimator samples the precomputed signed distance field via the
+        runtime-core sampler (fast, non-differentiable). If the sampler is not
+        available the function will raise an error instructing developers to
+        rebuild the runtime-core Python extension.
+
+        Returns a real float tensor of shape (batch,) with non-negative distances.
+        """
+        if c.dtype.is_complex:
+            c_complex = c.view(-1)
+        else:
+            # handle (N, 2) real/imag pairs
+            if c.dim() == 2 and c.shape[1] == 2:
+                real = c[:, 0].to(torch.get_default_dtype())
+                imag = c[:, 1].to(torch.get_default_dtype())
+                c_complex = torch.complex(real, imag).to(torch.complex64)
+            else:
+                raise TypeError(
+                    "Unsupported tensor shape for mandelbrot_distance_estimate: "
+                    "expected complex-valued tensor of shape (N,) or real-valued tensor of shape (N,2)"
+                )
+
+        sampled = _sample_distance_field(c_complex)
+        return sampled.clamp_min(0.0)

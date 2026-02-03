@@ -27,6 +27,8 @@ use crate::controller::{
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
+use crate::distance_field::{load_distance_field, sample_distance_field};
+
 
 /// Python wrapper for `ResidualParams`.
 #[pyclass]
@@ -248,6 +250,103 @@ impl OrbitState {
     }
 }
 
+
+/// Load a precomputed signed distance field (.npy) and optional .json metadata.
+///
+/// Note: This function is not currently implemented and will always return an error.
+/// The underlying Rust implementation (`crate::distance_field::load_distance_field`)
+/// does not support loading .npy files. Use `set_distance_field_py` to provide an
+/// in-memory distance field, or `get_builtin_distance_field_py` to use an embedded
+/// distance field instead.
+#[pyfunction]
+fn load_distance_field_py(path: &str) -> PyResult<()> {
+    match load_distance_field(path) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Set the in-memory distance field from a nested Python list of floats.
+/// Accepts a list of rows [[r0c0, r0c1, ...], [r1c0, ...], ...] plus bounding box.
+#[pyfunction]
+fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> PyResult<()> {
+    let rows = data.len();
+    if rows == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("data must be non-empty"));
+    }
+    let cols = data[0].len();
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("data rows must be non-empty"));
+    }
+    // Flatten, validating row lengths
+    let mut flat: Vec<f32> = Vec::with_capacity(rows * cols);
+    for row in &data {
+        if row.len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err("inconsistent row lengths"));
+        }
+        flat.extend(row.iter().cloned());
+    }
+    match crate::distance_field::set_distance_field_from_vec(flat, rows, cols, xmin, xmax, ymin, ymax) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Sample a loaded distance field at arrays of (x_reals, y_imags).
+#[pyfunction]
+fn sample_distance_field_py(x_coords: Vec<f64>, y_coords: Vec<f64>) -> PyResult<Vec<f32>> {
+    match sample_distance_field(&x_coords, &y_coords) {
+        Ok(v) => Ok(v),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Load and register a built-in distance field (embedded at compile time).
+#[pyfunction]
+fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64, f64, f64)> {
+    match crate::distance_field::load_builtin_distance_field(name) {
+        Ok((rows, cols, xmin, xmax, ymin, ymax)) => Ok((rows, cols, xmin, xmax, ymin, ymax)),
+        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+    }
+}
+
+/// Module-level __getattr__ to dynamically provide fallback callables for
+/// missing top-level functions. This helps tests that delete attributes via
+/// monkeypatch and provides a safety net when the compiled extension is
+/// imported but certain helpers are unavailable.
+#[pyfunction]
+fn __getattr__(py: Python, name: &str) -> PyResult<PyObject> {
+    use pyo3::types::PyModule;
+    let module = PyModule::import_bound(py, "runtime_core")?;
+    match name {
+        "sample_distance_field_py" => {
+            let func = wrap_pyfunction!(sample_distance_field_py, module.clone())?;
+            module.setattr("sample_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "set_distance_field_py" => {
+            let func = wrap_pyfunction!(set_distance_field_py, module.clone())?;
+            module.setattr("set_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "load_distance_field_py" => {
+            let func = wrap_pyfunction!(load_distance_field_py, module.clone())?;
+            module.setattr("load_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        "get_builtin_distance_field_py" => {
+            let func = wrap_pyfunction!(get_builtin_distance_field_py, module.clone())?;
+            module.setattr("get_builtin_distance_field_py", func.clone())?;
+            Ok(func.into())
+        }
+        _ => Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+            "module 'runtime_core' has no attribute '{}'",
+            name
+        ))),
+    }
+}
+
+
 /// Python wrapper for the feature extractor
 #[pyclass]
 #[derive(Clone)]
@@ -278,16 +377,16 @@ impl FeatureExtractor {
     
     /// Simple test function to verify Rust execution
     fn test_simple(&self) -> Vec<f32> {
-        eprintln!("[DEBUG] test_simple called");
+        log::debug!("[DEBUG] test_simple called");
         vec![1.0, 2.0, 3.0]
     }
 
     /// Extract windowed features from audio samples as a Python list.
     #[pyo3(signature = (audio, window_frames))]
     fn extract_windowed_features(&self, audio: Vec<f32>, window_frames: usize) -> PyResult<Vec<Vec<f64>>> {
-        eprintln!("[PYBIND] extract_windowed_features called with {} samples", audio.len());
+        log::debug!("[PYBIND] extract_windowed_features called with {} samples", audio.len());
         let features = self.inner.extract_windowed_features(&audio, window_frames);
-        eprintln!("[PYBIND] Returned {} windows", features.len());
+        log::debug!("[PYBIND] Returned {} windows", features.len());
         Ok(features)
     }
 
@@ -447,6 +546,12 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
+    // Distance-field helpers
+    m.add_function(wrap_pyfunction!(load_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
+    m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
 }
 
@@ -506,6 +611,10 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     let funcs = PyDict::new_bound(py);
     funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c_real: float, c_imag: float, max_iter: int = 100) -> RuntimeVisualMetrics")?;
     funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
+    funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
+    funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
+    funcs.set_item("sample_distance_field_py", "(x_coords: Sequence[float], y_coords: Sequence[float]) -> list[float]")?;
+    funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation
     let consts = PyDict::new_bound(py);

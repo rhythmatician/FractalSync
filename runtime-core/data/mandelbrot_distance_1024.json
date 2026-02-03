@@ -1,0 +1,15 @@
+{
+  "xmin": -2.5,
+  "xmax": 1.5,
+  "ymin": -2.0,
+  "ymax": 2.0,
+  "res": 1024,
+  "dx": 0.0039100684261974585,
+  "dy": 0.0039100684261974585,
+  "max_iter": 4096,
+  "bailout": 2.0,
+  "mask_mode": "supersampled_cpu(fallback)",
+  "layout": "row-major; signed[y][x]; y increases with row index (ymin->ymax)",
+  "sign_convention": "positive outside, negative inside",
+  "note": "Inside mask is iteration-limited; near-boundary classification errors are possible."
+}
