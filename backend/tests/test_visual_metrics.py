@@ -80,7 +80,7 @@ class TestRuntimeVisualMetrics:
 @pytest.mark.parametrize(
     "c_real,c_imag, nominal_distance",
     [
-        (0.0, 0.0, 0.25),  # origin is nearest the cardoid's "buttcrack" at 0.25
+        (0.0, 0.0, 0.25),  # origin is nearest the cardioid's "buttcrack" at 0.25
         (2.0, 0.0, 1.57044),  # Nearest the "buttcheecks"
         (0.25, 0.0, 0.0),  # on the boundary (of the main cardioid)
         (0.4439, 0.2117, 0.0),  # on the boundary (near bulb)
