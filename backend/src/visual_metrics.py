@@ -205,7 +205,8 @@ class LossVisualMetrics:
                 c_complex = torch.complex(real, imag).to(torch.complex64)
             else:
                 raise TypeError(
-                    "Unsupported tensor shape for mandelbrot_distance_estimate: expected (N,2) complex-valued or (N,) real-valued with shape (N,2)"
+                    "Unsupported tensor shape for mandelbrot_distance_estimate: "
+                    "expected complex-valued tensor of shape (N,) or real-valued tensor of shape (N,2)"
                 )
 
         sampled = _sample_distance_field(c_complex)
