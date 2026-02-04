@@ -49,6 +49,7 @@ uniform float u_fresnelBoost; // how much fresnel multiplies specular
 uniform float u_rimIntensity;  // additive rim highlight from demSig
 
 // Normal blending: 0 = DE normal only, 1 = gradient normal only
+// 1.0 = prefer gradient-derived normals when available, 0.0 = prefer analytic normals
 uniform float u_normalBlend;
 
 const float PI = 3.141592653589793;

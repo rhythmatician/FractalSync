@@ -88,20 +88,26 @@ export class JuliaRenderer {
 
   // FD / gradient defaults (tunable)
   private useGradientNormals: boolean = true;
-  private fdIter: number = 120;         // fixed-N for potential eval
-  private fdEps: number = 1.0;          // in pixels
-  private heightScale: number = 1.0;    // controls slope of height normal
+  // Defaults match UI control defaults in Visualizer.tsx
+  private fdIter: number = 160;         // fixed-N for potential eval (matches UI FD Iter default)
+  private fdEps: number = 0.6;          // in pixels (matches UI FD ε default)
+  private heightScale: number = 8.0;    // controls slope of height normal (matches UI Height default -> max)
   private derivLower: number = 1e-6;    // derivative confidence lower bound
   private derivUpper: number = 1e-3;    // derivative confidence upper bound
 
-  // Fresnel / rim / normal-blend defaults
+  // Fresnel / rim / normal behavior defaults
   private fresnelPower: number = 3.0;
   private fresnelBoost: number = 0.25;
   private rimIntensity: number = 0.08;
-  private normalBlend: number = 0.9;
+  // Preference: whether to prefer gradient-based normals when available.
+  // This boolean toggles which normal is preferred when both derivative-based
+  // gradient normals and analytic normals are available. It does not by itself
+  // enable/disable gradient computation (that's controlled by `Grad Mode`).
+  // true = prefer gradient normals when available; false = use analytic normals.
+  private preferGradientNormals: boolean = true;
 
   // Gradient mode: 0=off,1=full,2=cheap
-  private gradientMode: number = 0; // default to off for real-time
+  private gradientMode: number = 1; // default to full (accurate)
 
   // Low-cost FD defaults
   private fdIterLow: number = 32;
@@ -402,7 +408,8 @@ export class JuliaRenderer {
     gl.uniform1f(this.uFresnelPowerLocation!, this.fresnelPower);
     gl.uniform1f(this.uFresnelBoostLocation!, this.fresnelBoost);
     gl.uniform1f(this.uRimIntensityLocation!, this.rimIntensity);
-    gl.uniform1f(this.uNormalBlendLocation!, this.normalBlend);
+    // Convert boolean preference to numeric uniform (1.0 = prefer gradient normals, 0.0 = prefer analytic normals)
+    gl.uniform1f(this.uNormalBlendLocation!, this.preferGradientNormals ? 1.0 : 0.0);
 
     // Debug: log first frame
     if (this.time === 0) {
@@ -416,7 +423,7 @@ export class JuliaRenderer {
         fdEps: this.fdEps,
         fresnel: {power: this.fresnelPower, boost: this.fresnelBoost},
         rim: this.rimIntensity,
-        normalBlend: this.normalBlend,
+        preferGradientNormals: this.preferGradientNormals,
         uniforms: {
           uJuliaSeedLocation: this.uJuliaSeedLocation,
           uResolutionLocation: this.uResolutionLocation,
@@ -519,7 +526,12 @@ export class JuliaRenderer {
     this.rimIntensity = Math.max(0.0, v);
   }
 
-  setNormalBlend(b: number): void {
-    this.normalBlend = Math.max(0.0, Math.min(1.0, b));
+  /**
+   * Set whether to prefer gradient-derived normals when available.
+   * Note: this is a preference only; enabling/disabling gradient computation
+   * is done via `setGradientMode('off'|'cheap'|'full')`.
+   */
+  setPreferGradientNormals(enabled: boolean): void {
+    this.preferGradientNormals = Boolean(enabled);
   }
 }

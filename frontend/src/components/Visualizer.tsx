@@ -23,6 +23,7 @@ export function Visualizer() {
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [gradMode, setGradMode] = useState<'off' | 'cheap' | 'full'>('full');
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -41,6 +42,14 @@ export function Visualizer() {
       try {
         const renderer = new JuliaRenderer(canvasRef.current);
         rendererRef.current = renderer;
+
+        // Initialize renderer tunables to match UI control defaults for consistency
+        renderer.setHeightScale(8.0); // UI default: Height -> max
+        renderer.setFdEps(0.6);       // UI default: FD ε (px)
+        renderer.setFdIter(160);      // UI default: FD Iter
+        renderer.setPreferGradientNormals(true); // UI default: prefer gradient normals (ON)
+        renderer.setGradientMode('full'); // UI default: Grad Mode = Full (accurate)
+
         renderer.start();
 
         // Handle window resize
@@ -220,7 +229,7 @@ export function Visualizer() {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <label style={{ color: '#ddd', fontSize: '13px' }}>
                   <div style={{ fontSize: '11px' }}>Height</div>
-                  <input type="range" min="0.2" max="8" step="0.1" defaultValue="2.0" onChange={(e) => {
+                  <input type="range" min="0.2" max="8" step="0.1" defaultValue="8.0" onChange={(e) => {
                     const v = parseFloat(e.target.value);
                     rendererRef.current?.setHeightScale(v);
                   }} />
@@ -242,13 +251,6 @@ export function Visualizer() {
                   }} />
                 </label>
 
-                <label style={{ color: '#ddd', fontSize: '13px' }}>
-                  <div style={{ fontSize: '11px' }}>Normal Blend</div>
-                  <input type="range" min="0" max="1" step="0.01" defaultValue="0.9" onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    rendererRef.current?.setNormalBlend(v);
-                  }} />
-                </label>
 
                 <label style={{ color: '#ddd', fontSize: '13px' }}>
                   <div style={{ fontSize: '11px' }}>Fresnel Power</div>
@@ -274,10 +276,11 @@ export function Visualizer() {
                   }} />
                 </label>
 
-                <label style={{ color: '#ddd', fontSize: '13px' }}>
-                  <div style={{ fontSize: '11px' }}>Use Grad Normals</div>
-                  <input type="checkbox" defaultChecked={true} onChange={(e) => {
-                    rendererRef.current?.setUseGradientNormals(e.target.checked);
+
+                <label style={{ color: '#ddd', fontSize: '13px' }} title="If checked, the renderer will prefer gradient-derived normals when computing shading; otherwise analytic normals will be used">
+                  <div style={{ fontSize: '11px' }}>Prefer Gradient Normals</div>
+                  <input type="checkbox" defaultChecked={true} disabled={gradMode === 'off'} onChange={(e) => {
+                    rendererRef.current?.setPreferGradientNormals(e.target.checked);
                   }} />
                 </label>
 
@@ -285,9 +288,10 @@ export function Visualizer() {
 
               <label style={{ color: '#ddd', fontSize: '13px' }}>
                 <div style={{ fontSize: '11px' }}>Grad Mode</div>
-                <select defaultValue={'off'} onChange={(e) => {
+                <select defaultValue={'full'} onChange={(e) => {
                   const v = e.target.value as 'off' | 'cheap' | 'full';
                   rendererRef.current?.setGradientMode(v);
+                  setGradMode(v);
                 }}>
                   <option value="off">Off (fast)</option>
                   <option value="cheap">Cheap (gated FD)</option>
