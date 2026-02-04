@@ -7,6 +7,7 @@
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
+use num_complex::Complex64 as RustComplex;
 
 use crate::controller::{
     step as rust_step,
@@ -24,7 +25,7 @@ use crate::controller::{
     WINDOW_FRAMES,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// A complex number (Julia parameter c = a + bi).
@@ -37,7 +38,7 @@ pub struct Complex {
 
 impl From<RustComplex> for Complex {
     fn from(c: RustComplex) -> Self {
-        Self { real: c.real, imag: c.imag }
+        Self { real: c.re, imag: c.im }
     }
 }
 
