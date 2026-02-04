@@ -11,7 +11,6 @@ Pass `--delete` to actually unlink files. Pass `--git-rm` together with `--delet
 """
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -73,33 +72,9 @@ def delete_files(
     return removed
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Remove ONNX models whose metadata has epoch=1"
-    )
-    p.add_argument(
-        "--checkpoints-dir",
-        type=Path,
-        default=Path("backend/checkpoints"),
-        help="Directory containing ONNX models and metadata (default: backend/checkpoints)",
-    )
-    p.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging",
-    )
-    return p.parse_args()
-
-
 def main() -> int:
-    args = parse_args()
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="[%(levelname)s] %(message)s",
-    )
-
-    checkpoints_dir: Path = args.checkpoints_dir
+    checkpoints_dir = Path("backend/checkpoints")
     if not checkpoints_dir.exists():
         logger.error(f"Checkpoints directory does not exist: {checkpoints_dir}")
         return 2
@@ -113,9 +88,6 @@ def main() -> int:
     logger.info(f"Found {len(pairs)} metadata file(s) with epoch=1:")
     for meta, onnx in pairs:
         logger.info(f"  - {meta}  (model: {onnx})")
-
-    if args.git_rm:
-        args.delete = True
 
     removed = delete_files(pairs)
 
