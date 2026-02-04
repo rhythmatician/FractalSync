@@ -3,7 +3,6 @@ use once_cell::sync::Lazy;
 use std::path::Path;
 use std::sync::RwLock;
 
-use crate::geometry::Complex;
 #[derive(Clone, Debug)]
 struct DistanceField {
     data: Array2<f32>,
@@ -109,7 +108,7 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
 ///
 /// # Returns
 /// A vector of unsigned distances (non-negative floats) to the Mandelbrot boundary.
-pub fn sample_distance_field(points: &[Complex]) -> Result<Vec<f32>, String> {
+pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f32>, String> {
     // If no distance field is loaded, try loading the canonical builtin
     // so callers (like tests) can sample without an explicit prior set.
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
@@ -163,8 +162,8 @@ pub fn sample_distance_field(points: &[Complex]) -> Result<Vec<f32>, String> {
     }
 
     for point in points {
-        let xr = point.real;
-        let yr = point.imag;
+        let xr = point.re;
+        let yr = point.im;
         // normalized [0,1]
         let mut u = (xr - df.xmin) / dx;
         let mut v = (yr - df.ymin) / dy;

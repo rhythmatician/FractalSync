@@ -25,7 +25,7 @@ use crate::controller::{
     synthesize as rust_synthesize,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 use crate::distance_field::{load_distance_field, sample_distance_field};
 
@@ -186,7 +186,7 @@ impl OrbitState {
     /// `lobe_point_at_angle` with the current theta and radial scale.
     fn carrier(&self, py: Python) -> PyResult<Py<PyComplex>> {
         let c = rust_lobe_point_at_angle(self.inner.lobe, self.inner.sub_lobe, self.inner.theta, self.inner.s);
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 
     /// Get a copy of the residual phases.  This can be used by
@@ -207,7 +207,7 @@ impl OrbitState {
     fn synthesize(&self, py: Python, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
         let gates_ref = band_gates.as_deref();
         let c = rust_synthesize(&self.inner, residual_params.into(), gates_ref);
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 
     /// Expose core state attributes as read-only Python properties
@@ -246,7 +246,7 @@ impl OrbitState {
     #[pyo3(signature = (dt, residual_params, band_gates=None))]
     fn step(&mut self, py: Python, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
         let c = rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref());
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 }
 
@@ -298,7 +298,7 @@ fn sample_distance_field_py(py: Python, coords: Vec<Py<PyComplex>>) -> PyResult<
     let mut points = Vec::with_capacity(coords.len());
     for coord in coords {
         let coord = coord.bind(py);
-        points.push(RustComplex::new(coord.real(), coord.imag()));
+        points.push(num_complex::Complex64::new(coord.real(), coord.imag()));
     }
     match sample_distance_field(&points) {
         Ok(v) => Ok(v),
@@ -423,7 +423,7 @@ impl FeatureExtractor {
 #[pyo3(signature = (lobe, sub_lobe, theta, s))]
 fn lobe_point_at_angle(py: Python, lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> PyResult<Py<PyComplex>> {
     let c = rust_lobe_point_at_angle(lobe, sub_lobe, theta, s);
-    Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+    Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
 }
 
 /// Runtime visual metrics computed in Rust.
@@ -473,7 +473,7 @@ fn compute_runtime_visual_metrics(py: Python,
         width,
         height,
         channels,
-        RustComplex::new(c.real(), c.imag()),
+        num_complex::Complex64::new(c.real(), c.imag()),
         max_iter,
     )
     .map_err(|message| pyo3::exceptions::PyValueError::new_err(message))?;

@@ -1,7 +1,6 @@
 use ndarray::Array2;
 
 use runtime_core::distance_field::{set_distance_field_from_vec, sample_distance_field};
-use runtime_core::geometry::Complex;
 #[test]
 fn load_and_sample_small_field() {
     // create a small 3x3 field with known values
@@ -22,18 +21,18 @@ fn load_and_sample_small_field() {
 
     // Sample at pixel centers: (x,y) ranges 0..2
     // sampling at (0,0) should be 1.0
-    let points = [Complex::new(0.0, 0.0)];
+    let points = [num_complex::Complex64::new(0.0, 0.0)];
     let out = sample_distance_field(&points).expect("sample");
     assert_eq!(out.len(), 1);
     assert!((out[0] - 1.0).abs() < 1e-6);
 
     // sample at (1.0,1.0) center should be 5.0
-    let points = [Complex::new(1.0, 1.0)];
+    let points = [num_complex::Complex64::new(1.0, 1.0)];
     let out = sample_distance_field(&points).expect("sample");
     assert!((out[0] - 5.0).abs() < 1e-6);
 
     // sample at (0.5, 0.5) should bilinear between 1,2,4,5 -> (1*(0.5*0.5)+...)
-    let points = [Complex::new(0.5, 0.5)];
+    let points = [num_complex::Complex64::new(0.5, 0.5)];
     let out = sample_distance_field(&points).expect("sample");
     // manual bilinear: x=0.5 => sx=0.5, sy=0.5
     // a=1*(1-sx)+2*sx = 1.5; b=4*(1-sx)+5*sx=4.5; s = a*(1-sy)+b*sy = 3.0
@@ -47,7 +46,7 @@ fn load_builtin_and_sample() {
     assert!(meta.is_ok(), "load builtin failed: {:?}", meta.err());
 
     // sample at origin
-    let points = [Complex::new(0.0, 0.0)];
+    let points = [num_complex::Complex64::new(0.0, 0.0)];
     let out = sample_distance_field(&points).expect("sample builtin");
     assert_eq!(out.len(), 1);
     assert!(out[0].is_finite());
