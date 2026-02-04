@@ -12,10 +12,10 @@ winget install --id Rustlang.Rust  # runtime-core
 cargo --version  # verify runtime-core
 cargo install wasm-pack --locked  # wasm
 wasm-pack --version  # verify wasm
-cd frontend; npm install  # frontend
-
+Push-Location frontend; try { npm install } finally { Pop-Location }  # frontend
 
 ## Building
+# conda deactivate  # May be necessary if your shell has both a Python venv and a Conda env active (maturin refuses that).
 Push-Location runtime-core; try { maturin develop --release } finally { Pop-Location }  # PowerShell-safe pattern for runtime-core
 Push-Location wasm-orbit; try { wasm-pack build --target web } finally { Pop-Location }  # PowerShell-safe pattern for wasm bindings (wasm-orbit)
 npm --prefix frontend run build --silent  # frontend

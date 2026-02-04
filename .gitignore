@@ -46,3 +46,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# SongFormer outputs
+outputs_songformer/
+batch_all.scp
