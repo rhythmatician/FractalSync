@@ -12,7 +12,6 @@
  * - Distance estimate + Blinn-Phong + optional stripe/step shading match the python logic closely.
  */
 
-import fragSrc from './shaders/julia.frag?raw';
 import type { Complex } from './orbitSynthesizer';
 
 export interface VisualParameters {
@@ -169,10 +168,14 @@ export class JuliaRenderer {
       juliaSeed: { ...this.currentParams.juliaSeed }
     };
 
-    this.initWebGL();
+    // NOTE: WebGL program initialization is deferred to `init()` which fetches
+    // the canonical fragment shader at runtime from the backend (`/api/shader/julia.frag`).
   }
 
-  private initWebGL(): void {
+  /**
+   * Initialize WebGL program and uniforms. Must be awaited before calling `start()`.
+   */
+  async init(): Promise<void> {
     const gl = this.gl;
 
     const vertexShaderSource = `
@@ -182,8 +185,13 @@ export class JuliaRenderer {
       }
     `;
 
-    // Fragment shader: loaded from ` + "julia.frag" + ` as raw text; substitute placeholder for BASE_SPAN
-    const fragmentShaderSource = fragSrc.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
+    // Fetch canonical fragment shader from backend API
+    const resp = await fetch('/api/shader/julia.frag');
+    if (!resp.ok) {
+      throw new Error('Failed to fetch fragment shader from /api/shader/julia.frag: ' + resp.status);
+    }
+    const fragRaw = await resp.text();
+    const fragmentShaderSource = fragRaw.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
 
     const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);

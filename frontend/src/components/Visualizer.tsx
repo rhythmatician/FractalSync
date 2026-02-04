@@ -39,32 +39,36 @@ export function Visualizer() {
   useEffect(() => {
     // Initialize renderer
     if (canvasRef.current && !rendererRef.current) {
-      try {
-        const renderer = new JuliaRenderer(canvasRef.current);
+      (async () => {
+        const canvas = canvasRef.current as HTMLCanvasElement;
+        const renderer = new JuliaRenderer(canvas);
         rendererRef.current = renderer;
+        try {
+          await renderer.init();
 
-        // Initialize renderer tunables to match UI control defaults for consistency
-        renderer.setHeightScale(8.0); // UI default: Height -> max
-        renderer.setFdEps(0.6);       // UI default: FD ε (px)
-        renderer.setFdIter(160);      // UI default: FD Iter
-        renderer.setPreferGradientNormals(true); // UI default: prefer gradient normals (ON)
-        renderer.setGradientMode('full'); // UI default: Grad Mode = Full (accurate)
+          // Initialize renderer tunables to match UI control defaults for consistency
+          renderer.setHeightScale(8.0); // UI default: Height -> max
+          renderer.setFdEps(0.6);       // UI default: FD ε (px)
+          renderer.setFdIter(160);      // UI default: FD Iter
+          renderer.setPreferGradientNormals(true); // UI default: prefer gradient normals (ON)
+          renderer.setGradientMode('full'); // UI default: Grad Mode = Full (accurate)
 
-        renderer.start();
+          renderer.start();
 
-        // Handle window resize
-        const handleResize = () => {
-          renderer.resize();
-        };
-        window.addEventListener('resize', handleResize);
+          // Handle window resize
+          const handleResize = () => {
+            renderer.resize();
+          };
+          window.addEventListener('resize', handleResize);
 
-        return () => {
-          window.removeEventListener('resize', handleResize);
-          renderer.dispose();
-        };
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize renderer');
-      }
+          return () => {
+            window.removeEventListener('resize', handleResize);
+            renderer.dispose();
+          };
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize renderer');
+        }
+      })();
     }
   }, []);
 
