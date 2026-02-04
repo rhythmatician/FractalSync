@@ -31,12 +31,25 @@ uniform float u_derivLower;    // lower threshold for dz - below this -> low con
 uniform float u_derivUpper;    // upper threshold for dz - above this -> high confidence
 
 // Gradient-normal options (Option B)
-uniform int   u_useGradientNormals; // 0 = use DE normal (default), 1 = use finite-difference gradient normal
+// Modes: 0 = off (DE), 1 = full (accurate FD), 2 = cheap (low-cost FD with gating)
+uniform int   u_useGradientNormals; // mode
 uniform int   u_fdIter;             // number of iterations to evaluate potential for FD (N)
 uniform float u_fdEps;              // finite-difference epsilon in *pixels* (converted to complex units inside shader)
+// Low-cost FD / gating (cheap mode)
+uniform int   u_fdIterLow;          // smaller N for cheap FD
+uniform float u_fdEpsLow;           // larger epsilon for cheap FD (pixels)
+uniform float u_gradDemThreshold;   // demSig threshold below which cheap mode skips FD
 
 // Height scale controls the z component when building a 3D normal from the 2D gradient
 uniform float u_heightScale;
+
+// Fresnel and rim controls
+uniform float u_fresnelPower; // exponent for fresnel falloff
+uniform float u_fresnelBoost; // how much fresnel multiplies specular
+uniform float u_rimIntensity;  // additive rim highlight from demSig
+
+// Preference bit: 1.0 = prefer gradient-derived normals when available, 0.0 = prefer analytic normals
+uniform float u_preferGradientNormals;
 
 const float PI = 3.141592653589793;
 const float ESC_RADIUS_2 = 1.0e10;
@@ -393,36 +406,61 @@ vec3 shadePixel(vec2 fragCoord) {
   // Saturation control (not in python; keeps your UI meaningful)
   base = mix(vec3(0.5), base, clamp(u_sat, 0.0, 1.0));
 
-  // Choose normal: either DE-derived normal or finite-difference gradient normal
-  vec2 usedNormal = normal;
-  if (u_useGradientNormals != 0) {
-    // convert FD epsilon from pixels to complex-plane units
+  // dem normalization by diag + python's log+sigmoid shaping (compute early for rim)
+  float demN = max(dem / max(diag, 1.0e-30), 1.0e-30);
+  float demT = -log(demN) / 12.0;
+  float demSig = 1.0 / (1.0 + exp(-10.0 * (demT - 0.5)));
+
+  // Compute blended normal (N3) and usedNormal for existing blinnPhong
+  vec3 N3 = normalize(vec3(normal.x, normal.y, 1.0));
+  vec2 usedNormal = N3.xy;
+
+  // Gradient mode: 0=off,1=full,2=cheap
+  int gmode = u_useGradientNormals;
+  if (gmode != 0) {
     float pixelSize = span / minRes;
-    float eps = max(u_fdEps * pixelSize, 1.0e-7);
-    vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIter, eps);
-    float glen = length(grad);
-    // If gradient is tiny (or NaN), fall back to DE normal
-    if (glen > 1.0e-30) {
-      // Build a 3D normal: (grad.x, grad.y, heightScale) then normalize
-      float hs = max(u_heightScale, 1.0e-8);
-      vec3 N3 = normalize(vec3(grad.x, grad.y, hs));
-      usedNormal = N3.xy;
-      // Protect against pathological numeric cases
-      if (length(usedNormal) < 1.0e-6) {
-        usedNormal = normal;
+    if (gmode == 1) {
+      // Full mode: accurate FD using configured parameters
+      float eps = max(u_fdEps * pixelSize, 1.0e-7);
+      vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIter, eps);
+      float glen = length(grad);
+      if (glen > 1.0e-30) {
+        float hs = max(u_heightScale, 1.0e-8);
+        vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
+        vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
+        float blend = clamp(u_preferGradientNormals, 0.0, 1.0);
+        N3 = normalize(mix(Nd, Ng, blend));
+        usedNormal = N3.xy;
       }
     } else {
-      usedNormal = normal;
+      // Cheap mode: only compute FD if demSig >= threshold; use low-cost params
+      if (demSig >= u_gradDemThreshold) {
+        float eps = max(u_fdEpsLow * pixelSize, 1.0e-7);
+        vec2 grad = potentialGradient(z0, u_juliaSeed, u_fdIterLow, eps);
+        float glen = length(grad);
+        if (glen > 1.0e-30) {
+          float hs = max(u_heightScale, 1.0e-8);
+          vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
+          vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
+          float blend = clamp(u_preferGradientNormals, 0.0, 1.0);
+          // In cheap mode, favor DE a bit to preserve crispness while avoiding spikes
+          float cheapBlend = mix(0.5, blend, 0.8);
+          N3 = normalize(mix(Nd, Ng, cheapBlend));
+          usedNormal = N3.xy;
+        }
+      }
     }
   }
 
   // Brightness with Blinn-Phong (scale specular by derivative confidence)
   float bright = blinnPhong(usedNormal, derivConf);
 
-  // dem normalization by diag + python's log+sigmoid shaping
-  float demN = max(dem / max(diag, 1.0e-30), 1.0e-30);
-  float demT = -log(demN) / 12.0;
-  float demSig = 1.0 / (1.0 + exp(-10.0 * (demT - 0.5)));
+  // Fresnel: boost specular based on grazing angle
+  float fresnel = pow(1.0 - clamp(N3.z, 0.0, 1.0), max(u_fresnelPower, 1.0e-6));
+  bright = bright * (1.0 + u_fresnelBoost * fresnel);
+
+  // Add rim highlight from demSig
+  bright = bright + u_rimIntensity * demSig;
 
   // Shaders: stripes and/or steps (affect brightness like python)
   float nshader = 0.0;

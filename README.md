@@ -7,6 +7,7 @@ A real-time music visualizer that renders morphing Julia sets, using machine lea
 - **Backend (Python/PyTorch)**: Training pipeline that learns audio-to-visual mappings, exports models to ONNX
 - **Frontend (React)**: Real-time visualization with microphone input, ONNX.js inference, and WebGL Julia set rendering
 - **API Server**: FastAPI for training monitoring and model management
+  - Serves shared GLSL shaders (canonical: `shared/shaders/julia.frag`) at `/api/shader/{name}` so the frontend can fetch the shader at runtime.
 
 > Note: AI coding agents should read `.github/copilot-instructions.md` first — it contains the Rust-first policy and build/test guidance for contributors.
 
@@ -34,6 +35,8 @@ npm run dev
 cd backend
 python -m api.server
 ```
+
+Note: The backend serves the canonical fragment shader at `/api/shader/julia.frag` (source: `shared/shaders/julia.frag`). Start the backend before the frontend so the renderer can fetch the shader at runtime.
 
 2. Start the frontend dev server:
 ```bash

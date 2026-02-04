@@ -12,7 +12,6 @@
  * - Distance estimate + Blinn-Phong + optional stripe/step shading match the python logic closely.
  */
 
-import fragSrc from './shaders/julia.frag?raw';
 import type { Complex } from './orbitSynthesizer';
 
 export interface VisualParameters {
@@ -71,18 +70,48 @@ export class JuliaRenderer {
   private uFdEpsLocation: WebGLUniformLocation | null = null;
   private uHeightScaleLocation: WebGLUniformLocation | null = null;
 
+  // Fresnel / rim / normal preference uniform locations
+  private uFresnelPowerLocation: WebGLUniformLocation | null = null;
+  private uFresnelBoostLocation: WebGLUniformLocation | null = null;
+  private uRimIntensityLocation: WebGLUniformLocation | null = null;
+  private uPreferGradientNormalsLocation: WebGLUniformLocation | null = null;
+
+  // Low-cost FD/gating uniform locations
+  private uFdIterLowLocation: WebGLUniformLocation | null = null;
+  private uFdEpsLowLocation: WebGLUniformLocation | null = null;
+  private uGradDemThresholdLocation: WebGLUniformLocation | null = null;
+
   // Tunables
   private readonly MAX_ITER_DEFAULT = 500;
   private readonly NCYCLE_DEFAULT = 32.0;
 
   // FD / gradient defaults (tunable)
   private useGradientNormals: boolean = true;
-  private fdIter: number = 120;         // fixed-N for potential eval
-  private fdEps: number = 1.0;          // in pixels
-  private heightScale: number = 1.0;    // controls slope of height normal
+  // Defaults match UI control defaults in Visualizer.tsx
+  private fdIter: number = 160;         // fixed-N for potential eval (matches UI FD Iter default)
+  private fdEps: number = 0.6;          // in pixels (matches UI FD ε default)
+  private heightScale: number = 8.0;    // controls slope of height normal (matches UI Height default -> max)
   private derivLower: number = 1e-6;    // derivative confidence lower bound
   private derivUpper: number = 1e-3;    // derivative confidence upper bound
 
+  // Fresnel / rim / normal behavior defaults
+  private fresnelPower: number = 3.0;
+  private fresnelBoost: number = 0.25;
+  private rimIntensity: number = 0.08;
+  // Preference: whether to prefer gradient-based normals when available.
+  // This boolean toggles which normal is preferred when both derivative-based
+  // gradient normals and analytic normals are available. It does not by itself
+  // enable/disable gradient computation (that's controlled by `Grad Mode`).
+  // true = prefer gradient normals when available; false = use analytic normals.
+  private preferGradientNormals: boolean = true;
+
+  // Gradient mode: 0=off,1=full,2=cheap
+  private gradientMode: number = 1; // default to full (accurate)
+
+  // Low-cost FD defaults
+  private fdIterLow: number = 32;
+  private fdEpsLow: number = 1.5;
+  private gradDemThreshold: number = 0.02; // only compute cheap FD near boundary
   private readonly STRIPE_S_DEFAULT = 0.0;
   private readonly STRIPE_SIG_DEFAULT = 0.9;
   private readonly STEP_S_DEFAULT = 0.0;
@@ -139,10 +168,14 @@ export class JuliaRenderer {
       juliaSeed: { ...this.currentParams.juliaSeed }
     };
 
-    this.initWebGL();
+    // NOTE: WebGL program initialization is deferred to `init()` which fetches
+    // the canonical fragment shader at runtime from the backend (`/api/shader/julia.frag`).
   }
 
-  private initWebGL(): void {
+  /**
+   * Initialize WebGL program and uniforms. Must be awaited before calling `start()`.
+   */
+  async init(): Promise<void> {
     const gl = this.gl;
 
     const vertexShaderSource = `
@@ -152,8 +185,13 @@ export class JuliaRenderer {
       }
     `;
 
-    // Fragment shader: loaded from ` + "julia.frag" + ` as raw text; substitute placeholder for BASE_SPAN
-    const fragmentShaderSource = fragSrc.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
+    // Fetch canonical fragment shader from backend API
+    const resp = await fetch('/api/shader/julia.frag');
+    if (!resp.ok) {
+      throw new Error('Failed to fetch fragment shader from /api/shader/julia.frag: ' + resp.status);
+    }
+    const fragRaw = await resp.text();
+    const fragmentShaderSource = fragRaw.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
 
     const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
@@ -201,6 +239,17 @@ export class JuliaRenderer {
     this.uFdIterLocation = gl.getUniformLocation(this.program, 'u_fdIter');
     this.uFdEpsLocation = gl.getUniformLocation(this.program, 'u_fdEps');
     this.uHeightScaleLocation = gl.getUniformLocation(this.program, 'u_heightScale');
+
+    // Low-cost FD / gating uniforms
+    this.uFdIterLowLocation = gl.getUniformLocation(this.program, 'u_fdIterLow');
+    this.uFdEpsLowLocation = gl.getUniformLocation(this.program, 'u_fdEpsLow');
+    this.uGradDemThresholdLocation = gl.getUniformLocation(this.program, 'u_gradDemThreshold');
+
+    // Fresnel / rim / normal-blend uniform locations
+    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
+    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
+    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
+    this.uPreferGradientNormalsLocation = gl.getUniformLocation(this.program, 'u_preferGradientNormals');
 
     // Fullscreen quad
     const positionBuffer = gl.createBuffer();
@@ -352,10 +401,23 @@ export class JuliaRenderer {
     // Derivative gating and gradient-normal config
     gl.uniform1f(this.uDerivLowerLocation!, this.derivLower);
     gl.uniform1f(this.uDerivUpperLocation!, this.derivUpper);
-    gl.uniform1i(this.uUseGradientNormalsLocation!, this.useGradientNormals ? 1 : 0);
+    // Gradient mode: 0=off,1=full,2=cheap
+    gl.uniform1i(this.uUseGradientNormalsLocation!, this.gradientMode);
     gl.uniform1i(this.uFdIterLocation!, this.fdIter);
     gl.uniform1f(this.uFdEpsLocation!, this.fdEps);
     gl.uniform1f(this.uHeightScaleLocation!, this.heightScale);
+
+    // Low-cost FD / gating uniforms
+    gl.uniform1i(this.uFdIterLowLocation!, this.fdIterLow);
+    gl.uniform1f(this.uFdEpsLowLocation!, this.fdEpsLow);
+    gl.uniform1f(this.uGradDemThresholdLocation!, this.gradDemThreshold);
+
+    // Fresnel / rim / normal blend
+    gl.uniform1f(this.uFresnelPowerLocation!, this.fresnelPower);
+    gl.uniform1f(this.uFresnelBoostLocation!, this.fresnelBoost);
+    gl.uniform1f(this.uRimIntensityLocation!, this.rimIntensity);
+    // Convert boolean preference to numeric uniform (1.0 = prefer gradient normals, 0.0 = prefer analytic normals)
+    gl.uniform1f(this.uPreferGradientNormalsLocation!, this.preferGradientNormals ? 1.0 : 0.0);
 
     // Debug: log first frame
     if (this.time === 0) {
@@ -367,6 +429,9 @@ export class JuliaRenderer {
         gradientNormals: this.useGradientNormals,
         fdIter: this.fdIter,
         fdEps: this.fdEps,
+        fresnel: {power: this.fresnelPower, boost: this.fresnelBoost},
+        rim: this.rimIntensity,
+        preferGradientNormals: this.preferGradientNormals,
         uniforms: {
           uJuliaSeedLocation: this.uJuliaSeedLocation,
           uResolutionLocation: this.uResolutionLocation,
@@ -431,5 +496,50 @@ export class JuliaRenderer {
   setDerivThresholds(lower: number, upper: number): void {
     this.derivLower = lower;
     this.derivUpper = upper;
+  }
+
+  // gradient mode: 'off' | 'full' | 'cheap'
+  setGradientMode(mode: 'off' | 'full' | 'cheap'): void {
+    if (mode === 'off') this.gradientMode = 0;
+    else if (mode === 'full') this.gradientMode = 1;
+    else this.gradientMode = 2;
+  }
+
+  setFdIterLow(n: number): void {
+    this.fdIterLow = Math.max(1, Math.floor(n));
+  }
+
+  setFdEpsLow(pixels: number): void {
+    this.fdEpsLow = Math.max(0.0001, pixels);
+  }
+
+  setGradDemThreshold(v: number): void {
+    this.gradDemThreshold = Math.max(0.0, Math.min(1.0, v));
+  }
+
+  setFresnel(power: number, boost: number): void {
+    this.fresnelPower = Math.max(0.1, power);
+    this.fresnelBoost = Math.max(0.0, boost);
+  }
+
+  setFresnelPower(p: number): void {
+    this.fresnelPower = Math.max(0.1, p);
+  }
+
+  setFresnelBoost(b: number): void {
+    this.fresnelBoost = Math.max(0.0, b);
+  }
+
+  setRimIntensity(v: number): void {
+    this.rimIntensity = Math.max(0.0, v);
+  }
+
+  /**
+   * Set whether to prefer gradient-derived normals when available.
+   * Note: this is a preference only; enabling/disabling gradient computation
+   * is done via `setGradientMode('off'|'cheap'|'full')`.
+   */
+  setPreferGradientNormals(enabled: boolean): void {
+    this.preferGradientNormals = Boolean(enabled);
   }
 }

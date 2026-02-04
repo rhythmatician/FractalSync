@@ -41,6 +41,13 @@ This ensures the fractal responds to music in real-time, even before the model i
 
 ## Notes
 
+### Renderer controls
+- **Grad Mode** selects whether gradient-derived normals are computed: Off (disabled), Cheap (gated low-cost FD), Full (accurate FD). Default: **Full**.
+- **Prefer Gradient Normals** is a preference toggle that controls which normal is used when both gradient-derived and analytic normals are available. It does not enable gradient computation; enable Grad Mode to allow gradient normals to be computed. Default: **enabled**.
+
+- **Shader source**: The canonical fragment shader is located at `shared/shaders/julia.frag` and is served by the backend at `/api/shader/julia.frag`. The frontend fetches the shader at runtime to avoid keeping multiple copies.
+
+
 - **ONNX Runtime**: Repo uses onnxruntime-web 1.18.0 (see `package.json`/`vite.config.ts`). If you encounter dynamic-import issues with newer runtime versions (1.16+), update Vite's `optimizeDeps`/`publicDir` to handle `.mjs` files or provide a bundled runtime.
 - **WASM files**: Vite copies the canonical single-thread non‑SIMD `ort-wasm.wasm` from `node_modules` to `public/` on startup. The build will warn if the preferred artifact is missing — there is no runtime automatic fallback.
 - **CORS headers**: Required for SharedArrayBuffer (multi-threaded WASM)

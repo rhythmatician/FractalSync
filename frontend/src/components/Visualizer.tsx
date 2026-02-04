@@ -23,6 +23,7 @@ export function Visualizer() {
   const [inferenceFailures, setInferenceFailures] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioReactiveEnabled, setAudioReactiveEnabled] = useState(false);
+  const [gradMode, setGradMode] = useState<'off' | 'cheap' | 'full'>('full');
   const metricsUpdateRef = useRef<number | null>(null);
 
   // Default fallback parameters (safe Julia set from training)
@@ -38,24 +39,36 @@ export function Visualizer() {
   useEffect(() => {
     // Initialize renderer
     if (canvasRef.current && !rendererRef.current) {
-      try {
-        const renderer = new JuliaRenderer(canvasRef.current);
+      (async () => {
+        const canvas = canvasRef.current as HTMLCanvasElement;
+        const renderer = new JuliaRenderer(canvas);
         rendererRef.current = renderer;
-        renderer.start();
+        try {
+          await renderer.init();
 
-        // Handle window resize
-        const handleResize = () => {
-          renderer.resize();
-        };
-        window.addEventListener('resize', handleResize);
+          // Initialize renderer tunables to match UI control defaults for consistency
+          renderer.setHeightScale(8.0); // UI default: Height -> max
+          renderer.setFdEps(0.6);       // UI default: FD ε (px)
+          renderer.setFdIter(160);      // UI default: FD Iter
+          renderer.setPreferGradientNormals(true); // UI default: prefer gradient normals (ON)
+          renderer.setGradientMode('full'); // UI default: Grad Mode = Full (accurate)
 
-        return () => {
-          window.removeEventListener('resize', handleResize);
-          renderer.dispose();
-        };
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to initialize renderer');
-      }
+          renderer.start();
+
+          // Handle window resize
+          const handleResize = () => {
+            renderer.resize();
+          };
+          window.addEventListener('resize', handleResize);
+
+          return () => {
+            window.removeEventListener('resize', handleResize);
+            renderer.dispose();
+          };
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize renderer');
+        }
+      })();
     }
   }, []);
 
@@ -211,18 +224,83 @@ export function Visualizer() {
                 <input
                   type="file"
                   accept="audio/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setAudioFile(file);
-                      if (isVisualizing) {
-                        setIsVisualizing(false);
-                        setTimeout(() => setIsVisualizing(true), 100);
-                      }
-                    }
-                  }}
+                  onChange={(e) => setAudioFile(e.target.files ? e.target.files[0] : null)}
                   style={{ display: 'none' }}
                 />
+              </label>
+
+              {/* Temporary shading controls for experimentation */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Height</div>
+                  <input type="range" min="0.2" max="8" step="0.1" defaultValue="8.0" onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    rendererRef.current?.setHeightScale(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>FD ε (px)</div>
+                  <input type="range" min="0.1" max="3" step="0.1" defaultValue="0.6" onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    rendererRef.current?.setFdEps(v);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>FD Iter</div>
+                  <input type="range" min="32" max="512" step="8" defaultValue="160" onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    rendererRef.current?.setFdIter(v);
+                  }} />
+                </label>
+
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Fresnel Power</div>
+                  <input type="range" min="0.5" max="8" step="0.1" defaultValue="3.0" onChange={(e) => {
+                    const p = parseFloat(e.target.value);
+                    rendererRef.current?.setFresnelPower(p);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Fresnel Boost</div>
+                  <input type="range" min="0" max="2" step="0.01" defaultValue="0.25" onChange={(e) => {
+                    const b = parseFloat(e.target.value);
+                    rendererRef.current?.setFresnelBoost(b);
+                  }} />
+                </label>
+
+                <label style={{ color: '#ddd', fontSize: '13px' }}>
+                  <div style={{ fontSize: '11px' }}>Rim</div>
+                  <input type="range" min="0" max="1" step="0.01" defaultValue="0.08" onChange={(e) => {
+                    const r = parseFloat(e.target.value);
+                    rendererRef.current?.setRimIntensity(r);
+                  }} />
+                </label>
+
+
+                <label style={{ color: '#ddd', fontSize: '13px' }} title="If checked, the renderer will prefer gradient-derived normals when computing shading; otherwise analytic normals will be used">
+                  <div style={{ fontSize: '11px' }}>Prefer Gradient Normals</div>
+                  <input type="checkbox" defaultChecked={true} disabled={gradMode === 'off'} onChange={(e) => {
+                    rendererRef.current?.setPreferGradientNormals(e.target.checked);
+                  }} />
+                </label>
+
+              </div>
+
+              <label style={{ color: '#ddd', fontSize: '13px' }}>
+                <div style={{ fontSize: '11px' }}>Grad Mode</div>
+                <select defaultValue={'full'} onChange={(e) => {
+                  const v = e.target.value as 'off' | 'cheap' | 'full';
+                  rendererRef.current?.setGradientMode(v);
+                  setGradMode(v);
+                }}>
+                  <option value="off">Off (fast)</option>
+                  <option value="cheap">Cheap (gated FD)</option>
+                  <option value="full">Full (accurate)</option>
+                </select>
               </label>
 
               {audioFile && (

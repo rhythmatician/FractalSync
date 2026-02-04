@@ -9,6 +9,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+# Ensure /backend/ is the cwd
+import os
+
+os.chdir(Path(__file__).parent.parent)
+
 app = FastAPI(title="FractalSync Training API")
 
 
@@ -63,6 +68,22 @@ async def get_model_metadata():
         metadata = json.load(f)
 
     return metadata
+
+
+# Serve shared shaders to clients/backend
+@app.get("/api/shader/{name}")
+async def get_shared_shader(name: str):
+    """Return a shared shader by name (whitelisted)."""
+    from src.shaders import get_shader_path
+
+    try:
+        shader_path = get_shader_path(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Shader not found: {name}")
+
+    return FileResponse(
+        str(shader_path), media_type="text/plain", filename=shader_path.name
+    )
 
 
 if __name__ == "__main__":
