@@ -85,7 +85,7 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
     }
 }
 
-/// Sample the in-memory distance field at the given (x,y) real-valued coordinates.
+/// Sample the in-memory distance field at the given complex-valued coordinates.
 ///
 /// This function returns **unsigned** (absolute) distances to the Mandelbrot boundary,
 /// plus any additional distance for points outside the field's bounding box. The underlying
@@ -104,15 +104,11 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
 /// built-in "mandelbrot_default" field.
 ///
 /// # Arguments
-/// * `xs` - x-coordinates (real part) in the complex plane
-/// * `ys` - y-coordinates (imaginary part) in the complex plane
+/// * `points` - complex coordinates in the plane
 ///
 /// # Returns
 /// A vector of unsigned distances (non-negative floats) to the Mandelbrot boundary.
-pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String> {
-    if xs.len() != ys.len() {
-        return Err("xs and ys must have the same length".into());
-    }
+pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f32>, String> {
     // If no distance field is loaded, try loading the canonical builtin
     // so callers (like tests) can sample without an explicit prior set.
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
@@ -132,7 +128,7 @@ pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String>
     let dx = (df.xmax - df.xmin) as f64;
     let dy = (df.ymax - df.ymin) as f64;
 
-    let mut out = Vec::with_capacity(xs.len());
+    let mut out = Vec::with_capacity(points.len());
 
     // helper to evaluate bicubic interpolation at arbitrary (fx,fy) pixel coords
     fn eval_bicubic_at(df: &DistanceField, fx: f64, fy: f64, h: f64, w: f64) -> f32 {
@@ -165,7 +161,9 @@ pub fn sample_distance_field(xs: &[f64], ys: &[f64]) -> Result<Vec<f32>, String>
         } else { 0.0 }
     }
 
-    for (&xr, &yr) in xs.iter().zip(ys.iter()) {
+    for point in points {
+        let xr = point.re;
+        let yr = point.im;
         // normalized [0,1]
         let mut u = (xr - df.xmin) / dx;
         let mut v = (yr - df.ymin) / dy;

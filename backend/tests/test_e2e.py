@@ -238,8 +238,7 @@ def test_visual_metrics():
             test_image.shape[1],
             test_image.shape[0],
             test_image.shape[2],
-            0.0,
-            0.0,
+            0.0 + 0.0j,
             50,
         )
         print(

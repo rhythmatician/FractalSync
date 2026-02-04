@@ -28,5 +28,5 @@ def test_runtime_core_auto_loads_builtin():
     importlib.reload(runtime_core)
     # After reload, no field has been explicitly registered in Rust; sampling
     # should auto-load the canonical builtin and return a finite float.
-    out = runtime_core.sample_distance_field_py([0.0], [0.0])
+    out = runtime_core.sample_distance_field_py([0.0 + 0.0j])
     assert isinstance(out, list) and isinstance(out[0], float) and out[0] >= 0.0

@@ -25,7 +25,7 @@ use crate::controller::{
     synthesize as rust_synthesize,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 use crate::distance_field::{load_distance_field, sample_distance_field};
 
@@ -186,7 +186,7 @@ impl OrbitState {
     /// `lobe_point_at_angle` with the current theta and radial scale.
     fn carrier(&self, py: Python) -> PyResult<Py<PyComplex>> {
         let c = rust_lobe_point_at_angle(self.inner.lobe, self.inner.sub_lobe, self.inner.theta, self.inner.s);
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 
     /// Get a copy of the residual phases.  This can be used by
@@ -207,7 +207,7 @@ impl OrbitState {
     fn synthesize(&self, py: Python, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
         let gates_ref = band_gates.as_deref();
         let c = rust_synthesize(&self.inner, residual_params.into(), gates_ref);
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 
     /// Expose core state attributes as read-only Python properties
@@ -246,7 +246,7 @@ impl OrbitState {
     #[pyo3(signature = (dt, residual_params, band_gates=None))]
     fn step(&mut self, py: Python, dt: f64, residual_params: ResidualParams, band_gates: Option<Vec<f64>>) -> PyResult<Py<PyComplex>> {
         let c = rust_step(&mut self.inner, dt, residual_params.into(), band_gates.as_deref());
-        Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+        Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
     }
 }
 
@@ -292,10 +292,15 @@ fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, y
     }
 }
 
-/// Sample a loaded distance field at arrays of (x_reals, y_imags).
+/// Sample a loaded distance field at complex-valued coordinates.
 #[pyfunction]
-fn sample_distance_field_py(x_coords: Vec<f64>, y_coords: Vec<f64>) -> PyResult<Vec<f32>> {
-    match sample_distance_field(&x_coords, &y_coords) {
+fn sample_distance_field_py(py: Python, coords: Vec<Py<PyComplex>>) -> PyResult<Vec<f32>> {
+    let mut points = Vec::with_capacity(coords.len());
+    for coord in coords {
+        let coord = coord.bind(py);
+        points.push(num_complex::Complex64::new(coord.real(), coord.imag()));
+    }
+    match sample_distance_field(&points) {
         Ok(v) => Ok(v),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
@@ -418,7 +423,7 @@ impl FeatureExtractor {
 #[pyo3(signature = (lobe, sub_lobe, theta, s))]
 fn lobe_point_at_angle(py: Python, lobe: u32, sub_lobe: u32, theta: f64, s: f64) -> PyResult<Py<PyComplex>> {
     let c = rust_lobe_point_at_angle(lobe, sub_lobe, theta, s);
-    Ok(PyComplex::from_doubles_bound(py, c.real, c.imag).into())
+    Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
 }
 
 /// Runtime visual metrics computed in Rust.
@@ -454,14 +459,13 @@ impl From<RustRuntimeVisualMetrics> for RuntimeVisualMetrics {
 
 /// Compute runtime visual metrics from an image buffer and Julia seed.
 #[pyfunction]
-#[pyo3(signature = (image, width, height, channels, c_real, c_imag, max_iter=100))]
+#[pyo3(signature = (image, width, height, channels, c, max_iter=100))]
 fn compute_runtime_visual_metrics(py: Python, 
     image: Vec<f64>,
     width: usize,
     height: usize,
     channels: usize,
-    c_real: f64,
-    c_imag: f64,
+    c: &Bound<PyComplex>,
     max_iter: usize,
 ) -> PyResult<PyObject> {
     let metrics = compute_runtime_metrics(
@@ -469,7 +473,7 @@ fn compute_runtime_visual_metrics(py: Python,
         width,
         height,
         channels,
-        RustComplex::new(c_real, c_imag),
+        num_complex::Complex64::new(c.real(), c.imag()),
         max_iter,
     )
     .map_err(|message| pyo3::exceptions::PyValueError::new_err(message))?;
@@ -609,11 +613,11 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
 
     // Top-level functions
     let funcs = PyDict::new_bound(py);
-    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c_real: float, c_imag: float, max_iter: int = 100) -> RuntimeVisualMetrics")?;
+    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c: complex, max_iter: int = 100) -> RuntimeVisualMetrics")?;
     funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
     funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
     funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
-    funcs.set_item("sample_distance_field_py", "(x_coords: Sequence[float], y_coords: Sequence[float]) -> list[float]")?;
+    funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
     funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation

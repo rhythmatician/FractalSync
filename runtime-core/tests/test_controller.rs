@@ -22,8 +22,8 @@ fn test_deterministic_synthesis() {
     let c1 = synthesize(&state1, params, None);
     let c2 = synthesize(&state2, params, None);
     
-    assert_eq!(c1.real, c2.real);
-    assert_eq!(c1.imag, c2.imag);
+    assert_eq!(c1.re, c2.re);
+    assert_eq!(c1.im, c2.im);
 }
 
 #[test]
@@ -37,8 +37,8 @@ fn test_deterministic_stepping() {
         let c1 = step(&mut state1, 0.01, params, None);
         let c2 = step(&mut state2, 0.01, params, None);
         
-        assert_eq!(c1.real, c2.real);
-        assert_eq!(c1.imag, c2.imag);
+        assert_eq!(c1.re, c2.re);
+        assert_eq!(c1.im, c2.im);
     }
 }
 
@@ -52,8 +52,8 @@ fn test_alpha_zero_returns_carrier() {
     // With alpha=0, should return just the carrier (lobe point)
     let carrier = runtime_core::geometry::lobe_point_at_angle(1, 0, 0.123, 1.0);
     
-    assert!((c.real - carrier.real).abs() < 1e-10);
-    assert!((c.imag - carrier.imag).abs() < 1e-10);
+    assert!((c.re - carrier.re).abs() < 1e-10);
+    assert!((c.im - carrier.im).abs() < 1e-10);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_alpha_one_includes_residuals() {
     let carrier = runtime_core::geometry::lobe_point_at_angle(1, 0, 0.123, 1.0);
     
     // With alpha=1.0, result should differ from pure carrier
-    let diff = ((c.real - carrier.real).powi(2) + (c.imag - carrier.imag).powi(2)).sqrt();
+    let diff = ((c.re - carrier.re).powi(2) + (c.im - carrier.im).powi(2)).sqrt();
     assert!(diff > 1e-6, "Alpha=1.0 should produce residuals");
 }
 
@@ -80,7 +80,7 @@ fn test_k_residuals_effect() {
     let c6 = synthesize(&state_k6, params, None);
     
     // Different k_residuals should produce different results
-    let diff = ((c3.real - c6.real).powi(2) + (c3.imag - c6.imag).powi(2)).sqrt();
+    let diff = ((c3.re - c6.re).powi(2) + (c3.im - c6.im).powi(2)).sqrt();
     assert!(diff > 1e-6, "Different k_residuals should affect output");
 }
 
@@ -101,7 +101,7 @@ fn test_omega_scale_sensitivity() {
     let c2 = synthesize(&state2, params, None);
     
     // Different omega_scale should cause phases to diverge after time advances
-    let diff = ((c1.real - c2.real).powi(2) + (c1.imag - c2.imag).powi(2)).sqrt();
+    let diff = ((c1.re - c2.re).powi(2) + (c1.im - c2.im).powi(2)).sqrt();
     assert!(diff > 1e-6, "Omega scale should affect output after time advances");
 }
 
@@ -116,7 +116,7 @@ fn test_seed_changes_residuals() {
     let c2 = synthesize(&state2, params, None);
     
     // Different seeds should produce different residuals
-    let diff = ((c1.real - c2.real).powi(2) + (c1.imag - c2.imag).powi(2)).sqrt();
+    let diff = ((c1.re - c2.re).powi(2) + (c1.im - c2.im).powi(2)).sqrt();
     assert!(diff > 1e-6, "Different seeds should affect output");
 }
 
@@ -170,8 +170,8 @@ fn test_band_gates_effect() {
     
     // With gates closed, should be closer to pure carrier
     let carrier = runtime_core::geometry::lobe_point_at_angle(1, 0, state.theta, state.s);
-    let dist_open = ((c_open.real - carrier.real).powi(2) + (c_open.imag - carrier.imag).powi(2)).sqrt();
-    let dist_closed = ((c_closed.real - carrier.real).powi(2) + (c_closed.imag - carrier.imag).powi(2)).sqrt();
+    let dist_open = ((c_open.re - carrier.re).powi(2) + (c_open.im - carrier.im).powi(2)).sqrt();
+    let dist_closed = ((c_closed.re - carrier.re).powi(2) + (c_closed.im - carrier.im).powi(2)).sqrt();
     
     assert!(
         dist_closed < dist_open,
@@ -194,7 +194,7 @@ fn test_residual_params_effect() {
     let c_custom = synthesize(&state, params_custom, None);
     
     // Different residual params should affect output
-    let diff = ((c_default.real - c_custom.real).powi(2) + (c_default.imag - c_custom.imag).powi(2)).sqrt();
+    let diff = ((c_default.re - c_custom.re).powi(2) + (c_default.im - c_custom.im).powi(2)).sqrt();
     assert!(diff > 1e-6, "Residual params should affect output");
 }
 
@@ -208,8 +208,8 @@ fn test_synthesize_returns_finite_values() {
             let state = OrbitState::new_with_seed(1, 0, 0.5, 1.0, 1.0, alpha, 6, 1.0, seed);
             let c = synthesize(&state, params, None);
             
-            assert!(c.real.is_finite(), "Real part must be finite");
-            assert!(c.imag.is_finite(), "Imag part must be finite");
+            assert!(c.re.is_finite(), "Real part must be finite");
+            assert!(c.im.is_finite(), "Imag part must be finite");
         }
     }
 }
@@ -227,8 +227,8 @@ fn test_different_lobes() {
     let c3 = synthesize(&state_lobe3, params, None);
     
     // Different lobes should produce different outputs
-    let diff12 = ((c1.real - c2.real).powi(2) + (c1.imag - c2.imag).powi(2)).sqrt();
-    let diff23 = ((c2.real - c3.real).powi(2) + (c2.imag - c3.imag).powi(2)).sqrt();
+    let diff12 = ((c1.re - c2.re).powi(2) + (c1.im - c2.im).powi(2)).sqrt();
+    let diff23 = ((c2.re - c3.re).powi(2) + (c2.im - c3.im).powi(2)).sqrt();
     
     assert!(diff12 > 0.01, "Different lobes should produce different outputs");
     assert!(diff23 > 0.01, "Different lobes should produce different outputs");

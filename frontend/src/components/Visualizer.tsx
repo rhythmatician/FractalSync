@@ -27,8 +27,7 @@ export function Visualizer() {
 
   // Default fallback parameters (safe Julia set from training)
   const DEFAULT_PARAMS: VisualParameters = {
-    juliaReal: -0.7269,
-    juliaImag: 0.1889,
+    juliaSeed: { real: -0.7269, imag: 0.1889 },
     colorHue: 0.5,
     colorSat: 0.8,
     colorBright: 0.9,

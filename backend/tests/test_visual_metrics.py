@@ -8,7 +8,7 @@ from src.visual_metrics import LossVisualMetrics  # noqa: E402
 
 
 def _compute_runtime_metrics(
-    runtime_core, image: np.ndarray, c_real: float, c_imag: float
+    runtime_core, image: np.ndarray, c: complex
 ):
     if image.max() > 1.0:
         image = image.astype(np.float64) / 255.0
@@ -16,7 +16,7 @@ def _compute_runtime_metrics(
     channels = 1 if image.ndim == 2 else image.shape[2]
     flat = image.astype(np.float64).reshape(-1).tolist()
     return runtime_core.compute_runtime_visual_metrics(
-        flat, width, height, channels, c_real, c_imag, 50
+        flat, width, height, channels, c, 50
     )
 
 
@@ -46,7 +46,7 @@ class TestLossVisualMetrics:
         metrics_calc = LossVisualMetrics()
 
         image = metrics_calc.render_julia_set(
-            seed_real=-0.7, seed_imag=0.27, width=128, height=128, zoom=1.0
+            seed=-0.7 + 0.27j, width=128, height=128, zoom=1.0
         )
 
         assert image.shape == (128, 128, 3)
@@ -61,7 +61,7 @@ class TestRuntimeVisualMetrics:
     def test_runtime_metrics_ranges(self, runtime_core_module):
         """Ensure runtime metrics are computed and within expected ranges."""
         image = np.random.rand(32, 32, 3).astype(np.float32)
-        metrics = _compute_runtime_metrics(runtime_core_module, image, 0.0, 0.0)
+        metrics = _compute_runtime_metrics(runtime_core_module, image, 0.0 + 0.0j)
 
         assert 0.0 <= metrics.edge_density <= 1.0
         assert 0.0 <= metrics.color_uniformity <= 1.0
@@ -73,7 +73,7 @@ class TestRuntimeVisualMetrics:
     def test_mandelbrot_membership_outside(self, runtime_core_module):
         """Ensure membership returns False for an escaping point."""
         image = np.zeros((8, 8), dtype=np.float32)
-        metrics = _compute_runtime_metrics(runtime_core_module, image, 2.0, 0.0)
+        metrics = _compute_runtime_metrics(runtime_core_module, image, 2.0 + 0.0j)
         assert metrics.mandelbrot_membership is False
 
 

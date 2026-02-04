@@ -194,7 +194,7 @@ def test_visual_metrics():
         image_float = image.astype(np.float64) / 255.0
         flat = image_float.reshape(-1).tolist()
         runtime_metrics = runtime_core.compute_runtime_visual_metrics(
-            flat, image.shape[1], image.shape[0], image.shape[2], 0.0, 0.0, 50
+            flat, image.shape[1], image.shape[0], image.shape[2], 0.0 + 0.0j, 50
         )
         print(f"    - Edge density: {runtime_metrics.edge_density:.4f}")
 

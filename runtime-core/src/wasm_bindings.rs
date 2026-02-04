@@ -7,6 +7,7 @@
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
 use serde::{Deserialize, Serialize};
+use num_complex::Complex64 as RustComplex;
 
 use crate::controller::{
     step as rust_step,
@@ -24,7 +25,7 @@ use crate::controller::{
     WINDOW_FRAMES,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
-use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle, Complex as RustComplex};
+use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 
 /// A complex number (Julia parameter c = a + bi).
@@ -37,7 +38,13 @@ pub struct Complex {
 
 impl From<RustComplex> for Complex {
     fn from(c: RustComplex) -> Self {
-        Self { real: c.real, imag: c.imag }
+        Self { real: c.re, imag: c.im }
+    }
+}
+
+impl From<Complex> for RustComplex {
+    fn from(c: Complex) -> Self {
+        RustComplex::new(c.real, c.imag)
     }
 }
 
@@ -298,8 +305,7 @@ pub fn compute_runtime_visual_metrics(
     width: usize,
     height: usize,
     channels: usize,
-    c_real: f64,
-    c_imag: f64,
+    c: Complex,
     max_iter: usize,
 ) -> Result<RuntimeVisualMetrics, JsValue> {
     let metrics = compute_runtime_metrics(
@@ -307,7 +313,7 @@ pub fn compute_runtime_visual_metrics(
         width,
         height,
         channels,
-        RustComplex::new(c_real, c_imag),
+        RustComplex::from(c),
         max_iter,
     )
     .map_err(|message| JsValue::from_str(message))?;
@@ -387,10 +393,11 @@ pub fn set_distance_field(flat: Vec<f32>, rows: usize, cols: usize, xmin: f64, x
         .map_err(|e| JsValue::from_str(&e))
 }
 
-/// Sample the currently-loaded distance field at arrays of x and y coords.
+/// Sample the currently-loaded distance field at arrays of complex coords.
 #[wasm_bindgen]
-pub fn sample_distance_field(x_coords: Vec<f64>, y_coords: Vec<f64>) -> Result<Vec<f32>, JsValue> {
-    crate::distance_field::sample_distance_field(&x_coords, &y_coords).map_err(|e| JsValue::from_str(&e))
+pub fn sample_distance_field(coords: Vec<Complex>) -> Result<Vec<f32>, JsValue> {
+    let points: Vec<RustComplex> = coords.into_iter().map(RustComplex::from).collect();
+    crate::distance_field::sample_distance_field(&points).map_err(|e| JsValue::from_str(&e))
 }
 
 /// Load a built-in distance field (embedded at compile time) and return its

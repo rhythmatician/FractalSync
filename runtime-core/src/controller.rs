@@ -10,7 +10,7 @@
 //! each residual decays exponentially as 1/2^(k+1) and is modulated
 //! by the controller's `alpha` parameter and the band gate vector.
 
-use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius, Complex};
+use crate::geometry::{lobe_point_at_angle, period_n_bulb_radius};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 /// Shared runtime constants to keep backend and frontend in lockstep.
@@ -152,7 +152,7 @@ pub fn synthesize(
     state: &OrbitState,
     residual_params: ResidualParams,
     band_gates: Option<&[f64]>,
-) -> Complex {
+) -> num_complex::Complex64 {
     // Carrier: deterministic point on the lobe
     let carrier = lobe_point_at_angle(state.lobe, state.sub_lobe, state.theta, state.s);
 
@@ -193,7 +193,7 @@ pub fn synthesize(
     }
 
     // Sum carrier and residual
-    Complex::new(carrier.real + residual_real, carrier.imag + residual_imag)
+    num_complex::Complex64::new(carrier.re + residual_real, carrier.im + residual_imag)
 }
 
 /// Advance the state by dt and compute the new c(t).  Returns the
@@ -205,7 +205,7 @@ pub fn step(
     dt: f64,
     residual_params: ResidualParams,
     band_gates: Option<&[f64]>,
-) -> Complex {
+) -> num_complex::Complex64 {
     state.advance(dt);
     synthesize(state, residual_params, band_gates)
 }

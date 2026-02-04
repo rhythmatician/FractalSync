@@ -3,11 +3,10 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, createInitialState } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type OrbitState, type Complex, createInitialState } from './orbitSynthesizer';
 
 export interface VisualParameters {
-  juliaReal: number;
-  juliaImag: number;
+  juliaSeed: Complex;
   colorHue: number;
   colorSat: number;
   colorBright: number;
@@ -262,8 +261,7 @@ export class ModelInference {
       // Map to visual parameters
       const currentHue = (avgRMS * 2.0) % 1.0;
       visualParams = {
-        juliaReal: c.real,
-        juliaImag: c.imag,
+        juliaSeed: { ...c },
         colorHue: currentHue,
         colorSat: Math.max(0.5, Math.min(1.0, 0.7 + avgOnset * 0.3)),
         colorBright: Math.max(0.5, Math.min(0.9, 0.6 + avgRMS * 0.3)),
@@ -276,8 +274,7 @@ export class ModelInference {
     } else {
       // LEGACY VISUAL PARAMETER MODEL
       visualParams = {
-        juliaReal: params[0],
-        juliaImag: params[1],
+        juliaSeed: { real: params[0], imag: params[1] },
         colorHue: params[2],
         colorSat: params[3],
         colorBright: params[4],
@@ -326,8 +323,8 @@ export class ModelInference {
       }
       
       // ORIGINAL POST-PROCESSING (pre-MR #8)
-      visualParams.juliaReal = (visualParams.juliaReal * 0.6) % 1.4 - 0.7;
-      visualParams.juliaImag = (visualParams.juliaImag * 0.6) % 1.4 - 0.7;
+      visualParams.juliaSeed.real = (visualParams.juliaSeed.real * 0.6) % 1.4 - 0.7;
+      visualParams.juliaSeed.imag = (visualParams.juliaSeed.imag * 0.6) % 1.4 - 0.7;
 
       // Zoom: stay zoomed IN (1.5-4.0 for visible detail)
       visualParams.zoom = Math.max(1.5, Math.min(4.0, visualParams.zoom * 2 + 1.5));
@@ -356,7 +353,7 @@ export class ModelInference {
     // Debug log every 60 frames (~1 second at 60fps), but skip first frame
     if (this.inferenceTimings.length > 60 && this.inferenceTimings.length % 60 === 0) {
       console.log('[ModelInference] Visual params:', {
-        julia: [visualParams.juliaReal.toFixed(3), visualParams.juliaImag.toFixed(3)],
+        julia: [visualParams.juliaSeed.real.toFixed(3), visualParams.juliaSeed.imag.toFixed(3)],
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),

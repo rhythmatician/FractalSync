@@ -4,6 +4,7 @@
 
 use wasm_bindgen::prelude::*;
 use serde::Serialize;
+use num_complex::Complex64 as RustComplex;
 use runtime_core::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
@@ -18,7 +19,6 @@ use runtime_core::controller::{
     N_FFT,
     WINDOW_FRAMES,
 };
-use runtime_core::geometry::Complex as RustComplex;
 
 /// Shared constants exposed to JavaScript
 #[wasm_bindgen]
@@ -62,8 +62,8 @@ pub struct Complex {
 impl From<RustComplex> for Complex {
     fn from(c: RustComplex) -> Self {
         Self {
-            real: c.real,
-            imag: c.imag,
+            real: c.re,
+            imag: c.im,
         }
     }
 }

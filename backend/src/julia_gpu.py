@@ -98,26 +98,26 @@ class GPUJuliaRenderer:
         logger.info(f"GPU Julia renderer ready ({self.width}x{self.height})")
 
     def render(
-        self, seed_real: float, seed_imag: float, zoom: float = 1.0, max_iter: int = 50
+        self, seed: complex, zoom: float = 1.0, max_iter: int = 50
     ) -> np.ndarray:
         """
         Render Julia set.
 
         Args:
-            seed_real: Real part of Julia seed
-            seed_imag: Imaginary part of Julia seed
+            seed: Julia seed
             zoom: Zoom level
             max_iter: Maximum iterations
 
         Returns:
             Rendered image array (H, W, 3) in [0, 255]
         """
+        seed_complex = complex(seed)
         if not self.use_gpu or self.ctx is None:
-            return self._render_cpu(seed_real, seed_imag, zoom, max_iter)
+            return self._render_cpu(seed_complex, zoom, max_iter)
 
         try:
             # Set uniforms
-            self.program["seed"] = (seed_real, seed_imag)
+            self.program["seed"] = (seed_complex.real, seed_complex.imag)
             self.program["zoom"] = zoom
             self.program["max_iter"] = max_iter
 
@@ -142,10 +142,10 @@ class GPUJuliaRenderer:
         except Exception as e:
             logger.warning(f"GPU render failed ({e}), falling back to CPU")
             self.use_gpu = False
-            return self._render_cpu(seed_real, seed_imag, zoom, max_iter)
+            return self._render_cpu(seed_complex, zoom, max_iter)
 
     def _render_cpu(
-        self, seed_real: float, seed_imag: float, zoom: float = 1.0, max_iter: int = 50
+        self, seed: complex, zoom: float = 1.0, max_iter: int = 50
     ) -> np.ndarray:
         """CPU fallback Julia set renderer."""
         x = np.linspace(-2.0 / zoom, 2.0 / zoom, self.width)
@@ -157,7 +157,7 @@ class GPUJuliaRenderer:
         Z = C.copy()
         iterations = np.zeros_like(C, dtype=np.int32)
 
-        c = seed_real + 1j * seed_imag
+        c = complex(seed)
 
         for i in range(max_iter):
             mask = np.abs(Z) <= 2.0
@@ -187,4 +187,4 @@ class GPUJuliaRenderer:
 if __name__ == "__main__":
 
     renderer = GPUJuliaRenderer(width=256, height=256)
-    img = renderer.render(seed_real=-0.7, seed_imag=0.27015, zoom=1.0, max_iter=100)
+    img = renderer.render(seed=-0.7 + 0.27015j, zoom=1.0, max_iter=100)

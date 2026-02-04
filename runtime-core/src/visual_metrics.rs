@@ -4,8 +4,6 @@
 //! loss-only training objectives. They operate on rendered Julia images and
 //! Mandelbrot critical-orbit membership.
 
-use crate::geometry::Complex;
-
 #[derive(Clone, Debug)]
 pub struct RuntimeVisualMetrics {
     pub edge_density: f64,
@@ -30,13 +28,13 @@ fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Resul
     // Treat channels == 0 as a single-channel (grayscale) image to avoid
     // silently discarding a non-empty buffer and producing misleading metrics.
     let effective_channels = if channels == 0 { 1 } else { channels };
-    
+
     // Use overflow-safe multiplication to prevent panics on large inputs
     let pixels = match width.checked_mul(height) {
         Some(p) => p,
         None => return Err("image dimensions are too large"),
     };
-    
+
     let mut gray = vec![0.0; pixels];
     for y in 0..height {
         for x in 0..width {
@@ -168,10 +166,10 @@ fn compute_color_uniformity(gray: &[f64], width: usize, height: usize) -> f64 {
     (1.0 / (1.0 + avg_variance * 10.0)).clamp(0.0, 1.0)
 }
 
-pub fn mandelbrot_membership(c: Complex, max_iter: usize) -> bool {
-    let mut z = Complex::new(0.0, 0.0);
+pub fn mandelbrot_membership(c: num_complex::Complex64, max_iter: usize) -> bool {
+    let mut z = num_complex::Complex64::new(0.0, 0.0);
     for _ in 0..max_iter {
-        if z.real * z.real + z.imag * z.imag > 4.0 {
+        if z.re * z.re + z.im * z.im > 4.0 {
             return false;
         }
         z = z * z + c;
@@ -184,7 +182,7 @@ pub fn compute_runtime_metrics(
     width: usize,
     height: usize,
     channels: usize,
-    c: Complex,
+    c: num_complex::Complex64,
     max_iter: usize,
 ) -> Result<RuntimeVisualMetrics, &'static str> {
     if width == 0 || height == 0 {
@@ -236,7 +234,7 @@ mod tests {
 
     #[test]
     fn mandelbrot_membership_detects_inside_outside() {
-        assert!(mandelbrot_membership(Complex::new(0.0, 0.0), 50));
-        assert!(!mandelbrot_membership(Complex::new(2.0, 0.0), 10));
+        assert!(mandelbrot_membership(num_complex::Complex64::new(0.0, 0.0), 50));
+        assert!(!mandelbrot_membership(num_complex::Complex64::new(2.0, 0.0), 10));
     }
 }
