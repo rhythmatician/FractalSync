@@ -172,13 +172,14 @@ class LossVisualMetrics:
 
     @staticmethod
     def mandelbrot_distance_estimate(
-        c: torch.Tensor,
+        c: torch.Tensor | list[complex],
     ) -> torch.Tensor:
         """Estimate distance to the Mandelbrot boundary for a batch of points.
 
         Accepts either:
         - a complex-valued tensor of shape (batch,) (dtype=torch.cfloat or torch.cdouble), or
-        - a real tensor of shape (batch, 2) where columns are (real, imag).
+        - a real tensor of shape (batch, 2) where columns are (real, imag), or
+        - a list of complex numbers.
 
         This estimator samples the precomputed signed distance field via the
         runtime-core sampler (fast, non-differentiable). If the sampler is not
@@ -187,7 +188,11 @@ class LossVisualMetrics:
 
         Returns a real float tensor of shape (batch,) with non-negative distances.
         """
-        if c.dtype.is_complex:
+        if isinstance(c, list):
+            c_complex = torch.tensor(
+                c, dtype=torch.complex64
+            )  # use complex64 for compatibility
+        elif c.dtype.is_complex:
             c_complex = c.view(-1)
         else:
             # handle (N, 2) real/imag pairs
