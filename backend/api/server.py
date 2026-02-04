@@ -9,6 +9,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+# Ensure /backend/ is the cwd
+import os
+
+os.chdir(Path(__file__).parent.parent)
+
 app = FastAPI(title="FractalSync Training API")
 
 
