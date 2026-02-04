@@ -465,7 +465,7 @@ fn compute_runtime_visual_metrics(py: Python,
     width: usize,
     height: usize,
     channels: usize,
-    c: &PyComplex,
+    c: &Bound<PyComplex>,
     max_iter: usize,
 ) -> PyResult<PyObject> {
     let metrics = compute_runtime_metrics(
