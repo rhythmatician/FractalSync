@@ -5,6 +5,7 @@ import os
 from argparse import Namespace
 from pathlib import Path
 from train import execute_training_workflow
+from scripts.remove_epoch1_models import main as clean_up
 
 
 def test_trainer_e2e():
@@ -61,6 +62,9 @@ def test_trainer_e2e():
     assert any(
         line.startswith("[OK] Training complete!") for line in result_stdout
     ), "Trainer script did not complete successfully"
+
+    # Clean up epoch 1 models created during the test
+    clean_up()
 
 
 def test_execute_training_workflow(monkeypatch, tmp_path, capsys):
