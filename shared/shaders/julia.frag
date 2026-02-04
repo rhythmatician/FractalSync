@@ -48,9 +48,8 @@ uniform float u_fresnelPower; // exponent for fresnel falloff
 uniform float u_fresnelBoost; // how much fresnel multiplies specular
 uniform float u_rimIntensity;  // additive rim highlight from demSig
 
-// Normal blending: 0 = DE normal only, 1 = gradient normal only
-// 1.0 = prefer gradient-derived normals when available, 0.0 = prefer analytic normals
-uniform float u_normalBlend;
+// Preference bit: 1.0 = prefer gradient-derived normals when available, 0.0 = prefer analytic normals
+uniform float u_preferGradientNormals;
 
 const float PI = 3.141592653589793;
 const float ESC_RADIUS_2 = 1.0e10;
@@ -429,7 +428,7 @@ vec3 shadePixel(vec2 fragCoord) {
         float hs = max(u_heightScale, 1.0e-8);
         vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
         vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
-        float blend = clamp(u_normalBlend, 0.0, 1.0);
+        float blend = clamp(u_preferGradientNormals, 0.0, 1.0);
         N3 = normalize(mix(Nd, Ng, blend));
         usedNormal = N3.xy;
       }
@@ -443,7 +442,7 @@ vec3 shadePixel(vec2 fragCoord) {
           float hs = max(u_heightScale, 1.0e-8);
           vec3 Ng = normalize(vec3(grad.x, grad.y, hs));
           vec3 Nd = normalize(vec3(normal.x, normal.y, 1.0));
-          float blend = clamp(u_normalBlend, 0.0, 1.0);
+          float blend = clamp(u_preferGradientNormals, 0.0, 1.0);
           // In cheap mode, favor DE a bit to preserve crispness while avoiding spikes
           float cheapBlend = mix(0.5, blend, 0.8);
           N3 = normalize(mix(Nd, Ng, cheapBlend));

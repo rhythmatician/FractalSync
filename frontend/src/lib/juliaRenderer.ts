@@ -71,11 +71,11 @@ export class JuliaRenderer {
   private uFdEpsLocation: WebGLUniformLocation | null = null;
   private uHeightScaleLocation: WebGLUniformLocation | null = null;
 
-  // Fresnel / rim / normal-blend uniform locations
+  // Fresnel / rim / normal preference uniform locations
   private uFresnelPowerLocation: WebGLUniformLocation | null = null;
   private uFresnelBoostLocation: WebGLUniformLocation | null = null;
   private uRimIntensityLocation: WebGLUniformLocation | null = null;
-  private uNormalBlendLocation: WebGLUniformLocation | null = null;
+  private uPreferGradientNormalsLocation: WebGLUniformLocation | null = null;
 
   // Low-cost FD/gating uniform locations
   private uFdIterLowLocation: WebGLUniformLocation | null = null;
@@ -241,7 +241,7 @@ export class JuliaRenderer {
     this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
     this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
     this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
-    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
+    this.uPreferGradientNormalsLocation = gl.getUniformLocation(this.program, 'u_preferGradientNormals');
 
     // Fullscreen quad
     const positionBuffer = gl.createBuffer();
@@ -409,7 +409,7 @@ export class JuliaRenderer {
     gl.uniform1f(this.uFresnelBoostLocation!, this.fresnelBoost);
     gl.uniform1f(this.uRimIntensityLocation!, this.rimIntensity);
     // Convert boolean preference to numeric uniform (1.0 = prefer gradient normals, 0.0 = prefer analytic normals)
-    gl.uniform1f(this.uNormalBlendLocation!, this.preferGradientNormals ? 1.0 : 0.0);
+    gl.uniform1f(this.uPreferGradientNormalsLocation!, this.preferGradientNormals ? 1.0 : 0.0);
 
     // Debug: log first frame
     if (this.time === 0) {
