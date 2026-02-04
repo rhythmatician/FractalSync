@@ -14,3 +14,4 @@ python-multipart>=0.0.6
 tqdm
 pytest
 moderngl>=5.8.0
+httpx>=0.28.0
