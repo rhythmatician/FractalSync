@@ -134,7 +134,7 @@ def set_distance_field_py(
     data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float
 ) -> None: ...
 def sample_distance_field_py(
-    x_coords: Sequence[float], y_coords: Sequence[float]
+    coords: Sequence[complex],
 ) -> list[float]: ...
 def get_builtin_distance_field_py(
     name: str,
@@ -144,8 +144,7 @@ def compute_runtime_visual_metrics(
     width: int,
     height: int,
     channels: int,
-    c_real: float,
-    c_imag: float,
+    c: complex,
     max_iter: int = ...,
 ) -> RuntimeVisualMetrics: ...
 def lobe_point_at_angle(

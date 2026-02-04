@@ -292,10 +292,15 @@ fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, y
     }
 }
 
-/// Sample a loaded distance field at arrays of (x_reals, y_imags).
+/// Sample a loaded distance field at complex-valued coordinates.
 #[pyfunction]
-fn sample_distance_field_py(x_coords: Vec<f64>, y_coords: Vec<f64>) -> PyResult<Vec<f32>> {
-    match sample_distance_field(&x_coords, &y_coords) {
+fn sample_distance_field_py(py: Python, coords: Vec<Py<PyComplex>>) -> PyResult<Vec<f32>> {
+    let mut points = Vec::with_capacity(coords.len());
+    for coord in coords {
+        let coord = coord.bind(py);
+        points.push(RustComplex::new(coord.real(), coord.imag()));
+    }
+    match sample_distance_field(&points) {
         Ok(v) => Ok(v),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
@@ -454,14 +459,13 @@ impl From<RustRuntimeVisualMetrics> for RuntimeVisualMetrics {
 
 /// Compute runtime visual metrics from an image buffer and Julia seed.
 #[pyfunction]
-#[pyo3(signature = (image, width, height, channels, c_real, c_imag, max_iter=100))]
+#[pyo3(signature = (image, width, height, channels, c, max_iter=100))]
 fn compute_runtime_visual_metrics(py: Python, 
     image: Vec<f64>,
     width: usize,
     height: usize,
     channels: usize,
-    c_real: f64,
-    c_imag: f64,
+    c: &PyComplex,
     max_iter: usize,
 ) -> PyResult<PyObject> {
     let metrics = compute_runtime_metrics(
@@ -469,7 +473,7 @@ fn compute_runtime_visual_metrics(py: Python,
         width,
         height,
         channels,
-        RustComplex::new(c_real, c_imag),
+        RustComplex::new(c.real(), c.imag()),
         max_iter,
     )
     .map_err(|message| pyo3::exceptions::PyValueError::new_err(message))?;
@@ -609,11 +613,11 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
 
     // Top-level functions
     let funcs = PyDict::new_bound(py);
-    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c_real: float, c_imag: float, max_iter: int = 100) -> RuntimeVisualMetrics")?;
+    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c: complex, max_iter: int = 100) -> RuntimeVisualMetrics")?;
     funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
     funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
     funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
-    funcs.set_item("sample_distance_field_py", "(x_coords: Sequence[float], y_coords: Sequence[float]) -> list[float]")?;
+    funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
     funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation

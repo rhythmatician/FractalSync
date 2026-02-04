@@ -13,10 +13,10 @@
  */
 
 import fragSrc from './shaders/julia.frag?raw';
+import type { Complex } from './orbitSynthesizer';
 
 export interface VisualParameters {
-  juliaReal: number;
-  juliaImag: number;
+  juliaSeed: Complex;
   colorHue: number;    // treated as palette phase shift in [0,1)
   colorSat: number;    // treated as saturation mix [0,1]
   colorBright: number; // treated as light intensity mix [0,1]
@@ -127,15 +127,17 @@ export class JuliaRenderer {
     this.gl = gl;
 
     this.currentParams = {
-      juliaReal: -0.7269,
-      juliaImag: 0.1889,
+      juliaSeed: { real: -0.7269, imag: 0.1889 },
       colorHue: 0.0,
       colorSat: 0.85,
       colorBright: 0.9,
       zoom: 1.0,
       speed: 0.5
     };
-    this.targetParams = { ...this.currentParams };
+    this.targetParams = {
+      ...this.currentParams,
+      juliaSeed: { ...this.currentParams.juliaSeed }
+    };
 
     this.initWebGL();
   }
@@ -252,11 +254,17 @@ export class JuliaRenderer {
   }
 
   updateParameters(params: VisualParameters): void {
-    this.targetParams = { ...params };
+    this.targetParams = {
+      ...params,
+      juliaSeed: { ...params.juliaSeed }
+    };
   }
 
   getCurrentParameters(): VisualParameters {
-    return { ...this.currentParams };
+    return {
+      ...this.currentParams,
+      juliaSeed: { ...this.currentParams.juliaSeed }
+    };
   }
 
   private wrap01(x: number): number {
@@ -277,8 +285,8 @@ export class JuliaRenderer {
   private interpolateParams(_dt: number): void {
     const smoothing = 0.12;
 
-    this.currentParams.juliaReal += (this.targetParams.juliaReal - this.currentParams.juliaReal) * smoothing;
-    this.currentParams.juliaImag += (this.targetParams.juliaImag - this.currentParams.juliaImag) * smoothing;
+    this.currentParams.juliaSeed.real += (this.targetParams.juliaSeed.real - this.currentParams.juliaSeed.real) * smoothing;
+    this.currentParams.juliaSeed.imag += (this.targetParams.juliaSeed.imag - this.currentParams.juliaSeed.imag) * smoothing;
 
     this.currentParams.colorHue = this.lerpHue(this.currentParams.colorHue, this.targetParams.colorHue, smoothing);
 
@@ -299,7 +307,7 @@ export class JuliaRenderer {
     gl.useProgram(this.program);
 
     // Core uniforms
-    gl.uniform2f(this.uJuliaSeedLocation!, this.currentParams.juliaReal, this.currentParams.juliaImag);
+    gl.uniform2f(this.uJuliaSeedLocation!, this.currentParams.juliaSeed.real, this.currentParams.juliaSeed.imag);
     gl.uniform2f(this.uResolutionLocation!, this.canvas.width, this.canvas.height);
     gl.uniform1f(this.uTimeLocation!, this.time);
 
@@ -352,7 +360,7 @@ export class JuliaRenderer {
     // Debug: log first frame
     if (this.time === 0) {
       console.log('First render:', {
-        seed: [this.currentParams.juliaReal, this.currentParams.juliaImag],
+        seed: [this.currentParams.juliaSeed.real, this.currentParams.juliaSeed.imag],
         resolution: [this.canvas.width, this.canvas.height],
         zoom: this.currentParams.zoom,
         maxIter: this.MAX_ITER_DEFAULT,

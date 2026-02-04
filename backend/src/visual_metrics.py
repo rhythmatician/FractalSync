@@ -19,10 +19,8 @@ def sample_distance_field(c: complex) -> float:
 
     Returns unsigned distance (abs of signed distance) as float.
     """
-    real = float(c.real)
-    imag = float(c.imag)
-
-    sampled_list = runtime_core.sample_distance_field_py([real], [imag])
+    coord = complex(c)
+    sampled_list = runtime_core.sample_distance_field_py([coord])
     sampled = sampled_list[0]
     return abs(sampled)
 
@@ -35,13 +33,9 @@ def _sample_distance_field(c_complex: torch.Tensor) -> torch.Tensor:
 
     Returns unsigned distances (abs of signed distance) as float tensor (N,).
     """
-    real = c_complex.real.to(torch.float32)
-    imag = c_complex.imag.to(torch.float32)
-
     # Use Rust sampler if available for speed
-    xs = real.detach().cpu().numpy().tolist()
-    ys = imag.detach().cpu().numpy().tolist()
-    sampled_list = runtime_core.sample_distance_field_py(xs, ys)
+    coords = c_complex.detach().cpu().numpy().tolist()
+    sampled_list = runtime_core.sample_distance_field_py(coords)
     sampled = torch.tensor(sampled_list, dtype=torch.float32, device=c_complex.device)
     return sampled.abs()
 
@@ -122,8 +116,7 @@ class LossVisualMetrics:
 
     def render_julia_set(
         self,
-        seed_real: float,
-        seed_imag: float,
+        seed: complex,
         width: int = 64,
         height: int = 64,
         zoom: float = 1.0,
@@ -136,8 +129,7 @@ class LossVisualMetrics:
         This is a CPU-based renderer for training.
 
         Args:
-            seed_real: Real part of Julia seed
-            seed_imag: Imaginary part of Julia seed
+            seed: Julia seed
             width: Image width
             height: Image height
             zoom: Zoom level
@@ -159,7 +151,7 @@ class LossVisualMetrics:
         Z = C.copy()
         iterations = np.zeros_like(C, dtype=np.int32)
 
-        c = seed_real + 1j * seed_imag
+        c = complex(seed)
 
         for i in range(max_iter):
             mask = np.abs(Z) <= 2.0

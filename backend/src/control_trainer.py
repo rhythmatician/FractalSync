@@ -357,24 +357,29 @@ class ControlTrainer:
             for i in range(batch_size):
                 if self.julia_renderer is not None:
                     try:
+                        seed = complex(
+                            julia_real[i].detach().item(),
+                            julia_imag[i].detach().item(),
+                        )
                         image = self.julia_renderer.render(
-                            seed_real=julia_real[i].detach().item(),
-                            seed_imag=julia_imag[i].detach().item(),
+                            seed=seed,
                             max_iter=self.julia_max_iter,
                         )
                     except Exception as e:
                         logger.warning(f"GPU rendering failed: {e}")
                         image = self.visual_metrics.render_julia_set(
-                            seed_real=julia_real[i].detach().item(),
-                            seed_imag=julia_imag[i].detach().item(),
+                            seed=seed,
                             width=self.julia_resolution,
                             height=self.julia_resolution,
                             max_iter=self.julia_max_iter,
                         )
                 else:
+                    seed = complex(
+                        julia_real[i].detach().item(),
+                        julia_imag[i].detach().item(),
+                    )
                     image = self.visual_metrics.render_julia_set(
-                        seed_real=julia_real[i].detach().item(),
-                        seed_imag=julia_imag[i].detach().item(),
+                        seed=seed,
                         width=self.julia_resolution,
                         height=self.julia_resolution,
                         max_iter=self.julia_max_iter,
