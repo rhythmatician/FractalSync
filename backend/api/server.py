@@ -2,19 +2,27 @@
 FastAPI server for model serving.
 """
 
+import datetime
 import json
+import logging
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-# Ensure /backend/ is the cwd
-import os
+# Configure basic logging for server diagnostics
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Ensure /backend/ is the cwd
 os.chdir(Path(__file__).parent.parent)
 
 app = FastAPI(title="FractalSync Training API")
+
+# Log current working directory on import/startup to help diagnose which process is running
+logger.info("Server imported. CWD=%s", Path.cwd())
 
 
 # CORS middleware
@@ -84,6 +92,78 @@ async def get_shared_shader(name: str):
     return FileResponse(
         str(shader_path), media_type="text/plain", filename=shader_path.name
     )
+
+
+@app.get("/api/ping")
+async def get_ping():
+    """Diagnostic ping that returns server readiness and current working directory."""
+    return {"ok": True, "cwd": str(Path.cwd())}
+
+
+@app.post("/api/telemetry")
+async def post_telemetry(request: Request):
+    """Append telemetry JSON payload to logs/telemetry.log with timestamp and client info.
+
+    Reads the JSON body robustly and logs an INFO record on receipt. This makes it easier
+    to debug when the frontend isn't sending telemetry or when writes fail.
+    """
+    try:
+        payload = await request.json()
+    except Exception as e:
+        logger.warning("Telemetry: failed to decode JSON body: %s", e)
+        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}")
+
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file = logs_dir / "telemetry.log"
+
+    entry = {
+        "ts": datetime.datetime.utcnow().isoformat() + "Z",
+        "client": request.client.host if request.client else None,
+        "payload": payload,
+    }
+
+    logger.info(
+        "Telemetry received: client=%s size=%d",
+        entry["client"],
+        len(json.dumps(payload)),
+    )
+
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        logger.exception("Failed to write telemetry to %s: %s", log_file, e)
+        raise HTTPException(status_code=500, detail=f"Failed to write telemetry: {e}")
+
+    return {"status": "ok"}
+
+
+@app.get("/api/telemetry/last")
+async def get_last_telemetry(n: int = 50):
+    """Return the last `n` JSON telemetry lines as a JSON list (debug helper)."""
+    log_file = Path("logs") / "telemetry.log"
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="No telemetry log found")
+
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+    except Exception as e:
+        logger.exception("Failed to read telemetry log: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to read telemetry: {e}")
+
+    # Return up to n last entries parsed as JSON
+    last_lines = lines[-n:]
+    entries = []
+    for line in last_lines:
+        try:
+            entries.append(json.loads(line))
+        except Exception:
+            # skip malformed lines
+            continue
+
+    return {"count": len(entries), "entries": entries}
 
 
 if __name__ == "__main__":
