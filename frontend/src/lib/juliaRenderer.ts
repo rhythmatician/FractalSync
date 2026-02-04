@@ -237,18 +237,6 @@ export class JuliaRenderer {
     this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
     this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
 
-    // Fresnel / rim / normal-blend
-    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
-    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
-    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
-    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
-
-    // Fresnel / rim / normal-blend
-    this.uFresnelPowerLocation = gl.getUniformLocation(this.program, 'u_fresnelPower');
-    this.uFresnelBoostLocation = gl.getUniformLocation(this.program, 'u_fresnelBoost');
-    this.uRimIntensityLocation = gl.getUniformLocation(this.program, 'u_rimIntensity');
-    this.uNormalBlendLocation = gl.getUniformLocation(this.program, 'u_normalBlend');
-
     // Fullscreen quad
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
