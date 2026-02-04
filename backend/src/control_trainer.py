@@ -331,11 +331,7 @@ class ControlTrainer:
                     radius_scale=1.0,
                 )
                 c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
-                c_values.append([c.real, c.imag])
-
-            c_tensor = torch.tensor(c_values, dtype=torch.float32, device=self.device)
-            julia_real = c_tensor[:, 0]
-            julia_imag = c_tensor[:, 1]
+                c_values.append(c)
 
             # Extract audio features for correlation
             n_features_per_frame = self.feature_extractor.num_features_per_frame()
@@ -355,12 +351,9 @@ class ControlTrainer:
 
             prev_image = None
             for i in range(batch_size):
+                seed = c_values[i]
                 if self.julia_renderer is not None:
                     try:
-                        seed = complex(
-                            julia_real[i].detach().item(),
-                            julia_imag[i].detach().item(),
-                        )
                         image = self.julia_renderer.render(
                             seed=seed,
                             max_iter=self.julia_max_iter,
@@ -374,10 +367,6 @@ class ControlTrainer:
                             max_iter=self.julia_max_iter,
                         )
                 else:
-                    seed = complex(
-                        julia_real[i].detach().item(),
-                        julia_imag[i].detach().item(),
-                    )
                     image = self.visual_metrics.render_julia_set(
                         seed=seed,
                         width=self.julia_resolution,
@@ -418,9 +407,8 @@ class ControlTrainer:
             spectral_rms = avg_features[:, 2]
 
             # Calculate the distance between `c` and the Mandelbrot set boundary
-            c_tensor_coords = torch.stack([julia_real, julia_imag], dim=1)
             distance_tensor = (
-                self.visual_metrics.mandelbrot_distance_estimate(c_tensor_coords)
+                self.visual_metrics.mandelbrot_distance_estimate(c_values)
                 .to(self.device)
                 .to(torch.float32)
             )
