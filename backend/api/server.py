@@ -69,11 +69,7 @@ async def get_model_metadata():
 @app.get("/api/shader/{name}")
 async def get_shared_shader(name: str):
     """Return a shared shader by name (whitelisted)."""
-    try:
-        from backend.src.shaders import get_shader_path
-    except Exception:
-        # fallback if import path differs
-        from src.shaders import get_shader_path
+    from src.shaders import get_shader_path
 
     try:
         shader_path = get_shader_path(name)
