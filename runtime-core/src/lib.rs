@@ -26,6 +26,7 @@
 pub mod geometry;
 pub mod controller;
 pub mod features;
+pub mod clock;
 pub mod visual_metrics;
 pub mod distance_field;
 

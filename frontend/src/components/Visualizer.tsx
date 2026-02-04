@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
+import type { SlowState } from '../lib/slowState';
 import { FullscreenToggle } from './FullscreenToggle';
 
 export function Visualizer() {
@@ -119,13 +120,13 @@ export function Visualizer() {
     loadModel();
   }, []);
 
-  const handleFeatures = async (features: number[]) => {
+  const handleSlowState = async (state: SlowState) => {
     if (!rendererRef.current) return;
 
     try {
-      if (modelRef.current && modelRef.current.isLoaded()) {
+      if (modelRef.current && modelRef.current.isLoaded() && state.features.length > 0) {
         // Run inference with the model
-        const params = await modelRef.current.infer(features);
+        const params = await modelRef.current.infer(state.features);
         
         // Update metrics display
         const modelMetrics = modelRef.current.getMetrics();
@@ -476,7 +477,7 @@ export function Visualizer() {
       </div>
 
       {isVisualizing && (
-        <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} audioFile={audioFile} />
+        <AudioCapture onSlowState={handleSlowState} enabled={isVisualizing} audioFile={audioFile} />
       )}
     </div>
   );
