@@ -251,20 +251,6 @@ impl OrbitState {
 }
 
 
-/// Load a precomputed signed distance field (.npy) and optional .json metadata.
-///
-/// Note: This function is not currently implemented and will always return an error.
-/// The underlying Rust implementation (`crate::distance_field::load_distance_field`)
-/// does not support loading .npy files. Use `set_distance_field_py` to provide an
-/// in-memory distance field, or `get_builtin_distance_field_py` to use an embedded
-/// distance field instead.
-#[pyfunction]
-fn load_distance_field_py(path: &str) -> PyResult<()> {
-    match load_distance_field(path) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
-    }
-}
 
 /// Set the in-memory distance field from a nested Python list of floats.
 /// Accepts a list of rows [[r0c0, r0c1, ...], [r1c0, ...], ...] plus bounding box.
@@ -332,11 +318,6 @@ fn __getattr__(py: Python, name: &str) -> PyResult<PyObject> {
         "set_distance_field_py" => {
             let func = wrap_pyfunction!(set_distance_field_py, module.clone())?;
             module.setattr("set_distance_field_py", func.clone())?;
-            Ok(func.into())
-        }
-        "load_distance_field_py" => {
-            let func = wrap_pyfunction!(load_distance_field_py, module.clone())?;
-            module.setattr("load_distance_field_py", func.clone())?;
             Ok(func.into())
         }
         "get_builtin_distance_field_py" => {
@@ -551,7 +532,6 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
     // Distance-field helpers
-    m.add_function(wrap_pyfunction!(load_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
@@ -615,7 +595,7 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     let funcs = PyDict::new_bound(py);
     funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c: complex, max_iter: int = 100) -> RuntimeVisualMetrics")?;
     funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
-    funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
+
     funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
     funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
     funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;

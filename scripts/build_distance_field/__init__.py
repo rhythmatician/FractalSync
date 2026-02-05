@@ -2,8 +2,7 @@
 Build a signed distance field (SDF) for the Mandelbrot set.
 
 Outputs:
-- <out>.npy  : float32 signed distance field (positive outside, negative inside)
-- <out>.bin  : raw little-endian float32 array (row-major), same as .npy
+- <out>.bin  : raw little-endian float32 array (row-major) — canonical runtime artifact
 - <out>.json : metadata (bounds, res, dx/dy, max_iter, bailout, etc.)
 - <out>.png  : visualization preview (8-bit), optional
 
@@ -768,12 +767,11 @@ def main() -> None:
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
 
-    npy_path = out_base.with_suffix(".npy")
     bin_path = out_base.with_suffix(".bin")
     json_path = out_base.with_suffix(".json")
     png_path = out_base.with_suffix(".png")
 
-    np.save(npy_path, signed)
+    # Write canonical runtime binary (.bin)
     with open(bin_path, "wb") as f:
         f.write(signed.astype("<f4").tobytes())
 
@@ -800,7 +798,6 @@ def main() -> None:
         print("Writing PNG preview...")
         save_preview_png(png_path, signed, png_scale=float(args.png_scale))
 
-    print(f"Saved: {npy_path}")
     print(f"Saved: {bin_path}")
     print(f"Saved: {json_path}")
     if args.png:
