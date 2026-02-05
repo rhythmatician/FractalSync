@@ -37,38 +37,59 @@ Notes / caveats:
 - The "inside" mask is an approximation (iteration-limited). Near the boundary, classification errors can occur.
   If you need more reliable distances near the boundary, raise --max-iter and/or consider generating an
   uncertainty band (not implemented here).
+- Optional DEM exterior replacement is available and enabled by default; use `--no-dem` to disable.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
+from numpy.typing import NDArray
 
 import numpy as np
 from PIL import Image
 from scipy import ndimage
-
 
 # -------------------------
 # Args / CLI
 # -------------------------
 
 
+@dataclass
+class Coords:
+    xmin: float
+    xmax: float
+    ymin: float
+    ymax: float
+
+
+@dataclass
+class DemParams:
+    enabled: bool
+    bailout: float
+    max_iter: int
+    eps: float
+    blend: float
+    band: float
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--out", type=Path, required=True, help="Output base path (suffix optional)."
+        "--out",
+        type=Path,
+        required=False,
+        help="Output base path (suffix optional). Defaults to 'runtime-core/data'.",
+        default=Path("runtime-core/data"),
     )
     p.add_argument(
         "--res", type=int, default=2048, help="Square resolution (res x res)."
     )
-
-    p.add_argument("--xmin", type=float, default=-2.5)
-    p.add_argument("--xmax", type=float, default=1.5)
-    p.add_argument("--ymin", type=float, default=-2.0)
-    p.add_argument("--ymax", type=float, default=2.0)
+    # Real (x) range: \([-2.0,\ 0.4711]\).Imaginary (y) range: Approximately \([-1.122,\ 1.122]\).Center: \((-0.875,\ 0)\).Dimensions: \(2.25\times 2.245\).
 
     p.add_argument("--max-iter", type=int, default=2048)
     p.add_argument("--bailout", type=float, default=2.0)
@@ -91,7 +112,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     # PNG output
-    p.add_argument("--png", action="store_true", help="Also output a preview PNG.")
+    p.add_argument(
+        "--png", action="store_true", help="Also output a preview PNG.", default=True
+    )
     p.add_argument(
         "--png-scale",
         type=float,
@@ -104,13 +127,60 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--supersample",
         type=int,
-        default=1,
+        default=2,
         help=(
             "Supersample factor for mask generation (1 = no supersampling). "
             "When >1 the mask is rendered at res*supersample, EDT is computed at that "
             "resolution and the resulting SDF is downsampled to the target res."
         ),
     )
+
+    # DEM exterior replacement (enabled by default; use --no-dem to disable)
+    p.add_argument(
+        "--no-dem",
+        action="store_true",
+        help="Disable DEM exterior replacement (enabled by default).",
+    )
+    p.add_argument(
+        "--dem-bailout",
+        type=float,
+        default=1e4,
+        help="Escape radius to use for DEM exterior computation (default: 1e4).",
+    )
+    p.add_argument(
+        "--dem-max-iter",
+        type=int,
+        default=None,
+        help=(
+            "Max iterations for DEM derivative loop. If omitted, falls back to --max-iter. "
+            "Increase for higher-fidelity DEM."
+        ),
+    )
+    p.add_argument(
+        "--dem-eps",
+        type=float,
+        default=1e-12,
+        help="Derivative magnitude threshold below which DEM is considered unstable.",
+    )
+    p.add_argument(
+        "--dem-blend",
+        type=float,
+        default=0.5,
+        help=(
+            "Blend factor between DEM and EDT for exterior pixels (0..1). "
+            "0 = keep EDT, 1 = pure DEM."
+        ),
+    )
+    p.add_argument(
+        "--dem-band",
+        type=float,
+        default=0.5,
+        help=(
+            "Only compute DEM for exterior pixels whose EDT <= dem_band (in plane units). "
+            "Smaller -> less work and less noise near far exterior points."
+        ),
+    )
+
     return p.parse_args()
 
 
@@ -126,17 +196,14 @@ def normalize_out_base(out: Path) -> Path:
 
 def build_mask_cpu(
     res: int,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
+    coords: Coords,
     max_iter: int,
     bailout: float,
-) -> np.ndarray:
+) -> NDArray:
     w = res
     h = res
-    xs = np.linspace(xmin, xmax, w, dtype=np.float64)
-    ys = np.linspace(ymin, ymax, h, dtype=np.float64)
+    xs = np.linspace(coords.xmin, coords.xmax, w, dtype=np.float64)
+    ys = np.linspace(coords.ymin, coords.ymax, h, dtype=np.float64)
     X, Y = np.meshgrid(xs, ys)
     C = X + 1j * Y
 
@@ -165,12 +232,9 @@ def build_mask_cpu(
 
 
 def build_signed_distance(
-    inside_mask: np.ndarray,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
-) -> Tuple[np.ndarray, float, float]:
+    inside_mask: NDArray,
+    coords: Coords,
+) -> Tuple[NDArray, float, float]:
     """
     Returns:
       signed: float32 SDF (positive outside, negative inside), in complex-plane units
@@ -180,15 +244,87 @@ def build_signed_distance(
     if w <= 1 or h <= 1:
         raise ValueError("res must be > 1")
 
-    dx = (xmax - xmin) / float(w - 1)
-    dy = (ymax - ymin) / float(h - 1)
+    dx = (coords.xmax - coords.xmin) / float(w - 1)
+    dy = (coords.ymax - coords.ymin) / float(h - 1)
 
     # distance_transform_edt: for each True element, distance to nearest False
     dist_to_outside = ndimage.distance_transform_edt(inside_mask, sampling=(dy, dx))
     dist_to_inside = ndimage.distance_transform_edt(~inside_mask, sampling=(dy, dx))
 
-    signed = (dist_to_inside - dist_to_outside).astype(np.float32)
+    signed = (dist_to_inside - dist_to_outside).astype(np.float32)  # type: ignore
     return signed, dx, dy
+
+
+# -------------------------
+# DEM: CPU exterior distance estimation helpers
+# -------------------------
+
+
+def compute_dem_for_point(c: complex, dem_params: DemParams) -> Optional[float]:
+    """Compute the exterior DEM (approximate unsigned distance) for c.
+
+    Returns DEM in complex-plane units or None if DEM is unstable or c is interior.
+    Uses derivative iteration: dz_{n+1} = 2*z_n*dz_n + 1, starting with z=0, dz=1.
+    """
+    z = 0 + 0j
+    dz = 1 + 0j
+    for _ in range(dem_params.max_iter):
+        # derivative update uses current z_n
+        dz = 2.0 * z * dz + 1.0
+        z = z * z + c
+        absz = abs(z)
+        if absz > dem_params.bailout:
+            absdz = abs(dz)
+            if absdz < dem_params.eps or absdz == 0.0:
+                return None
+            # distance estimate (exterior DEM formula)
+            try:
+                de = 2.0 * absz * math.log(absz) / absdz
+            except Exception:
+                return None
+            if not math.isfinite(de) or de <= 0.0:
+                return None
+            return float(de)
+    # did not escape -> interior or unknown
+    return None
+
+
+def apply_dem_to_sdf(
+    signed: NDArray,
+    coords: Coords,
+    dx: float,
+    dy: float,
+    dem_params: DemParams,
+) -> NDArray:
+    """Apply DEM exterior replacement to positive entries of `signed`.
+
+    Only processes exterior pixels with signed <= dem_params.band. Returns new signed array.
+    """
+    h, w = signed.shape
+    out = signed.copy()
+
+    # clamp interior to be <= 0
+    out[out < 0.0] = np.minimum(out[out < 0.0], 0.0)
+
+    # Iterate over candidate exterior pixels
+    for y in range(h):
+        yr = coords.ymin + y * dy
+        for x in range(w):
+            v = signed[y, x]
+            if v <= 0.0:
+                continue  # interior
+            if v > dem_params.band:
+                continue  # skip far exterior points
+            xr = coords.xmin + x * dx
+            c = complex(xr, yr)
+            de = compute_dem_for_point(c, dem_params)
+            if de is None:
+                continue  # fallback to EDT
+            # blend DEM and EDT
+            new_val = dem_params.blend * float(de) + (1.0 - dem_params.blend) * float(v)
+            out[y, x] = float(new_val)
+
+    return out
 
 
 # -------------------------
@@ -205,17 +341,60 @@ def _make_compute_src(local_size: int) -> str:
     return _COMPUTE_SRC.replace("LOCAL_SIZE", str(local_size))
 
 
+def _alloc_and_set_tile(
+    ctx,
+    prog,
+    res: int,
+    x0: int,
+    y0: int,
+    tile_w: int,
+    tile_h: int,
+    coords: Coords,
+    max_iter: int,
+    bailout2: float,
+    local_size: int,
+    extra_uniforms: Optional[dict] = None,
+):
+    """Allocate SSBO for a tile, bind it and set common uniforms.
+
+    Returns (ssbo, out_count, groups_x, groups_y).
+    """
+    out_count = tile_w * tile_h
+    ssbo = ctx.buffer(reserve=out_count * 4)
+    ssbo.bind_to_storage_buffer(binding=0)
+
+    prog["u_tile_w"].value = int(tile_w)
+    prog["u_tile_h"].value = int(tile_h)
+    prog["u_tile_x0"].value = int(x0)
+    prog["u_tile_y0"].value = int(y0)
+    prog["u_res"].value = int(res)
+
+    # Coordinate bounds (float/double uniforms)
+    prog["u_xmin"].value = coords.xmin  # type: ignore
+    prog["u_xmax"].value = coords.xmax  # type: ignore
+    prog["u_ymin"].value = coords.ymin  # type: ignore
+    prog["u_ymax"].value = coords.ymax  # type: ignore
+
+    prog["u_max_iter"].value = int(max_iter)
+    prog["u_bailout2"].value = bailout2  # type: ignore
+
+    if extra_uniforms:
+        for k, v in extra_uniforms.items():
+            prog[k].value = v  # type: ignore
+
+    groups_x = (tile_w + local_size - 1) // local_size
+    groups_y = (tile_h + local_size - 1) // local_size
+    return ssbo, out_count, groups_x, groups_y
+
+
 def _try_build_mask_gpu(
     res: int,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
+    coords: Coords,
     max_iter: int,
     bailout: float,
     batch: int,
     local_size: int,
-) -> Optional[np.ndarray]:
+) -> Optional[NDArray]:
     """
     Returns inside mask as bool array if successful, else None.
 
@@ -254,32 +433,21 @@ def _try_build_mask_gpu(
         for x0 in range(0, res, batch):
             tile_w = min(batch, res - x0)
 
-            # SSBO for tile mask (uint32)
-            out_count = tile_w * tile_h
-            ssbo = ctx.buffer(reserve=out_count * 4)
-
-            # Bind SSBO at binding = 0
-            ssbo.bind_to_storage_buffer(binding=0)
-
-            # Set uniforms
-            prog["u_tile_w"].value = int(tile_w)
-            prog["u_tile_h"].value = int(tile_h)
-            prog["u_tile_x0"].value = int(x0)
-            prog["u_tile_y0"].value = int(y0)
-            prog["u_res"].value = int(res)
-
-            # Coordinate bounds (float/double uniforms)
-            prog["u_xmin"].value = float(xmin)
-            prog["u_xmax"].value = float(xmax)
-            prog["u_ymin"].value = float(ymin)
-            prog["u_ymax"].value = float(ymax)
-
-            prog["u_max_iter"].value = int(max_iter)
-            prog["u_bailout2"].value = float(bailout2)
+            ssbo, out_count, groups_x, groups_y = _alloc_and_set_tile(
+                ctx,
+                prog,
+                res,
+                x0,
+                y0,
+                tile_w,
+                tile_h,
+                coords,
+                max_iter,
+                bailout2,
+                local_size,
+            )
 
             # Dispatch
-            groups_x = (tile_w + local_size - 1) // local_size
-            groups_y = (tile_h + local_size - 1) // local_size
             prog.run(group_x=groups_x, group_y=groups_y, group_z=1)
 
             # Read back
@@ -295,32 +463,120 @@ def _try_build_mask_gpu(
     return inside
 
 
+# -------------------------
+# DEM GPU compute shader path (mirrors mask tile dispatch)
+# -------------------------
+
+dem_shader_path = Path(__file__).parent / "mandelbrot_dem.comp"
+with open(dem_shader_path, "r") as f:
+    _DEM_COMPUTE_SRC = f.read()
+
+
+def _make_dem_compute_src(local_size: int) -> str:
+    if local_size <= 0:
+        raise ValueError("--local-size must be > 0")
+    return _DEM_COMPUTE_SRC.replace("LOCAL_SIZE", str(local_size))
+
+
+def _try_compute_dem_gpu(
+    res: int,
+    coords: Coords,
+    max_iter: int,
+    dem_bailout: float,
+    dem_eps: float,
+    batch: int,
+    local_size: int,
+) -> Optional[NDArray]:
+    """
+    Returns a float32 array with per-pixel DEM estimates if successful.
+
+    The shader writes:
+      -2.0 -> interior (did not escape)
+      -1.0 -> failure/unstable
+      >0.0 -> computed DEM distance
+
+    Returns None on failure to run (moderngl unavailable or compilation errors).
+    """
+    if batch <= 0 or batch > 2048:
+        raise ValueError("--batch must be in [1, 2048]")
+
+    try:
+        import moderngl  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        ctx = moderngl.create_standalone_context(require=430)
+    except Exception:
+        return None
+
+    dem_src = _make_dem_compute_src(local_size)
+    try:
+        prog = ctx.compute_shader(dem_src)
+    except Exception:
+        return None
+
+    bailout2 = float(dem_bailout) * float(dem_bailout)
+
+    dem_out = np.full((res, res), -2.0, dtype=np.float32)
+
+    # Tile over full image
+    for y0 in range(0, res, batch):
+        tile_h = min(batch, res - y0)
+        for x0 in range(0, res, batch):
+            tile_w = min(batch, res - x0)
+
+            ssbo, out_count, groups_x, groups_y = _alloc_and_set_tile(
+                ctx,
+                prog,
+                res,
+                x0,
+                y0,
+                tile_w,
+                tile_h,
+                coords,
+                max_iter,
+                bailout2,
+                local_size,
+                extra_uniforms={"u_dem_eps": float(dem_eps)},
+            )
+
+            # Dispatch
+            prog.run(group_x=groups_x, group_y=groups_y, group_z=1)
+
+            raw = ssbo.read()
+            arr = np.frombuffer(raw, dtype=np.float32, count=out_count).reshape(
+                (tile_h, tile_w)
+            )
+            dem_out[y0 : y0 + tile_h, x0 : x0 + tile_w] = arr
+
+            ssbo.release()
+
+    ctx.release()
+    return dem_out
+
+
 def build_mask(
     res: int,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
+    coords: Coords,
     max_iter: int,
     bailout: float,
     force_cpu: bool,
     batch: int,
     local_size: int,
-) -> Tuple[np.ndarray, str]:
+) -> Tuple[NDArray, str]:
     if force_cpu:
         return (
-            build_mask_cpu(res, xmin, xmax, ymin, ymax, max_iter, bailout),
+            build_mask_cpu(res, coords, max_iter, bailout),
             "cpu",
         )
 
-    inside = _try_build_mask_gpu(
-        res, xmin, xmax, ymin, ymax, max_iter, bailout, batch, local_size
-    )
+    inside = _try_build_mask_gpu(res, coords, max_iter, bailout, batch, local_size)
     if inside is not None:
         return inside, "gpu"
 
     return (
-        build_mask_cpu(res, xmin, xmax, ymin, ymax, max_iter, bailout),
+        build_mask_cpu(res, coords, max_iter, bailout),
         "cpu(fallback)",
     )
 
@@ -330,7 +586,7 @@ def build_mask(
 # -------------------------
 
 
-def save_preview_png(path: Path, signed: np.ndarray, png_scale: float) -> None:
+def save_preview_png(path: Path, signed: NDArray, png_scale: float) -> None:
     """
     Absolute-distance visualization (grayscale):
       v = clamp(|signed| / png_scale, 0..1)
@@ -352,6 +608,12 @@ def save_preview_png(path: Path, signed: np.ndarray, png_scale: float) -> None:
 
 
 def main() -> None:
+    coords = Coords(
+        xmin=-2.0,
+        xmax=0.4711,
+        ymin=-1.122,
+        ymax=1.122,
+    )
     args = parse_args()
     out_base = normalize_out_base(args.out)
 
@@ -367,16 +629,13 @@ def main() -> None:
 
     print(
         f"Building inside mask (res={res}) in box "
-        f"x=[{args.xmin},{args.xmax}] y=[{args.ymin},{args.ymax}] "
+        f"x=[{coords.xmin},{coords.xmax}] y=[{coords.ymin},{coords.ymax}] "
         f"max_iter={args.max_iter} bailout={args.bailout}"
     )
 
     inside, mode = build_mask(
         res=res,
-        xmin=args.xmin,
-        xmax=args.xmax,
-        ymin=args.ymin,
-        ymax=args.ymax,
+        coords=coords,
         max_iter=args.max_iter,
         bailout=args.bailout,
         force_cpu=bool(args.cpu),
@@ -388,19 +647,14 @@ def main() -> None:
     # If supersampling is enabled, render mask at higher resolution, compute EDT, then downsample the SDF
     if args.supersample <= 1:
         print("Computing signed distance transform (CPU, scipy)...")
-        signed, dx, dy = build_signed_distance(
-            inside, args.xmin, args.xmax, args.ymin, args.ymax
-        )
+        signed, dx, dy = build_signed_distance(inside, coords)
     else:
         ss = int(args.supersample)
         high_res = res * ss
         print(f"Supersampling mask at {ss}x => high_res={high_res}")
         high_mask, mode_high = build_mask(
             res=high_res,
-            xmin=args.xmin,
-            xmax=args.xmax,
-            ymin=args.ymin,
-            ymax=args.ymax,
+            coords=coords,
             max_iter=args.max_iter,
             bailout=args.bailout,
             force_cpu=bool(args.cpu),
@@ -409,17 +663,43 @@ def main() -> None:
         )
         print(f"Mask generation mode (high-res): {mode_high}")
         print("Computing signed distance transform at high resolution (CPU, scipy)...")
-        signed_high, dx_high, dy_high = build_signed_distance(
-            high_mask, args.xmin, args.xmax, args.ymin, args.ymax
-        )
+        signed_high, dx_high, dy_high = build_signed_distance(high_mask, coords)
         # Downsample signed_high to target res using cubic interpolation
         zoom_factor = 1.0 / float(ss)
-        signed = ndimage.zoom(signed_high, (zoom_factor, zoom_factor), order=3)
+
+        signed: NDArray[np.float32] = ndimage.zoom(
+            signed_high, (zoom_factor, zoom_factor), order=3
+        )  # pyright: ignore[reportAssignmentType]
         # Ensure final shape matches (res,res)
         signed = signed[:res, :res]
-        dx = (args.xmax - args.xmin) / float(res - 1)
-        dy = (args.ymax - args.ymin) / float(res - 1)
+        dx = (coords.xmax - coords.xmin) / float(res - 1)
+        dy = (coords.ymax - coords.ymin) / float(res - 1)
         mode = f"supersampled_{mode_high}"
+
+    # Apply DEM exterior replacement by default unless explicitly disabled
+    dem_enabled = not bool(args.no_dem)
+    dem_params = DemParams(
+        enabled=dem_enabled,
+        bailout=float(args.dem_bailout),
+        max_iter=(
+            int(args.dem_max_iter)
+            if args.dem_max_iter is not None
+            else int(args.max_iter)
+        ),
+        eps=float(args.dem_eps),
+        blend=float(args.dem_blend),
+        band=float(args.dem_band),
+    )
+    if dem_enabled:
+        print("Applying DEM exterior replacement (CPU)...")
+        signed = apply_dem_to_sdf(
+            signed,
+            coords,
+            dx,
+            dy,
+            dem_params,
+        )
+        mode = f"{mode}+dem"
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
 
@@ -433,16 +713,17 @@ def main() -> None:
         f.write(signed.astype("<f4").tobytes())
 
     meta = {
-        "xmin": float(args.xmin),
-        "xmax": float(args.xmax),
-        "ymin": float(args.ymin),
-        "ymax": float(args.ymax),
+        "xmin": float(coords.xmin),
+        "xmax": float(coords.xmax),
+        "ymin": float(coords.ymin),
+        "ymax": float(coords.ymax),
         "res": int(res),
         "dx": float(dx),
         "dy": float(dy),
         "max_iter": int(args.max_iter),
         "bailout": float(args.bailout),
         "mask_mode": mode,
+        "dem": dem_params.__dict__,
         "layout": "row-major; signed[y][x]; y increases with row index (ymin->ymax)",
         "sign_convention": "positive outside, negative inside",
         "note": "Inside mask is iteration-limited; near-boundary classification errors are possible.",
