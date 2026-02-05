@@ -84,10 +84,10 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         required=False,
         help="Output base path (suffix optional). Defaults to 'runtime-core/data'.",
-        default=Path("runtime-core/data"),
+        default=Path("runtime-core/data/mandelbrot_distance"),
     )
     p.add_argument(
-        "--res", type=int, default=2048, help="Square resolution (res x res)."
+        "--res", type=int, default=1024, help="Square resolution (res x res)."
     )
     # Real (x) range: \([-2.0,\ 0.4711]\).Imaginary (y) range: Approximately \([-1.122,\ 1.122]\).Center: \((-0.875,\ 0)\).Dimensions: \(2.25\times 2.245\).
 
@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--batch",
         type=int,
-        default=2048,
+        default=1024,
         help="Max GPU batch/tile size (square). Must be <= 2048 per request.",
     )
     p.add_argument(
@@ -181,6 +181,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
 
+    p.add_argument(
+        "--dem-gpu",
+        action="store_true",
+        help="Use GPU-based DEM compute shader (experimental).",
+        default=True,
+    )
+
     return p.parse_args()
 
 
@@ -234,7 +241,7 @@ def build_mask_cpu(
 def build_signed_distance(
     inside_mask: NDArray,
     coords: Coords,
-) -> Tuple[NDArray, float, float]:
+) -> Tuple[NDArray[np.float32], float, float]:
     """
     Returns:
       signed: float32 SDF (positive outside, negative inside), in complex-plane units
@@ -296,9 +303,9 @@ def apply_dem_to_sdf(
     dy: float,
     dem_params: DemParams,
 ) -> NDArray:
-    """Apply DEM exterior replacement to positive entries of `signed`.
+    """Apply DEM exterior replacement using per-point CPU DEM computations.
 
-    Only processes exterior pixels with signed <= dem_params.band. Returns new signed array.
+    Only processes exterior pixels with EDT <= dem_params.band. Returns new signed array.
     """
     h, w = signed.shape
     out = signed.copy()
@@ -324,6 +331,44 @@ def apply_dem_to_sdf(
             new_val = dem_params.blend * float(de) + (1.0 - dem_params.blend) * float(v)
             out[y, x] = float(new_val)
 
+    return out
+
+
+def apply_dem_from_dem_array(
+    signed: NDArray,
+    dem_arr: NDArray,
+    dem_params: DemParams,
+) -> NDArray:
+    """Apply DEM replacement from a precomputed dem array (shader output).
+
+    dem_arr uses sentinel values:
+      >0.0 : DEM distance (plane units)
+      -1.0 : failure/unstable (leave EDT unchanged)
+      -2.0 : interior / did not escape (leave EDT unchanged)
+
+    Only replaces EDT where dem_arr > 0 and EDT <= dem_params.band.
+    """
+    h, w = signed.shape
+    if dem_arr.shape != (h, w):
+        raise ValueError("dem_arr shape must match signed shape")
+
+    out = signed.copy()
+
+    for y in range(h):
+        for x in range(w):
+            edt = signed[y, x]
+            if edt <= 0.0:
+                continue
+            if edt > dem_params.band:
+                continue
+            de = dem_arr[y, x]
+            if de > 0.0:
+                out[y, x] = dem_params.blend * float(de) + (
+                    1.0 - dem_params.blend
+                ) * float(edt)
+            else:
+                # sentinel or interior: do not change (fallback to EDT)
+                continue
     return out
 
 
@@ -615,7 +660,7 @@ def main() -> None:
         ymax=1.122,
     )
     args = parse_args()
-    out_base = normalize_out_base(args.out)
+    out_base = normalize_out_base(Path(f"{args.out}_{args.res}"))
 
     res = int(args.res)
     if res <= 1:
@@ -663,11 +708,11 @@ def main() -> None:
         )
         print(f"Mask generation mode (high-res): {mode_high}")
         print("Computing signed distance transform at high resolution (CPU, scipy)...")
-        signed_high, dx_high, dy_high = build_signed_distance(high_mask, coords)
+        signed_high, _, _ = build_signed_distance(high_mask, coords)
         # Downsample signed_high to target res using cubic interpolation
         zoom_factor = 1.0 / float(ss)
 
-        signed: NDArray[np.float32] = ndimage.zoom(
+        signed: NDArray[np.float32] = ndimage.zoom(  # type: ignore
             signed_high, (zoom_factor, zoom_factor), order=3
         )  # pyright: ignore[reportAssignmentType]
         # Ensure final shape matches (res,res)
@@ -691,15 +736,35 @@ def main() -> None:
         band=float(args.dem_band),
     )
     if dem_enabled:
-        print("Applying DEM exterior replacement (CPU)...")
-        signed = apply_dem_to_sdf(
-            signed,
-            coords,
-            dx,
-            dy,
-            dem_params,
-        )
-        mode = f"{mode}+dem"
+        if getattr(args, "dem_gpu", False):
+            print("Attempting GPU DEM (experimental)...")
+            dem_out = _try_compute_dem_gpu(
+                res=res,
+                coords=coords,
+                max_iter=dem_params.max_iter,
+                dem_bailout=dem_params.bailout,
+                dem_eps=dem_params.eps,
+                batch=int(args.batch),
+                local_size=int(args.local_size),
+            )
+            if dem_out is not None:
+                print("Applying DEM from GPU output...")
+                signed = apply_dem_from_dem_array(signed, dem_out, dem_params)
+                mode = f"{mode}+dem_gpu"
+            else:
+                print("GPU DEM unavailable; falling back to CPU DEM")
+                signed = apply_dem_to_sdf(signed, coords, dx, dy, dem_params)
+                mode = f"{mode}+dem_cpu"
+        else:
+            print("Applying DEM exterior replacement (CPU)...")
+            signed = apply_dem_to_sdf(
+                signed,
+                coords,
+                dx,
+                dy,
+                dem_params,
+            )
+            mode = f"{mode}+dem"
 
     out_base.parent.mkdir(parents=True, exist_ok=True)
 
