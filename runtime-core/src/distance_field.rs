@@ -25,7 +25,7 @@ pub fn clear_distance_field() {
 }
 
 pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
-    Err("loading .npy from Rust is not implemented on this build; call set_distance_field_from_vec from Python instead".into())
+    Err("loading .npy from Rust is not implemented in this build; use `set_distance_field_from_vec` (Python) or `load_builtin_distance_field` instead".into())
 }
 
 pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> Result<(), String> {
