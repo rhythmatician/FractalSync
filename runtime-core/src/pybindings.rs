@@ -27,7 +27,7 @@ use crate::controller::{
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
-use crate::distance_field::{load_distance_field, sample_distance_field};
+use crate::distance_field::{sample_distance_field};
 
 
 /// Python wrapper for `ResidualParams`.
