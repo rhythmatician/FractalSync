@@ -1,0 +1,45 @@
+name: Generate and verify runtime_core stubs
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    generate-stubs:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.10"
+
+            - name: Setup Rust
+              uses: oxidize/setup-rust@v1
+              with:
+                  rust-toolchain: stable
+
+            - name: Install system dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  python -m pip install maturin pyo3-stubgen
+
+            - name: Generate runtime_core stubs
+              run: |
+                  chmod +x scripts/generate_runtime_core_stubs.sh
+                  ./scripts/generate_runtime_core_stubs.sh
+
+            - name: Check for changes
+              run: |
+                  git --no-pager status --porcelain
+                  if [ -n "$(git --no-pager status --porcelain)" ]; then
+                    echo "Generated stubs differ from committed stubs. Please run './scripts/generate_runtime_core_stubs.sh' locally and commit the updates.";
+                    git --no-pager diff --patch -- backend/stubs/runtime_core || true
+                    exit 1
+                  fi
