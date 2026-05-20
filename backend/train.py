@@ -130,6 +130,48 @@ def main():
         default=None,
         help="Maximum number of audio files to load (for quick runs)",
     )
+    parser.add_argument(
+        "--temporal-smoothness-weight",
+        type=float,
+        default=0.0,
+        help="Weight for off-hit control smoothness (speed + jerk)",
+    )
+    parser.add_argument(
+        "--sequence-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight for sequence-level motion correlation with music hits",
+    )
+    parser.add_argument(
+        "--hit-alignment-weight",
+        type=float,
+        default=0.0,
+        help="Weight for direct hit-to-transition intensity alignment",
+    )
+    parser.add_argument(
+        "--rollout-batch-fraction",
+        type=float,
+        default=0.0,
+        help="Fraction of batches that use runtime-like rollout training",
+    )
+    parser.add_argument(
+        "--rollout-horizon",
+        type=int,
+        default=64,
+        help="Max contiguous frames to include in rollout windows",
+    )
+    parser.add_argument(
+        "--rollout-teacher-forcing",
+        type=float,
+        default=0.2,
+        help="Teacher forcing factor for rollout carryover dynamics",
+    )
+    parser.add_argument(
+        "--rollout-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight for rollout-mode sequence loss",
+    )
 
     args = parser.parse_args()
 
@@ -156,6 +198,13 @@ def execute_training_workflow(args):
     print(f"  Julia resolution: {args.julia_resolution}x{args.julia_resolution}")
     print(f"  Julia max iterations: {args.julia_max_iter}")
     print(f"  DataLoader workers: {args.num_workers}")
+    print(f"  Temporal smoothness weight: {args.temporal_smoothness_weight}")
+    print(f"  Sequence loss weight: {args.sequence_loss_weight}")
+    print(f"  Hit alignment weight: {args.hit_alignment_weight}")
+    print(f"  Rollout batch fraction: {args.rollout_batch_fraction}")
+    print(f"  Rollout horizon: {args.rollout_horizon}")
+    print(f"  Rollout teacher forcing: {args.rollout_teacher_forcing}")
+    print(f"  Rollout loss weight: {args.rollout_loss_weight}")
     print("=" * 60)
 
     # Ensure a consistent multiprocessing start method on Windows to avoid
@@ -235,6 +284,13 @@ def execute_training_workflow(args):
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
         k_residuals=args.k_bands,
+        temporal_smoothness_weight=args.temporal_smoothness_weight,
+        sequence_loss_weight=args.sequence_loss_weight,
+        hit_alignment_weight=args.hit_alignment_weight,
+        rollout_batch_fraction=args.rollout_batch_fraction,
+        rollout_horizon=args.rollout_horizon,
+        rollout_teacher_forcing=args.rollout_teacher_forcing,
+        rollout_loss_weight=args.rollout_loss_weight,
     )
 
     print("[7/7] Starting training...")
