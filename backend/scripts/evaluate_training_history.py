@@ -76,6 +76,76 @@ def _alignment_score(
     }
 
 
+def _evaluate_gate(
+    summary: Dict[str, object],
+    min_epochs: int | None,
+    min_alignment_score: float | None,
+    max_final_loss: float | None,
+    max_hit_alignment_loss: float | None,
+    max_rollout_loss: float | None,
+) -> Dict[str, object]:
+    """Return gate result with pass/fail and human-readable reasons."""
+    failures: List[str] = []
+
+    epochs = int(summary.get("epochs", 0))
+    last = summary.get("last", {})
+    alignment = summary.get("alignment", {})
+
+    if not isinstance(last, dict):
+        last = {}
+    if not isinstance(alignment, dict):
+        alignment = {}
+
+    if min_epochs is not None and epochs < min_epochs:
+        failures.append(f"epochs {epochs} < required {min_epochs}")
+
+    alignment_score = alignment.get("score")
+    if (
+        min_alignment_score is not None
+        and isinstance(alignment_score, (int, float))
+        and float(alignment_score) < min_alignment_score
+    ):
+        failures.append(
+            f"alignment_score {float(alignment_score):.3f} < required {min_alignment_score:.3f}"
+        )
+
+    final_loss = last.get("loss")
+    if (
+        max_final_loss is not None
+        and isinstance(final_loss, (int, float))
+        and float(final_loss) > max_final_loss
+    ):
+        failures.append(
+            f"final_loss {float(final_loss):.6f} > allowed {max_final_loss:.6f}"
+        )
+
+    hit_alignment_loss = last.get("hit_alignment_loss")
+    if (
+        max_hit_alignment_loss is not None
+        and isinstance(hit_alignment_loss, (int, float))
+        and float(hit_alignment_loss) > max_hit_alignment_loss
+    ):
+        failures.append(
+            "hit_alignment_loss "
+            f"{float(hit_alignment_loss):.6f} > allowed {max_hit_alignment_loss:.6f}"
+        )
+
+    rollout_loss = last.get("rollout_loss")
+    if (
+        max_rollout_loss is not None
+        and isinstance(rollout_loss, (int, float))
+        and float(rollout_loss) > max_rollout_loss
+    ):
+        failures.append(
+            f"rollout_loss {float(rollout_loss):.6f} > allowed {max_rollout_loss:.6f}"
+        )
+
+    return {
+        "passed": len(failures) == 0,
+        "failures": failures,
+    }
+
+
 def _save_plots(
     out_dir: Path,
     history: Dict[str, List[float]],
@@ -157,6 +227,41 @@ def main() -> int:
         default=Path("checkpoints") / "analysis",
         help="Directory for plots and summary JSON",
     )
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="Enable acceptance gate checks and return non-zero on failure",
+    )
+    parser.add_argument(
+        "--min-epochs",
+        type=int,
+        default=None,
+        help="Minimum number of epochs required to pass the gate",
+    )
+    parser.add_argument(
+        "--min-alignment-score",
+        type=float,
+        default=None,
+        help="Minimum required alignment score (0-100)",
+    )
+    parser.add_argument(
+        "--max-final-loss",
+        type=float,
+        default=None,
+        help="Maximum allowed final loss",
+    )
+    parser.add_argument(
+        "--max-hit-alignment-loss",
+        type=float,
+        default=None,
+        help="Maximum allowed final hit alignment loss",
+    )
+    parser.add_argument(
+        "--max-rollout-loss",
+        type=float,
+        default=None,
+        help="Maximum allowed final rollout loss",
+    )
     args = parser.parse_args()
 
     if not args.history.exists():
@@ -207,6 +312,16 @@ def main() -> int:
         "alignment": alignment,
     }
 
+    gate_result = _evaluate_gate(
+        summary,
+        min_epochs=args.min_epochs,
+        min_alignment_score=args.min_alignment_score,
+        max_final_loss=args.max_final_loss,
+        max_hit_alignment_loss=args.max_hit_alignment_loss,
+        max_rollout_loss=args.max_rollout_loss,
+    )
+    summary["gate"] = gate_result
+
     summary_path = args.out_dir / "summary.json"
     with summary_path.open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
@@ -229,6 +344,18 @@ def main() -> int:
             print(f"    - {path}")
     else:
         print("  plots: skipped (matplotlib not available)")
+
+    if args.gate:
+        if gate_result["passed"]:
+            print("  gate: PASS")
+            return 0
+
+        print("  gate: FAIL")
+        failures = gate_result.get("failures", [])
+        if isinstance(failures, list):
+            for reason in failures:
+                print(f"    - {reason}")
+        return 2
 
     return 0
 

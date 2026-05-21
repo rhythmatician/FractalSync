@@ -188,9 +188,12 @@ class ControlTrainer:
             "sequence_perceptual_loss": [],
             "hit_alignment_loss": [],
             "rollout_loss": [],
+            "alignment_proxy": [],
         }
         # Track last checkpoint for reporting
         self.last_checkpoint_path: Optional[str] = None
+        self.best_checkpoint_path: Optional[str] = None
+        self.best_alignment_proxy: Optional[float] = None
 
     def _generate_curriculum_data(self, n_samples: int):
         """Generate curriculum learning data from preset orbits."""
@@ -286,6 +289,18 @@ class ControlTrainer:
     def _sanitize_scalar(x: torch.Tensor) -> torch.Tensor:
         """Ensure scalar loss term is finite."""
         return torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+
+    @staticmethod
+    def _alignment_proxy(
+        sequence_perceptual_loss: float,
+        hit_alignment_loss: float,
+    ) -> float:
+        """Higher-is-better proxy for hit-correlated transitions.
+
+        sequence_perceptual_loss is a negative-correlation loss (lower is better),
+        while hit_alignment_loss is MSE (lower is better).
+        """
+        return float(-sequence_perceptual_loss - hit_alignment_loss)
 
     def _compute_sequence_losses(
         self,
@@ -743,6 +758,10 @@ class ControlTrainer:
             range(epochs), desc="Epochs", total=epochs, leave=True, mininterval=0.5
         ):
             avg_losses = self.train_epoch(dataloader, epoch, curriculum_decay)
+            avg_losses["alignment_proxy"] = self._alignment_proxy(
+                avg_losses["sequence_perceptual_loss"],
+                avg_losses["hit_alignment_loss"],
+            )
 
             for key, value in avg_losses.items():
                 self.history[key].append(value)
@@ -750,8 +769,29 @@ class ControlTrainer:
             logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
                 f'Loss: {avg_losses["loss"]:.4f}, '
-                f'Control: {avg_losses["control_loss"]:.4f}'
+                f'Control: {avg_losses["control_loss"]:.4f}, '
+                f'AlignProxy: {avg_losses["alignment_proxy"]:.4f}'
             )
+
+            if save_dir and (
+                self.best_alignment_proxy is None
+                or avg_losses["alignment_proxy"] > self.best_alignment_proxy
+            ):
+                self.best_alignment_proxy = avg_losses["alignment_proxy"]
+                self.save_checkpoint(
+                    save_dir,
+                    epoch + 1,
+                    batch_size,
+                    curriculum_decay,
+                    epochs,
+                    checkpoint_filename="checkpoint_best.pt",
+                    update_last_path=False,
+                )
+                self.best_checkpoint_path = os.path.join(save_dir, "checkpoint_best.pt")
+                logger.info(
+                    f"Best checkpoint updated at epoch {epoch + 1}: "
+                    f"alignment_proxy={self.best_alignment_proxy:.4f}"
+                )
 
             if save_dir and ((epoch + 1) % 10 == 0 or (epoch + 1) == epochs):
                 self.save_checkpoint(
@@ -768,6 +808,8 @@ class ControlTrainer:
         batch_size: int = 32,
         curriculum_decay: float = 0.95,
         total_epochs: int = 100,
+        checkpoint_filename: Optional[str] = None,
+        update_last_path: bool = True,
     ):
         """Save model checkpoint with full training configuration."""
         os.makedirs(save_dir, exist_ok=True)
@@ -797,13 +839,19 @@ class ControlTrainer:
             "rollout_horizon": self.rollout_horizon,
             "rollout_teacher_forcing": self.rollout_teacher_forcing,
             "rollout_loss_weight": self.rollout_loss_weight,
+            "best_alignment_proxy": self.best_alignment_proxy,
+            "best_checkpoint_path": self.best_checkpoint_path,
         }
 
-        checkpoint_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
+        if checkpoint_filename is None:
+            checkpoint_filename = f"checkpoint_epoch_{epoch}.pt"
+
+        checkpoint_path = os.path.join(save_dir, checkpoint_filename)
         torch.save(checkpoint, checkpoint_path)
         # Also emit a console print for immediate visibility
         print(f"[CHECKPOINT] Saved: {checkpoint_path}")
-        self.last_checkpoint_path = checkpoint_path
+        if update_last_path:
+            self.last_checkpoint_path = checkpoint_path
 
         history_path = os.path.join(save_dir, "training_history.json")
         with open(history_path, "w") as f:
