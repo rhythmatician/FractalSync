@@ -172,6 +172,17 @@ def main():
         default=0.0,
         help="Weight for rollout-mode sequence loss",
     )
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=str,
+        default=None,
+        help="Path to checkpoint (.pt) to resume model/optimizer state from",
+    )
+    parser.add_argument(
+        "--resume-reset-optimizer",
+        action="store_true",
+        help="When resuming, load model weights but reset optimizer state",
+    )
 
     args = parser.parse_args()
 
@@ -205,6 +216,8 @@ def execute_training_workflow(args):
     print(f"  Rollout horizon: {args.rollout_horizon}")
     print(f"  Rollout teacher forcing: {args.rollout_teacher_forcing}")
     print(f"  Rollout loss weight: {args.rollout_loss_weight}")
+    print(f"  Resume checkpoint: {args.resume_checkpoint}")
+    print(f"  Resume reset optimizer: {args.resume_reset_optimizer}")
     print("=" * 60)
 
     # Ensure a consistent multiprocessing start method on Windows to avoid
@@ -292,6 +305,39 @@ def execute_training_workflow(args):
         rollout_teacher_forcing=args.rollout_teacher_forcing,
         rollout_loss_weight=args.rollout_loss_weight,
     )
+
+    if args.resume_checkpoint:
+        ckpt_path = os.path.abspath(args.resume_checkpoint)
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"Resume checkpoint not found: {ckpt_path}")
+
+        print(f"  Loading checkpoint: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=args.device)
+
+        model_state = checkpoint.get("model_state_dict")
+        if model_state is None:
+            raise ValueError(
+                "Resume checkpoint missing model_state_dict; cannot resume."
+            )
+        trainer.model.load_state_dict(model_state)
+
+        if not args.resume_reset_optimizer:
+            opt_state = checkpoint.get("optimizer_state_dict")
+            if opt_state is not None:
+                trainer.optimizer.load_state_dict(opt_state)
+
+        ckpt_history = checkpoint.get("history")
+        if isinstance(ckpt_history, dict):
+            for key, values in ckpt_history.items():
+                if key in trainer.history and isinstance(values, list):
+                    trainer.history[key] = [float(v) for v in values]
+
+        # Feature normalization stats are recomputed in trainer.train() from the
+        # current dataset. runtime_core FeatureExtractor binding properties are
+        # read-only in this environment, so we intentionally do not assign them
+        # here when resuming.
+
+        print("  Resume load complete")
 
     print("[7/7] Starting training...")
     print("=" * 60)
