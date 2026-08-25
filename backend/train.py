@@ -183,6 +183,70 @@ def main():
         action="store_true",
         help="When resuming, load model weights but reset optimizer state",
     )
+    parser.add_argument(
+        "--no-cspace-proxies",
+        action="store_true",
+        help="Disable differentiable c-space proxy supervision (falls back to slow rendered-image losses)",
+    )
+    parser.add_argument(
+        "--coverage-weight",
+        type=float,
+        default=0.1,
+        help="Weight for c-space coverage/diversity regularizer (0 disables)",
+    )
+    parser.add_argument(
+        "--scheduled-sampling-max",
+        type=float,
+        default=0.3,
+        help="Max scheduled-sampling probability reached after ramping (0 disables)",
+    )
+    parser.add_argument(
+        "--scheduled-sampling-ramp-epochs",
+        type=int,
+        default=20,
+        help="Epochs over which scheduled sampling ramps from 0 to max",
+    )
+    parser.add_argument(
+        "--clip-length",
+        type=int,
+        default=1,
+        help="Contiguous windows per training clip (1 = legacy window batching; 32-128 recommended for sequence training)",
+    )
+    parser.add_argument(
+        "--anti-dwell-weight",
+        type=float,
+        default=1.0,
+        help="Weight for scale-aware anti-dwell penalty keeping c(t) moving (0 disables)",
+    )
+    parser.add_argument(
+        "--anti-dwell-target",
+        type=float,
+        default=0.15,
+        help="Required per-frame c displacement as fraction of local feature scale",
+    )
+    parser.add_argument(
+        "--zone-weight",
+        type=float,
+        default=2.0,
+        help="Weight for visibility-band constraint keeping c near the Mandelbrot boundary (0 disables)",
+    )
+    parser.add_argument(
+        "--zone-min",
+        type=float,
+        default=0.01,
+        help="Minimum cardioid proximity (interior dead-zone edge)",
+    )
+    parser.add_argument(
+        "--zone-max",
+        type=float,
+        default=0.45,
+        help="Maximum cardioid proximity (exterior dust dead-zone edge)",
+    )
+    parser.add_argument(
+        "--recurrent",
+        action="store_true",
+        help="Use GRU-based temporal encoder instead of flat MLP",
+    )
 
     args = parser.parse_args()
 
@@ -216,6 +280,13 @@ def execute_training_workflow(args):
     print(f"  Rollout horizon: {args.rollout_horizon}")
     print(f"  Rollout teacher forcing: {args.rollout_teacher_forcing}")
     print(f"  Rollout loss weight: {args.rollout_loss_weight}")
+    print(f"  C-space proxies: {not args.no_cspace_proxies}")
+    print(f"  Coverage weight: {args.coverage_weight}")
+    print(f"  Scheduled sampling max: {args.scheduled_sampling_max}")
+    print(f"  Clip length: {args.clip_length}")
+    print(f"  Anti-dwell weight: {args.anti_dwell_weight} (target {args.anti_dwell_target})")
+    print(f"  Zone band: [{args.zone_min}, {args.zone_max}] (weight {args.zone_weight})")
+    print(f"  Recurrent encoder: {args.recurrent}")
     print(f"  Resume checkpoint: {args.resume_checkpoint}")
     print(f"  Resume reset optimizer: {args.resume_reset_optimizer}")
     print("=" * 60)
@@ -277,6 +348,7 @@ def execute_training_workflow(args):
         hidden_dims=[128, 256, 128],
         k_bands=args.k_bands,
         dropout=0.2,
+        recurrent=args.recurrent,
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -304,6 +376,16 @@ def execute_training_workflow(args):
         rollout_horizon=args.rollout_horizon,
         rollout_teacher_forcing=args.rollout_teacher_forcing,
         rollout_loss_weight=args.rollout_loss_weight,
+        use_cspace_proxies=not args.no_cspace_proxies,
+        coverage_weight=args.coverage_weight,
+        scheduled_sampling_max=args.scheduled_sampling_max,
+        scheduled_sampling_ramp_epochs=args.scheduled_sampling_ramp_epochs,
+        clip_length=args.clip_length,
+        anti_dwell_weight=args.anti_dwell_weight,
+        anti_dwell_target=args.anti_dwell_target,
+        zone_weight=args.zone_weight,
+        zone_min=args.zone_min,
+        zone_max=args.zone_max,
     )
 
     if args.resume_checkpoint:

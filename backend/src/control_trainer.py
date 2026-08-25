@@ -98,6 +98,17 @@ class ControlTrainer:
         rollout_horizon: int = 64,
         rollout_teacher_forcing: float = 0.2,
         rollout_loss_weight: float = 0.0,
+        use_cspace_proxies: bool = True,
+        coverage_weight: float = 0.1,
+        scheduled_sampling_start: float = 0.0,
+        scheduled_sampling_max: float = 0.3,
+        scheduled_sampling_ramp_epochs: int = 20,
+        clip_length: int = 1,
+        anti_dwell_weight: float = 1.0,
+        anti_dwell_target: float = 0.15,
+        zone_weight: float = 1.0,
+        zone_min: float = 0.01,
+        zone_max: float = 0.45,
     ):
         """
         Initialize control trainer.
@@ -123,6 +134,30 @@ class ControlTrainer:
             rollout_horizon: Maximum contiguous window length for rollout mode
             rollout_teacher_forcing: Blend factor for predicted vs carried control state
             rollout_loss_weight: Weight for rollout-mode sequence loss
+            use_cspace_proxies: Supervise via differentiable c-space proxies
+                (cardioid proximity, orbit speed) instead of rendered images.
+                Removes the slow non-differentiable render loop from training.
+            coverage_weight: Weight for the c-space coverage (anti-revisit)
+                diversity regularizer.
+            scheduled_sampling_start: Initial probability of feeding the model's
+                previous prediction back as input context.
+            scheduled_sampling_max: Final scheduled-sampling probability after ramp.
+            scheduled_sampling_ramp_epochs: Epochs over which to ramp from start to max.
+            clip_length: Number of contiguous windows per training clip.
+                1 disables clip mode (legacy per-window batches). Values of
+                32–128 enable truncated-BPTT-style sequence training.
+            anti_dwell_weight: Weight for the scale-aware anti-dwell penalty
+                that keeps c(t) moving through c-space over time.
+            anti_dwell_target: Minimum required per-frame displacement of c,
+                normalized by local feature scale (cardioid proximity).
+                Scale-free: near the Mandelbrot boundary tiny moves count;
+                far from it, larger travel is demanded for equal visual change.
+            zone_weight: Weight for the visibility-band constraint that keeps
+                c within the region where Julia sets are visually interesting.
+            zone_min: Minimum cardioid proximity — below this c is deep in the
+                interior where Julia sets are a solid blob.
+            zone_max: Maximum cardioid proximity — above this c is far outside
+                the set where Julia sets are a sparse dust (mostly black).
         """
         self.model: AudioToControlModel = model.to(device)
 
@@ -148,6 +183,17 @@ class ControlTrainer:
         self.rollout_horizon = rollout_horizon
         self.rollout_teacher_forcing = rollout_teacher_forcing
         self.rollout_loss_weight = rollout_loss_weight
+        self.use_cspace_proxies = use_cspace_proxies
+        self.coverage_weight = coverage_weight
+        self.scheduled_sampling_start = scheduled_sampling_start
+        self.scheduled_sampling_max = scheduled_sampling_max
+        self.scheduled_sampling_ramp_epochs = max(1, scheduled_sampling_ramp_epochs)
+        self.clip_length = max(1, clip_length)
+        self.anti_dwell_weight = anti_dwell_weight
+        self.anti_dwell_target = anti_dwell_target
+        self.zone_weight = zone_weight
+        self.zone_min = zone_min
+        self.zone_max = zone_max
         self.residual_params = ResidualParams(
             k_residuals=k_residuals,
             residual_cap=DEFAULT_RESIDUAL_CAP,
@@ -189,6 +235,9 @@ class ControlTrainer:
             "sequence_perceptual_loss": [],
             "hit_alignment_loss": [],
             "rollout_loss": [],
+            "coverage_loss": [],
+            "anti_dwell_loss": [],
+            "zone_loss": [],
             "alignment_proxy": [],
         }
         # Track last checkpoint for reporting
@@ -350,6 +399,7 @@ class ControlTrainer:
         spectral_flux: torch.Tensor,
         onset_strength: torch.Tensor,
         segment_ids: torch.Tensor,
+        teacher_forcing_override: Optional[float] = None,
     ) -> torch.Tensor:
         """Compute rollout loss on contiguous same-segment windows.
 
@@ -369,8 +419,13 @@ class ControlTrainer:
         runs.append((run_start, len(seg_cpu)))
 
         rollout_terms: List[torch.Tensor] = []
-        carry_weight = max(0.0, min(1.0, 1.0 - self.rollout_teacher_forcing))
-        teacher_weight = max(0.0, min(1.0, self.rollout_teacher_forcing))
+        effective_tf = (
+            self.rollout_teacher_forcing
+            if teacher_forcing_override is None
+            else teacher_forcing_override
+        )
+        carry_weight = max(0.0, min(1.0, 1.0 - effective_tf))
+        teacher_weight = max(0.0, min(1.0, effective_tf))
 
         for start, end in runs:
             run_len = end - start
@@ -399,6 +454,22 @@ class ControlTrainer:
         if not rollout_terms:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
         return torch.stack(rollout_terms).mean()
+
+    def _scheduled_sampling_prob(self, epoch: int) -> float:
+        """Ramp scheduled-sampling probability from start to max over epochs.
+
+        The probability is interpreted as how much of the rollout carryover
+        comes from the model's own previously simulated controls instead of
+        ground-truth predictions (i.e. ``1 - effective teacher forcing``).
+        Early epochs train close to ground truth; later epochs progressively
+        expose the model to its own drift, matching inference conditions.
+        """
+        if self.scheduled_sampling_max <= 0.0:
+            return 0.0
+        frac = min(1.0, max(0.0, epoch / float(self.scheduled_sampling_ramp_epochs)))
+        return self.scheduled_sampling_start + frac * (
+            self.scheduled_sampling_max - self.scheduled_sampling_start
+        )
 
     def _synthesize_c_differentiable(
         self,
@@ -429,6 +500,264 @@ class ControlTrainer:
         parity-tested against the Rust bindings.
         """
         return cardioid_proximity(c)
+
+    def _coverage_loss(
+        self, c_sequence: torch.Tensor, segment_ids: torch.Tensor
+    ) -> torch.Tensor:
+        """Anti-revisit diversity regularizer over contiguous same-segment runs.
+
+        Penalizes points that fall inside the convex hull of earlier points in
+        the same run: low hull coverage means the orbit keeps revisiting the
+        same region of c-space (the "gets old after a few seconds" failure).
+        Implemented as mean pairwise-distance deficit: for each run we compute
+        the mean pairwise distance between sampled points; runs whose points
+        cluster tightly produce a small value, which we invert into a loss via
+        negative-mean normalized by the expected spread of controls.
+        """
+        if c_sequence.shape[0] < 2 or self.coverage_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        seg_cpu = segment_ids.detach().cpu().tolist()
+        runs: List[Tuple[int, int]] = []
+        run_start = 0
+        for idx in range(1, len(seg_cpu)):
+            if seg_cpu[idx] != seg_cpu[idx - 1]:
+                runs.append((run_start, idx))
+                run_start = idx
+        runs.append((run_start, len(seg_cpu)))
+
+        terms: List[torch.Tensor] = []
+        max_points_per_run = 64
+        for start, end in runs:
+            pts = c_sequence[start:end]
+            n = pts.shape[0]
+            if n < 2:
+                continue
+            if n > max_points_per_run:
+                idx_sel = torch.linspace(0, n - 1, max_points_per_run).long()
+                pts = pts[idx_sel]
+                n = pts.shape[0]
+            re = pts.real.float()
+            im = pts.imag.float()
+            diff_re = re.unsqueeze(1) - re.unsqueeze(0)
+            diff_im = im.unsqueeze(1) - im.unsqueeze(0)
+            dists = torch.sqrt(diff_re**2 + diff_im**2 + 1e-12)
+            # Mean off-diagonal pairwise distance = spatial spread of the run.
+            mask = ~torch.eye(n, dtype=torch.bool, device=self.device)
+            spread = dists[mask].mean()
+            # Loss = inverse spread: tight clustering → large loss.
+            terms.append(1.0 / (spread + 1e-3))
+
+        if not terms:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+        return torch.stack(terms).mean()
+
+    def _temporal_thetas(
+        self,
+        omega_scale: torch.Tensor,
+        segment_ids: torch.Tensor,
+        audio_energy: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Physics-based carrier phase: velocity integrates acceleration with drag.
+
+        The model's omega_scale output is an *acceleration* signal, not a
+        velocity. Angular velocity evolves as:
+
+            v(t) = drag * v(t-1) + accel_scale * omega_scale(t)
+            theta(t) = theta(t-1) + v(t)
+
+        where ``drag`` (slightly < 1) is a constant weak friction. This gives
+        the exact behavior the user specified: c's motion is driven by audio —
+        sustained loud audio builds up angular velocity, and during silence the
+        drag gradually decays velocity to zero (c coasts to a stop, no hard
+        threshold). Fully differentiable w.r.t. omega_scale via the scan.
+
+        Phase resets at segment boundaries (new file/clip).
+        """
+        drag = 0.92  # per-frame velocity retention; ~e-folding over ~12 frames
+        accel_gain = 0.02  # rad/frame^2 at omega_scale = 1
+
+        accel = accel_gain * omega_scale.reshape(-1).float()
+        if audio_energy is not None:
+            # Audio gates the acceleration: silence produces no thrust.
+            accel = accel * audio_energy.reshape(-1).float()
+
+        seg = segment_ids.reshape(-1)
+        n = accel.shape[0]
+
+        # Sequential scan (differentiable through time).
+        velocity = torch.zeros(n, device=accel.device, dtype=accel.dtype)
+        theta = torch.zeros(n, device=accel.device, dtype=accel.dtype)
+        v = torch.zeros((), device=accel.device, dtype=accel.dtype)
+        th = torch.zeros((), device=accel.device, dtype=accel.dtype)
+        for i in range(n):
+            if i > 0 and seg[i] != seg[i - 1]:
+                v = torch.zeros_like(v)
+                th = torch.zeros_like(th)
+            v = drag * v + accel[i]
+            th = th + v
+            velocity[i] = v
+            theta[i] = th
+        return theta % (2.0 * np.pi)
+
+    def _anti_dwell_loss(
+        self,
+        c_sequence: torch.Tensor,
+        segment_ids: torch.Tensor,
+        audio_energy: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Scale-aware penalty on c(t) dwelling, gated by audio energy.
+
+        The user's insight: 'region' is not definable in absolute c-space units
+        because visual feature size varies enormously across the Mandelbrot set
+        (a sliver outside the boundary shows as much variety as an entire lobe).
+        We therefore normalize displacement by the LOCAL feature scale, proxied
+        by cardioid proximity ||mu|-1| (distance from the boundary in multiplier
+        space): near-boundary points have tiny features, far points have large
+        ones.
+
+        Physics model: c is a body with inertia; audio provides the only
+        accelerating force, and a weak constant friction always opposes
+        motion. There is deliberately NO silence threshold — instead the
+        required movement scales smoothly with audio energy, so during
+        silence the requirement decays toward zero and friction naturally
+        brings c to a stop. Loud audio demands movement; silence permits rest.
+        """
+        if c_sequence.shape[0] < 2 or self.anti_dwell_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        # Local feature scale: floor at a small epsilon so deep-interior points
+        # (proximity ~ 0) still demand some minimal motion.
+        local_scale = torch.clamp(proximity, min=0.02)
+
+        seg = segment_ids.reshape(-1)
+        step_ok = torch.ones_like(proximity, dtype=torch.bool)
+        if seg.shape[0] > 1:
+            step_ok[1:] = seg[1:] == seg[:-1]
+            step_ok[0] = False  # no predecessor for first point
+
+        dc = c_sequence[1:] - c_sequence[:-1]
+        displacement = torch.abs(dc)
+
+        # Audio-gated requirement: energy in [0, 1] scales the target.
+        # energy = RMS (index 2) when provided; silence -> ~0 requirement.
+        if audio_energy is not None:
+            energy = torch.nan_to_num(audio_energy.reshape(-1).float(), nan=0.0)
+            energy = torch.clamp(energy, 0.0, 1.0)
+        else:
+            energy = torch.ones_like(displacement)
+        required = self.anti_dwell_target * local_scale[1:] * energy[1:]
+
+        # Smooth displacement over a short horizon so single-frame jitter
+        # cannot satisfy the requirement while c overall stays put: running
+        # max of displacement over `dwell_window` frames.
+        window = min(8, displacement.shape[0])
+        if window > 1:
+            disp_used = (
+                torch.nn.functional.max_pool1d(
+                    displacement.unsqueeze(0).unsqueeze(0),
+                    kernel_size=window,
+                    stride=1,
+                    padding=window // 2,
+                )
+                .squeeze(0)
+                .squeeze(0)[: displacement.shape[0]]
+            )
+        else:
+            disp_used = displacement
+
+        # Hinge: penalize frames where even the best recent movement falls
+        # short of the energy-scaled target.
+        shortfall = torch.relu(required - disp_used)
+        # Mask out segment-boundary transitions (no meaningful predecessor).
+        valid = step_ok[1:]
+        if valid.any():
+            return shortfall[valid].mean()
+        return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+    def _zone_loss(self, c_sequence: torch.Tensor) -> torch.Tensor:
+        """Keep c inside the visibility band where Julia sets are interesting.
+
+        Two dead zones exist in c-space:
+        - Deep interior (proximity ~ 0): Julia set is a connected blob that
+          barely changes shape — the "still image" failure.
+        - Far exterior (large proximity): Julia set is disconnected Cantor
+          dust — mostly black, sparse, boring.
+
+        The interesting band is a thin shell hugging the set boundary. We
+        penalize proximity outside [zone_min, zone_max] with a smooth hinge.
+        """
+        if self.zone_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        below = torch.relu(self.zone_min - proximity)
+        above = torch.relu(proximity - self.zone_max)
+        return (below**2 + above**2).mean()
+
+    def _make_clip_dataloader(
+        self,
+        features: torch.Tensor,
+        segment_ids: torch.Tensor,
+        batch_size: int,
+        shuffle_clips: bool = True,
+    ) -> DataLoader:
+        """Build a DataLoader whose samples are contiguous same-file clips.
+
+        Each dataset item is a (clip_length, feature_dim) tensor plus its
+        segment id; the DataLoader stacks them into batches of shape
+        (batch, clip_length, feature_dim). The trainer's train_epoch flattens
+        these back to (batch * clip_length, feature_dim) so all existing loss
+        machinery operates on temporally contiguous runs with correct
+        segment_ids — enabling true sequence supervision and TBPTT-style
+        gradient flow across the clip.
+        """
+        clip_len = self.clip_length
+        clips: List[torch.Tensor] = []
+        clip_segments: List[torch.Tensor] = []
+
+        seg_np = segment_ids.numpy()
+        feat_np = features.numpy()
+        n = len(seg_np)
+        start = 0
+        while start + clip_len <= n:
+            if seg_np[start] == seg_np[start + clip_len - 1]:
+                clips.append(torch.tensor(feat_np[start : start + clip_len]))
+                clip_segments.append(
+                    torch.full((clip_len,), seg_np[start], dtype=torch.int64)
+                )
+                start += clip_len
+            else:
+                # Skip over the file boundary.
+                start += 1
+
+        if not clips:
+            logger.warning(
+                "No complete clips of length %d could be formed; falling back to window batching.",
+                clip_len,
+            )
+            self.clip_length = 1
+            return DataLoader(
+                TensorDataset(features, segment_ids),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+            )
+
+        clip_dataset = TensorDataset(torch.stack(clips), torch.stack(clip_segments))
+        logger.info(
+            "Clip training enabled: %d clips of length %d (batch covers %d contiguous frames)",
+            len(clip_dataset),
+            clip_len,
+            batch_size * clip_len,
+        )
+        return DataLoader(
+            clip_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle_clips,
+            num_workers=self.num_workers,
+        )
+
     def train_epoch(
         self, dataloader: DataLoader, epoch: int, curriculum_decay: float = 0.95
     ) -> Dict[str, float]:
@@ -444,6 +773,9 @@ class ControlTrainer:
         total_sequence_perceptual = 0.0
         total_hit_alignment = 0.0
         total_rollout = 0.0
+        total_coverage = 0.0
+        total_anti_dwell = 0.0
+        total_zone = 0.0
         n_batches = 0
 
         # Generate curriculum data if needed
@@ -471,6 +803,15 @@ class ControlTrainer:
                     segment_ids = batch_item[1]
             else:
                 features = batch_item
+
+            # Clip mode: (batch, clip_length, feature_dim) →
+            # (batch * clip_length, feature_dim) so downstream losses see one
+            # contiguous temporal run per clip with correct segment ids.
+            if features.dim() == 3:
+                batch_size_clip, clip_len, feat_dim = features.shape
+                features = features.reshape(batch_size_clip * clip_len, feat_dim)
+                if segment_ids is not None:
+                    segment_ids = segment_ids.reshape(batch_size_clip * clip_len)
 
             features = features.to(self.device)
             if segment_ids is None:
@@ -513,114 +854,167 @@ class ControlTrainer:
             omega_scale = parsed["omega_scale"]
             band_gates = parsed["band_gates"]
 
-            # Synthesize c(t) using runtime_core (cardioid lobe)
-            c_values = []
-            for i in range(batch_size):
-                state = OrbitState.new_with_seed(
-                    lobe=1,
-                    sub_lobe=0,
-                    theta=float(i * 2 * np.pi / batch_size),
-                    omega=float(DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()),
-                    s=float(s_target[i].detach().item()),
-                    alpha=float(alpha[i].detach().item()),
-                    k_residuals=self.k_residuals,
-                    residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
-                    seed=int(DEFAULT_ORBIT_SEED + i),
+            if self.use_cspace_proxies:
+                # ---- Differentiable c-space supervision (fast path) ----
+                # Physics-based theta: audio-driven acceleration vs constant
+                # drag. Silence decays velocity to zero gradually (no hard
+                # threshold), matching the desired friction model.
+                try:
+                    n_features_per_frame = (
+                        self.feature_extractor.num_features_per_frame()
+                    )
+                except Exception:
+                    n_features_per_frame = 6
+                window_frames = features.shape[1] // n_features_per_frame
+                features_reshaped = features.view(
+                    batch_size, window_frames, n_features_per_frame
                 )
-                rp = self.residual_params or ResidualParams(
-                    k_residuals=DEFAULT_K_RESIDUALS,
-                    residual_cap=DEFAULT_RESIDUAL_CAP,
-                    radius_scale=1.0,
+                avg_features = features_reshaped.mean(dim=1)
+                audio_energy = torch.clamp(avg_features[:, 2], min=0.0)  # RMS
+
+                thetas = self._temporal_thetas(
+                    omega_scale, segment_ids, audio_energy=audio_energy
                 )
-                c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
-                c_values.append(c)
+                c_complex = self._synthesize_c_differentiable(
+                    s_target, alpha, band_gates, thetas
+                )
 
-            # Extract audio features for correlation
-            n_features_per_frame = self.feature_extractor.num_features_per_frame()
-            window_frames = features.shape[1] // n_features_per_frame
-            features_reshaped = features.view(
-                batch_size, window_frames, n_features_per_frame
-            )
-            avg_features = features_reshaped.mean(dim=1)
+                spectral_centroid = avg_features[:, 0]
+                spectral_flux = avg_features[:, 1]
+                onset_strength = avg_features[:, 4]
+                spectral_rms = avg_features[:, 2]
 
-            spectral_centroid = avg_features[:, 0]
-            spectral_flux = avg_features[:, 1]
-            onset_strength = avg_features[:, 4]
+                # Timbre ↔ color: brighter timbre → larger s (carrier radius).
+                timbre_color_loss = self.correlation_loss(spectral_centroid, s_target)
 
-            # Render Julia sets for visual metrics
-            images = []
-            color_hues = []
-            temporal_changes = []
+                # Transient impact ↔ motion: flux → c-space step speed proxy.
+                # alpha * omega_scale drives how fast/wild the orbit moves.
+                motion_proxy = alpha.reshape(-1) * omega_scale.reshape(-1)
+                transient_impact_loss = self.correlation_loss(
+                    spectral_flux, motion_proxy
+                )
 
-            prev_image = None
-            for i in range(batch_size):
-                seed = c_values[i]
-                if self.julia_renderer is not None:
-                    try:
-                        image = self.julia_renderer.render(
-                            seed=seed,
-                            max_iter=self.julia_max_iter,
-                        )
-                    except Exception as e:
-                        logger.warning(f"GPU rendering failed: {e}")
+                # Loudness ↔ boundary proximity: louder audio should push c
+                # closer to the Mandelbrot boundary (more intricate visuals).
+                proximity = self._cardioid_proximity_differentiable(c_complex)
+                loudness_distance_loss = self.correlation_loss(-spectral_rms, proximity)
+
+                timbre_color_loss = self._sanitize_scalar(timbre_color_loss)
+                transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
+                loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
+
+                temporal_change_tensor = torch.zeros_like(spectral_flux)
+            else:
+                # ---- Legacy rendered-image supervision (slow path) ----
+                c_values = []
+                for i in range(batch_size):
+                    state = OrbitState.new_with_seed(
+                        lobe=1,
+                        sub_lobe=0,
+                        theta=float(i * 2 * np.pi / batch_size),
+                        omega=float(
+                            DEFAULT_BASE_OMEGA * omega_scale[i].detach().item()
+                        ),
+                        s=float(s_target[i].detach().item()),
+                        alpha=float(alpha[i].detach().item()),
+                        k_residuals=self.k_residuals,
+                        residual_omega_scale=DEFAULT_RESIDUAL_OMEGA_SCALE,
+                        seed=int(DEFAULT_ORBIT_SEED + i),
+                    )
+                    rp = self.residual_params or ResidualParams(
+                        k_residuals=DEFAULT_K_RESIDUALS,
+                        residual_cap=DEFAULT_RESIDUAL_CAP,
+                        radius_scale=1.0,
+                    )
+                    c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
+                    c_values.append(c)
+
+                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                window_frames = features.shape[1] // n_features_per_frame
+                features_reshaped = features.view(
+                    batch_size, window_frames, n_features_per_frame
+                )
+                avg_features = features_reshaped.mean(dim=1)
+
+                spectral_centroid = avg_features[:, 0]
+                spectral_flux = avg_features[:, 1]
+                onset_strength = avg_features[:, 4]
+                spectral_rms = avg_features[:, 2]
+
+                images = []
+                color_hues = []
+                temporal_changes = []
+
+                prev_image = None
+                for i in range(batch_size):
+                    seed = c_values[i]
+                    if self.julia_renderer is not None:
+                        try:
+                            image = self.julia_renderer.render(
+                                seed=seed,
+                                max_iter=self.julia_max_iter,
+                            )
+                        except Exception as e:
+                            logger.warning(f"GPU rendering failed: {e}")
+                            image = self.visual_metrics.render_julia_set(
+                                seed=seed,
+                                width=self.julia_resolution,
+                                height=self.julia_resolution,
+                                max_iter=self.julia_max_iter,
+                            )
+                    else:
                         image = self.visual_metrics.render_julia_set(
                             seed=seed,
                             width=self.julia_resolution,
                             height=self.julia_resolution,
                             max_iter=self.julia_max_iter,
                         )
-                else:
-                    image = self.visual_metrics.render_julia_set(
-                        seed=seed,
-                        width=self.julia_resolution,
-                        height=self.julia_resolution,
-                        max_iter=self.julia_max_iter,
+
+                    metrics = self.visual_metrics.compute_all_metrics(
+                        image, prev_image=prev_image
                     )
 
-                metrics = self.visual_metrics.compute_all_metrics(
-                    image, prev_image=prev_image
-                )
-
-                images.append(image)
-                # Use s_target as proxy for color hue (example correlation)
-                color_hues.append(s_target[i])
-                temporal_changes.append(
-                    torch.tensor(
-                        metrics["temporal_change"],
-                        device=self.device,
-                        dtype=torch.float32,
+                    images.append(image)
+                    color_hues.append(s_target[i])
+                    temporal_changes.append(
+                        torch.tensor(
+                            metrics["temporal_change"],
+                            device=self.device,
+                            dtype=torch.float32,
+                        )
                     )
+
+                    prev_image = image
+
+                color_hue_tensor = torch.stack(color_hues)
+                temporal_change_tensor = torch.stack(temporal_changes)
+
+                timbre_color_loss = self.correlation_loss(
+                    spectral_centroid, color_hue_tensor
+                )
+                transient_impact_loss = self.correlation_loss(
+                    spectral_flux, temporal_change_tensor
                 )
 
-                prev_image = image
+                distance_tensor = (
+                    self.visual_metrics.mandelbrot_distance_estimate(c_values)
+                    .to(self.device)
+                    .to(torch.float32)
+                )
+                loudness_distance_loss = self.correlation_loss(
+                    -spectral_rms, distance_tensor
+                )
+                timbre_color_loss = self._sanitize_scalar(timbre_color_loss)
+                transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
+                loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
 
-            color_hue_tensor = torch.stack(color_hues)
-            temporal_change_tensor = torch.stack(temporal_changes)
-
-            # Compute correlation losses
-            timbre_color_loss = self.correlation_loss(
-                spectral_centroid, color_hue_tensor
-            )
-            transient_impact_loss = self.correlation_loss(
-                spectral_flux, temporal_change_tensor
-            )
-
-            # Loudness-distance (negative correlation) loss
-            # Loudness proxy: RMS feature (index 2 of avg_features)
-            spectral_rms = avg_features[:, 2]
-
-            # Calculate the distance between `c` and the Mandelbrot set boundary
-            distance_tensor = (
-                self.visual_metrics.mandelbrot_distance_estimate(c_values)
-                .to(self.device)
-                .to(torch.float32)
-            )
-            loudness_distance_loss = self.correlation_loss(
-                -spectral_rms, distance_tensor
-            )
-            timbre_color_loss = self._sanitize_scalar(timbre_color_loss)
-            transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
-            loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
+                # Legacy path also uses physics-based theta for coverage/anti-dwell.
+                thetas = self._temporal_thetas(
+                    omega_scale, segment_ids, audio_energy=spectral_rms
+                )
+                c_complex = self._synthesize_c_differentiable(
+                    s_target, alpha, band_gates, thetas
+                )
 
             # Sequence-level terms: smooth off-hit, allow/encourage transitions on hits.
             controls = torch.cat(
@@ -649,12 +1043,33 @@ class ControlTrainer:
                 and self.rollout_batch_fraction > 0.0
                 and torch.rand(1).item() < self.rollout_batch_fraction
             ):
+                # Scheduled sampling: ramp reliance on the model's own carried
+                # state up over epochs (teacher forcing decays accordingly).
+                ss_prob = self._scheduled_sampling_prob(epoch)
+                effective_tf = max(0.0, 1.0 - ss_prob)
                 rollout_loss = self._compute_rollout_loss(
                     controls,
                     spectral_flux,
                     onset_strength,
                     segment_ids,
+                    teacher_forcing_override=effective_tf,
                 )
+
+            # Coverage/diversity: penalize c(t) clustering in c-space.
+            coverage_loss = self._coverage_loss(c_complex, segment_ids)
+            coverage_loss = self._sanitize_scalar(coverage_loss)
+
+            # Anti-dwell: scale-aware penalty on c(t) staying put, gated by
+            # audio energy — silence decays the requirement so friction can
+            # bring c to rest; loud audio demands movement.
+            anti_dwell_loss = self._anti_dwell_loss(
+                c_complex, segment_ids, audio_energy=spectral_rms
+            )
+            anti_dwell_loss = self._sanitize_scalar(anti_dwell_loss)
+
+            # Zone: keep c in the visually interesting band near the boundary.
+            zone_loss = self._zone_loss(c_complex)
+            zone_loss = self._sanitize_scalar(zone_loss)
 
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
@@ -677,6 +1092,9 @@ class ControlTrainer:
                 + self.sequence_loss_weight * sequence_perceptual_loss
                 + self.hit_alignment_weight * hit_alignment_loss
                 + self.rollout_loss_weight * rollout_loss
+                + self.coverage_weight * coverage_loss
+                + self.anti_dwell_weight * anti_dwell_loss
+                + self.zone_weight * zone_loss
             )
             total_batch_loss = self._sanitize_scalar(total_batch_loss)
 
@@ -696,6 +1114,9 @@ class ControlTrainer:
             total_sequence_perceptual += sequence_perceptual_loss.item()
             total_hit_alignment += hit_alignment_loss.item()
             total_rollout += rollout_loss.item()
+            total_coverage += coverage_loss.item()
+            total_anti_dwell += anti_dwell_loss.item()
+            total_zone += zone_loss.item()
             n_batches += 1
 
         # Average losses
@@ -709,6 +1130,9 @@ class ControlTrainer:
             "sequence_perceptual_loss": total_sequence_perceptual / n_batches,
             "hit_alignment_loss": total_hit_alignment / n_batches,
             "rollout_loss": total_rollout / n_batches,
+            "coverage_loss": total_coverage / n_batches,
+            "anti_dwell_loss": total_anti_dwell / n_batches,
+            "zone_loss": total_zone / n_batches,
         }
 
         return avg_losses
@@ -772,13 +1196,22 @@ class ControlTrainer:
         all_features_tensor = torch.tensor(concatenated, dtype=torch.float32)
         segment_id_tensor = torch.tensor(segment_ids, dtype=torch.int64)
 
-        tensor_dataset = TensorDataset(all_features_tensor, segment_id_tensor)
-        dataloader = DataLoader(
-            tensor_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-        )
+        if self.clip_length > 1:
+            # Clip-based training: batches are contiguous clips of clip_length
+            # windows drawn from the same file, shuffled per epoch. This gives
+            # the sequence losses real temporal structure instead of relying
+            # on incidental batch adjacency.
+            dataloader = self._make_clip_dataloader(
+                all_features_tensor, segment_id_tensor, batch_size, shuffle_clips=True
+            )
+        else:
+            tensor_dataset = TensorDataset(all_features_tensor, segment_id_tensor)
+            dataloader = DataLoader(
+                tensor_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+            )
 
         logger.info(
             f"Starting control signal training for {epochs} epochs... (total frames: {all_features_tensor.shape[0]})"
@@ -798,9 +1231,9 @@ class ControlTrainer:
 
             logger.info(
                 f"Epoch {epoch + 1}/{epochs}: "
-                f'Loss: {avg_losses["loss"]:.4f}, '
-                f'Control: {avg_losses["control_loss"]:.4f}, '
-                f'AlignProxy: {avg_losses["alignment_proxy"]:.4f}'
+                f"Loss: {avg_losses['loss']:.4f}, "
+                f"Control: {avg_losses['control_loss']:.4f}, "
+                f"AlignProxy: {avg_losses['alignment_proxy']:.4f}"
             )
 
             if save_dir and (
