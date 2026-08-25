@@ -1,6 +1,6 @@
 import numpy as np
-from src.runtime_core_bridge import make_feature_extractor
-from src.runtime_core_bridge import SAMPLE_RATE
+from src.runtime_core_helpers import make_feature_extractor
+from src.runtime_core_helpers import SAMPLE_RATE
 
 
 def test_extract_numpy_vs_list_equal():

@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # If `runtime_core` is not available (typical when running tests locally
 # without building the native extension), install a lightweight fake module
-# so importing `runtime_core_bridge` succeeds. Tests below only exercise the
+# so importing `runtime_core_helpers` succeeds. Tests below only exercise the
 # Python-side adapter behaviour and do not require the real C-extension.
 if "runtime_core" not in sys.modules:
     fake_rc = types.ModuleType("runtime_core")
@@ -19,6 +19,12 @@ if "runtime_core" not in sys.modules:
     fake_rc.DEFAULT_RESIDUAL_OMEGA_SCALE = 1.0
     fake_rc.DEFAULT_BASE_OMEGA = 1.0
     fake_rc.DEFAULT_ORBIT_SEED = 123
+
+    # Minimal lobe_point_at_angle function
+    def _lobe_point_at_angle(lobe: int, sub_lobe: int, theta: float):
+        return types.SimpleNamespace(real=0.0, imag=0.0)
+
+    fake_rc.lobe_point_at_angle = _lobe_point_at_angle
 
     # Minimal class required by make_residual_params() call in ControlTrainer
     class _ResidualParams:
@@ -113,7 +119,7 @@ if "runtime_core" not in sys.modules:
 
     sys.modules["runtime_core"] = fake_rc
 
-from src.runtime_core_bridge import FeatureExtractorBridge
+from src.runtime_core_helpers import FeatureExtractorProxy
 
 # Provide a minimal 'librosa' shim so importing modules that reference it at
 # import-time (e.g., DataLoader) doesn't fail in lightweight test envs.
@@ -141,13 +147,13 @@ def test_num_features_per_frame_callable_and_attr():
         def num_features_per_frame(self):
             return 6
 
-    be = FeatureExtractorBridge(FakeRustMethod())
+    be = FeatureExtractorProxy(FakeRustMethod())
     assert be.num_features_per_frame() == 6
 
     class FakeRustAttr:
         num_features_per_frame = 12
 
-    be2 = FeatureExtractorBridge(FakeRustAttr())
+    be2 = FeatureExtractorProxy(FakeRustAttr())
     assert be2.num_features_per_frame() == 12
 
 

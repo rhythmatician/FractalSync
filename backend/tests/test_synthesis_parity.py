@@ -57,7 +57,9 @@ class TestCarrierParity:
 
     def test_pytorch_carrier_matches_rust(self, rc):
         k_residuals = 6
-        rp = rc.ResidualParams(k_residuals=k_residuals, residual_cap=0.5, radius_scale=1.0)
+        rp = rc.ResidualParams(
+            k_residuals=k_residuals, residual_cap=0.5, radius_scale=1.0
+        )
 
         s_val, theta_val = 1.02, 0.7
 
@@ -84,9 +86,7 @@ class TestCarrierParity:
     def test_rust_carrier_matches_closed_form(self, rc):
         rp = rc.ResidualParams(k_residuals=6, residual_cap=0.5, radius_scale=1.0)
         for theta in (0.0, 0.7, math.pi / 2, 3.1):
-            state = rc.OrbitState.new_with_seed(
-                1, 0, theta, 1.0, 1.02, 0.0, 6, 2.0, 42
-            )
+            state = rc.OrbitState.new_with_seed(1, 0, theta, 1.0, 1.02, 0.0, 6, 2.0, 42)
             c = state.synthesize(rp, None)
             expected = _carrier_reference(theta, 1.02)
             assert abs(c.real - expected.real) < 1e-12
@@ -148,12 +148,14 @@ class TestResidualParity:
             residual_cap=residual_cap,
         )
         res_re_ga = sum(
-            (alpha_val * (s_val * radius)) / 2 ** (k + 1)
+            (alpha_val * (s_val * radius))
+            / 2 ** (k + 1)
             * math.cos((k * GOLDEN_ANGLE) % (2 * math.pi))
             for k in range(k_residuals)
         )
         res_im_ga = sum(
-            (alpha_val * (s_val * radius)) / 2 ** (k + 1)
+            (alpha_val * (s_val * radius))
+            / 2 ** (k + 1)
             * math.sin((k * GOLDEN_ANGLE) % (2 * math.pi))
             for k in range(k_residuals)
         )
@@ -220,9 +222,7 @@ class TestProximityParity:
         rng = np.random.RandomState(42)
         points = [
             complex(re, im)
-            for re, im in zip(
-                rng.uniform(-1.5, 1.0, 32), rng.uniform(-1.0, 1.0, 32)
-            )
+            for re, im in zip(rng.uniform(-1.5, 1.0, 32), rng.uniform(-1.0, 1.0, 32))
         ]
 
         rust_vals = rc.mandelbrot_cardioid_proximity_batch(points)
@@ -240,8 +240,10 @@ class TestProximityParity:
 
         # Boundary points via the multiplier map with |μ| = 1.
         boundary = [
-            complex(math.cos(t) / 2 - math.cos(2 * t) / 4,
-                    math.sin(t) / 2 - math.sin(2 * t) / 4)
+            complex(
+                math.cos(t) / 2 - math.cos(2 * t) / 4,
+                math.sin(t) / 2 - math.sin(2 * t) / 4,
+            )
             for t in np.linspace(0, 2 * math.pi, 12, endpoint=False)
         ]
         rust_vals = rc.mandelbrot_cardioid_proximity_batch(boundary)
