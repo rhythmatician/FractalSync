@@ -17,6 +17,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
+from .cspace_proxies import cardioid_proximity, synthesize_c
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
 from runtime_core import (
@@ -399,6 +400,35 @@ class ControlTrainer:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
         return torch.stack(rollout_terms).mean()
 
+    def _synthesize_c_differentiable(
+        self,
+        s_target: torch.Tensor,
+        alpha: torch.Tensor,
+        band_gates: torch.Tensor,
+        thetas: torch.Tensor,
+    ) -> torch.Tensor:
+        """Differentiable c-space synthesis (delegates to cspace_proxies).
+
+        Thin wrapper over :func:`cspace_proxies.synthesize_c`, which mirrors
+        ``runtime_core::controller::synthesize`` and is parity-tested against
+        the Rust bindings in backend/tests/test_synthesis_parity.py.
+        """
+        return synthesize_c(
+            s_target=s_target,
+            alpha=alpha,
+            band_gates=band_gates,
+            thetas=thetas,
+            k_residuals=self.k_residuals,
+            residual_cap=DEFAULT_RESIDUAL_CAP,
+        )
+
+    def _cardioid_proximity_differentiable(self, c: torch.Tensor) -> torch.Tensor:
+        """Cardioid proximity proxy (delegates to cspace_proxies).
+
+        Mirrors ``runtime_core::proxies::mandelbrot_cardioid_proximity``;
+        parity-tested against the Rust bindings.
+        """
+        return cardioid_proximity(c)
     def train_epoch(
         self, dataloader: DataLoader, epoch: int, curriculum_decay: float = 0.95
     ) -> Dict[str, float]:

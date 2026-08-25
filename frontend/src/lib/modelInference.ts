@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, type Complex, createInitialState } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -46,7 +46,7 @@ export class ModelInference {
   
   // Orbit-based synthesis (new architecture)
   private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitState: OrbitState | null = null;
+  private orbitTheta: number = 0.0;
   private isOrbitModel: boolean = false;
   
   // Color-based section detection for lobe switching
@@ -156,10 +156,12 @@ export class ModelInference {
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
 
         if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
+          // Initialize orbit synthesizer for control-signal models.
+          // Backed by the canonical Rust implementation via wasm-orbit.
+          await initOrbitSynth();
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
+          this.orbitTheta = 0.0;
           console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
@@ -221,8 +223,8 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL
+    if (this.isOrbitModel && this.orbitSynthesizer) {
+      // NEW ORBIT-BASED CONTROL MODEL (canonical Rust synthesis via wasm-orbit)
       // Parse control signals from model output
       const controlSignals: ControlSignals = {
         sTarget: params[0],
@@ -232,20 +234,13 @@ export class ModelInference {
       };
 
       // Update orbit state with new control signals
-      this.orbitState.s = controlSignals.sTarget;
-      this.orbitState.alpha = controlSignals.alpha;
-      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
+      this.orbitSynthesizer.applyControls(controlSignals);
 
-      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
+      console.log(`🎯 Orbit Controls: lobe=${this.orbitSynthesizer.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
 
       // Synthesize Julia parameter c(t) from orbit
       const dt = 1.0 / 60.0; // Assume 60 FPS
-      const { c, newState } = this.orbitSynthesizer.step(
-        this.orbitState,
-        dt,
-        controlSignals.bandGates
-      );
-      this.orbitState = newState;
+      const c = this.orbitSynthesizer.step(dt, controlSignals.bandGates);
 
       // Extract audio features for color mapping
       const numFeatures = 6;
@@ -390,7 +385,7 @@ export class ModelInference {
    * Switches to a random different lobe when a significant color change is detected.
    */
   private detectSectionChange(currentHue: number): void {
-    if (!this.orbitState) return;
+    if (!this.orbitSynthesizer) return;
     
     // Add current hue to history
     this.colorHistory.push(currentHue);
@@ -429,11 +424,11 @@ export class ModelInference {
     
     if (hueDiff > this.colorChangeThreshold) {
       // Section change detected! Switch to a random different lobe
-      const currentLobe = this.orbitState.lobe;
+      const currentLobe = this.orbitSynthesizer.lobe;
       const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
       const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
       
-      this.orbitState.lobe = newLobe;
+      this.orbitSynthesizer.setLobe(newLobe);
       this.lastLobeSwitch = this.colorHistory.length;
       
       console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);

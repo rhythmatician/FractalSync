@@ -146,6 +146,36 @@ impl OrbitState {
         self.inner.lobe = lobe;
     }
 
+    /// Set s (radius scaling)
+    #[wasm_bindgen(setter)]
+    pub fn set_s(&mut self, s: f64) {
+        self.inner.s = s;
+    }
+
+    /// Set alpha (residual amplitude)
+    #[wasm_bindgen(setter)]
+    pub fn set_alpha(&mut self, alpha: f64) {
+        self.inner.alpha = alpha;
+    }
+
+    /// Set omega (base angular velocity)
+    #[wasm_bindgen(setter)]
+    pub fn set_omega(&mut self, omega: f64) {
+        self.inner.omega = omega;
+    }
+
+    /// Get sub_lobe
+    #[wasm_bindgen(getter)]
+    pub fn sub_lobe(&self) -> u32 {
+        self.inner.sub_lobe
+    }
+
+    /// Set sub_lobe
+    #[wasm_bindgen(setter)]
+    pub fn set_sub_lobe(&mut self, sub_lobe: u32) {
+        self.inner.sub_lobe = sub_lobe;
+    }
+
     /// Get theta
     #[wasm_bindgen(getter)]
     pub fn theta(&self) -> f64 {
