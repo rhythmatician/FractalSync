@@ -26,6 +26,7 @@ use crate::controller::{
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
+use crate::proxies as rust_proxies;
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 use crate::distance_field::{sample_distance_field};
 
@@ -407,6 +408,31 @@ fn lobe_point_at_angle(py: Python, lobe: u32, sub_lobe: u32, theta: f64, s: f64)
     Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
 }
 
+/// Free function: compute cardioid-boundary proximity for a batch of points.
+#[pyfunction]
+#[pyo3(signature = (coords))]
+fn mandelbrot_cardioid_proximity_batch(
+    coords: Vec<Bound<'_, PyComplex>>,
+) -> PyResult<Vec<f64>> {
+    let cs: Vec<num_complex::Complex64> = coords
+        .iter()
+        .map(|c| num_complex::Complex64::new(c.real(), c.imag()))
+        .collect();
+    Ok(rust_proxies::mandelbrot_cardioid_proximity_batch(&cs))
+}
+
+/// Free function: compute orbit path metrics over a c(t) trajectory.
+#[pyfunction]
+#[pyo3(signature = (coords))]
+fn orbit_path_metrics_py(coords: Vec<Bound<'_, PyComplex>>) -> PyResult<(f64, f64, f64)> {
+    let pts: Vec<num_complex::Complex64> = coords
+        .iter()
+        .map(|c| num_complex::Complex64::new(c.real(), c.imag()))
+        .collect();
+    let m = rust_proxies::orbit_path_metrics(&pts);
+    Ok((m.mean_speed, m.max_speed, m.spread))
+}
+
 /// Runtime visual metrics computed in Rust.
 #[pyclass]
 #[derive(Clone, Debug)]
@@ -535,6 +561,10 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
+    // Differentiable-proxy reference implementations (training supervision)
+    m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;
+    m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
 }

@@ -1,7 +1,7 @@
 import time
 import time
 import numpy as np
-from src.runtime_core_bridge import make_feature_extractor
+from src.runtime_core_helpers import make_feature_extractor
 
 
 def bench(n_iters=2000, n_samples=1024):

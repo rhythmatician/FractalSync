@@ -105,15 +105,19 @@ def make_feature_extractor(include_delta: bool = False, include_delta_delta: boo
     """Create a runtime_core.FeatureExtractor and wrap it with a small
     proxy object. We run a short sanity subprocess check to avoid calling
     the Rust extractor from the main process if it is known to hang.
+    Raises RuntimeError if the Rust extractor fails the sanity check.
     """
     if _rust_extractor_sanity_check(include_delta, include_delta_delta):
         logger.info("Using Rust FeatureExtractor for extraction (sanity check passed)")
         fe = rc.FeatureExtractor(sr=SAMPLE_RATE, hop_length=HOP_LENGTH, n_fft=N_FFT, include_delta=include_delta, include_delta_delta=include_delta_delta)
         return FeatureExtractorProxy(fe)
-    logger.error("Rust FeatureExtractor sanity check failed; consider rebuilding runtime_core or falling back to Python extractor")
-    # As a conservative fallback return a working extractor instance anyway
-    fe = rc.FeatureExtractor(sr=SAMPLE_RATE, hop_length=HOP_LENGTH, n_fft=N_FFT, include_delta=include_delta, include_delta_delta=include_delta_delta)
-    return FeatureExtractorProxy(fe)
+    logger.error("Rust FeatureExtractor sanity check failed; refusing to fall back to Python extractor")
+    raise RuntimeError(
+        "Rust FeatureExtractor sanity check failed. "
+        "This indicates a problem with the runtime_core native extension. "
+        "Rebuild with 'maturin develop --release' from the runtime-core directory, "
+        "or investigate the Rust extractor hang. Fallback to Python extractor is disabled by policy."
+    )
 
 
 # Simple convenience wrappers mirroring the bridge
