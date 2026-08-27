@@ -305,6 +305,25 @@ def main():
         help="Maximum cardioid proximity (exterior dust dead-zone edge)",
     )
     parser.add_argument(
+        "--julia-stability-weight",
+        type=float,
+        default=0.0,
+        help="Weight for J(c) frame-to-frame stability loss (0 disables). "
+        "Penalizes perceptual c displacement in quiet parts; transients exempt.",
+    )
+    parser.add_argument(
+        "--julia-stability-base",
+        type=float,
+        default=0.02,
+        help="Perceptual displacement allowed in silence (local-scale units)",
+    )
+    parser.add_argument(
+        "--julia-stability-loud-gain",
+        type=float,
+        default=0.08,
+        help="Extra allowed displacement per unit audio energy (loud parts drift more)",
+    )
+    parser.add_argument(
         "--recurrent",
         action="store_true",
         help="Use GRU-based temporal encoder instead of flat MLP",
@@ -461,6 +480,9 @@ def execute_training_workflow(args):
         zone_weight=args.zone_weight,
         zone_min=args.zone_min,
         zone_max=args.zone_max,
+        julia_stability_weight=args.julia_stability_weight,
+        julia_stability_base=args.julia_stability_base,
+        julia_stability_loud_gain=args.julia_stability_loud_gain,
     )
 
     if args.resume_checkpoint:

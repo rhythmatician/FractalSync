@@ -7,6 +7,7 @@ Trains model to predict control signals that drive deterministic orbit synthesis
 import json
 import os
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from tqdm import tqdm
 import numpy as np
@@ -20,11 +21,11 @@ from .control_model import AudioToControlModel
 from .cspace_proxies import (
     cardioid_proximity,
     orbit_controller_momentum_sequence,
-    orbit_controller_sequence,
     shore_proximity,
     synthesize_c,
 )
 from .data_loader import AudioDataset
+from .c_trace_plot import collect_c_traces, plot_c_traces
 from .visual_metrics import LossVisualMetrics
 from runtime_core import (
     DEFAULT_BASE_OMEGA,
@@ -162,6 +163,9 @@ class ControlTrainer:
         zone_weight: float = 1.0,
         zone_min: float = 0.01,
         zone_max: float = 0.45,
+        julia_stability_weight: float = 0.0,
+        julia_stability_base: float = 0.02,
+        julia_stability_loud_gain: float = 0.08,
     ):
         """
         Initialize control trainer.
@@ -252,6 +256,17 @@ class ControlTrainer:
         self.zone_weight = zone_weight
         self.zone_min = zone_min
         self.zone_max = zone_max
+        # J(c) frame-to-frame stability (see _julia_stability_loss).
+        self.julia_stability_weight = julia_stability_weight
+        # Perceptual displacement allowed in silence (in local-scale units).
+        self.julia_stability_base = julia_stability_base
+        # Extra allowed displacement per unit of audio energy (loud parts
+        # may drift a little more).
+        self.julia_stability_loud_gain = julia_stability_loud_gain
+        # c-trace plot metadata (set in train()): dataset file order and
+        # window size, so per-epoch plots replay the same songs.
+        self._trace_dataset_files: List[Path] = []
+        self._trace_window_frames: int = 10
         self.residual_params = ResidualParams(
             k_residuals=k_residuals,
             residual_cap=DEFAULT_RESIDUAL_CAP,
@@ -295,6 +310,7 @@ class ControlTrainer:
             "rollout_loss": [],
             "coverage_loss": [],
             "anti_dwell_loss": [],
+            "julia_stability_loss": [],
             "zone_loss": [],
             "alignment_proxy": [],
         }
@@ -766,6 +782,68 @@ class ControlTrainer:
         above = torch.relu(proximity - self.zone_max)
         return (below**2 + above**2).mean()
 
+    def _julia_stability_loss(
+        self,
+        c_sequence: torch.Tensor,
+        segment_ids: torch.Tensor,
+        audio_energy: torch.Tensor,
+        onset_strength: torch.Tensor,
+    ) -> torch.Tensor:
+        """Frame-to-frame stability of the rendered Julia set J(c).
+
+        The user's framing: what matters visually is not |dc| but how much
+        J(c) changes frame to frame. Two regimes:
+
+        - Quiet parts: J(c) should be nearly STILL. Penalize any c
+          displacement, scaled by the local feature size (proximity) so the
+          penalty is perceptual, not absolute — the same |dc| barely changes
+          J far from the boundary but completely transforms it near it.
+        - Transients: c crossing in/out of the Mandelbrot set flips J(c)
+          between connected and dust — a full-frame change. That is DESIRED
+          on transients/section transitions, so displacement there is
+          exempt (gated by onset strength).
+
+        Loss = mean over frames of (quiet-gate * perceptual-displacement),
+        where perceptual-displacement = |dc| / local_scale and the quiet
+        gate fades out on transients. Fully differentiable w.r.t. the
+        controls through c_sequence.
+        """
+        if c_sequence.shape[0] < 2 or self.julia_stability_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        # Local feature scale: near the boundary J(c) is infinitely detailed,
+        # so tiny dc = huge visual change; far away the same dc is invisible.
+        local_scale = torch.clamp(proximity, min=0.02)
+
+        seg = segment_ids.reshape(-1)
+        step_ok = torch.ones_like(proximity, dtype=torch.bool)
+        if seg.shape[0] > 1:
+            step_ok[1:] = seg[1:] == seg[:-1]
+            step_ok[0] = False
+
+        dc = torch.abs(c_sequence[1:] - c_sequence[:-1])
+        perceptual_dc = dc / local_scale[1:]
+
+        # Quiet gate: full penalty in silence/quiet, fading to zero on
+        # transients (where big J(c) changes are wanted).
+        onset = torch.nan_to_num(onset_strength.reshape(-1).float(), nan=0.0)
+        onset = torch.clamp(onset, 0.0, 1.0)[1:]
+        quiet_gate = 1.0 - onset
+
+        # Energy scaling: loud-but-steady parts may drift a little more
+        # than silence, per the user's "less movement for quiet parts,
+        # a little more for loud parts".
+        energy = torch.nan_to_num(audio_energy.reshape(-1).float(), nan=0.0)
+        energy = torch.clamp(energy, 0.0, 1.0)[1:]
+        allowed = self.julia_stability_base + self.julia_stability_loud_gain * energy
+
+        excess = torch.relu(perceptual_dc - allowed) * quiet_gate
+        valid = step_ok[1:]
+        if valid.any():
+            return excess[valid].mean()
+        return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
     def _make_clip_dataloader(
         self,
         features: torch.Tensor,
@@ -846,6 +924,7 @@ class ControlTrainer:
         total_rollout = 0.0
         total_coverage = 0.0
         total_anti_dwell = 0.0
+        total_julia_stability = 0.0
         total_zone = 0.0
         n_batches = 0
 
@@ -1151,6 +1230,14 @@ class ControlTrainer:
             zone_loss = self._zone_loss(c_complex)
             zone_loss = self._sanitize_scalar(zone_loss)
 
+            # J(c) frame-to-frame stability: quiet parts nearly still,
+            # loud parts drift a little, transients exempt (full-frame
+            # changes land there by design).
+            julia_stability_loss = self._julia_stability_loss(
+                c_complex, segment_ids, spectral_rms, onset_strength
+            )
+            julia_stability_loss = self._sanitize_scalar(julia_stability_loss)
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -1175,6 +1262,7 @@ class ControlTrainer:
                 + self.coverage_weight * coverage_loss
                 + self.anti_dwell_weight * anti_dwell_loss
                 + self.zone_weight * zone_loss
+                + self.julia_stability_weight * julia_stability_loss
             )
             total_batch_loss = self._sanitize_scalar(total_batch_loss)
 
@@ -1196,6 +1284,7 @@ class ControlTrainer:
             total_rollout += rollout_loss.item()
             total_coverage += coverage_loss.item()
             total_anti_dwell += anti_dwell_loss.item()
+            total_julia_stability += julia_stability_loss.item()
             total_zone += zone_loss.item()
             n_batches += 1
 
@@ -1212,6 +1301,7 @@ class ControlTrainer:
             "rollout_loss": total_rollout / n_batches,
             "coverage_loss": total_coverage / n_batches,
             "anti_dwell_loss": total_anti_dwell / n_batches,
+            "julia_stability_loss": total_julia_stability / n_batches,
             "zone_loss": total_zone / n_batches,
         }
 
@@ -1233,6 +1323,10 @@ class ControlTrainer:
         logger.info("Loading audio features...")
         all_features = dataset.load_all_features()
         logger.info(f"Loaded {len(all_features)} feature set(s)")
+
+        # Remember the dataset layout for the per-epoch c-trace plots.
+        self._trace_dataset_files = list(dataset.audio_files)
+        self._trace_window_frames = dataset.window_frames
 
         if len(all_features) == 0:
             logger.error(
@@ -1316,6 +1410,12 @@ class ControlTrainer:
                 f"AlignProxy: {avg_losses['alignment_proxy']:.4f}"
             )
 
+            # c-trace diagnostic: plot the model's c(t) path per song over
+            # the Mandelbrot set. Shows which regions are explored and —
+            # critically — whether/where c gets stuck.
+            if save_dir:
+                self._plot_c_traces(save_dir, epoch + 1)
+
             if save_dir and (
                 self.best_alignment_proxy is None
                 or avg_losses["alignment_proxy"] > self.best_alignment_proxy
@@ -1343,6 +1443,30 @@ class ControlTrainer:
 
         logger.info("Training complete!")
         return self.last_checkpoint_path
+
+    def _plot_c_traces(self, save_dir: str, epoch: int) -> Optional[str]:
+        """Generate the per-song c-trace plot for the current model state."""
+        try:
+            dataset_files = self._trace_dataset_files
+            if not dataset_files:
+                return None
+            traces = collect_c_traces(
+                self.model,
+                self.feature_extractor,
+                dataset_files,
+                window_frames=self._trace_window_frames,
+            )
+            if not traces:
+                return None
+            out = plot_c_traces(
+                traces,
+                Path(save_dir) / "c_traces" / f"c_trace_epoch_{epoch:04d}.png",
+                title=f"c(t) trajectories — epoch {epoch}",
+            )
+            return str(out) if out else None
+        except Exception as exc:  # noqa: BLE001 - diagnostics must never kill training
+            logger.warning("c-trace plot failed (non-fatal): %s", exc)
+            return None
 
     def save_checkpoint(
         self,
