@@ -195,6 +195,11 @@ impl OrbitController {
         self.inner.drag = drag;
     }
 
+    /// Audio thrust magnitude for momentum: sustained energy builds inertia.
+    fn set_thrust(&mut self, thrust: f64) {
+        self.inner.thrust = thrust;
+    }
+
     fn set_shore_bias(&mut self, on: bool) {
         self.inner.shore_bias = on;
     }

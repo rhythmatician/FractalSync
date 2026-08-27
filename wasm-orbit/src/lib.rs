@@ -528,6 +528,12 @@ impl OrbitController {
         self.inner.drag = drag;
     }
 
+    /// Audio thrust for momentum: sustained energy builds inertia.
+    #[wasm_bindgen(setter)]
+    pub fn set_thrust(&mut self, thrust: f64) {
+        self.inner.thrust = thrust;
+    }
+
     /// Refinement 2 toggle: shore bias via minimap contour stepping.
     #[wasm_bindgen(setter)]
     pub fn set_shore_bias(&mut self, on: bool) {

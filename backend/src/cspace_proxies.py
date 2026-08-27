@@ -320,6 +320,7 @@ def orbit_controller_momentum_sequence(
     segment_ids: torch.Tensor,
     dt: float = 1.0 / 60.0,
     drag: float = 0.90,
+    thrust: float = 0.0,
 ) -> torch.Tensor:
     """Differentiable replay of OrbitController::step with momentum ON.
 
@@ -327,6 +328,9 @@ def orbit_controller_momentum_sequence(
       theta += omega*dt
       target = mandelbrot_boundary(s, alpha) + residual epicycles
       a = (target - c) * 2*dt          # pull-as-acceleration
+        + thrust * tangent(target - c)  # audio thrust (sustained energy
+                                        # builds inertia; c orbits its
+                                        # target instead of parking on it)
       v = v*drag + a
       c += v*dt
     c starts at the first frame's boundary point; velocity resets at
@@ -386,8 +390,16 @@ def orbit_controller_momentum_sequence(
         if seg_boundary[i]:
             v_re = torch.zeros_like(v_re)
             v_im = torch.zeros_like(v_im)
-        a_re = (tgt_re[i] - cur_re) * accel_gain
-        a_im = (tgt_im[i] - cur_im) * accel_gain
+        dx = tgt_re[i] - cur_re
+        dy = tgt_im[i] - cur_im
+        a_re = dx * accel_gain
+        a_im = dy * accel_gain
+        if thrust > 0.0:
+            # Tangential thrust (perpendicular to the pull): sustained
+            # energy keeps c orbiting its target instead of parking on it.
+            d = torch.sqrt(dx * dx + dy * dy + 1e-12)
+            a_re = a_re + thrust * (-dy / d)
+            a_im = a_im + thrust * (dx / d)
         v_re = v_re * drag + a_re
         v_im = v_im * drag + a_im
         cur_re = cur_re + v_re * dt

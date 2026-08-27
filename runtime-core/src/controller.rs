@@ -423,6 +423,11 @@ pub struct OrbitController {
     pub velocity: num_complex::Complex64,
     /// Per-frame velocity retention when momentum is on (0.90 = May+10%).
     pub drag: f64,
+    /// Audio thrust magnitude for momentum (0 = off). When > 0, sustained
+    /// audio energy applies a tangential thrust each frame so loud audio
+    /// literally builds inertia: c can never be stationary under sustained
+    /// volume. Set via set_thrust() from the runtime's energy signal.
+    pub thrust: f64,
     //
     /// Refinement 2 — SHORE BIAS: route motion through the minimap's
     /// contour_biased_step so c hugs the Shore. Requires a loaded pyramid;
@@ -447,6 +452,7 @@ impl Default for OrbitController {
             c: num_complex::Complex64::new(0.0, 0.0),
             velocity: num_complex::Complex64::new(0.0, 0.0),
             drag: 0.90,
+            thrust: 0.0,
             shore_bias: false,
             d_star: 0.5,
             max_step: 0.05,
@@ -533,8 +539,30 @@ impl OrbitController {
 
         // Momentum path: pull toward the target is an acceleration.
         let accel_gain = 2.0 * dt;
-        let a_re = (target.re - self.c.re) * accel_gain;
-        let a_im = (target.im - self.c.im) * accel_gain;
+        let mut a_re = (target.re - self.c.re) * accel_gain;
+        let mut a_im = (target.im - self.c.im) * accel_gain;
+
+        // Audio thrust: sustained volume builds inertia. The thrust is
+        // TANGENTIAL to the vector from c to the target — perpendicular
+        // to the pull — so it never fights the attraction (which would
+        // prevent convergence) but keeps c orbiting its target instead
+        // of parking on it. Magnitude scales with the runtime's energy
+        // signal: loud audio = strong thrust, silence = pure attraction
+        // (c settles). This makes sustained volume literally impossible
+        // to be stationary, per the domain contract's Momentum concept.
+        if self.thrust > 0.0 {
+            let dx = target.re - self.c.re;
+            let dy = target.im - self.c.im;
+            let d = (dx * dx + dy * dy).sqrt();
+            if d > 1e-9 {
+                // Tangent unit vector (rotate pull direction by 90°).
+                let tx = -dy / d;
+                let ty = dx / d;
+                a_re += self.thrust * tx;
+                a_im += self.thrust * ty;
+            }
+        }
+
         self.velocity = self.velocity.scale(self.drag)
             + num_complex::Complex64::new(a_re, a_im);
         let v_dt = self.velocity.scale(dt);
