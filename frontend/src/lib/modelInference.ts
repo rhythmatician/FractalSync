@@ -165,6 +165,14 @@ export class ModelInference {
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
 
+          // Momentum refinement (ADR 0001, opt-in flag, default OFF): c is
+          // persistent state with drag; the boundary target pulls via
+          // acceleration. Smooths the frame-to-frame jitter of the raw
+          // baseline (c teleporting to each new boundary point) while
+          // staying audio-driven — the model still chooses WHERE to go,
+          // momentum just shapes HOW c travels there.
+          this.orbitSynthesizer.setMomentum(true, 0.90);
+
           // Controller contract check (ADR 0001): the model must have been
           // trained against the same controller semantics this runtime runs.
           const runtimeVersion = getControllerVersion();
