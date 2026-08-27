@@ -17,7 +17,12 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
-from .cspace_proxies import cardioid_proximity, shore_proximity, synthesize_c
+from .cspace_proxies import (
+    cardioid_proximity,
+    player_step_sequence,
+    shore_proximity,
+    synthesize_c,
+)
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
 from runtime_core import (
@@ -935,13 +940,17 @@ class ControlTrainer:
                     batch_size, window_frames, n_features_per_frame
                 )
                 avg_features = features_reshaped.mean(dim=1)
-                audio_energy = torch.clamp(avg_features[:, 2], min=0.0)  # RMS
 
-                thetas = self._temporal_thetas(
-                    omega_scale, segment_ids, audio_energy=audio_energy
-                )
-                c_complex = self._synthesize_c_differentiable(
-                    s_target, alpha, band_gates, thetas
+                # Supervise through the SAME integrator the browser executes:
+                # PlayerState momentum (v = drag*v + accel; c += v*dt). The
+                # old path supervised the closed-loop OrbitState carrier,
+                # which is why trained controls saturated and c parked.
+                c_complex = player_step_sequence(
+                    s_target=s_target,
+                    alpha=alpha,
+                    omega_scale=omega_scale,
+                    band_gates=band_gates,
+                    segment_ids=segment_ids,
                 )
 
                 spectral_centroid = avg_features[:, 0]
@@ -1073,12 +1082,14 @@ class ControlTrainer:
                 transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
                 loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
 
-                # Legacy path also uses physics-based theta for coverage/anti-dwell.
-                thetas = self._temporal_thetas(
-                    omega_scale, segment_ids, audio_energy=spectral_rms
-                )
-                c_complex = self._synthesize_c_differentiable(
-                    s_target, alpha, band_gates, thetas
+                # Legacy path also supervises through the PlayerState momentum
+                # integrator so both supervision paths match runtime physics.
+                c_complex = player_step_sequence(
+                    s_target=s_target,
+                    alpha=alpha,
+                    omega_scale=omega_scale,
+                    band_gates=band_gates,
+                    segment_ids=segment_ids,
                 )
 
             # Sequence-level terms: smooth off-hit, allow/encourage transitions on hits.

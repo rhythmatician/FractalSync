@@ -112,6 +112,53 @@ class TestPlayerGolden:
                 "(did Rust math change without regenerating golden_vectors.json?)"
             )
 
+    def test_player_mirror_matches_golden(self, golden):
+        """The differentiable PyTorch mirror must reproduce Rust trajectories.
+
+        This is THE parity contract for training: if this fails, the trainer
+        supervises physics the browser does not execute.
+        """
+        import torch
+
+        from src.cspace_proxies import player_step_sequence
+
+        max_err = 0.0
+        for case in golden["player_step_cases"]:
+            controls = case["controls"]
+            n = len(controls)
+            s_t = torch.tensor([c[0] for c in controls])
+            a_t = torch.tensor([c[1] for c in controls])
+            w_t = torch.tensor([c[2] for c in controls])
+            gates = (
+                torch.tensor([case["band_gates"]], dtype=torch.float32)
+                .repeat(n, 1)
+            )
+            seg = torch.zeros(n, dtype=torch.int64)
+
+            # Start on the boundary at (s0, alpha0) like PlayerState::new.
+            theta0 = case["alpha0"] * 2.0 * math.pi
+            mu0 = case["s0"] * cmath.exp(1j * theta0)
+            c0_complex = mu0 / 2 - mu0**2 / 4
+
+            pt_c = player_step_sequence(
+                s_target=s_t,
+                alpha=a_t,
+                omega_scale=w_t,
+                band_gates=gates,
+                segment_ids=seg,
+                dt=case["dt"],
+                c0=(c0_complex.real, c0_complex.imag),
+            )
+            err = max(
+                abs(pt_c[-1].real.item() - case["c_re"]),
+                abs(pt_c[-1].imag.item() - case["c_im"]),
+            )
+            max_err = max(max_err, err)
+        assert max_err < 1e-5, (
+            f"PlayerState mirror diverged from golden: max_err={max_err} "
+            "(trainer would supervise wrong physics)"
+        )
+
 
 class TestProximityGolden:
     def test_proximity_matches_golden(self, golden):

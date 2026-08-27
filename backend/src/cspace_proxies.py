@@ -19,6 +19,8 @@ truth.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import torch
 
@@ -140,3 +142,99 @@ def shore_proximity(c: torch.Tensor, level: int = 2) -> torch.Tensor:
     return torch.tensor(
         values, dtype=torch.float32, device=c.device
     ).reshape(c.shape if c.dim() > 0 else ())
+
+
+# ---------------------------------------------------------------------------
+# PlayerState momentum integrator mirror
+#
+# Mirrors ``runtime_core::controller::PlayerState::step`` — the integrator the
+# BROWSER actually executes. Constants must match controller.rs exactly:
+#   drag = 0.90, accel_gain = omega_scale * 2.0 * dt, jitter amp 0.004/(k+1).
+# The contour-bias step (minimap) is a runtime-only refinement on top of the
+# clamped motion; training supervises the no-pyramid fallback path, which is
+# what the golden vectors record.
+# ---------------------------------------------------------------------------
+
+PLAYER_DRAG = 0.90
+PLAYER_JITTER_AMP = 0.004
+
+
+def player_step_sequence(
+    s_target: torch.Tensor,
+    alpha: torch.Tensor,
+    omega_scale: torch.Tensor,
+    band_gates: torch.Tensor,
+    segment_ids: torch.Tensor,
+    dt: float = 1.0 / 60.0,
+    c0: tuple[float, float] | None = None,
+) -> torch.Tensor:
+    """Differentiable replay of PlayerState momentum integration.
+
+    Mirrors ``PlayerState::step`` per frame: target = lobe_point_at_angle(
+    lobe=1, 0, alpha*2π, s); a = (target − c)·ω·2·dt + gate jitter;
+    v = drag·v + a; c += v·dt. Velocity resets at segment boundaries.
+
+    All ops are real-tensor ops so gradients flow back through s, alpha,
+    omega_scale, and band_gates. Returns complex tensor of shape (N,).
+
+    Parity is pinned by backend/tests/test_golden_parity.py against
+    shared/golden_vectors.json player trajectories.
+    """
+    n = s_target.shape[0]
+    device = s_target.device
+
+    # Target boundary points for every frame (vectorized carrier formula).
+    theta = alpha.reshape(-1).float() * 2.0 * math.pi
+    cos_t = torch.cos(theta)
+    sin_t = torch.sin(theta)
+    mu_re = s_target.reshape(-1).float() * cos_t
+    mu_im = s_target.reshape(-1).float() * sin_t
+    mu2_re = mu_re * mu_re - mu_im * mu_im
+    mu2_im = 2.0 * mu_im * mu_re
+    tgt_re = 0.5 * mu_re - 0.25 * mu2_re
+    tgt_im = 0.5 * mu_im - 0.25 * mu2_im
+
+    # Gate jitter phases: alpha*2π*(k+2), amplitude 0.004*gate/(k+1).
+    k_idx = torch.arange(band_gates.shape[1], device=device, dtype=torch.float32)
+    jit_phase = alpha.reshape(-1, 1).float() * 2.0 * math.pi * (k_idx + 2.0)
+    jit_amp = PLAYER_JITTER_AMP * band_gates.float() / (k_idx + 1.0)
+    jit_re = (jit_amp * torch.cos(jit_phase)).sum(dim=1)
+    jit_im = (jit_amp * torch.sin(jit_phase)).sum(dim=1)
+
+    # Per-frame acceleration gain.
+    w = omega_scale.reshape(-1).float().clamp(0.1, 10.0)
+    accel_gain = w * 2.0 * dt
+
+    seg = segment_ids.reshape(-1)
+    seg_boundary = torch.zeros(n, dtype=torch.bool, device=device)
+    if n > 1:
+        seg_boundary[1:] = seg[1:] != seg[:-1]
+
+    # Sequential scan (differentiable through time).
+    c_re = torch.zeros(n, device=device, dtype=torch.float32)
+    c_im = torch.zeros(n, device=device, dtype=torch.float32)
+    v_re = torch.zeros((), device=device, dtype=torch.float32)
+    v_im = torch.zeros((), device=device, dtype=torch.float32)
+
+    start_re, start_im = c0 if c0 is not None else (
+        float(tgt_re[0].detach()), float(tgt_im[0].detach())
+    )
+    cur_re = torch.tensor(start_re, device=device, dtype=torch.float32)
+    cur_im = torch.tensor(start_im, device=device, dtype=torch.float32)
+
+    for i in range(n):
+        if seg_boundary[i]:
+            v_re = torch.zeros_like(v_re)
+            v_im = torch.zeros_like(v_im)
+            cur_re = tgt_re[i]
+            cur_im = tgt_im[i]
+        a_re = (tgt_re[i] - cur_re) * accel_gain[i] + jit_re[i]
+        a_im = (tgt_im[i] - cur_im) * accel_gain[i] + jit_im[i]
+        v_re = v_re * PLAYER_DRAG + a_re
+        v_im = v_im * PLAYER_DRAG + a_im
+        cur_re = cur_re + v_re * dt
+        cur_im = cur_im + v_im * dt
+        c_re[i] = cur_re
+        c_im[i] = cur_im
+
+    return torch.complex(c_re, c_im)

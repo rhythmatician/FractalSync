@@ -155,6 +155,68 @@ def check_mirror_parity(rc) -> tuple[bool, float]:
     return max_err <= MIRROR_TOL, max_err
 
 
+def check_player_mirror_parity(rc) -> tuple[bool, float]:
+    """(e) PlayerState mirror vs Rust PlayerState trajectories.
+
+    THE critical check: the trainer must supervise through the same momentum
+    integrator the browser executes. A divergence here means training optimizes
+    physics the runtime does not run — the exact failure that wasted a 90-minute
+    session and produced saturated, frozen-c controls.
+    """
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "torch is required for player mirror parity check (e). Install "
+            "backend requirements: pip install -r backend/requirements.txt"
+        ) from exc
+
+    from src.cspace_proxies import player_step_sequence
+
+    rng = torch.Generator().manual_seed(0)
+    n_steps = 60
+    max_err = 0.0
+    for trial in range(4):
+        s0 = float(0.5 + 2.2 * torch.rand(1, generator=rng))
+        alpha0 = float(torch.rand(1, generator=rng))
+        s_vals = (s0 + 0.05 * torch.randn(n_steps, generator=rng)).clamp(0.2, 3.0)
+        a_vals = (alpha0 + 0.01 * torch.randn(n_steps, generator=rng)).clamp(0.0, 1.0)
+        w_vals = (1.0 + 3.0 * torch.rand(n_steps, generator=rng)).clamp(0.1, 10.0)
+        gates = torch.rand(n_steps, K_RESIDUALS, generator=rng)
+        seg = torch.zeros(n_steps, dtype=torch.int64)
+
+        # Rust reference: replay through the actual binding.
+        p = rc.PlayerState(1, 0, s0, alpha0)
+        rust_re = 0.0
+        rust_im = 0.0
+        for i in range(n_steps):
+            p.apply_controls(float(s_vals[i]), float(a_vals[i]), float(w_vals[i]))
+            rust_re, rust_im = p.step(
+                1.0 / 60.0, 0.0, [float(g) for g in gates[i]]
+            )
+
+        # Mirror: same controls through the differentiable sequence. The
+        # mirror's c0 must match the Rust constructor state (boundary at
+        # s0/alpha0), which differs from the first frame's controls.
+        theta0 = alpha0 * 2.0 * math.pi
+        mu0 = complex(s0 * math.cos(theta0), s0 * math.sin(theta0))
+        c0 = mu0 / 2 - mu0**2 / 4
+        pt_c = player_step_sequence(
+            s_target=s_vals,
+            alpha=a_vals,
+            omega_scale=w_vals,
+            band_gates=gates,
+            segment_ids=seg,
+            c0=(c0.real, c0.imag),
+        )
+        err = max(
+            abs(rust_re - pt_c[-1].real.item()),
+            abs(rust_im - pt_c[-1].imag.item()),
+        )
+        max_err = max(max_err, err)
+    return max_err <= MIRROR_TOL, max_err
+
+
 def check_shared_phase_source(rc) -> tuple[bool, float]:
     """(c) residual_phases_for_seed_py == OrbitState.residual_phases()."""
     max_err = 0.0
@@ -218,6 +280,11 @@ CHECKS: list[tuple[str, bool, Callable]] = [
     ("a) Carrier parity (Rust vs closed form)", True, check_carrier_parity),
     ("b) Mirror parity (synthesize_c vs Rust)", True, check_mirror_parity),
     ("c) Shared phase source", True, check_shared_phase_source),
+    (
+        "e) Player mirror parity (trainer vs runtime)",
+        True,
+        check_player_mirror_parity,
+    ),
     ("d) Minimap availability (warning only)", False, check_minimap_availability),
 ]
 
