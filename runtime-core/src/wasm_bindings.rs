@@ -418,3 +418,83 @@ pub fn get_builtin_distance_field(name: &str) -> Result<Array, JsValue> {
         Err(e) => Err(JsValue::from_str(&e)),
     }
 }
+
+/// Set the mip pyramid (the Map's multi-scale minimaps) from host-provided
+/// flat planes. `f_flat` and `s_flat` are concatenated per-level row-major
+/// f32 planes; widths/heights give each level's dimensions.
+#[wasm_bindgen]
+pub fn set_mip_pyramid(
+    f_flat: Vec<f32>,
+    s_flat: Vec<f32>,
+    widths: Vec<u32>,
+    heights: Vec<u32>,
+    re_min: f64,
+    re_max: f64,
+    im_min: f64,
+    im_max: f64,
+) -> Result<(), JsValue> {
+    if f_flat.len() != s_flat.len() || widths.len() != heights.len() {
+        return Err(JsValue::from_str("mip pyramid buffer mismatch"));
+    }
+    let total: usize = widths
+        .iter()
+        .zip(heights.iter())
+        .map(|(&w, &h)| w as usize * h as usize)
+        .sum();
+    if f_flat.len() != total {
+        return Err(JsValue::from_str(format!(
+            "expected {} values, got {}",
+            total,
+            f_flat.len()
+        ).as_str()));
+    }
+    let split = |flat: &[f32]| -> Vec<Vec<f32>> {
+        let mut out = Vec::with_capacity(widths.len());
+        let mut pos = 0usize;
+        for i in 0..widths.len() {
+            let n = widths[i] as usize * heights[i] as usize;
+            out.push(flat[pos..pos + n].to_vec());
+            pos += n;
+        }
+        out
+    };
+    let mut pyr = crate::minimap::MipPyramid::from_levels(
+        split(&s_flat),
+        widths.iter().map(|&w| w as usize).collect(),
+        heights.iter().map(|&h| h as usize).collect(),
+        re_min,
+        re_max,
+        im_min,
+        im_max,
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    pyr.fields = [split(&f_flat), split(&s_flat)];
+    crate::minimap::set_pyramid(pyr).map_err(|e| JsValue::from_str(&e))
+}
+
+/// The Player's full observation at c: 4×81 greys + 8 slope values = 332.
+#[wasm_bindgen]
+pub fn player_observation(real: f64, imag: f64) -> Result<Vec<f32>, JsValue> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| JsValue::from_str("mip pyramid not loaded"))?;
+        let c = RustComplex::new(real, imag);
+        pyr.player_observation(c)
+            .ok_or_else(|| JsValue::from_str("c outside map extent"))
+    })
+}
+
+/// Slope of the shore-proximity field at c on a mip level.
+#[wasm_bindgen]
+pub fn minimap_slope(real: f64, imag: f64, level: usize) -> Result<Array, JsValue> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| JsValue::from_str("mip pyramid not loaded"))?;
+        let c = RustComplex::new(real, imag);
+        let (gx, gy) = pyr
+            .slope(c, level)
+            .ok_or_else(|| JsValue::from_str("c outside map extent"))?;
+        let arr = Array::new();
+        arr.push(&JsValue::from_f64(gx));
+        arr.push(&JsValue::from_f64(gy));
+        Ok(arr)
+    })
+}

@@ -302,6 +302,53 @@ fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64
     }
 }
 
+/// Load the baked mip pyramid (the Map's multi-scale minimaps) from files and
+/// register it as the process-wide pyramid.
+#[pyfunction]
+fn load_mip_pyramid_py(
+    f_bin_path: &str,
+    s_bin_path: &str,
+    meta_path: &str,
+) -> PyResult<(usize, f64, f64, f64, f64)> {
+    let pyr = crate::minimap::load_pyramid_from_files(f_bin_path, s_bin_path, meta_path)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let n = pyr.num_levels();
+    let (re_min, re_max, im_min, im_max) = (pyr.re_min, pyr.re_max, pyr.im_min, pyr.im_max);
+    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok((n, re_min, re_max, im_min, im_max))
+}
+
+/// The Player's full observation at c: 4×81 greys + 8 slope values = 332.
+#[pyfunction]
+fn player_observation_py(py: Python, c_re: f64, c_im: f64) -> PyResult<Vec<f32>> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded; call load_mip_pyramid_py first")
+        })?;
+        let c = num_complex::Complex64::new(c_re, c_im);
+        pyr.player_observation(c)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
+            .map_err(|e| e.into())
+            .map(|obs| {
+                let _ = py;
+                obs
+            })
+    })
+}
+
+/// Slope of the shore-proximity field at c on a level.
+#[pyfunction]
+fn minimap_slope_py(c_re: f64, c_im: f64, level: usize) -> PyResult<(f64, f64)> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
+        })?;
+        let c = num_complex::Complex64::new(c_re, c_im);
+        pyr.slope(c, level)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
+    })
+}
+
 /// Module-level __getattr__ to dynamically provide fallback callables for
 /// missing top-level functions. This helps tests that delete attributes via
 /// monkeypatch and provides a safety net when the compiled extension is
@@ -561,6 +608,10 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
+    // Minimap / mip pyramid (the Player's windows onto the Map)
+    m.add_function(wrap_pyfunction!(load_mip_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
+    m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
     // Differentiable-proxy reference implementations (training supervision)
     m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;

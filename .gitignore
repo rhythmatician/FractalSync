@@ -73,9 +73,7 @@ telemetry.csv
 # Generated distance-map artifacts
 Slog_mips_f32.bin
 Slog_mips_meta.json
-mandel_F_mips_f32.bin
-mandel_S_mips_f32.bin
-mandel_mips_meta.json
+# Mip pyramid artifacts are committed (the Map's minimaps, issue #88)
 backend/data/mandelbrot_distance_1024.json
 backend/data/mandelbrot_distance_1024.npy
 runtime-core/data.bin
