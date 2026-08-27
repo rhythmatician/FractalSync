@@ -69,7 +69,9 @@ def mandelbrot_distance_estimate_from_any(
         xs = np.array([float(complex(p).real) for p in points], dtype=float)
         ys = np.array([float(complex(p).imag) for p in points], dtype=float)
 
-    # Call the runtime-core binding with Python lists (cheap views via .tolist())
+    # Call the runtime-core binding with Python lists (cheap views via .tolist()).
+    # The binding takes (coords) or (xs, ys); max_iter/bailout/perimeter_samples/
+    # clamp use the binding's internal defaults (8192 / 1e6 / 512).
     xs_list = xs.tolist()
     ys_list = ys.tolist()
-    return runtime_core.mandelbrot_distance_estimate(xs_list, ys_list, max_iter, float(bailout), int(perimeter_samples), float(clamp))
+    return runtime_core.mandelbrot_distance_estimate(xs_list, ys_list)

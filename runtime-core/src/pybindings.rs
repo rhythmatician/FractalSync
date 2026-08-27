@@ -379,6 +379,88 @@ fn minimap_shore_proximity_batch_py(
     })
 }
 
+/// Mandelbrot distance estimate. Accepts:
+/// 1) `mandelbrot_distance_estimate(coords: Sequence[complex])` -> list[float]
+/// 2) `mandelbrot_distance_estimate((x_seq, y_seq))` -> list[float]
+/// 3) `mandelbrot_distance_estimate(xs, ys)` (two equal-length sequences)
+///
+/// Signed distances: positive outside the set, non-positive inside.
+#[pyfunction]
+#[pyo3(signature = (coords, ys=None))]
+fn mandelbrot_distance_estimate_py(
+    coords: &Bound<'_, PyAny>,
+    ys: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Vec<f32>> {
+    // Two-sequence form: (xs, ys)
+    if let Some(ys) = ys {
+        let xv: Vec<f64> = coords.extract()?;
+        let yv: Vec<f64> = ys.extract()?;
+        if xv.len() != yv.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "x and y sequences must have equal length",
+            ));
+        }
+        let cs: Vec<num_complex::Complex64> = xv
+            .iter()
+            .zip(yv.iter())
+            .map(|(&xr, &yr)| num_complex::Complex64::new(xr, yr))
+            .collect();
+        return crate::distance_field::mandelbrot_distance_estimate(&cs)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err);
+    }
+
+    // Tuple-of-sequences form: (xs, ys)
+    if let Ok((xv, yv)) = coords.extract::<(Vec<f64>, Vec<f64>)>() {
+        if xv.len() != yv.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "x and y sequences must have equal length",
+            ));
+        }
+        let cs: Vec<num_complex::Complex64> = xv
+            .iter()
+            .zip(yv.iter())
+            .map(|(&xr, &yr)| num_complex::Complex64::new(xr, yr))
+            .collect();
+        return crate::distance_field::mandelbrot_distance_estimate(&cs)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err);
+    }
+
+    // Sequence of complex-like values
+    let mut cs: Vec<num_complex::Complex64> = Vec::new();
+    match coords.iter() {
+        Ok(seq) => {
+            for item in seq {
+                let el = item?;
+                if let Ok((r, i)) = el.extract::<(f64, f64)>() {
+                    cs.push(num_complex::Complex64::new(r, i));
+                    continue;
+                }
+                if let (Ok(rp), Ok(ip)) = (el.getattr("real"), el.getattr("imag")) {
+                    let r: f64 = rp.extract()?;
+                    let i: f64 = ip.extract()?;
+                    cs.push(num_complex::Complex64::new(r, i));
+                    continue;
+                }
+                if let Ok(r) = el.extract::<f64>() {
+                    cs.push(num_complex::Complex64::new(r, 0.0));
+                    continue;
+                }
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "coords must be complex-like values or (real, imag) tuples",
+                ));
+            }
+        }
+        Err(_) => {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "coords must be a sequence of complex-like values or an (xs, ys) pair",
+            ))
+        }
+    }
+
+    crate::distance_field::mandelbrot_distance_estimate(&cs)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
 /// Module-level __getattr__ to dynamically provide fallback callables for
 /// missing top-level functions. This helps tests that delete attributes via
 /// monkeypatch and provides a safety net when the compiled extension is
@@ -643,6 +725,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;
+    m.add_function(wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
+    // Alias without the _py suffix (tests and distance_utils use this name)
+    m.add("mandelbrot_distance_estimate", wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
     // Differentiable-proxy reference implementations (training supervision)
     m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;
