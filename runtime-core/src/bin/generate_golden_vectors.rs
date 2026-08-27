@@ -17,6 +17,7 @@
 
 use num_complex::Complex64;
 use runtime_core::controller::{OrbitState, PlayerState, ResidualParams};
+use runtime_core::features::{FeatureExtractor, FEATURE_VERSION};
 use runtime_core::geometry::lobe_point_at_angle;
 use runtime_core::proxies::mandelbrot_cardioid_proximity;
 use serde::Serialize;
@@ -61,10 +62,14 @@ struct GoldenVectors {
     /// The preflight and cargo tests assert this matches the runtime's
     /// CONTROLLER_VERSION, so stale goldens cannot masquerade as current.
     controller_version: String,
+    /// Contract version of the feature-extraction pipeline that generated
+    /// the feature_cases. Same staleness guard as controller_version.
+    feature_version: String,
     carrier_cases: Vec<CarrierCase>,
     orbit_cases: Vec<OrbitCase>,
     player_step_cases: Vec<PlayerStepCase>,
     proximity_cases: Vec<ProximityCase>,
+    feature_cases: Vec<FeatureCase>,
 }
 
 #[derive(Serialize)]
@@ -84,15 +89,26 @@ struct ProximityCase {
     proximity: f64,
 }
 
+#[derive(Serialize)]
+struct FeatureCase {
+    /// Deterministic seed for the synthetic audio signal.
+    seed: u64,
+    window_frames: usize,
+    /// Flattened frame-major feature window from the canonical extractor.
+    features: Vec<f64>,
+}
+
 fn main() {
     let mut g = GoldenVectors {
         generator: format!("runtime_core {}", env!("CARGO_PKG_VERSION")),
         authority: "docs/adr/0001-rust-first-parity.md".to_string(),
         controller_version: runtime_core::controller::CONTROLLER_VERSION.to_string(),
+        feature_version: FEATURE_VERSION.to_string(),
         carrier_cases: Vec::new(),
         orbit_cases: Vec::new(),
         player_step_cases: Vec::new(),
         proximity_cases: Vec::new(),
+        feature_cases: Vec::new(),
     };
 
     // ---- Carrier: lobe_point_at_angle over a deterministic grid ----
@@ -210,14 +226,48 @@ fn main() {
         });
     }
 
+    // ---- Feature extraction: deterministic synthetic audio windows ----
+    // Each case synthesizes ~1 second of seeded pseudo-random tonal audio
+    // (LCG noise + a fixed harmonic stack), runs it through the canonical
+    // extractor, and records one flattened frame-major window. Mirrors
+    // (Python preflight, browser tests) must reproduce these bit-for-bit
+    // within tolerance.
+    for &seed in &[42u64, 1337, 90210] {
+        let n_samples = 48_000usize; // 1 s at 48 kHz
+        let mut lcg = seed;
+        let mut audio = Vec::with_capacity(n_samples);
+        for i in 0..n_samples {
+            let t = i as f64 / 48_000.0;
+            // Fixed harmonic stack: A3/A4/A5 like the parity test signal.
+            let mut v = 0.3 * (2.0 * std::f64::consts::PI * 220.0 * t).sin()
+                + 0.2 * (2.0 * std::f64::consts::PI * 440.0 * t).sin()
+                + 0.1 * (2.0 * std::f64::consts::PI * 880.0 * t).sin();
+            // Seeded LCG noise for spectral flux / ZCR variation.
+            lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let noise = ((lcg >> 33) as i64 as f64 / (1i64 << 30) as f64 - 1.0) * 0.05;
+            v += noise;
+            audio.push(v.clamp(-1.0, 1.0) as f32);
+        }
+        let fe = FeatureExtractor::default();
+        let windows = fe.extract_windowed_features(&audio, 10);
+        if let Some(w) = windows.into_iter().next() {
+            g.feature_cases.push(FeatureCase {
+                seed,
+                window_frames: 10,
+                features: w,
+            });
+        }
+    }
+
     let json = serde_json::to_string_pretty(&g).expect("serialize golden vectors");
     std::fs::create_dir_all("../shared").expect("create shared dir");
     std::fs::write("../shared/golden_vectors.json", json).expect("write golden vectors");
     println!(
-        "Wrote ../shared/golden_vectors.json: {} carrier, {} orbit, {} player, {} proximity cases",
+        "Wrote ../shared/golden_vectors.json: {} carrier, {} orbit, {} player, {} proximity, {} feature cases",
         g.carrier_cases.len(),
         g.orbit_cases.len(),
         g.player_step_cases.len(),
-        g.proximity_cases.len()
+        g.proximity_cases.len(),
+        g.feature_cases.len()
     );
 }

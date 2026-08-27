@@ -22,6 +22,8 @@ use runtime_core::controller::{
     N_FFT,
     WINDOW_FRAMES,
 };
+use runtime_core::features::{FEATURE_VERSION, NORM_EPS};
+use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
 
 /// Shared constants exposed to JavaScript
 #[wasm_bindgen]
@@ -38,6 +40,8 @@ pub fn constants() -> JsValue {
         default_base_omega: f64,
         default_orbit_seed: u64,
         controller_version: String,
+        feature_version: String,
+        norm_eps: f64,
     }
 
     let c = Constants {
@@ -50,10 +54,63 @@ pub fn constants() -> JsValue {
         default_residual_omega_scale: DEFAULT_RESIDUAL_OMEGA_SCALE,
         default_base_omega: DEFAULT_BASE_OMEGA,
         controller_version: CONTROLLER_VERSION.to_string(),
+        feature_version: FEATURE_VERSION.to_string(),
+        norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };
 
     serde_wasm_bindgen::to_value(&c).unwrap_or_else(|_| JsValue::NULL)
+}
+
+/// Audio feature extractor — the SAME Rust implementation the trainer uses.
+///
+/// The browser feeds a rolling window of PCM samples (from
+/// AnalyserNode.getFloatTimeDomainData) and receives feature windows laid
+/// out identically to training inputs. This eliminates the entire class of
+/// browser-vs-trainer extraction drift (FFT size, smoothing, dB conversion,
+/// per-file normalization, window layout) by construction: there is only
+/// one implementation, executed in two places.
+#[wasm_bindgen]
+pub struct FeatureExtractor {
+    inner: RustFeatureExtractor,
+}
+
+#[wasm_bindgen]
+impl FeatureExtractor {
+    /// Create an extractor with the shared runtime defaults (48 kHz,
+    /// hop 1024, n_fft 4096). Callers must resample browser audio to the
+    /// runtime sample rate before feeding PCM here.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> FeatureExtractor {
+        FeatureExtractor {
+            inner: RustFeatureExtractor::default(),
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn num_features_per_frame(&self) -> usize {
+        self.inner.num_features_per_frame()
+    }
+
+    /// Extract the MOST RECENT flattened feature window from `audio`
+    /// (frame-major).
+    ///
+    /// `audio` is the rolling PCM history in chronological order; the
+    /// returned window covers the latest `window_frames` STFT frames,
+    /// matching what live inference needs. Short input is padded by
+    /// repeating the last frame, matching training behavior for short
+    /// files.
+    #[wasm_bindgen]
+    pub fn extract_window(&self, audio: Vec<f32>, window_frames: usize) -> Vec<f64> {
+        let windows = self.inner.extract_windowed_features(&audio, window_frames);
+        windows.into_iter().last().unwrap_or_default()
+    }
+}
+
+impl Default for FeatureExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Wrapper for complex number to/from JavaScript

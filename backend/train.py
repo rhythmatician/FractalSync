@@ -79,6 +79,24 @@ def _runtime_controller_version() -> str:
     return "unknown"
 
 
+def _runtime_feature_version() -> str:
+    """Read FEATURE_VERSION from the installed runtime_core.
+
+    Same contract mechanism as controller_version: the model records the
+    feature-extraction semantics the mirror was verified against, and the
+    browser refuses mismatched models.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "FEATURE_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def main():
     """Main training function."""
     # Configure logging so ControlTrainer messages are visible
@@ -337,8 +355,12 @@ def execute_training_workflow(args):
     print(f"  Coverage weight: {args.coverage_weight}")
     print(f"  Scheduled sampling max: {args.scheduled_sampling_max}")
     print(f"  Clip length: {args.clip_length}")
-    print(f"  Anti-dwell weight: {args.anti_dwell_weight} (target {args.anti_dwell_target})")
-    print(f"  Zone band: [{args.zone_min}, {args.zone_max}] (weight {args.zone_weight})")
+    print(
+        f"  Anti-dwell weight: {args.anti_dwell_weight} (target {args.anti_dwell_target})"
+    )
+    print(
+        f"  Zone band: [{args.zone_min}, {args.zone_max}] (weight {args.zone_weight})"
+    )
     print(f"  Recurrent encoder: {args.recurrent}")
     print(f"  Resume checkpoint: {args.resume_checkpoint}")
     print(f"  Resume reset optimizer: {args.resume_reset_optimizer}")
@@ -548,6 +570,9 @@ def execute_training_workflow(args):
                 # to load an orbit_control model whose controller_version
                 # differs from its own runtime's version.
                 "controller_version": _runtime_controller_version(),
+                # Feature-extraction contract stamp (ADR 0001): same
+                # mechanism for the audio feature pipeline.
+                "feature_version": _runtime_feature_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")

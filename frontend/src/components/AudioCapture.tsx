@@ -3,7 +3,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { AudioFeatureExtractor } from '../lib/audioFeatures';
+import { initOrbitSynth } from '../lib/orbitSynthesizer';
+import {
+  WasmAudioFeatureSource,
+  setWasmFeatureExtractor,
+} from '../lib/canonicalFeatures';
 
 interface AudioCaptureProps {
   onFeatures: (features: number[]) => void;
@@ -16,7 +20,7 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
   const [error, setError] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const featureExtractorRef = useRef<AudioFeatureExtractor | null>(null);
+  const featureSourceRef = useRef<WasmAudioFeatureSource | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
@@ -72,9 +76,18 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
       source.connect(analyser);
       analyser.connect(audioContext.destination); // Connect to speakers
 
-      // Create feature extractor
-      const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
-      featureExtractorRef.current = featureExtractor;
+      // Create canonical feature source (wasm extractor + PCM history).
+      // Features come from raw PCM fed through the same Rust extractor the
+      // trainer uses — not from AnalyserNode's own FFT pipeline.
+      //
+      // NOTE: import the SAME wasm module instance initOrbitSynth() uses
+      // (/wasm/... from public/, served by wasm-pack). The src/wasm copy is
+      // a stale January build without FeatureExtractor.
+      await initOrbitSynth();
+      const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', window.location.origin).href;
+      const wasmMod = await import(/* @vite-ignore */ wasmUrl);
+      setWasmFeatureExtractor((wasmMod as any).FeatureExtractor ?? null);
+      featureSourceRef.current = new WasmAudioFeatureSource();
 
       // Start playback
       await audio.play();
@@ -84,9 +97,14 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
 
       // Start feature extraction loop
       const extractLoop = () => {
-        if (!featureExtractorRef.current) return;
+        if (!featureSourceRef.current) return;
 
-        const features = featureExtractorRef.current.extractWindowedFeatures(10);
+        // Pull raw PCM for this frame and feed the rolling buffer.
+        const pcm = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(pcm);
+        featureSourceRef.current.push(pcm, audioContext.sampleRate);
+
+        const features = featureSourceRef.current.extractWindow(10);
         onFeatures(features);
 
         animationFrameRef.current = requestAnimationFrame(extractLoop);
@@ -118,18 +136,29 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
 
-      // Create feature extractor
-      const featureExtractor = new AudioFeatureExtractor(audioContext, analyser);
-      featureExtractorRef.current = featureExtractor;
+      // Create canonical feature source (wasm extractor + PCM history).
+      // Features come from raw PCM fed through the same Rust extractor the
+      // trainer uses — not from AnalyserNode's own FFT pipeline.
+      // Same wasm instance as initOrbitSynth() — see note in startFilePlayback.
+      await initOrbitSynth();
+      const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', window.location.origin).href;
+      const wasmMod = await import(/* @vite-ignore */ wasmUrl);
+      setWasmFeatureExtractor((wasmMod as any).FeatureExtractor ?? null);
+      featureSourceRef.current = new WasmAudioFeatureSource();
 
       setIsCapturing(true);
       setError(null);
 
       // Start feature extraction loop
       const extractLoop = () => {
-        if (!featureExtractorRef.current) return;
+        if (!featureSourceRef.current) return;
 
-        const features = featureExtractorRef.current.extractWindowedFeatures(10);
+        // Pull raw PCM for this frame and feed the rolling buffer.
+        const pcm = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(pcm);
+        featureSourceRef.current.push(pcm, audioContext.sampleRate);
+
+        const features = featureSourceRef.current.extractWindow(10);
         onFeatures(features);
 
         animationFrameRef.current = requestAnimationFrame(extractLoop);
@@ -170,7 +199,7 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
     }
 
     analyserRef.current = null;
-    featureExtractorRef.current = null;
+    featureSourceRef.current = null;
     setIsCapturing(false);
   };
 

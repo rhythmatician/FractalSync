@@ -1,8 +1,16 @@
 """
 Python fallback feature extractor using librosa.
 
-This is a workaround for the hanging issue in the Rust feature extractor.
-It provides the same interface and output format.
+Mirror of runtime-core/src/features.rs (canonical). Must reproduce the
+Rust extractor's output within tolerance — enforced by preflight check (g)
+against shared/golden_vectors.json feature_cases.
+
+Contract (FEATURE_VERSION = features/2):
+  - Causal fixed transforms for energy-like features (flux/rms/onset):
+    x' = log1p(100·x) / log1p(100). NO per-file min-max normalization —
+    that was impossible to reproduce at runtime and made training inputs
+    depend on dataset composition.
+  - Frame-major window layout: [f0(t0)..f5(t0), f0(t1)..f5(t1), ...].
 """
 
 import numpy as np
@@ -40,17 +48,22 @@ class PythonFeatureExtractor:
         return base
 
     def extract_windowed_features(
-        self, audio: NDArray[np.float32], window_frames: int
+        self, audio: NDArray[np.float32] | list[float], window_frames: int
     ) -> NDArray[np.float64]:
         """Extract windowed features from audio.
 
         Args:
-            audio: Audio samples as float32 array
+            audio: Audio samples as float32 array (or plain sequence;
+                converted to float32 ndarray for librosa)
             window_frames: Number of frames per window
 
         Returns:
             Array of shape (n_windows, num_features_per_frame * window_frames)
         """
+        # librosa requires a float ndarray; accept plain sequences too.
+        if not isinstance(audio, np.ndarray):
+            audio = np.asarray(audio, dtype=np.float32)
+
         # Extract base features
         features = self._extract_features(audio)
         n_features, n_frames = features.shape
@@ -74,7 +87,9 @@ class PythonFeatureExtractor:
 
         for start in range(n_windows):
             window = features[:, start : start + window_frames]
-            # Flatten in column-major order (feature0[0...window_frames], feature1[0...window_frames], ...)
+            # Flatten in FRAME-MAJOR order (all six features of frame t0,
+            # then all six of frame t1, ...) matching the Rust canonical
+            # layout for FEATURE_VERSION 'features/2'.
             flattened = window.T.flatten()
             windows.append(flattened)
 
@@ -83,71 +98,115 @@ class PythonFeatureExtractor:
     def _extract_features(self, audio: NDArray[np.float32]) -> NDArray[np.float64]:
         """Extract base features from audio.
 
+        Literal numpy port of Rust FeatureExtractor::extract_features
+        (runtime-core/src/features.rs) — same STFT (Hann window, RMS-
+        normalized, no centering), same feature formulas, same frame
+        indexing. This is a FALLBACK only; the canonical extractor is the
+        Rust one via runtime_core_helpers.make_feature_extractor.
+
         Returns:
             Array of shape (num_features_per_frame, n_frames)
         """
         if len(audio) == 0:
             return np.empty((self.num_features_per_frame(), 0), dtype=np.float64)
 
-        # Compute STFT
-        stft = librosa.stft(
-            audio, n_fft=self.n_fft, hop_length=self.hop_length, center=True
-        )
-        magnitude = np.abs(stft)
+        n_fft = self.n_fft
+        hop = self.hop_length
+        sr_half = self.sr / 2.0
+        num_bins = n_fft // 2 + 1
 
-        # Extract features
-        spectral_centroid = librosa.feature.spectral_centroid(S=magnitude, sr=self.sr)[
-            0
-        ]
+        # Frequency bins: i * (sr/2) / num_bins — matches Rust exactly.
+        freq_bins = np.arange(num_bins, dtype=np.float64) * sr_half / num_bins
 
-        spectral_flux = np.concatenate(
-            [[0.0], np.sqrt(np.sum(np.diff(magnitude, axis=1) ** 2, axis=0))]
-        )
+        # Hann window normalized so its RMS is 1 (matches Rust).
+        n = np.arange(n_fft, dtype=np.float64)
+        window = 0.5 - 0.5 * np.cos(2.0 * np.pi * n / n_fft)
+        rms_w = float(np.sum(window**2) / n_fft)
+        window = window / np.sqrt(rms_w)
 
-        # RMS - compute directly from magnitude to avoid frame_length issues
-        rms = np.sqrt(np.mean(magnitude**2, axis=0))
+        # Frame count: matches Rust stft_magnitude (no centering).
+        if len(audio) > n_fft:
+            n_frames = (len(audio) - n_fft) // hop + 1
+        else:
+            n_frames = 1
 
-        # Compute ZCR with correct frame_length to match STFT frames
-        zcr = librosa.feature.zero_crossing_rate(
-            audio, frame_length=self.n_fft, hop_length=self.hop_length, center=True
-        )[0]
+        # Framed matrix: pad the tail with zeros like Rust does.
+        idx = np.arange(n_fft)[None, :] + hop * np.arange(n_frames)[:, None]
+        frames = np.zeros((n_frames, n_fft), dtype=np.float64)
+        valid = idx < len(audio)
+        frames[valid] = audio[idx[valid].astype(np.intp)]
 
-        # Trim/pad ZCR to match magnitude shape
-        if len(zcr) > magnitude.shape[1]:
-            zcr = zcr[: magnitude.shape[1]]
-        elif len(zcr) < magnitude.shape[1]:
-            zcr = np.pad(zcr, (0, magnitude.shape[1] - len(zcr)), mode="edge")
+        # Magnitude spectrum per frame.
+        spec = np.fft.rfft(frames * window[None, :], axis=1)
+        magnitude = np.abs(spec[:, :num_bins])
 
-        # Onset strength - compute directly from magnitude diff to avoid frame_length issues
-        onset_env = np.concatenate(
-            [[0.0], np.sum(np.maximum(0, np.diff(magnitude, axis=1)), axis=0)]
-        )
-        if len(onset_env) > magnitude.shape[1]:
-            onset_env = onset_env[: magnitude.shape[1]]
-        elif len(onset_env) < magnitude.shape[1]:
-            onset_env = np.pad(
-                onset_env, (0, magnitude.shape[1] - len(onset_env)), mode="edge"
+        spectral_centroid = np.zeros(n_frames, dtype=np.float64)
+        spectral_flux = np.zeros(n_frames, dtype=np.float64)
+        rms_energy = np.zeros(n_frames, dtype=np.float64)
+        zero_crossing_rate = np.zeros(n_frames, dtype=np.float64)
+        onset_env = np.zeros(n_frames, dtype=np.float64)
+        spectral_rolloff = np.zeros(n_frames, dtype=np.float64)
+
+        prev_mag: NDArray[np.float64] | None = None
+        for frame_idx in range(n_frames):
+            mag = magnitude[frame_idx]
+            sum_mag = float(np.sum(mag))
+
+            # Spectral centroid (normalized by Nyquist).
+            if sum_mag > 0.0:
+                weighted = float(np.sum(mag * freq_bins))
+                spectral_centroid[frame_idx] = weighted / sum_mag / sr_half
+
+            # Spectral flux: MEAN squared diff vs previous frame — divided
+            # by bin count to share RMS's scale (features/2 fix; raw-sum flux
+            # reached ~10 for music and saturated the model's control heads).
+            if prev_mag is not None:
+                spectral_flux[frame_idx] = float(
+                    np.sum((mag - prev_mag) ** 2) / mag.size
+                )
+            prev_mag = mag
+
+            # Spectral rolloff at 85% cumulative energy.
+            total_energy = float(np.sum(mag))
+            threshold = 0.85 * total_energy
+            cumulative = np.cumsum(mag)
+            hit = np.nonzero(cumulative >= threshold)[0]
+            if hit.size > 0:
+                spectral_rolloff[frame_idx] = freq_bins[hit[0]] / sr_half
+
+            # Time-domain window for RMS and ZCR (matches Rust indexing).
+            start = frame_idx * hop
+            end = start + n_fft
+            win = (
+                audio[start:end].astype(np.float64)
+                if end <= len(audio)
+                else np.pad(
+                    audio[start:].astype(np.float64),
+                    (0, n_fft - (len(audio) - start)),
+                )
             )
 
-        spectral_rolloff = librosa.feature.spectral_rolloff(
-            S=magnitude, sr=self.sr, roll_percent=0.85
-        )[0]
+            rms_energy[frame_idx] = float(np.sqrt(np.sum(win**2) / n_fft))
 
-        # Normalize features
-        spectral_centroid = spectral_centroid / (self.sr / 2.0)
-        spectral_rolloff = spectral_rolloff / (self.sr / 2.0)
+            signs = win >= 0.0
+            zc = int(np.sum(signs[1:] != signs[:-1]))
+            zero_crossing_rate[frame_idx] = zc / n_fft
 
-        spectral_flux = self._normalize(spectral_flux)
-        rms = self._normalize(rms)
-        onset_env = self._normalize(onset_env)
+            # Onset envelope: reuse flux (matches Rust proxy).
+            onset_env[frame_idx] = spectral_flux[frame_idx]
+
+        # Causal fixed transforms (FEATURE_VERSION 2).
+        spectral_flux = self._causal_transform(spectral_flux)
+        rms_energy = self._causal_transform(rms_energy)
+        onset_env = self._causal_transform(onset_env)
 
         # Stack features
         features = np.array(
             [
                 spectral_centroid,
                 spectral_flux,
-                rms,
-                zcr,
+                rms_energy,
+                zero_crossing_rate,
                 onset_env,
                 spectral_rolloff,
             ],
@@ -157,7 +216,9 @@ class PythonFeatureExtractor:
         # Add delta features if requested
         if self.include_delta:
             deltas = np.array([self._delta(f) for f in features], dtype=np.float64)
-            deltas = np.array([self._normalize(d) for d in deltas], dtype=np.float64)
+            deltas = np.array(
+                [self._causal_transform(d) for d in deltas], dtype=np.float64
+            )
             features = np.vstack([features, deltas])
 
         if self.include_delta_delta:
@@ -172,15 +233,31 @@ class PythonFeatureExtractor:
 
             delta_deltas = np.array([self._delta(f) for f in source], dtype=np.float64)
             delta_deltas = np.array(
-                [self._normalize(d) for d in delta_deltas], dtype=np.float64
+                [self._causal_transform(d) for d in delta_deltas], dtype=np.float64
             )
             features = np.vstack([features, delta_deltas])
 
         return features
 
     @staticmethod
+    def _causal_transform(vec: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Causal fixed transform: log1p(100·x)/log1p(100), zero → zero.
+
+        Mirror of Rust FeatureExtractor::causal_transform_in_place.
+        """
+        K = 100.0
+        denom = float(np.log1p(K))
+        out = np.where(vec > 0.0, np.log1p(K * np.maximum(vec, 0.0)) / denom, 0.0)
+        return cast(NDArray[np.float64], out)
+
+    @staticmethod
     def _normalize(vec: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Normalize vector to [0, 1] range."""
+        """DEPRECATED: per-file min-max normalization.
+
+        Retained only for backward compatibility with external callers;
+        the extraction pipeline no longer uses it (FEATURE_VERSION 1 uses
+        _causal_transform instead). Do not call from new code.
+        """
         if len(vec) == 0:
             return cast(NDArray[np.float64], vec)
         vmin, vmax = vec.min(), vec.max()

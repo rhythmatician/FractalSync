@@ -76,6 +76,7 @@ interface WasmModule {
     default_base_omega: number;
     default_orbit_seed: number;
     controller_version?: string;
+    feature_version?: string;
   };
   OrbitState: new (
     lobe: number,
@@ -179,6 +180,19 @@ export function getControllerVersion(): string {
   if (!wasm) return 'unknown';
   try {
     return wasm.constants().controller_version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * The runtime's feature-extraction contract version (from the Rust constant
+ * via wasm constants). Returns 'unknown' if the wasm build predates the field.
+ */
+export function getFeatureVersion(): string {
+  if (!wasm) return 'unknown';
+  try {
+    return wasm.constants().feature_version ?? 'unknown';
   } catch {
     return 'unknown';
   }
@@ -349,8 +363,9 @@ export class OrbitSynthesizer {
   setLobe(lobe: number, subLobe = 0): void {
     this._lobe = lobe;
     this._subLobe = subLobe;
-    if (typeof (this.state as WasmPlayerState).set_lobe === 'function') {
-      (this.state as WasmPlayerState).set_lobe(lobe, subLobe);
+    const playerLike = this.state as unknown as WasmPlayerState;
+    if (typeof playerLike.set_lobe === 'function') {
+      playerLike.set_lobe(lobe, subLobe);
     }
   }
 
@@ -360,7 +375,7 @@ export class OrbitSynthesizer {
    * `h` is the transient/hit signal in [0, 1]; near 1 allows crossing the
    * Shore's contours (used for section changes / onsets).
    */
-  step(dt: number, bandGates: number[], h = 0.0): Complex {
+  step(dt: number, bandGates: number[], _h = 0.0): Complex {
     const gates = new Float64Array(Math.min(bandGates.length, this.kBands));
     for (let i = 0; i < gates.length; i++) {
       gates[i] = Math.max(0.0, Math.min(1.0, bandGates[i]));

@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -30,6 +30,8 @@ export interface ModelMetadata {
   k_bands?: number;
   /** Controller contract stamp (ADR 0001). Missing = pre-contract legacy. */
   controller_version?: string;
+  /** Feature-extraction contract stamp. Missing = pre-contract legacy. */
+  feature_version?: string;
 }
 
 export interface PerformanceMetrics {
@@ -48,7 +50,6 @@ export class ModelInference {
   
   // Orbit-based synthesis (new architecture)
   private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitTheta: number = 0.0;
   private isOrbitModel: boolean = false;
   
   // Color-based section detection for lobe switching
@@ -163,7 +164,6 @@ export class ModelInference {
           await initOrbitSynth();
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitTheta = 0.0;
 
           // Controller contract check (ADR 0001): the model must have been
           // trained against the same controller semantics this runtime runs.
@@ -183,6 +183,28 @@ export class ModelInference {
             );
           } else {
             console.log(`[ModelInference] Controller contract OK: ${runtimeVersion}`);
+          }
+
+          // Feature-extraction contract (ADR 0001): the model must have been
+          // trained on features produced by the same extraction pipeline this
+          // runtime executes (same Rust code via wasm-orbit).
+          const runtimeFeatureVersion = getFeatureVersion();
+          const modelFeatureVersion = this.metadata.feature_version;
+          if (!modelFeatureVersion) {
+            console.warn(
+              `[ModelInference] ⚠️ Model has no feature_version stamp ` +
+                `(pre-contract legacy model). Trained on UNKNOWN feature ` +
+                `semantics — inputs may not match training.`
+            );
+          } else if (modelFeatureVersion !== runtimeFeatureVersion) {
+            throw new Error(
+              `Feature version mismatch: model was trained against ` +
+                `'${modelFeatureVersion}' but this runtime extracts with ` +
+                `'${runtimeFeatureVersion}'. Refusing to load — retrain the ` +
+                `model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Feature contract OK: ${runtimeFeatureVersion}`);
           }
 
           // Load the minimaps so the Player's contour-biased stepper can

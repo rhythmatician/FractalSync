@@ -16,7 +16,7 @@ export interface MockState {
 
 const TWO_PI = 2.0 * Math.PI;
 
-function lobePoint(lobe: number, subLobe: number, theta: number, s: number) {
+function lobePoint(lobe: number, _subLobe: number, theta: number, s: number) {
   if (lobe === 1) {
     // c = mu/2 - mu^2/4 with mu = s * e^{i theta}
     const muRe = s * Math.cos(theta);
@@ -137,7 +137,7 @@ class MockPlayerState {
     this.sub_lobe = sub_lobe;
   }
 
-  step(dt: number, h: number, bandGates?: Float64Array | null) {
+  step(dt: number, _h: number, bandGates?: Float64Array | null) {
     // Target point on the boundary the model wants to reach.
     const target = lobePoint(this.lobe, this.sub_lobe, this.alpha * TWO_PI, this.s);
     // Pull toward the target is an ACCELERATION (mirrors controller.rs).

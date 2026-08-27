@@ -81,3 +81,45 @@ trained against the same controller semantics the runtime executes.
 - The preflight (check f) fails if `shared/golden_vectors.json` was generated
   by a different controller version than the installed runtime — stale goldens
   cannot silently verify the wrong contract.
+
+## Amendment: feature-extraction contract (2026-08-27)
+
+**Invariant:** an `orbit_control` model deployed to the runtime must have been
+trained on features produced by the same extraction pipeline the runtime
+executes, with identical window layout and normalization semantics.
+
+**Single implementation, executed twice.** The Rust extractor
+(`runtime-core/src/features.rs`) is the only implementation of feature
+extraction. Training runs it via the Python bindings; the browser runs it via
+a new `FeatureExtractor` binding in `wasm-orbit`, fed raw PCM from
+`AnalyserNode.getFloatTimeDomainData` (resampled to 48 kHz). The former
+JavaScript reimplementation (`audioFeatures.ts` extraction logic) is retired —
+it had drifted from training on FFT size (2048 vs 4096), smoothing,
+dB-domain math, and per-file min-max normalization that the browser cannot
+reproduce.
+
+- `FEATURE_VERSION` in `features.rs` is the single source (`features/1`).
+  Bump it in the SAME commit as any change to feature definitions, fixed
+  transforms, window layout, or STFT defaults, together with regenerated
+  goldens and updated mirrors.
+- `NORM_EPS` is pinned in `features.rs`; trainer mirror and browser read it
+  from bindings rather than hard-coding their own epsilon.
+- **Causal transforms replace per-file min-max**: energy-like features
+  (flux/rms/onset) use `log1p(100·x)/log1p(100)`. Min-max depended on the
+  whole file (impossible at runtime) and made training inputs depend on
+  dataset composition.
+- **Frame-major window layout** everywhere:
+  `[f0(t0)..f5(t0), f0(t1)..f5(t1), ...]`. The Rust extractor previously
+  flattened feature-major while Python/browser used frame-major — a silent
+  input-permutation bug.
+- Training stamps ONNX metadata with `feature_version`; the browser refuses
+  to load an orbit_control model whose `feature_version` differs from its
+  runtime's (same mechanism as `controller_version`).
+- Golden vectors now include `feature_cases`: deterministic synthetic audio
+  windows recorded from the canonical extractor. Preflight check (g) replays
+  them through the Python mirror (must match within 5e-3; measured 1e-15);
+  check (h) fails on stale `feature_version` in the goldens.
+
+**Note:** this contract changes what models learn (inputs differ from all
+previously trained checkpoints). Models trained before this amendment are
+invalid for the new pipeline and must be retrained.

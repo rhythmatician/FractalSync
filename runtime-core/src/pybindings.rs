@@ -822,6 +822,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
     m.add("CONTROLLER_VERSION", CONTROLLER_VERSION)?;
+    // Feature-extraction contract (ADR 0001): version + pinned epsilon.
+    m.add("FEATURE_VERSION", crate::features::FEATURE_VERSION)?;
+    m.add("NORM_EPS", crate::features::NORM_EPS)?;
 
     m.add_class::<ResidualParams>()?;
 

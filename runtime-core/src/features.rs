@@ -10,6 +10,32 @@
 
 use rustfft::{FftPlanner, num_complex::Complex as FFTComplex};
 
+/// Contract version of the feature-extraction pipeline.
+///
+/// Every exported model records this in its ONNX metadata
+/// (`feature_version`); the browser refuses to load an orbit_control model
+/// whose feature_version differs from its own. Bump whenever ANY of these
+/// change — in the SAME commit as regenerating shared/golden_vectors.json:
+///   - feature definitions or their formulas (centroid/flux/rms/zcr/onset/
+///     rolloff)
+///   - fixed transforms applied to raw features (log/clamp/scaling)
+///   - window flattening layout (frame-major vs feature-major)
+///   - STFT parameters (n_fft, hop_length) defaults
+///
+/// Version history:
+///   1 - Causal baseline: fixed transforms (no data-dependent min-max),
+///       frame-major window layout [f0(t0..T), f1(t0..T), ...].
+///   2 - Flux fix: spectral flux is now the MEAN squared diff (divided by
+///       bin count) so it shares RMS's scale. Raw-sum flux reached ~10 for
+///       music and saturated the model's control heads (alpha pinned at 1.0,
+///       c frozen at origin). Also: h/onset consumers can rely on features
+///       being bounded near [0, 1] again.
+pub const FEATURE_VERSION: &str = "features/2";
+
+/// Epsilon added to std before dividing during dataset normalization.
+/// Pinned here so trainer mirror and browser cannot drift apart.
+pub const NORM_EPS: f64 = 1e-8;
+
 /// Extractor configuration.  Mirrors the Python `AudioFeatureExtractor`
 /// parameters and defaults to a 48 kHz sample rate with an FFT size
 /// of 4096 and a hop length of 1024 samples (≈46.9 Hz frame rate).
@@ -175,13 +201,19 @@ impl FeatureExtractor {
                 spectral_centroid.push(0.0);
             }
 
-            // Spectral flux: measure change between consecutive spectra
+            // Spectral flux: mean squared change between consecutive spectra.
+            // Dividing by the bin count keeps flux on a scale comparable to
+            // RMS (~[0, 1]) instead of growing with FFT size — without this,
+            // music-range flux (raw Σ ≈ 2.5–10) swamps the other features and
+            // saturates the model's sigmoid heads (observed live: alpha pinned
+            // at 1.0, c frozen at origin).
             if let Some(ref prev) = prev_mag {
                 let flux: f64 = prev
                     .iter()
                     .zip(mag.iter())
                     .map(|(p, c)| (c - p).powi(2))
-                    .sum();
+                    .sum::<f64>()
+                    / mag.len() as f64;
                 spectral_flux.push(flux);
             } else {
                 spectral_flux.push(0.0);
@@ -246,11 +278,15 @@ impl FeatureExtractor {
             onset_env.push(onset_value);
         }
 
-        // Normalise features to [0,1] where appropriate
-        Self::normalise_in_place(&mut spectral_flux);
-        Self::normalise_in_place(&mut rms_energy);
-        Self::normalise_in_place(&mut onset_env);
-
+        // Causal fixed transforms (FEATURE_VERSION 1). These replace the
+        // old per-file min-max normalization, which was impossible to
+        // reproduce at runtime (the browser cannot see the whole file
+        // before playing) and made training inputs depend on dataset
+        // composition. Fixed transforms are identical for any input and
+        // require no lookahead.
+        Self::causal_transform_in_place(&mut spectral_flux);
+        Self::causal_transform_in_place(&mut rms_energy);
+        Self::causal_transform_in_place(&mut onset_env);
         let mut base = vec![
             spectral_centroid,
             spectral_flux,
@@ -294,6 +330,12 @@ impl FeatureExtractor {
     /// shape `(n_windows, n_features_per_frame × window_frames)`.  If
     /// there are fewer frames than `window_frames` the last frame is
     /// repeated.
+    ///
+    /// Layout is FRAME-MAJOR (FEATURE_VERSION 1):
+    ///   [f0(t0), f1(t0), ..., f5(t0), f0(t1), f1(t1), ..., f5(t_{T-1})]
+    /// i.e. all six features of frame t0, then all six of frame t1, etc.
+    /// This matches the browser's natural per-frame push order and the
+    /// Python mirror's `window.T.flatten()`.
     pub fn extract_windowed_features(
         &self,
         audio: &[f32],
@@ -313,9 +355,9 @@ impl FeatureExtractor {
         // If the audio is shorter than one full window, pad by repeating the last frame.
         if n_frames < window_frames {
             let mut padded: Vec<f64> = Vec::with_capacity(n_features * window_frames);
-            for f in 0..n_features {
-                for i in 0..window_frames {
-                    let idx = if i < n_frames { i } else { n_frames - 1 };
+            for i in 0..window_frames {
+                let idx = if i < n_frames { i } else { n_frames - 1 };
+                for f in 0..n_features {
                     padded.push(features[f][idx]);
                 }
             }
@@ -325,8 +367,8 @@ impl FeatureExtractor {
 
         for start in 0..=(n_frames - window_frames) {
             let mut window: Vec<f64> = Vec::with_capacity(n_features * window_frames);
-            for f in 0..n_features {
-                for i in 0..window_frames {
+            for i in 0..window_frames {
+                for f in 0..n_features {
                     window.push(features[f][start + i]);
                 }
             }
@@ -415,6 +457,26 @@ impl FeatureExtractor {
             for v in vec.iter_mut() {
                 *v = (*v - min) / range;
             }
+        }
+    }
+
+    /// Causal fixed transform applied to non-negative energy-like
+    /// features (flux, rms, onset). Replaces per-file min-max
+    /// normalization: this needs no lookahead and no dataset statistics,
+    /// so training-time and runtime-time values agree by construction.
+    ///
+    /// x' = log1p(k·x) / log1p(k) with k = 100 — compresses the wide
+    /// dynamic range of raw energies into roughly [0, 1] while keeping
+    /// zero mapped to zero.
+    fn causal_transform_in_place(vec: &mut Vec<f64>) {
+        const K: f64 = 100.0;
+        let denom = (1.0 + K).ln();
+        for v in vec.iter_mut() {
+            *v = if *v > 0.0 {
+                (1.0 + K * *v).ln() / denom
+            } else {
+                0.0
+            };
         }
     }
 }

@@ -372,6 +372,18 @@ pub fn default_orbit_seed() -> u64 {
     DEFAULT_ORBIT_SEED
 }
 
+/// Feature-extraction contract version (ADR 0001).
+#[wasm_bindgen]
+pub fn feature_version() -> &'static str {
+    crate::features::FEATURE_VERSION
+}
+
+/// Pinned normalization epsilon shared by trainer and browser.
+#[wasm_bindgen]
+pub fn norm_eps() -> f64 {
+    crate::features::NORM_EPS
+}
+
 /// Load a precomputed distance field (.npy) and optional .json metadata from
 /// the host file system (when running under a host that provides a file API).
 ///
