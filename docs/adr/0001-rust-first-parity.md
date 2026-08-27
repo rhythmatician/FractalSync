@@ -93,12 +93,12 @@ executes, with identical window layout and normalization semantics.
 extraction. Training runs it via the Python bindings; the browser runs it via
 a new `FeatureExtractor` binding in `wasm-orbit`, fed raw PCM from
 `AnalyserNode.getFloatTimeDomainData` (resampled to 48 kHz). The former
-JavaScript reimplementation (`audioFeatures.ts` extraction logic) is retired —
+JavaScript reimplementation (`frontend/src/lib/audioFeatures.ts` extraction logic) is retired — the file remains only as a hard-failing stub —
 it had drifted from training on FFT size (2048 vs 4096), smoothing,
 dB-domain math, and per-file min-max normalization that the browser cannot
 reproduce.
 
-- `FEATURE_VERSION` in `features.rs` is the single source (`features/1`).
+- `FEATURE_VERSION` in `features.rs` is the single source (`features/2`; history: `features/1` = causal baseline with frame-major/causal transforms, `features/2` = flux-mean fix).
   Bump it in the SAME commit as any change to feature definitions, fixed
   transforms, window layout, or STFT defaults, together with regenerated
   goldens and updated mirrors.
@@ -123,3 +123,14 @@ reproduce.
 **Note:** this contract changes what models learn (inputs differ from all
 previously trained checkpoints). Models trained before this amendment are
 invalid for the new pipeline and must be retrained.
+
+## Version increment policy
+
+`FEATURE_VERSION` and `CONTROLLER_VERSION` are pinned in `runtime-core` (`features.rs` and `controller.rs`). Bump rules:
+
+- Bump `FEATURE_VERSION` whenever ANY of these change: feature definitions / formulas (centroid/flux/rms/zcr/onset/rolloff), fixed transforms (log/clamp/scaling), window flattening layout (frame-major vs feature-major), or STFT defaults (`n_fft`, `hop_length`). See the doc comment on `FEATURE_VERSION` in `features.rs` for the authoritative list and version history (`1` causal baseline, `2` flux-mean fix).
+- Bump `CONTROLLER_VERSION` whenever flags-off semantics of `OrbitController::step` change (constants, formulas, or order of operations).
+- The bump, `cargo run --release -p runtime_core --bin generate_golden_vectors` (regenerate `shared/golden_vectors.json`), and updates to ALL mirrors (`backend/src/cspace_proxies.py`, `backend/src/python_feature_extractor.py`, `frontend/src/lib/canonicalFeatures.ts` / `wasm-orbit`) MUST land in the SAME commit. Preflight checks (f) and (h) fail on stale versions in goldens; (b) and (g) fail on numeric drift.
+
+CI enforces this via `.github/workflows/pytest.yml` (runs `scripts/preflight_parity.py` via `backend/tests/test_preflight_parity.py` and `backend/tests/test_golden_parity.py`) and the `train.py` preflight gate.
+

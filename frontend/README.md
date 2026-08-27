@@ -21,7 +21,7 @@ Open http://localhost:3000
 
 - `src/components/` - React components (AudioCapture, Visualizer)
 - `src/lib/modelInference.ts` - ONNX model loading and inference with **audio-driven post-processing**
-- `src/lib/audioFeatures.ts` - Browser-based audio feature extraction
+- `src/lib/canonicalFeatures.ts` — Canonical audio feature extraction via `wasm-orbit` (Rust `runtime-core`; `audioFeatures.ts` was the former JS reimplementation and has been removed — see ADR 0001)
 - `src/lib/juliaRenderer.ts` - WebGL Julia set renderer
 - `public/` - Static assets including ONNX WASM files (auto-copied from node_modules)
 

@@ -91,10 +91,11 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
+      - name: Run pytest (includes preflight-parity + golden-parity gate)
         run: |
           cd backend
-          python -m pytest tests/ -v
+          python -m pytest tests/ -v  # covers test_preflight_parity.py (scripts/preflight_parity.py) and test_golden_parity.py
+            python ../scripts/preflight_parity.py  # same gate wired into train.py
 
   runtime-core-build:
     name: Runtime-Core Build (maturin)

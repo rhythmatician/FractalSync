@@ -6,7 +6,7 @@
  * trainer uses. These tests validate the browser-side plumbing:
  *   - resampling to the runtime sample rate (48 kHz)
  *   - rolling PCM buffer ordering
- *   - frame-major window layout contract (FEATURE_VERSION 'features/1')
+ *   - frame-major window layout contract (FEATURE_VERSION 'features/2')
  *
  * Numeric parity against Rust is enforced by shared/golden_vectors.json
  * feature_cases via preflight check (g) on the Python side; the browser
