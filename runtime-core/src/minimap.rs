@@ -165,6 +165,19 @@ impl MipPyramid {
         self.sample_level(MinimapField::ShoreProximity, level, col, row)
     }
 
+    /// Shore proximity (S field value) at c on the given level: the Player's
+    /// current distance-from-the-Shore reading, in [0, 1].
+    pub fn shore_proximity_at(
+        &self,
+        c: num_complex::Complex64,
+        level: usize,
+    ) -> Option<f32> {
+        let (fx, fy) = self.world_to_texel(level, c)?;
+        let cx = fx.round() as isize;
+        let cy = fy.round() as isize;
+        Some(self.sample_level(MinimapField::ShoreProximity, level, cx, cy))
+    }
+
     /// Extract the Player's minimap: a `half*2+1`-square window of greys
     /// centered on c at the given level, clamped at the extent edges.
     ///
@@ -243,6 +256,93 @@ impl MipPyramid {
 }
 
 static PYRAMID: Lazy<RwLock<Option<MipPyramid>>> = Lazy::new(|| RwLock::new(None));
+
+/// Contour-biased integrator step for Physics (issue #88, Q2).
+///
+/// Moves c from `(c_re, c_im)` by the proposed delta `(u_re, u_im)`, biased to
+/// follow the Shore's contours:
+/// - The proposed motion is decomposed into tangent (along the contour) and
+///   normal (toward/away from the Shore) components using the slope of the
+///   shore-proximity field at c.
+/// - Tangential motion always passes through; normal motion is suppressed
+///   except during transients (`h` near 1), where crossing contours is
+///   allowed.
+/// - A soft servo pulls the distance toward `d_star`.
+/// - The total step is clamped to `max_step` in world units.
+///
+/// When no pyramid is loaded, falls back to plain clamped motion (the
+/// proposed delta clamped to max_step).
+pub fn contour_biased_step(
+    c_re: f64,
+    c_im: f64,
+    u_re: f64,
+    u_im: f64,
+    h: f64,
+    d_star: f64,
+    max_step: f64,
+    level: usize,
+) -> Result<(f64, f64), String> {
+    let u_mag = (u_re * u_re + u_im * u_im).sqrt();
+
+    with_pyramid(|pyr| {
+        let pyr = match pyr {
+            Some(p) => p,
+            None => {
+                // No map available: plain clamped motion.
+                let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+                return Ok((c_re + u_re * scale, c_im + u_im * scale));
+            }
+        };
+
+        let c = num_complex::Complex64::new(c_re, c_im);
+        let d = pyr
+            .shore_proximity_at(c, level)
+            .ok_or_else(|| "level out of range".to_string())? as f64;
+        let (gx, gy) = pyr
+            .slope(c, level)
+            .ok_or_else(|| "level out of range".to_string())?;
+        let grad_norm = (gx * gx + gy * gy).sqrt();
+
+        // Gradient too small to define a contour: fall back to clamped u.
+        if grad_norm <= 1e-12 {
+            let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+            return Ok((c_re + u_re * scale, c_im + u_im * scale));
+        }
+
+        // Normal points toward increasing proximity (away from the Shore);
+        // tangent runs along the contour.
+        let nx = gx / grad_norm;
+        let ny = gy / grad_norm;
+        let tx = -gy / grad_norm;
+        let ty = gx / grad_norm;
+
+        let proj_t = u_re * tx + u_im * ty;
+        let proj_n = u_re * nx + u_im * ny;
+
+        // Between transients, hug the contour; during hits, allow crossing.
+        let normal_scale_no_hit = 0.05_f64;
+        let normal_scale_hit = 1.0_f64;
+        let tangential_scale = 1.0_f64;
+        let normal_scale =
+            normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * h.clamp(0.0, 1.0);
+
+        // Soft servo toward the target distance.
+        let servo_gain = 0.2_f64;
+        let servo = servo_gain * (d_star - d);
+
+        let mut dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo);
+        let mut dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo);
+
+        let mag = (dx * dx + dy * dy).sqrt();
+        if mag > max_step && mag > 0.0 {
+            let s = max_step / mag;
+            dx *= s;
+            dy *= s;
+        }
+
+        Ok((c_re + dx, c_im + dy))
+    })
+}
 
 /// Install the process-wide pyramid (used by bindings and tests).
 pub fn set_pyramid(pyr: MipPyramid) -> Result<(), String> {

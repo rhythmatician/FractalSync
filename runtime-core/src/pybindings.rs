@@ -379,6 +379,22 @@ fn minimap_shore_proximity_batch_py(
     })
 }
 
+/// Contour-biased integrator step for Physics. Returns (new_re, new_im).
+#[pyfunction]
+fn contour_biased_step_py(
+    c_re: f64,
+    c_im: f64,
+    u_re: f64,
+    u_im: f64,
+    h: f64,
+    d_star: f64,
+    max_step: f64,
+    level: usize,
+) -> PyResult<(f64, f64)> {
+    crate::minimap::contour_biased_step(c_re, c_im, u_re, u_im, h, d_star, max_step, level)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
 /// Mandelbrot distance estimate. Accepts:
 /// 1) `mandelbrot_distance_estimate(coords: Sequence[complex])` -> list[float]
 /// 2) `mandelbrot_distance_estimate((x_seq, y_seq))` -> list[float]
@@ -725,6 +741,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;
+    m.add_function(wrap_pyfunction!(contour_biased_step_py, m)?)?;
     m.add_function(wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
     // Alias without the _py suffix (tests and distance_utils use this name)
     m.add("mandelbrot_distance_estimate", wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;

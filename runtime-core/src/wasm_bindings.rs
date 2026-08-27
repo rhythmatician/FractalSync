@@ -498,3 +498,25 @@ pub fn minimap_slope(real: f64, imag: f64, level: usize) -> Result<Array, JsValu
         Ok(arr)
     })
 }
+
+/// Contour-biased integrator step for Physics. Returns [new_real, new_imag].
+#[wasm_bindgen]
+pub fn contour_biased_step(
+    real: f64,
+    imag: f64,
+    u_real: f64,
+    u_imag: f64,
+    h: f64,
+    d_star: f64,
+    max_step: f64,
+    level: usize,
+) -> Result<Array, JsValue> {
+    let (nr, ni) = crate::minimap::contour_biased_step(
+        real, imag, u_real, u_imag, h, d_star, max_step, level,
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(nr));
+    arr.push(&JsValue::from_f64(ni));
+    Ok(arr)
+}
