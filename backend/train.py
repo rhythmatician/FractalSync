@@ -35,6 +35,33 @@ except ImportError:
     GPU_AVAILABLE = False
 
 
+def _run_preflight_parity() -> None:
+    """Run scripts/preflight_parity.py as a subprocess; abort on failure.
+
+    Runs before any long-running work so a diverged training mirror can never
+    waste a training session. Subprocess isolation means a broken mirror fails
+    cleanly instead of crashing weirdly inside the trainer.
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script = os.path.join(repo_root, "scripts", "preflight_parity.py")
+    if not os.path.exists(script):
+        print(
+            f"ERROR: preflight parity script not found: {script}\n"
+            "Refusing to train without parity verification. "
+            "Use --skip-parity-check to bypass (emergency only)."
+        )
+        sys.exit(1)
+    result = subprocess.run([sys.executable, script], cwd=repo_root)
+    if result.returncode != 0:
+        print(
+            "\nAborting training: preflight parity check FAILED "
+            f"(exit code {result.returncode}). The training-time mirror and "
+            "runtime_core have likely diverged. Fix the mismatch or use "
+            "--skip-parity-check (emergency only)."
+        )
+        sys.exit(result.returncode)
+
+
 def main():
     """Main training function."""
     # Configure logging so ControlTrainer messages are visible
@@ -247,8 +274,17 @@ def main():
         action="store_true",
         help="Use GRU-based temporal encoder instead of flat MLP",
     )
+    parser.add_argument(
+        "--skip-parity-check",
+        action="store_true",
+        help="Skip the preflight parity check (emergency use only: allows "
+        "training even if the training mirror and runtime_core have diverged)",
+    )
 
     args = parser.parse_args()
+
+    if not args.skip_parity_check:
+        _run_preflight_parity()
 
     execute_training_workflow(args)
 

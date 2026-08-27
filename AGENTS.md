@@ -8,6 +8,8 @@ Instructions for AI coding agents working in this repository.
 
 Use YAGNI and DRY principles.
 
+Runtime-consumed math lives in runtime-core (Rust) only; mirrors must pass `python scripts/preflight_parity.py` before training. Authority: docs/adr/0001-rust-first-parity.md.
+
 ### Issue tracker
 
 Issues are tracked in GitHub Issues (`rhythmatician/FractalSync`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.

@@ -127,6 +127,7 @@ If anything here seems off or incomplete (e.g., ports, paths, or training params
 - Visual metrics and rendering hooks: `backend/src/visual_metrics.py` and `backend/src/julia_gpu.py` (GPU optional).
 
 ## Runtime-core (Rust) - guidance for changes and builds
+- Parity authority: see docs/adr/0001-rust-first-parity.md. Run `python scripts/preflight_parity.py` before training; training aborts automatically if mirrors diverge.
 - `runtime-core` is the canonical implementation of geometry, orbits, features and runtime visual metrics. When adding or changing core behavior:
   - Implement the logic in `runtime-core/src/*` and add unit tests in `runtime-core/tests` (run with `cargo test -q`).
   - Update the Python bindings in `runtime-core/src/pybindings.rs` and the wasm bindings in `runtime-core/src/wasm_bindings.rs` as needed.
