@@ -14,6 +14,7 @@ from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
+    FEATURE_VERSION,
     FeatureExtractor,
 )
 
@@ -97,6 +98,12 @@ class AudioDataset:
             "hop_length": HOP_LENGTH,
             "n_fft": N_FFT,
             "window_frames": self.window_frames,
+            # Extractor contract version: when the feature semantics change
+            # (FEATURE_VERSION bump), cached features MUST be invalidated —
+            # otherwise the trainer silently trains on stale features from
+            # the old contract (observed: features/1 cache survived the
+            # features/2 change and the model learned the wrong distribution).
+            "feature_version": FEATURE_VERSION,
         }
         cache_key = hashlib.sha1(
             json.dumps(cache_payload, sort_keys=True).encode()
