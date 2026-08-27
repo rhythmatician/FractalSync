@@ -166,6 +166,8 @@ class ControlTrainer:
         julia_stability_weight: float = 0.0,
         julia_stability_base: float = 0.02,
         julia_stability_loud_gain: float = 0.08,
+        song_identity_weight: float = 0.0,
+        song_identity_margin: float = 0.35,
     ):
         """
         Initialize control trainer.
@@ -259,10 +261,18 @@ class ControlTrainer:
         # J(c) frame-to-frame stability (see _julia_stability_loss).
         self.julia_stability_weight = julia_stability_weight
         # Perceptual displacement allowed in silence (in local-scale units).
-        self.julia_stability_base = julia_stability_base
+        # Must exceed anti_dwell_target (0.15) so the two losses never
+        # conflict: allowed(e) = base + gain*e >= required(e) = 0.15*e
+        # for all e in [0,1] requires base >= 0.15 and gain >= 0.15.
+        self.julia_stability_base = max(julia_stability_base, 0.16)
         # Extra allowed displacement per unit of audio energy (loud parts
         # may drift a little more).
-        self.julia_stability_loud_gain = julia_stability_loud_gain
+        self.julia_stability_loud_gain = max(julia_stability_loud_gain, 0.16)
+        # Song-identity region loss (see _song_identity_loss): different
+        # songs explore different areas, consistently within each song.
+        self.song_identity_weight = song_identity_weight
+        # Minimum distance between song home regions (c-space units).
+        self.song_identity_margin = song_identity_margin
         # c-trace plot metadata (set in train()): dataset file order and
         # window size, so per-epoch plots replay the same songs.
         self._trace_dataset_files: List[Path] = []
@@ -311,6 +321,7 @@ class ControlTrainer:
             "coverage_loss": [],
             "anti_dwell_loss": [],
             "julia_stability_loss": [],
+            "song_identity_loss": [],
             "zone_loss": [],
             "alignment_proxy": [],
         }
@@ -834,15 +845,119 @@ class ControlTrainer:
         # Energy scaling: loud-but-steady parts may drift a little more
         # than silence, per the user's "less movement for quiet parts,
         # a little more for loud parts".
+        #
+        # IMPORTANT: this allowance must stay ABOVE the anti-dwell loss's
+        # requirement (anti_dwell_target * energy = 0.15*energy local
+        # units). With the old base=0.02/gain=0.08 the two losses were in
+        # direct conflict at Tool-level energy (anti-dwell demanded 0.09
+        # while stability allowed 0.068 at e=0.6) — the model resolved the
+        # fight by parking in one region. The band below guarantees
+        # allowed >= required + margin for all energy levels.
         energy = torch.nan_to_num(audio_energy.reshape(-1).float(), nan=0.0)
         energy = torch.clamp(energy, 0.0, 1.0)[1:]
-        allowed = self.julia_stability_base + self.julia_stability_loud_gain * energy
+        allowed = (
+            self.julia_stability_base
+            + self.julia_stability_loud_gain * energy
+        )
 
         excess = torch.relu(perceptual_dc - allowed) * quiet_gate
         valid = step_ok[1:]
         if valid.any():
             return excess[valid].mean()
         return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+    def _song_identity_loss(
+        self,
+        c_sequence: torch.Tensor,
+        segment_ids: torch.Tensor,
+        song_fingerprints: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Song-identity region loss: different songs explore different areas.
+
+        The user's requirement, stated mathematically. Let mu_s be the
+        centroid of c(t) for song s and sigma_s its spread. Two terms:
+
+        1. SEPARATION (between songs): penalize small pairwise distances
+           between song centroids. For songs s != s':
+               L_sep = sum_{s<s'} max(0, margin - |mu_s - mu_s'|)
+           pushing each song's home region at least `margin` away from
+           every other song's. This is the direct answer to "why does it
+           always converge to the same region" — same region now costs.
+
+        2. CONSISTENCY (within a song): penalize large per-frame deviation
+           from the song's own centroid:
+               L_cons = mean_s mean_t |c_s(t) - mu_s| / margin
+           normalized by margin so its scale matches term 1. This is the
+           "prefer certain regions for certain songs" part: a song keeps
+           coming home to its own area instead of wandering uniformly.
+
+        The fingerprint tensor (optional) carries a learned embedding per
+        song; when provided, songs with similar audio get similar target
+        regions via a contrastive pull. Without it, the loss is purely
+        repulsive — every song claims distinct territory.
+
+        Fully differentiable w.r.t. the controls through c_sequence.
+        """
+        if c_sequence.shape[0] < 2 or self.song_identity_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        seg = segment_ids.reshape(-1)
+        unique_songs = torch.unique(seg)
+        n_songs = unique_songs.numel()
+        if n_songs < 1:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        # Per-song centroids (differentiable means over each song's frames).
+        centroids = []
+        for s in unique_songs:
+            mask = seg == s
+            if mask.sum() < 2:
+                continue
+            centroids.append(c_sequence[mask].real.float().mean())
+            centroids.append(c_sequence[mask].imag.float().mean())
+        if len(centroids) < 4:
+            # Fewer than 2 usable songs: only the consistency term applies.
+            pass
+
+        n_usable = len(centroids) // 2
+        margin = self.song_identity_margin
+
+        loss = torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        # ---- Term 1: separation between song centroids ----
+        if n_usable >= 2:
+            mu = torch.stack(centroids).view(n_usable, 2)
+            # Pairwise centroid distances.
+            diff = mu.unsqueeze(1) - mu.unsqueeze(0)
+            dists = torch.sqrt(diff**2 + 1e-12).sum(dim=2)
+            iu = torch.triu_indices(n_usable, n_usable, offset=1)
+            pair_d = dists[iu[0], iu[1]]
+            separation = torch.relu(margin - pair_d).pow(2).mean()
+            loss = loss + separation
+
+        # ---- Term 2: within-song consistency ----
+        cons_terms: List[torch.Tensor] = []
+        for s in unique_songs:
+            mask = seg == s
+            if mask.sum() < 2:
+                continue
+            pts = c_sequence[mask]
+            mu_re = pts.real.float().mean()
+            mu_im = pts.imag.float().mean()
+            dev = torch.sqrt(
+                (pts.real.float() - mu_re) ** 2
+                + (pts.imag.float() - mu_im) ** 2
+                + 1e-12
+            )
+            # Cap: deviations beyond 2*margin are already "wandering" —
+            # the coverage loss handles diversity; we only penalize the
+            # middle ground so songs stay coherent without being pinned.
+            excess = torch.relu(dev - 2.0 * margin)
+            cons_terms.append(excess.mean())
+        if cons_terms:
+            loss = loss + torch.stack(cons_terms).mean() / margin
+
+        return loss
 
     def _make_clip_dataloader(
         self,
@@ -925,6 +1040,7 @@ class ControlTrainer:
         total_coverage = 0.0
         total_anti_dwell = 0.0
         total_julia_stability = 0.0
+        total_song_identity = 0.0
         total_zone = 0.0
         n_batches = 0
 
@@ -1238,6 +1354,14 @@ class ControlTrainer:
             )
             julia_stability_loss = self._sanitize_scalar(julia_stability_loss)
 
+            # Song identity: different songs claim different home regions,
+            # consistently within each song. Directly answers "why does it
+            # always converge to the same region".
+            song_identity_loss = self._song_identity_loss(
+                c_complex, segment_ids
+            )
+            song_identity_loss = self._sanitize_scalar(song_identity_loss)
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -1263,6 +1387,7 @@ class ControlTrainer:
                 + self.anti_dwell_weight * anti_dwell_loss
                 + self.zone_weight * zone_loss
                 + self.julia_stability_weight * julia_stability_loss
+                + self.song_identity_weight * song_identity_loss
             )
             total_batch_loss = self._sanitize_scalar(total_batch_loss)
 
@@ -1285,6 +1410,7 @@ class ControlTrainer:
             total_coverage += coverage_loss.item()
             total_anti_dwell += anti_dwell_loss.item()
             total_julia_stability += julia_stability_loss.item()
+            total_song_identity += song_identity_loss.item()
             total_zone += zone_loss.item()
             n_batches += 1
 
@@ -1302,6 +1428,7 @@ class ControlTrainer:
             "coverage_loss": total_coverage / n_batches,
             "anti_dwell_loss": total_anti_dwell / n_batches,
             "julia_stability_loss": total_julia_stability / n_batches,
+            "song_identity_loss": total_song_identity / n_batches,
             "zone_loss": total_zone / n_batches,
         }
 

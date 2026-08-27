@@ -324,6 +324,20 @@ def main():
         help="Extra allowed displacement per unit audio energy (loud parts drift more)",
     )
     parser.add_argument(
+        "--song-identity-weight",
+        type=float,
+        default=0.0,
+        help="Weight for song-identity region loss (0 disables). Pushes each "
+        "song's c(t) centroid at least --song-identity-margin from every other "
+        "song's, and keeps each song's path coherent around its own centroid.",
+    )
+    parser.add_argument(
+        "--song-identity-margin",
+        type=float,
+        default=0.35,
+        help="Minimum c-space distance between song home regions",
+    )
+    parser.add_argument(
         "--recurrent",
         action="store_true",
         help="Use GRU-based temporal encoder instead of flat MLP",
@@ -483,6 +497,8 @@ def execute_training_workflow(args):
         julia_stability_weight=args.julia_stability_weight,
         julia_stability_base=args.julia_stability_base,
         julia_stability_loud_gain=args.julia_stability_loud_gain,
+        song_identity_weight=args.song_identity_weight,
+        song_identity_margin=args.song_identity_margin,
     )
 
     if args.resume_checkpoint:
