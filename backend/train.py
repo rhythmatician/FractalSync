@@ -338,6 +338,31 @@ def main():
         help="Minimum c-space distance between song home regions",
     )
     parser.add_argument(
+        "--region-dwell-weight",
+        type=float,
+        default=0.0,
+        help="Weight for region-dwell loss (0 disables). Penalizes c occupying "
+        "the same J(c)-region (perceptual neighborhood) for the whole dwell window.",
+    )
+    parser.add_argument(
+        "--region-dwell-window",
+        type=int,
+        default=240,
+        help="Look-back window in frames (240 = 4s at 60fps) for continuous occupation",
+    )
+    parser.add_argument(
+        "--region-dwell-p",
+        type=float,
+        default=0.08,
+        help="Region radius in proximity units (J-space perceptual axis)",
+    )
+    parser.add_argument(
+        "--region-dwell-phi",
+        type=float,
+        default=0.5,
+        help="Region radius in boundary-angle units (radians)",
+    )
+    parser.add_argument(
         "--recurrent",
         action="store_true",
         help="Use GRU-based temporal encoder instead of flat MLP",
@@ -499,6 +524,10 @@ def execute_training_workflow(args):
         julia_stability_loud_gain=args.julia_stability_loud_gain,
         song_identity_weight=args.song_identity_weight,
         song_identity_margin=args.song_identity_margin,
+        region_dwell_weight=args.region_dwell_weight,
+        region_dwell_window=args.region_dwell_window,
+        region_dwell_p=args.region_dwell_p,
+        region_dwell_phi=args.region_dwell_phi,
     )
 
     if args.resume_checkpoint:

@@ -168,6 +168,12 @@ class ControlTrainer:
         julia_stability_loud_gain: float = 0.08,
         song_identity_weight: float = 0.0,
         song_identity_margin: float = 0.35,
+        region_dwell_weight: float = 0.0,
+        region_dwell_window: int = 240,
+        region_dwell_p: float = 0.08,
+        region_dwell_phi: float = 0.5,
+        region_dwell_depth_gate: float = 0.6,
+        region_dwell_onset_gate: float = 0.5,
     ):
         """
         Initialize control trainer.
@@ -273,6 +279,20 @@ class ControlTrainer:
         self.song_identity_weight = song_identity_weight
         # Minimum distance between song home regions (c-space units).
         self.song_identity_margin = song_identity_margin
+        # Region-dwell loss (see _region_dwell_loss): penalize c occupying
+        # the same J(c)-region for too long. "Region" is defined in J-space
+        # via the perceptual coordinates (proximity, boundary angle).
+        self.region_dwell_weight = region_dwell_weight
+        # Look-back window (frames) for continuous occupation. 240 = 4 s.
+        self.region_dwell_window = region_dwell_window
+        # Region radius in proximity units (J-space perceptual axis).
+        self.region_dwell_p = region_dwell_p
+        # Region radius in boundary-angle units (radians).
+        self.region_dwell_phi = region_dwell_phi
+        # Occupation fraction above which a frame counts as dwelling.
+        self.region_dwell_depth_gate = region_dwell_depth_gate
+        # Onset level that resets the dwell window (a hit frees c to jump).
+        self.region_dwell_onset_gate = region_dwell_onset_gate
         # c-trace plot metadata (set in train()): dataset file order and
         # window size, so per-epoch plots replay the same songs.
         self._trace_dataset_files: List[Path] = []
@@ -322,6 +342,7 @@ class ControlTrainer:
             "anti_dwell_loss": [],
             "julia_stability_loss": [],
             "song_identity_loss": [],
+            "region_dwell_loss": [],
             "zone_loss": [],
             "alignment_proxy": [],
         }
@@ -598,6 +619,98 @@ class ControlTrainer:
         if self._use_minimap_proximity:
             return shore_proximity(c)
         return cardioid_proximity(c)
+
+    def _region_dwell_loss(
+        self,
+        c_sequence: torch.Tensor,
+        segment_ids: torch.Tensor,
+        onset_strength: torch.Tensor,
+    ) -> torch.Tensor:
+        """Penalize c dwelling in the same J(c)-region for too long.
+
+        The user's framing, made precise. "Region" is defined in J(c)-space,
+        not c-space: two points a, b are in the same region when J(a) ≈ J(b).
+        We use the cardioid-proximity coordinate p(c) = ||mu|-1| as the
+        perceptual axis — it is continuous in c outside the set, and J(c)'s
+        character varies primarily along it (deep interior = blob, boundary =
+        filigree, far exterior = dust). Two c points with similar p AND
+        similar angle around the cardioid render similar Julia sets.
+
+        Region signature per frame: (p(c), phi(c)) where phi is the angle of
+        mu = 1 - sqrt(1-4c) — the position ON the cardioid boundary nearest
+        c. Frames whose signatures stay within (region_p, region_phi) of a
+        recently-visited signature are "dwelling".
+
+        Loss: for each frame, look back over a dwell window; if ALL recent
+        signatures are within the region radius, that frame is dwelling and
+        incurs loss proportional to how deep into the window it sits (early
+        occupancy is fine — a section may open in one area — but lingering
+        the whole window is not). Transients reset the window: a hit lets c
+        jump regions freely (that's the desired section-change behavior).
+
+        This directly encodes "okay to jitter in one area for a section,
+        but then it's gotta move" without forbidding returns: coming BACK
+        to an area after visiting others is not penalized — only continuous
+        occupation is.
+        """
+        if c_sequence.shape[0] < 2 or self.region_dwell_weight <= 0.0:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+
+        n = c_sequence.shape[0]
+        proximity = self._cardioid_proximity_differentiable(c_sequence)
+
+        # mu = 1 - sqrt(1-4c): the cardioid parameterization. Its angle is
+        # the position along the boundary — the second perceptual axis.
+        inner = 1.0 - 4.0 * c_sequence
+        w = torch.sqrt(inner.to(torch.complex64))
+        mu = 1.0 - w
+        phi = torch.atan2(mu.imag.float(), mu.real.float())
+
+        # Region signature: (p, phi). Two frames are "same region" when both
+        # coordinates are close. phi wraps at ±pi, so compare via sin/cos.
+        p = proximity.float()
+
+        onset = torch.nan_to_num(onset_strength.reshape(-1).float(), nan=0.0)
+        onset = torch.clamp(onset, 0.0, 1.0)
+
+        window = self.region_dwell_window
+        losses: List[torch.Tensor] = []
+        for t in range(window // 2, n):
+            lo = max(0, t - window // 2)
+            # SPREAD-based dwell detection (not fixed-region occupation):
+            # measure how much the recent perceptual signatures have SPREAD.
+            # A dwelling c has near-zero spread in (p, phi); a traveling c
+            # accumulates spread even if it moves slowly or revisits. This
+            # is robust to region size choices and directly encodes "has c
+            # stopped exploring?".
+            dp = torch.abs(p[lo:t] - p[lo:t].mean())
+            dphi = torch.abs(phi[lo:t] - phi[lo:t].mean())
+            dphi = torch.minimum(dphi, 2.0 * torch.pi - dphi)  # wrap
+            spread_p = dp.max()
+            spread_phi = dphi.max()
+
+            # Normalized dwell: how far below the region radius the recent
+            # spread sits. spread >= region radius -> not dwelling (0 loss).
+            dwell_p = torch.relu(self.region_dwell_p - spread_p) / self.region_dwell_p
+            dwell_phi = torch.relu(self.region_dwell_phi - spread_phi) / self.region_dwell_phi
+            # Both axes must be confined for a true dwell (moving along one
+            # axis alone still changes J(c) meaningfully).
+            dwell = dwell_p * dwell_phi
+
+            # Transient escape: hits in the recent window PARTIALLY forgive
+            # dwelling — c was allowed to jump regions, but if it stayed in
+            # the same J-neighborhood anyway, the dwell still counts (with
+            # reduced weight per hit). Full forgiveness only when hits are
+            # frequent relative to the window.
+            n_hits = (onset[lo:t] > self.region_dwell_onset_gate).float().sum()
+            hit_fraction = torch.clamp(n_hits / max(1, (t - lo) / 60.0), 0.0, 1.0)
+            dwell = dwell * (1.0 - 0.5 * hit_fraction)
+
+            losses.append(dwell)
+
+        if not losses:
+            return torch.tensor(0.0, device=self.device, dtype=torch.float32)
+        return torch.stack(losses).mean()
 
     def _coverage_loss(
         self, c_sequence: torch.Tensor, segment_ids: torch.Tensor
@@ -1041,6 +1154,7 @@ class ControlTrainer:
         total_anti_dwell = 0.0
         total_julia_stability = 0.0
         total_song_identity = 0.0
+        total_region_dwell = 0.0
         total_zone = 0.0
         n_batches = 0
 
@@ -1362,6 +1476,14 @@ class ControlTrainer:
             )
             song_identity_loss = self._sanitize_scalar(song_identity_loss)
 
+            # Region dwell: c must not occupy the same J(c)-region for the
+            # whole dwell window. Jitter in one area for a section is fine;
+            # lingering all window is not. Hits reset the window.
+            region_dwell_loss = self._region_dwell_loss(
+                c_complex, segment_ids, onset_strength
+            )
+            region_dwell_loss = self._sanitize_scalar(region_dwell_loss)
+
             # Control loss (curriculum learning)
             if control_targets is not None and current_curriculum_weight > 0.0:
                 control_loss_val = self.control_loss(
@@ -1388,6 +1510,7 @@ class ControlTrainer:
                 + self.zone_weight * zone_loss
                 + self.julia_stability_weight * julia_stability_loss
                 + self.song_identity_weight * song_identity_loss
+                + self.region_dwell_weight * region_dwell_loss
             )
             total_batch_loss = self._sanitize_scalar(total_batch_loss)
 
@@ -1411,6 +1534,7 @@ class ControlTrainer:
             total_anti_dwell += anti_dwell_loss.item()
             total_julia_stability += julia_stability_loss.item()
             total_song_identity += song_identity_loss.item()
+            total_region_dwell += region_dwell_loss.item()
             total_zone += zone_loss.item()
             n_batches += 1
 
@@ -1429,6 +1553,7 @@ class ControlTrainer:
             "anti_dwell_loss": total_anti_dwell / n_batches,
             "julia_stability_loss": total_julia_stability / n_batches,
             "song_identity_loss": total_song_identity / n_batches,
+            "region_dwell_loss": total_region_dwell / n_batches,
             "zone_loss": total_zone / n_batches,
         }
 
