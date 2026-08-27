@@ -17,7 +17,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
-from .cspace_proxies import cardioid_proximity, synthesize_c
+from .cspace_proxies import cardioid_proximity, shore_proximity, synthesize_c
 from .data_loader import AudioDataset
 from .visual_metrics import LossVisualMetrics
 from runtime_core import (
@@ -37,6 +37,49 @@ from runtime_core import (
 from .julia_gpu import GPUJuliaRenderer
 
 logger = logging.getLogger(__name__)
+
+# Candidate locations of the baked mip pyramid artifacts (issue #88). The
+# bake script writes them to its CWD; the repo root and backend/ are both
+# plausible depending on how training was launched.
+_MIP_PYRAMID_CANDIDATES = [
+    ("mandel_F_mips_f32.bin", "mandel_S_mips_f32.bin", "mandel_mips_meta.json"),
+    ("../mandel_F_mips_f32.bin", "../mandel_S_mips_f32.bin", "../mandel_mips_meta.json"),
+]
+
+_pyramid_load_attempted = False
+_pyramid_loaded = False
+
+
+def _ensure_mip_pyramid_loaded() -> bool:
+    """Load the baked mip pyramid into runtime-core (idempotent).
+
+    Returns True when the pyramid is available so shore-proximity losses read
+    the minimaps; False when the artifacts are missing and callers should fall
+    back to the deprecated cardioid approximation.
+    """
+    global _pyramid_load_attempted, _pyramid_loaded
+    if _pyramid_load_attempted:
+        return _pyramid_loaded
+    _pyramid_load_attempted = True
+
+    import runtime_core
+
+    for f_bin, s_bin, meta in _MIP_PYRAMID_CANDIDATES:
+        if os.path.exists(f_bin) and os.path.exists(s_bin) and os.path.exists(meta):
+            try:
+                runtime_core.load_mip_pyramid_py(f_bin, s_bin, meta)
+                _pyramid_loaded = True
+                logger.info("Mip pyramid loaded from %s", os.path.abspath(meta))
+                return True
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("Failed to load mip pyramid from %s: %s", meta, exc)
+                break
+
+    logger.warning(
+        "Baked mip pyramid not found; falling back to deprecated cardioid "
+        "proximity. Run scripts/bake_mandel_maps_gl.py to generate it."
+    )
+    return False
 
 
 class ControlLoss(nn.Module):
@@ -160,6 +203,11 @@ class ControlTrainer:
                 the set where Julia sets are a sparse dust (mostly black).
         """
         self.model: AudioToControlModel = model.to(device)
+
+        # Load the Map's mip pyramid (issue #88) so shore-proximity losses can
+        # read the minimaps. Best-effort: if the baked artifacts are missing,
+        # fall back to the deprecated cardioid approximation with a warning.
+        self._use_minimap_proximity = _ensure_mip_pyramid_loaded()
 
         # Feature extractor is guaranteed to be present after initialization
         self.feature_extractor = feature_extractor or FeatureExtractor(
@@ -494,11 +542,16 @@ class ControlTrainer:
         )
 
     def _cardioid_proximity_differentiable(self, c: torch.Tensor) -> torch.Tensor:
-        """Cardioid proximity proxy (delegates to cspace_proxies).
+        """Shore proximity for supervision (delegates to cspace_proxies).
 
-        Mirrors ``runtime_core::proxies::mandelbrot_cardioid_proximity``;
-        parity-tested against the Rust bindings.
+        Sunset note (issue #88): the cardioid approximation is retired as the
+        shore-distance oracle; this now samples the Map's mip pyramid S field
+        via the Rust minimap reader when the pyramid is loaded, falling back
+        to the deprecated cardioid approximation otherwise. Kept under the
+        old name so existing loss call sites remain stable.
         """
+        if self._use_minimap_proximity:
+            return shore_proximity(c)
         return cardioid_proximity(c)
 
     def _coverage_loss(

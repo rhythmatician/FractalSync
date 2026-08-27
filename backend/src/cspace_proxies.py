@@ -90,8 +90,38 @@ def cardioid_proximity(c: torch.Tensor) -> torch.Tensor:
 
     Mirrors ``runtime_core::proxies::mandelbrot_cardioid_proximity``:
     w = sqrt(1 − 4c); mu = 1 − w; return ||mu| − 1|. Zero on the boundary.
+
+    .. deprecated::
+        Sunset per issue #88: the minimaps (mip pyramid S field) are the
+        shore-distance oracle. Use :func:`shore_proximity` instead.
     """
     inner = 1.0 - 4.0 * c
     w = torch.sqrt(inner.to(torch.complex64))
     mu = 1.0 - w
     return torch.abs(torch.abs(mu) - 1.0)
+
+
+def shore_proximity(c: torch.Tensor, level: int = 2) -> torch.Tensor:
+    """Shore proximity sampled from the Map's mip pyramid (issue #88).
+
+    Reads the baked S field (gradient-magnitude proximity G/(G+G0), already
+    normalized [0, 1]) at each point of `c` via the runtime-core minimap
+    reader. This is non-differentiable w.r.t. c — it is a *supervision
+    signal*, not a gradient path. The Rust reader is the single source of
+    truth; there is deliberately no tensor re-implementation.
+
+    Args:
+        c: complex tensor of points in c-space.
+        level: mip level to sample (default 2 — the finest selected rung).
+
+    Returns a float tensor of shore-proximity values in [0, 1].
+    """
+    import runtime_core
+
+    flat = c.detach().cpu().reshape(-1)
+    re = flat.real.tolist()
+    im = flat.imag.tolist()
+    values = runtime_core.minimap_shore_proximity_batch_py(re, im, level)
+    return torch.tensor(
+        values, dtype=torch.float32, device=c.device
+    ).reshape(c.shape if c.dim() > 0 else ())

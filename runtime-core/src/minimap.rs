@@ -147,6 +147,24 @@ impl MipPyramid {
         Some((fx, fy.min(h as f64 - 0.5)))
     }
 
+    /// Convert world coordinates to fractional texel coordinates on a level.
+    ///
+    /// Column increases with Re; row increases as Im decreases (row 0 = IM_MAX).
+    /// Public so bindings can implement batch sampling without per-point calls.
+    pub fn world_to_texel_pub(
+        &self,
+        level: usize,
+        c: num_complex::Complex64,
+    ) -> Option<(f64, f64)> {
+        self.world_to_texel(level, c)
+    }
+
+    /// Sample the shore-proximity (S) field at integer texel coordinates.
+    /// Public for the same reason as [`MipPyramid::world_to_texel_pub`].
+    pub fn sample_field_pub(&self, level: usize, col: isize, row: isize) -> f32 {
+        self.sample_level(MinimapField::ShoreProximity, level, col, row)
+    }
+
     /// Extract the Player's minimap: a `half*2+1`-square window of greys
     /// centered on c at the given level, clamped at the extent edges.
     ///

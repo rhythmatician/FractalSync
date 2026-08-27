@@ -349,6 +349,36 @@ fn minimap_slope_py(c_re: f64, c_im: f64, level: usize) -> PyResult<(f64, f64)> 
     })
 }
 
+/// Batch shore proximity (S field) sampled at points on a mip level.
+#[pyfunction]
+fn minimap_shore_proximity_batch_py(
+    re: Vec<f64>,
+    im: Vec<f64>,
+    level: usize,
+) -> PyResult<Vec<f32>> {
+    if re.len() != im.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "re/im length mismatch",
+        ));
+    }
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
+        })?;
+        let mut out = Vec::with_capacity(re.len());
+        for (&r, &i) in re.iter().zip(im.iter()) {
+            let c = num_complex::Complex64::new(r, i);
+            let (fx, fy) = pyr
+                .world_to_texel_pub(level, c)
+                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("bad level"))?;
+            let cx = fx.round() as isize;
+            let cy = fy.round() as isize;
+            out.push(pyr.sample_field_pub(level, cx, cy));
+        }
+        Ok(out)
+    })
+}
+
 /// Module-level __getattr__ to dynamically provide fallback callables for
 /// missing top-level functions. This helps tests that delete attributes via
 /// monkeypatch and provides a safety net when the compiled extension is
@@ -612,6 +642,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_mip_pyramid_py, m)?)?;
     m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
+    m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;
     // Differentiable-proxy reference implementations (training supervision)
     m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;
