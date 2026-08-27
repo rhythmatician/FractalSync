@@ -456,6 +456,36 @@ impl OrbitController {
         self.inner.apply_controls(s, alpha);
     }
 
+    /// Refinement 1 toggle: momentum (persistent velocity + drag).
+    #[wasm_bindgen(setter)]
+    pub fn set_momentum(&mut self, on: bool) {
+        self.inner.momentum = on;
+    }
+
+    /// Friction for momentum refinement (default 0.90).
+    #[wasm_bindgen(setter)]
+    pub fn set_drag(&mut self, drag: f64) {
+        self.inner.drag = drag;
+    }
+
+    /// Refinement 2 toggle: shore bias via minimap contour stepping.
+    #[wasm_bindgen(setter)]
+    pub fn set_shore_bias(&mut self, on: bool) {
+        self.inner.shore_bias = on;
+    }
+
+    /// Target shore proximity for the shore-bias servo.
+    #[wasm_bindgen(setter)]
+    pub fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Max world-space step per frame for shore bias.
+    #[wasm_bindgen(setter)]
+    pub fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
     /// Advance one frame; returns the new c.
     pub fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>) -> Complex {
         self.inner.step(dt, band_gates.as_deref()).into()

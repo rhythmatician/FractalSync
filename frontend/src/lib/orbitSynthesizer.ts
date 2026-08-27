@@ -56,6 +56,11 @@ interface WasmOrbitState {
 interface WasmOrbitController {
   readonly theta: number;
   apply_controls(s: number, alpha: number): void;
+  set_momentum(on: boolean): void;
+  set_drag(drag: number): void;
+  set_shore_bias(on: boolean): void;
+  set_d_star(d_star: number): void;
+  set_max_step(max_step: number): void;
   step(dt: number, bandGates?: Float64Array | null): { real: number; imag: number };
 }
 
@@ -301,6 +306,19 @@ export class OrbitSynthesizer {
    */
   applyControls(signals: ControlSignals): void {
     this.state.apply_controls(signals.sTarget, signals.alpha);
+  }
+
+  /** Refinement 1: momentum (persistent velocity + drag). Default OFF. */
+  setMomentum(on: boolean, drag = 0.9): void {
+    this.state.set_momentum(on);
+    this.state.set_drag(drag);
+  }
+
+  /** Refinement 2: shore bias via minimap contour stepping. Default OFF. */
+  setShoreBias(on: boolean, dStar = 0.5, maxStep = 0.05): void {
+    this.state.set_shore_bias(on);
+    this.state.set_d_star(dStar);
+    this.state.set_max_step(maxStep);
   }
 
   /**

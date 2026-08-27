@@ -48,11 +48,16 @@ declare module '/wasm/orbit_synth_wasm.js' {
     ): { real: number; imag: number };
   }
 
-  /** May-proven orbit controller (restored baseline). */
+  /** May-proven orbit controller (restored baseline) with opt-in refinements. */
   export class OrbitController {
     constructor(s: number, alpha: number, omega: number);
     theta: number;
     apply_controls(s: number, alpha: number): void;
+    set_momentum(on: boolean): void;
+    set_drag(drag: number): void;
+    set_shore_bias(on: boolean): void;
+    set_d_star(d_star: number): void;
+    set_max_step(max_step: number): void;
     step(
       dt: number,
       band_gates?: Float64Array | null

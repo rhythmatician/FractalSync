@@ -396,6 +396,32 @@ pub struct OrbitController {
     pub s: f64,
     /// Angular position on the cardioid from the model ([0, 1] internally).
     pub alpha: f64,
+
+    // ---- Opt-in refinements (PlayerState ideas, one at a time) ----
+    // All default OFF so step() is bit-identical to the May TS controller.
+    // Enable ONE at a time and evaluate visually before enabling another.
+    //
+    /// Refinement 1 — MOMENTUM: c becomes persistent state with velocity
+    /// and drag; the boundary point becomes an attractor rather than a
+    /// hard position. Smooths control jitter, adds coasting.
+    pub momentum: bool,
+    /// Persistent c position (used only when momentum or shore_bias is on).
+    pub c: num_complex::Complex64,
+    /// Velocity state for refinement 1.
+    pub velocity: num_complex::Complex64,
+    /// Per-frame velocity retention when momentum is on (0.90 = May+10%).
+    pub drag: f64,
+    //
+    /// Refinement 2 — SHORE BIAS: route motion through the minimap's
+    /// contour_biased_step so c hugs the Shore. Requires a loaded pyramid;
+    /// silently no-ops without one.
+    pub shore_bias: bool,
+    /// Target shore-proximity for refinement 2's servo.
+    pub d_star: f64,
+    /// Max world-space step per frame for refinement 2.
+    pub max_step: f64,
+    /// Mip level for refinement 2.
+    pub level: usize,
 }
 
 impl Default for OrbitController {
@@ -405,6 +431,14 @@ impl Default for OrbitController {
             omega: 1.0,
             s: 1.0,
             alpha: 0.0,
+            momentum: false,
+            c: num_complex::Complex64::new(0.0, 0.0),
+            velocity: num_complex::Complex64::new(0.0, 0.0),
+            drag: 0.90,
+            shore_bias: false,
+            d_star: 0.5,
+            max_step: 0.05,
+            level: 0,
         }
     }
 }
@@ -416,6 +450,7 @@ impl OrbitController {
             omega,
             s: s.clamp(0.01, 3.0),
             alpha: alpha.clamp(0.0, 1.0),
+            ..Self::default()
         }
     }
 
@@ -446,8 +481,13 @@ impl OrbitController {
     ///
     /// Returns the new c. Residuals are harmonic epicycles at freq (k+2)
     /// times the wobble phase, amplitude 0.05*gate — identical to the TS.
+    ///
+    /// With all refinement flags off (the default), this is bit-identical
+    /// to the May TS controller. Each flag layers ONE PlayerState idea:
+    ///   momentum   -> c is persistent state; boundary point attracts
+    ///   shore_bias -> motion routed through minimap contour biasing
     pub fn step(&mut self, dt: f64, band_gates: Option<&[f64]>) -> num_complex::Complex64 {
-        // Update wobble phase.
+        // Update wobble phase (unchanged by refinements).
         self.theta = (self.theta + self.omega * dt) % (2.0 * std::f64::consts::PI);
 
         // Base position from the model's (s, alpha).
@@ -465,7 +505,56 @@ impl OrbitController {
                 res_im += gate * 0.05 * phase.sin();
             }
         }
+        let target = num_complex::Complex64::new(base.re + res_re, base.im + res_im);
 
-        num_complex::Complex64::new(base.re + res_re, base.im + res_im)
+        if !self.momentum && !self.shore_bias {
+            // Baseline path: c IS the target. Bit-identical to May.
+            return target;
+        }
+
+        if !self.momentum {
+            // Shore bias only: move from current c toward the target,
+            // biased along contours. No velocity state.
+            let proposed = target - self.c;
+            return self.apply_shore_bias(proposed.re, proposed.im, 0.0);
+        }
+
+        // Momentum path: pull toward the target is an acceleration.
+        let accel_gain = 2.0 * dt;
+        let a_re = (target.re - self.c.re) * accel_gain;
+        let a_im = (target.im - self.c.im) * accel_gain;
+        self.velocity = self.velocity.scale(self.drag)
+            + num_complex::Complex64::new(a_re, a_im);
+        let v_dt = self.velocity.scale(dt);
+
+        if self.shore_bias {
+            self.apply_shore_bias(v_dt.re, v_dt.im, 0.0)
+        } else {
+            self.c = self.c + v_dt;
+            self.c
+        }
+    }
+
+    /// Route a proposed delta through the minimap contour bias (refinement 2).
+    /// Falls back to plain clamped motion when no pyramid is loaded.
+    fn apply_shore_bias(
+        &mut self,
+        du_re: f64,
+        du_im: f64,
+        h: f64,
+    ) -> num_complex::Complex64 {
+        let (nr, ni) = crate::minimap::contour_biased_step(
+            self.c.re,
+            self.c.im,
+            du_re,
+            du_im,
+            h.clamp(0.0, 1.0),
+            self.d_star,
+            self.max_step,
+            self.level,
+        )
+        .unwrap_or((self.c.re + du_re, self.c.im + du_im));
+        self.c = num_complex::Complex64::new(nr, ni);
+        self.c
     }
 }
