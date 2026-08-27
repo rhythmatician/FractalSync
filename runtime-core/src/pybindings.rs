@@ -23,6 +23,7 @@ use crate::controller::{
     WINDOW_FRAMES,
     step as rust_step,
     synthesize as rust_synthesize,
+    residual_phases_for_seed as rust_residual_phases_for_seed,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
@@ -277,6 +278,16 @@ fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, y
         Ok(()) => Ok(()),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
+}
+
+/// Generate the deterministic residual phases for a given seed.
+///
+/// Single source of truth for residual phase generation, shared by the
+/// runtime controller and the training-time differentiable mirror so both
+/// use identical phase statistics.
+#[pyfunction]
+fn residual_phases_for_seed_py(seed: u64, k_residuals: usize) -> Vec<f64> {
+    rust_residual_phases_for_seed(seed, k_residuals)
 }
 
 /// Sample a loaded distance field at complex-valued coordinates.
@@ -732,6 +743,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
+    // Controller phase generation (shared with training for parity)
+    m.add_function(wrap_pyfunction!(residual_phases_for_seed_py, m)?)?;
     // Distance-field helpers
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
@@ -813,6 +826,7 @@ fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
     funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
     funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
     funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
+    funcs.set_item("residual_phases_for_seed_py", "(seed: int, k_residuals: int) -> list[float]")?;
     d.set_item("functions", funcs)?;
     // Export simple constants and their types for stub generation
     let consts = PyDict::new_bound(py);

@@ -107,6 +107,14 @@ impl MipPyramid {
         self.widths.len()
     }
 
+    /// Replace the Escape-field planes (used by bindings that load F and S
+    /// from separate buffers).
+    pub fn set_escape_field(&mut self, levels: Vec<Vec<f32>>) {
+        if levels.len() == self.widths.len() {
+            self.fields[0] = levels;
+        }
+    }
+
     /// (width, height) of a level, or None if out of range.
     pub fn level_size(&self, level: usize) -> Option<(usize, usize)> {
         self.widths

@@ -109,11 +109,7 @@ impl OrbitState {
         residual_omega_scale: f64,
         seed: u64,
     ) -> Self {
-        let mut rng = StdRng::seed_from_u64(seed);
-
-        let residual_phases: Vec<f64> = (0..k_residuals)
-            .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
-            .collect();
+        let residual_phases = residual_phases_for_seed(seed, k_residuals);
         let residual_omegas: Vec<f64> = (0..k_residuals)
             .map(|k| residual_omega_scale * omega * (k as f64 + 1.0))
             .collect();
@@ -143,6 +139,20 @@ impl OrbitState {
             *phase = (*phase + omega * dt) % (2.0 * std::f64::consts::PI);
         }
     }
+}
+
+/// Generate the deterministic residual phases for a given seed.
+///
+/// This is the single source of truth for residual phase generation. Both
+/// [`OrbitState::new_with_seed`] (used by the runtime) and the training-time
+/// differentiable mirror call this so training and runtime share identical
+/// phase statistics — eliminating the historical golden-angle vs seeded-RNG
+/// parity gap.
+pub fn residual_phases_for_seed(seed: u64, k_residuals: usize) -> Vec<f64> {
+    let mut rng = StdRng::seed_from_u64(seed);
+    (0..k_residuals)
+        .map(|_| rng.gen::<f64>() * 2.0 * std::f64::consts::PI)
+        .collect()
 }
 
 /// Synthesize the complex parameter c(t) from the given state and

@@ -108,11 +108,10 @@ export async function initOrbitSynth(): Promise<void> {
     return;
   }
 
-  // Served from public/wasm/ by the dev server and vite build. The ambient
-  // module declaration in src/wasm.d.ts types this dynamic import. The
-  // indirection through a variable keeps bundlers from trying to resolve the
-  // public-path module at build time.
-  const wasmUrl = '/wasm/orbit_synth_wasm.js';
+  // Served from public/wasm/ by the dev server and vite build. Build the URL
+  // at runtime (origin-relative) so Vite treats it as a truly dynamic import
+  // and serves the /public asset as-is instead of trying to transform it.
+  const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', globalThis.location.origin).href;
   const mod = (await import(/* @vite-ignore */ wasmUrl)) as
     WasmModule & { default?: () => Promise<void> };
   if (typeof mod.default === 'function') {
@@ -191,19 +190,39 @@ export class OrbitSynthesizer {
 
   /**
    * Apply model-predicted control signals to the orbit state.
+   *
+   * The wasm-bindgen API exposes setters as JS accessors (`state.s = v`),
+   * not methods — but some builds expose `set_x` methods instead. Support
+   * both so either wasm build works.
    */
   applyControls(signals: ControlSignals): void {
-    this.state.set_s(signals.sTarget);
-    this.state.set_alpha(signals.alpha);
-    this.state.set_omega(1.0 * signals.omegaScale);
+    const st = this.state as unknown as Record<string, unknown>;
+    const apply = (key: string, setter: string, value: number) => {
+      if (typeof st[setter] === 'function') {
+        (st[setter] as (v: number) => void)(value);
+      } else {
+        st[key] = value;
+      }
+    };
+    apply('s', 'set_s', signals.sTarget);
+    apply('alpha', 'set_alpha', signals.alpha);
+    apply('omega', 'set_omega', 1.0 * signals.omegaScale);
   }
 
   /**
    * Switch the active Mandelbrot lobe (section-change handling).
    */
   setLobe(lobe: number, subLobe = 0): void {
-    this.state.set_lobe(lobe);
-    this.state.set_sub_lobe(subLobe);
+    const st = this.state as unknown as Record<string, unknown>;
+    const apply = (key: string, setter: string, value: number) => {
+      if (typeof st[setter] === 'function') {
+        (st[setter] as (v: number) => void)(value);
+      } else {
+        st[key] = value;
+      }
+    };
+    apply('lobe', 'set_lobe', lobe);
+    apply('sub_lobe', 'set_sub_lobe', subLobe);
   }
 
   /**

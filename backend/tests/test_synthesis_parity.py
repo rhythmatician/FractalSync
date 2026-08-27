@@ -1,15 +1,15 @@
 """Rust ↔ PyTorch parity tests for orbit synthesis and c-space proxies.
 
 The trainer's differentiable mirrors (``backend/src/cspace_proxies.py``)
-claim to mirror ``runtime_core``'s canonical math. These tests make that
-claim verifiable: they compare the PyTorch implementations against the
-Rust bindings exposed through ``runtime_core`` on identical inputs.
+mirror ``runtime_core``'s canonical math. These tests make that claim
+verifiable: they compare the PyTorch implementations against the Rust
+bindings exposed through ``runtime_core`` on identical inputs.
 
-The Rust controller draws residual phases from a seeded RNG, while the
-PyTorch mirror uses a fixed golden-angle spread. To compare like with
-like, the parity tests drive both through the *carrier-only* path
-(alpha = 0, where residuals vanish) and through the residual path using
-the Rust state's actual phases read back via ``residual_phases()``.
+The residual phases are now shared: both the runtime controller and the
+PyTorch mirror draw from ``runtime_core.residual_phases_for_seed_py`` (the
+single source of truth), so the mirror matches Rust exactly — no golden-angle
+approximation. The parity tests drive both through the carrier-only path
+(alpha = 0) and the residual path using the shared phases.
 
 Run: pytest backend/tests/test_synthesis_parity.py
 """
@@ -97,7 +97,7 @@ class TestResidualParity:
     """Residual path: replay Rust phases inside the PyTorch mirror."""
 
     def test_pytorch_residuals_match_rust_with_same_phases(self, rc):
-        from src.cspace_proxies import GOLDEN_ANGLE, synthesize_c
+        from src.cspace_proxies import synthesize_c
 
         k_residuals = 6
         residual_cap = 0.5
@@ -135,9 +135,9 @@ class TestResidualParity:
         assert abs(rust_c.real - expected.real) < 1e-10
         assert abs(rust_c.imag - expected.imag) < 1e-10
 
-        # The PyTorch mirror uses golden-angle phases; verify it produces the
-        # same structure (amplitude decay + gating) by checking it against its
-        # own reference with GOLDEN_ANGLE phases.
+        # The PyTorch mirror now uses the SAME phases as Rust (via the shared
+        # residual_phases_for_seed_py binding), so it must match Rust exactly —
+        # no golden-angle approximation. This is the dedup guarantee.
         gates = [1.0] * k_residuals
         pt_c = synthesize_c(
             s_target=torch.tensor([s_val]),
@@ -146,28 +146,21 @@ class TestResidualParity:
             thetas=torch.tensor([theta_val]),
             k_residuals=k_residuals,
             residual_cap=residual_cap,
+            phases=phases,
         )
-        res_re_ga = sum(
-            (alpha_val * (s_val * radius))
-            / 2 ** (k + 1)
-            * math.cos((k * GOLDEN_ANGLE) % (2 * math.pi))
-            for k in range(k_residuals)
-        )
-        res_im_ga = sum(
-            (alpha_val * (s_val * radius))
-            / 2 ** (k + 1)
-            * math.sin((k * GOLDEN_ANGLE) % (2 * math.pi))
-            for k in range(k_residuals)
-        )
-        mag_ga = math.hypot(res_re_ga, res_im_ga)
-        if mag_ga > cap:
-            sc = cap / mag_ga
-            res_re_ga *= sc
-            res_im_ga *= sc
-        expected_ga = complex(carrier.real + res_re_ga, carrier.imag + res_im_ga)
 
-        assert abs(pt_c[0].real.item() - expected_ga.real) < 1e-5
-        assert abs(pt_c[0].imag.item() - expected_ga.imag) < 1e-5
+        assert abs(pt_c[0].real.item() - rust_c.real) < 1e-6
+        assert abs(pt_c[0].imag.item() - rust_c.imag) < 1e-6
+
+    def test_shared_phase_generation_matches_orbit_state(self, rc):
+        """residual_phases_for_seed_py must equal OrbitState's phases (dedup)."""
+        k_residuals = 6
+        seed = 1337
+        state = rc.OrbitState.new_with_seed(
+            1, 0, 0.0, 1.0, 1.02, 0.3, k_residuals, 2.0, seed
+        )
+        shared = rc.residual_phases_for_seed_py(seed, k_residuals)
+        assert list(state.residual_phases()) == shared
 
     def test_residual_cap_engages_identically(self, rc):
         """Large alpha must trigger the magnitude cap in both implementations."""

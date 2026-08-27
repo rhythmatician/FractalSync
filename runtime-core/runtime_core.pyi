@@ -138,6 +138,29 @@ def sample_distance_field_py(
 def get_builtin_distance_field_py(
     name: str,
 ) -> tuple[int, int, float, float, float, float]: ...
+def residual_phases_for_seed_py(seed: int, k_residuals: int) -> list[float]: ...
+def load_mip_pyramid_py(
+    f_bin_path: str, s_bin_path: str, meta_path: str
+) -> tuple[int, float, float, float, float]: ...
+def player_observation_py(c_re: float, c_im: float) -> list[float]: ...
+def minimap_slope_py(c_re: float, c_im: float, level: int) -> tuple[float, float]: ...
+def minimap_shore_proximity_batch_py(
+    re: Sequence[float], im: Sequence[float], level: int
+) -> list[float]: ...
+def contour_biased_step_py(
+    c_re: float,
+    c_im: float,
+    u_re: float,
+    u_im: float,
+    h: float,
+    d_star: float,
+    max_step: float,
+    level: int,
+) -> tuple[float, float]: ...
+def mandelbrot_distance_estimate(
+    coords: Union[Sequence[complex], tuple[Sequence[float], Sequence[float]]],
+    ys: Optional[Sequence[float]] = ...,
+) -> list[float]: ...
 def compute_runtime_visual_metrics(
     image: Sequence[float],
     width: int,

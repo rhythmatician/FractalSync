@@ -43,7 +43,11 @@ logger = logging.getLogger(__name__)
 # plausible depending on how training was launched.
 _MIP_PYRAMID_CANDIDATES = [
     ("mandel_F_mips_f32.bin", "mandel_S_mips_f32.bin", "mandel_mips_meta.json"),
-    ("../mandel_F_mips_f32.bin", "../mandel_S_mips_f32.bin", "../mandel_mips_meta.json"),
+    (
+        "../mandel_F_mips_f32.bin",
+        "../mandel_S_mips_f32.bin",
+        "../mandel_mips_meta.json",
+    ),
 ]
 
 _pyramid_load_attempted = False
@@ -529,9 +533,16 @@ class ControlTrainer:
         """Differentiable c-space synthesis (delegates to cspace_proxies).
 
         Thin wrapper over :func:`cspace_proxies.synthesize_c`, which mirrors
-        ``runtime_core::controller::synthesize`` and is parity-tested against
-        the Rust bindings in backend/tests/test_synthesis_parity.py.
+        ``runtime_core::controller::synthesize``. The residual phases come from
+        ``runtime_core.residual_phases_for_seed_py`` (the same single source
+        of truth the runtime controller uses), so training and runtime share
+        identical phase statistics — no golden-angle approximation.
         """
+        import runtime_core
+
+        phases = runtime_core.residual_phases_for_seed_py(
+            DEFAULT_ORBIT_SEED, self.k_residuals
+        )
         return synthesize_c(
             s_target=s_target,
             alpha=alpha,
@@ -539,6 +550,7 @@ class ControlTrainer:
             thetas=thetas,
             k_residuals=self.k_residuals,
             residual_cap=DEFAULT_RESIDUAL_CAP,
+            phases=phases,
         )
 
     def _cardioid_proximity_differentiable(self, c: torch.Tensor) -> torch.Tensor:

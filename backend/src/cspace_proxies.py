@@ -8,11 +8,13 @@ implementations in ``runtime_core``:
 - :func:`cardioid_proximity` mirrors
   ``runtime_core::proxies::mandelbrot_cardioid_proximity``.
 
-They exist so gradients can flow during training. Because they are pure
-functions of tensors, they can be parity-tested against the Rust bindings
-(see ``backend/tests/test_synthesis_parity.py``). Any change to the Rust
-canonical math must be mirrored here and the parity tests updated — the
-Rust-first policy makes ``runtime-core`` the source of truth.
+They exist so gradients can flow during training. The residual phases used
+by :func:`synthesize_c` come from ``runtime_core.residual_phases_for_seed_py``
+— the same single source of truth the runtime controller uses — so training
+and runtime share identical phase statistics (no golden-angle approximation).
+Any change to the Rust canonical math must be mirrored here and the parity
+tests updated — the Rust-first policy makes ``runtime-core`` the source of
+truth.
 """
 
 from __future__ import annotations
@@ -20,9 +22,10 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-# Golden-angle spread of residual phases, matching the trainer's historical
-# convention. The Rust controller uses per-state random phases; this fixed
-# spread is the deterministic training-time approximation.
+# Golden-angle spread of residual phases. Retained only as a backward-
+# compatible fallback when no explicit phases are supplied. The primary path
+# now passes phases from ``runtime_core.residual_phases_for_seed_py`` so
+# training and runtime share identical phase statistics.
 GOLDEN_ANGLE = 2.399963229728653
 
 
@@ -33,6 +36,7 @@ def synthesize_c(
     thetas: torch.Tensor,
     k_residuals: int,
     residual_cap: float,
+    phases: list[float] | None = None,
 ) -> torch.Tensor:
     """Differentiable c-space synthesis mirroring runtime-core's synthesize().
 
@@ -42,6 +46,12 @@ def synthesize_c(
 
     All ops are real-tensor ops so gradients flow back through s, alpha,
     and band_gates. Returns a complex tensor of shape (batch,).
+
+    ``phases`` are the residual phases to use. When provided (recommended),
+    they come from ``runtime_core.residual_phases_for_seed_py`` so training
+    uses the *exact* phase statistics as the runtime controller — eliminating
+    the historical golden-angle vs seeded-RNG parity gap. When omitted, the
+    legacy golden-angle spread is used for backward compatibility.
     """
     batch_size = s_target.shape[0]
     device = s_target.device
@@ -60,12 +70,17 @@ def synthesize_c(
     # Cardioid radius used by runtime-core for lobe == 1 is 0.25.
     radius = 0.25
 
+    if phases is None:
+        phases = [
+            float((k * GOLDEN_ANGLE) % (2.0 * np.pi)) for k in range(k_residuals)
+        ]
+
     residual_re = torch.zeros(batch_size, device=device, dtype=s_target.dtype)
     residual_im = torch.zeros(batch_size, device=device, dtype=s_target.dtype)
     for k in range(k_residuals):
         gate = band_gates[:, k]
         amplitude = (alpha * (s_target * radius)) / (2.0 ** (k + 1))
-        phase_k = float((k * GOLDEN_ANGLE) % (2.0 * np.pi))  # golden-angle spread
+        phase_k = float(phases[k])
         residual_re = residual_re + amplitude * gate * np.cos(phase_k)
         residual_im = residual_im + amplitude * gate * np.sin(phase_k)
 
