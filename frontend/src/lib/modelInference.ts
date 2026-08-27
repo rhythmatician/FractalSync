@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -162,6 +162,9 @@ export class ModelInference {
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
           this.orbitTheta = 0.0;
+          // Load the minimaps so the Player's contour-biased stepper can
+          // follow the Shore (best-effort; falls back to plain motion).
+          await loadMipPyramid();
           console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
@@ -238,11 +241,7 @@ export class ModelInference {
 
       console.log(`🎯 Orbit Controls: lobe=${this.orbitSynthesizer.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
 
-      // Synthesize Julia parameter c(t) from orbit
-      const dt = 1.0 / 60.0; // Assume 60 FPS
-      const c = this.orbitSynthesizer.step(dt, controlSignals.bandGates);
-
-      // Extract audio features for color mapping
+      // Extract audio features for color mapping and the transient/hit signal.
       const numFeatures = 6;
       const windowFrames = Math.floor(features.length / numFeatures);
       let avgRMS = 0, avgOnset = 0;
@@ -252,6 +251,17 @@ export class ModelInference {
       }
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
+
+      // Synthesize Julia parameter c(t) from the Player c-space integrator.
+      // `h` is the onset/transient signal: near 1 allows crossing the Shore's
+      // contours (section changes), otherwise the Player hugs the contour.
+      const dt = 1.0 / 60.0; // Assume 60 FPS
+      const h = Math.max(0.0, Math.min(1.0, avgOnset));
+      const c = this.orbitSynthesizer.step(dt, controlSignals.bandGates, h);
+
+      console.log(
+        `📍 c = (${c.real.toFixed(4)}, ${c.imag.toFixed(4)}) | speed=${this.orbitSynthesizer.speed.toFixed(5)} | h=${h.toFixed(3)}`
+      );
 
       // Map to visual parameters
       const currentHue = (avgRMS * 2.0) % 1.0;

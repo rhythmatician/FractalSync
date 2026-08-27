@@ -219,3 +219,153 @@ pub fn step(
     state.advance(dt);
     synthesize(state, residual_params, band_gates)
 }
+
+/// A c-space integrator for the Player (issue #88, Q2).
+///
+/// Unlike [`OrbitState`], which traces a fixed closed carrier loop, the
+/// Player holds `c` as persistent state in the complex plane and moves it
+/// toward a model-driven *target* point on the Mandelbrot boundary, biased
+/// to follow the Shore's contours via [`crate::minimap::contour_biased_step`].
+///
+/// This restores the audio-driven wandering behaviour that the pre-wasm
+/// TypeScript port had (`cBase = mandelbrotBoundary(s, alpha)`), while
+/// keeping the canonical Rust math and actually exercising the minimap.
+#[derive(Clone, Debug)]
+pub struct PlayerState {
+    /// Current Julia parameter in the complex plane.
+    pub c: num_complex::Complex64,
+    /// Persistent c-space velocity (Momentum). The pull toward the model's
+    /// target is an *acceleration*; friction bleeds it off. This prevents the
+    /// servo from parking at a fixed point when the target barely moves.
+    pub velocity: num_complex::Complex64,
+    /// Per-frame velocity retention (friction). 1.0 = no friction.
+    pub drag: f64,
+    /// Active Mandelbrot lobe (1 = main cardioid).
+    pub lobe: u32,
+    /// Sub-lobe within the period.
+    pub sub_lobe: u32,
+    /// Radial scale target from the model (how far from the Shore).
+    pub s: f64,
+    /// Angular position target from the model (where along the boundary).
+    pub alpha: f64,
+    /// Speed multiplier from the model.
+    pub omega_scale: f64,
+    /// Mip level used for the contour step (0 = finest).
+    pub level: usize,
+    /// Target shore-proximity distance (0..1) the servo pulls toward.
+    pub d_star: f64,
+    /// Maximum world-space step per frame.
+    pub max_step: f64,
+}
+
+impl Default for PlayerState {
+    fn default() -> Self {
+        Self {
+            c: num_complex::Complex64::new(0.0, 0.0),
+            velocity: num_complex::Complex64::new(0.0, 0.0),
+            drag: 0.90,
+            lobe: 1,
+            sub_lobe: 0,
+            s: 0.5,
+            alpha: 0.5,
+            omega_scale: 1.0,
+            level: 0,
+            d_star: 0.5,
+            max_step: 0.05,
+        }
+    }
+}
+
+impl PlayerState {
+    /// Create a PlayerState starting at the boundary point for the given
+    /// `(s, alpha)` so the first frame is already on the Shore.
+    pub fn new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> Self {
+        let c = crate::geometry::lobe_point_at_angle(
+            lobe,
+            sub_lobe,
+            alpha * 2.0 * std::f64::consts::PI,
+            s,
+        );
+        Self {
+            c,
+            lobe,
+            sub_lobe,
+            s,
+            alpha,
+            ..Self::default()
+        }
+    }
+
+    /// Apply model-predicted control signals.
+    pub fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
+        self.s = s;
+        self.alpha = alpha;
+        self.omega_scale = omega_scale;
+    }
+
+    /// Advance the Player by dt, moving `c` toward the model-driven target
+    /// point on the boundary, biased along the Shore's contours.
+    ///
+    /// * `dt` – frame time in seconds.
+    /// * `h` – transient/hit signal in [0, 1]; near 1 allows crossing contours.
+    /// * `band_gates` – optional per-band jitter modulation.
+    ///
+    /// Returns the new `c`. When no mip pyramid is loaded, falls back to a
+    /// plain clamped move toward the target (still audio-driven, no loop).
+    pub fn step(
+        &mut self,
+        dt: f64,
+        h: f64,
+        band_gates: Option<&[f64]>,
+    ) -> num_complex::Complex64 {
+        // Target point on the boundary the model wants to reach.
+        let target = crate::geometry::lobe_point_at_angle(
+            self.lobe,
+            self.sub_lobe,
+            self.alpha * 2.0 * std::f64::consts::PI,
+            self.s,
+        );
+
+        // The pull toward the target is an ACCELERATION, not a velocity.
+        // Velocity persists (Momentum) and friction bleeds it off each frame,
+        // so c coasts when audio goes quiet and never parks at a fixed point
+        // while the model's target keeps drifting. The gain includes dt so
+        // `a` is a per-second acceleration; steady-state speed under a fixed
+        // offset is a/(1-drag), giving responsive but bounded motion.
+        let accel_gain = self.omega_scale.clamp(0.1, 10.0) * 2.0 * dt;
+        let mut a_re = (target.re - self.c.re) * accel_gain;
+        let mut a_im = (target.im - self.c.im) * accel_gain;
+
+        // Optional residual jitter from the band gates (impulse per frame).
+        if let Some(gates) = band_gates {
+            for (k, &g) in gates.iter().enumerate() {
+                let amp = 0.004 * g.clamp(0.0, 1.0) / (k as f64 + 1.0);
+                let phase = self.alpha * 2.0 * std::f64::consts::PI * (k as f64 + 2.0);
+                a_re += amp * phase.cos();
+                a_im += amp * phase.sin();
+            }
+        }
+
+        // Integrate: v = drag*v + a; c += v*dt.
+        self.velocity = self.velocity.scale(self.drag)
+            + num_complex::Complex64::new(a_re, a_im);
+        let proposed_re = self.velocity.re * dt;
+        let proposed_im = self.velocity.im * dt;
+
+        // Bias the proposed motion along the Shore's contours.
+        let (nr, ni) = crate::minimap::contour_biased_step(
+            self.c.re,
+            self.c.im,
+            proposed_re,
+            proposed_im,
+            h.clamp(0.0, 1.0),
+            self.d_star,
+            self.max_step,
+            self.level,
+        )
+        .unwrap_or((self.c.re + proposed_re, self.c.im + proposed_im));
+
+        self.c = num_complex::Complex64::new(nr, ni);
+        self.c
+    }
+}

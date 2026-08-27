@@ -12,6 +12,7 @@ use pyo3::types::PyComplex;
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
+    PlayerState as RustPlayerState,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
@@ -78,6 +79,80 @@ impl From<ResidualParams> for RustResidualParams {
             residual_cap: p.residual_cap,
             radius_scale: p.radius_scale,
         }
+    }
+}
+
+/// Python wrapper for the Player c-space integrator (momentum + drag).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct PlayerState {
+    inner: RustPlayerState,
+}
+
+#[pymethods]
+impl PlayerState {
+    #[new]
+    fn py_new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> Self {
+        Self {
+            inner: RustPlayerState::new(lobe, sub_lobe, s, alpha),
+        }
+    }
+
+    /// Current c (real part).
+    #[getter]
+    fn c_re(&self) -> f64 {
+        self.inner.c.re
+    }
+
+    /// Current c (imaginary part).
+    #[getter]
+    fn c_im(&self) -> f64 {
+        self.inner.c.im
+    }
+
+    /// Current c-space speed (Momentum diagnostic).
+    #[getter]
+    fn speed(&self) -> f64 {
+        self.inner.velocity.norm()
+    }
+
+    /// Apply model-predicted control signals.
+    fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
+        self.inner.apply_controls(s, alpha, omega_scale);
+    }
+
+    /// Switch the active Mandelbrot lobe.
+    fn set_lobe(&mut self, lobe: u32, sub_lobe: u32) {
+        self.inner.lobe = lobe;
+        self.inner.sub_lobe = sub_lobe;
+    }
+
+    /// Set the mip level for the contour step.
+    fn set_level(&mut self, level: usize) {
+        self.inner.level = level;
+    }
+
+    /// Set the target shore-proximity distance.
+    fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Set the maximum world-space step per frame.
+    fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
+    /// Advance by dt; returns (re, im). `h` in [0,1] allows contour crossing
+    /// during transients. Band gates optional.
+    #[pyo3(signature = (dt, h, band_gates=None))]
+    fn step(
+        &mut self,
+        dt: f64,
+        h: f64,
+        band_gates: Option<Vec<f64>>,
+    ) -> (f64, f64) {
+        let c = self.inner.step(dt, h, band_gates.as_deref());
+        (c.re, c.im)
     }
 }
 
@@ -723,9 +798,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         let _ = os_ty.setattr("s", 1.02f64);
         let _ = os_ty.setattr("alpha", 0.3f64);
     }
+    m.add_class::<PlayerState>()?;
+
     m.add_class::<FeatureExtractor>()?;
-
-
 
     m.add_class::<RuntimeVisualMetrics>()?;
 

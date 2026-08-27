@@ -31,6 +31,23 @@ declare module '/wasm/orbit_synth_wasm.js' {
     constructor(k_residuals: number, residual_cap: number, radius_scale: number);
   }
 
+  export class PlayerState {
+    constructor(lobe: number, sub_lobe: number, s: number, alpha: number);
+    c_re: number;
+    c_im: number;
+    speed: number;
+    set_level(v: number): void;
+    set_d_star(v: number): void;
+    set_max_step(v: number): void;
+    apply_controls(s: number, alpha: number, omega_scale: number): void;
+    set_lobe(lobe: number, sub_lobe: number): void;
+    step(
+      dt: number,
+      h: number,
+      band_gates?: Float64Array | null
+    ): { real: number; imag: number };
+  }
+
   export function step(
     state: OrbitState,
     dt: number,

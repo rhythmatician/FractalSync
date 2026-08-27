@@ -65,6 +65,12 @@ interface WasmModule {
     residualOmegaScale: number,
     seed?: bigint | null
   ) => WasmOrbitState;
+  PlayerState: new (
+    lobe: number,
+    subLobe: number,
+    s: number,
+    alpha: number
+  ) => WasmPlayerState;
   ResidualParams: new (
     kResiduals: number,
     residualCap: number,
@@ -87,6 +93,23 @@ interface WasmModule {
     default_base_omega: number;
     default_orbit_seed: number;
   };
+}
+
+// Shape of the wasm-bindgen PlayerState export (c-space integrator).
+interface WasmPlayerState {
+  readonly c_re: number;
+  readonly c_im: number;
+  readonly speed: number;
+  set_level(v: number): void;
+  set_d_star(v: number): void;
+  set_max_step(v: number): void;
+  apply_controls(s: number, alpha: number, omega_scale: number): void;
+  set_lobe(lobe: number, sub_lobe: number): void;
+  step(
+    dt: number,
+    h: number,
+    bandGates?: Float64Array | null
+  ): { real: number; imag: number };
 }
 
 let wasm: WasmModule | null = null;
@@ -125,6 +148,62 @@ export function setWasmModuleForTesting(mod: WasmModule | null): void {
   wasm = mod;
 }
 
+/**
+ * Load the mip pyramid (minimaps) into the wasm runtime so the Player's
+ * contour-biased stepper can follow the Shore. Fetches the baked artifacts
+ * from the backend API and calls the wasm `set_mip_pyramid` binding.
+ *
+ * Best-effort: if the artifacts are unavailable, the Player falls back to
+ * plain clamped motion (still audio-driven, no closed loop).
+ */
+export async function loadMipPyramid(): Promise<boolean> {
+  const m = requireWasm();
+  if (typeof (m as any).set_mip_pyramid !== 'function') {
+    console.warn('[orbitSynthesizer] wasm build has no set_mip_pyramid; minimap disabled');
+    return false;
+  }
+  try {
+    const metaResp = await fetch('/api/minimap/meta', { credentials: 'same-origin' });
+    if (!metaResp.ok) {
+      console.warn('[orbitSynthesizer] mip pyramid metadata unavailable:', metaResp.status);
+      return false;
+    }
+    const meta = await metaResp.json();
+
+    const [fResp, sResp] = await Promise.all([
+      fetch('/api/minimap/field/F', { credentials: 'same-origin' }),
+      fetch('/api/minimap/field/S', { credentials: 'same-origin' }),
+    ]);
+    if (!fResp.ok || !sResp.ok) {
+      console.warn('[orbitSynthesizer] mip pyramid field unavailable');
+      return false;
+    }
+
+    const [fBuf, sBuf] = await Promise.all([fResp.arrayBuffer(), sResp.arrayBuffer()]);
+    const fFlat = new Float32Array(fBuf);
+    const sFlat = new Float32Array(sBuf);
+
+    const widths = new Uint32Array(meta.F.mip_widths);
+    const heights = new Uint32Array(meta.F.mip_heights);
+
+    (m as any).set_mip_pyramid(
+      fFlat,
+      sFlat,
+      widths,
+      heights,
+      meta.re_min,
+      meta.re_max,
+      meta.im_min,
+      meta.im_max
+    );
+    console.log('[orbitSynthesizer] mip pyramid loaded:', widths.length, 'levels');
+    return true;
+  } catch (err) {
+    console.warn('[orbitSynthesizer] failed to load mip pyramid:', err);
+    return false;
+  }
+}
+
 function requireWasm(): WasmModule {
   if (!wasm) {
     throw new Error(
@@ -146,94 +225,89 @@ export function createInitialState(_config: OrbitConfig): OrbitState {
 }
 
 /**
- * Step the orbit forward by dt using the canonical Rust synthesis.
+ * Orbit-based Julia parameter synthesizer.
  *
- * Delegates to runtime_core::controller::step: advances carrier + residual
- * phases, then synthesizes c(t) = carrier(lobe, θ) + Σ gated residual
- * epicycles with exponential amplitude decay and magnitude cap.
+ * Thin adapter over the canonical Rust `PlayerState` c-space integrator
+ * (runtime-core compiled to WebAssembly via wasm-orbit). Unlike the old
+ * closed-loop carrier, `PlayerState` holds `c` as persistent state and moves
+ * it toward a model-driven target point on the Mandelbrot boundary, biased
+ * along the Shore's contours via the minimap. This restores audio-driven
+ * wandering and actually exercises the minimap (issue #88).
  */
 export class OrbitSynthesizer {
   private kBands: number;
-  private params: object;
-  private state: WasmOrbitState;
+  private state: WasmPlayerState;
 
   constructor(kBands: number, initialState?: Partial<OrbitState>) {
     const m = requireWasm();
     this.kBands = kBands;
-    const constants = m.constants();
-    this.params = new m.ResidualParams(kBands, constants.default_residual_cap, 1.0);
-    this.state = new m.OrbitState(
+    this.state = new m.PlayerState(
       initialState?.lobe ?? 1,
       initialState?.subLobe ?? 0,
-      initialState?.theta ?? 0.0,
-      initialState?.omega ?? 1.0,
       initialState?.s ?? 0.5,
-      initialState?.alpha ?? 0.5,
-      kBands,
-      constants.default_residual_omega_scale,
-      BigInt(constants.default_orbit_seed)
+      initialState?.alpha ?? 0.5
     );
   }
 
-  /** Current carrier phase (read-only snapshot). */
-  get theta(): number {
-    return this.state.theta;
+  /** Current c (real part). */
+  get cRe(): number {
+    return this.state.c_re;
+  }
+
+  /** Current c (imaginary part). */
+  get cIm(): number {
+    return this.state.c_im;
+  }
+
+  /** Current c-space speed (Momentum diagnostic). */
+  get speed(): number {
+    return this.state.speed;
   }
 
   get lobe(): number {
-    return this.state.lobe;
+    // PlayerState does not expose lobe as a getter; track it here.
+    return this._lobe;
   }
 
   get subLobe(): number {
-    return this.state.sub_lobe;
+    return this._subLobe;
   }
 
+  private _lobe = 1;
+  private _subLobe = 0;
+
   /**
-   * Apply model-predicted control signals to the orbit state.
-   *
-   * The wasm-bindgen API exposes setters as JS accessors (`state.s = v`),
-   * not methods — but some builds expose `set_x` methods instead. Support
-   * both so either wasm build works.
+   * Apply model-predicted control signals to the Player state.
    */
   applyControls(signals: ControlSignals): void {
-    const st = this.state as unknown as Record<string, unknown>;
-    const apply = (key: string, setter: string, value: number) => {
-      if (typeof st[setter] === 'function') {
-        (st[setter] as (v: number) => void)(value);
-      } else {
-        st[key] = value;
-      }
-    };
-    apply('s', 'set_s', signals.sTarget);
-    apply('alpha', 'set_alpha', signals.alpha);
-    apply('omega', 'set_omega', 1.0 * signals.omegaScale);
+    this.state.apply_controls(
+      signals.sTarget,
+      signals.alpha,
+      1.0 * signals.omegaScale
+    );
   }
 
   /**
    * Switch the active Mandelbrot lobe (section-change handling).
    */
   setLobe(lobe: number, subLobe = 0): void {
-    const st = this.state as unknown as Record<string, unknown>;
-    const apply = (key: string, setter: string, value: number) => {
-      if (typeof st[setter] === 'function') {
-        (st[setter] as (v: number) => void)(value);
-      } else {
-        st[key] = value;
-      }
-    };
-    apply('lobe', 'set_lobe', lobe);
-    apply('sub_lobe', 'set_sub_lobe', subLobe);
+    this._lobe = lobe;
+    this._subLobe = subLobe;
+    this.state.set_lobe(lobe, subLobe);
   }
 
   /**
-   * Advance the orbit by dt and synthesize c(t).
+   * Advance the Player by dt and synthesize c(t).
+   *
+   * `h` is the transient/hit signal in [0, 1]; near 1 allows crossing the
+   * Shore's contours (used for section changes / onsets).
    */
-  step(dt: number, bandGates: number[]): Complex {
+  step(dt: number, bandGates: number[], h = 0.0): Complex {
     const gates = new Float64Array(Math.min(bandGates.length, this.kBands));
     for (let i = 0; i < gates.length; i++) {
       gates[i] = Math.max(0.0, Math.min(1.0, bandGates[i]));
     }
-    const c = requireWasm().step(this.state, dt, this.params, gates);
+    const c = this.state.step(dt, h, gates);
     return { real: c.real, imag: c.imag };
   }
 }

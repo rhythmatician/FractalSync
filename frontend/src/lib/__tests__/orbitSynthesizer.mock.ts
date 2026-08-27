@@ -1,17 +1,16 @@
 /**
  * Deterministic mock of the wasm-orbit module used only in vitest runs.
  *
- * Implements the exact same math as runtime-core's controller for the main
- * cardioid (lobe=1) so tests exercise real synthesis semantics without the
- * wasm binary. Residual phases are fixed (all zero) rather than seeded-RNG,
- * which is fine for the assertions these tests make.
+ * Implements the same math as runtime-core's `PlayerState` c-space integrator
+ * for the main cardioid (lobe=1) so tests exercise real synthesis semantics
+ * without the wasm binary. Mirrors `controller.rs::PlayerState`: c is held as
+ * persistent state and moved toward the model-driven target point on the
+ * boundary (no closed-loop carrier).
  */
 
 export interface MockState {
   lobe: number;
   sub_lobe: number;
-  theta: number;
-  omega: number;
   s: number;
   alpha: number;
 }
@@ -36,97 +35,99 @@ function lobePoint(lobe: number, subLobe: number, theta: number, s: number) {
   };
 }
 
-class MockOrbitState {
+class MockPlayerState {
   lobe: number;
   sub_lobe: number;
-  theta: number;
-  omega: number;
   s: number;
   alpha: number;
+  omega_scale: number;
+  c_re: number;
+  c_im: number;
+  // Momentum state: pull is an acceleration; friction bleeds velocity.
+  v_re = 0;
+  v_im = 0;
+  drag = 0.9;
+  level: number;
+  d_star: number;
+  max_step: number;
 
-  constructor(
-    lobe: number,
-    sub_lobe: number,
-    theta: number,
-    omega: number,
-    s: number,
-    alpha: number,
-    _kResiduals: number,
-    _residualOmegaScale: number,
-    _seed?: bigint | null
-  ) {
+  constructor(lobe: number, sub_lobe: number, s: number, alpha: number) {
     this.lobe = lobe;
     this.sub_lobe = sub_lobe;
-    this.theta = theta;
-    this.omega = omega;
     this.s = s;
     this.alpha = alpha;
+    this.omega_scale = 1.0;
+    this.level = 0;
+    this.d_star = 0.5;
+    this.max_step = 0.05;
+    // Start on the boundary at (s, alpha).
+    const start = lobePoint(lobe, sub_lobe, alpha * TWO_PI, s);
+    this.c_re = start.re;
+    this.c_im = start.im;
   }
 
-  set_lobe(v: number) {
-    this.lobe = v;
-  }
-  set_sub_lobe(v: number) {
-    this.sub_lobe = v;
-  }
-  set_s(v: number) {
-    this.s = v;
-  }
-  set_alpha(v: number) {
-    this.alpha = v;
-  }
-  set_omega(v: number) {
-    this.omega = v;
+  get speed() {
+    return Math.sqrt(this.v_re * this.v_re + this.v_im * this.v_im);
   }
 
-  advance(dt: number) {
-    this.theta = (this.theta + this.omega * dt) % TWO_PI;
+  set_level(v: number) {
+    this.level = v;
+  }
+  set_d_star(v: number) {
+    this.d_star = v;
+  }
+  set_max_step(v: number) {
+    this.max_step = v;
   }
 
-  synthesize(_params: object, bandGates?: Float64Array | null) {
-    const carrier = lobePoint(this.lobe, this.sub_lobe, this.theta, this.s);
-    if (!bandGates || bandGates.length === 0 || this.alpha === 0.0) {
-      return { real: carrier.re, imag: carrier.im };
+  apply_controls(s: number, alpha: number, omega_scale: number) {
+    this.s = s;
+    this.alpha = alpha;
+    this.omega_scale = omega_scale;
+  }
+
+  set_lobe(lobe: number, sub_lobe: number) {
+    this.lobe = lobe;
+    this.sub_lobe = sub_lobe;
+  }
+
+  step(dt: number, h: number, bandGates?: Float64Array | null) {
+    // Target point on the boundary the model wants to reach.
+    const target = lobePoint(this.lobe, this.sub_lobe, this.alpha * TWO_PI, this.s);
+    // Pull toward the target is an ACCELERATION (mirrors controller.rs).
+    // Gain includes dt so `a` is per-second; steady-state speed = a/(1-drag).
+    const accelGain = Math.max(0.1, Math.min(10.0, this.omega_scale)) * 2.0 * dt;
+    let aRe = (target.re - this.c_re) * accelGain;
+    let aIm = (target.im - this.c_im) * accelGain;
+    // Optional residual jitter from band gates (impulse per frame).
+    if (bandGates) {
+      for (let k = 0; k < bandGates.length; k++) {
+        const amp = (0.004 * Math.max(0.0, Math.min(1.0, bandGates[k]))) / (k + 1);
+        const phase = this.alpha * TWO_PI * (k + 2);
+        aRe += amp * Math.cos(phase);
+        aIm += amp * Math.sin(phase);
+      }
     }
-    const radius = this.lobe === 1 ? 0.25 : 0.25 / (this.lobe * this.lobe);
-    let resRe = 0.0;
-    let resIm = 0.0;
-    for (let k = 0; k < bandGates.length; k++) {
-      const amplitude = (this.alpha * (this.s * radius)) / 2.0 ** (k + 1);
-      // Zero residual phase keeps the mock deterministic.
-      resRe += amplitude * bandGates[k];
-      resIm += 0.0;
+    // Integrate: v = drag*v + a; c += v*dt.
+    this.v_re = this.v_re * this.drag + aRe;
+    this.v_im = this.v_im * this.drag + aIm;
+    let uRe = this.v_re * dt;
+    let uIm = this.v_im * dt;
+    // Clamp to max_step (no pyramid in mock → plain clamped motion).
+    const mag = Math.sqrt(uRe * uRe + uIm * uIm);
+    if (mag > this.max_step && mag > 0) {
+      const scale = this.max_step / mag;
+      uRe *= scale;
+      uIm *= scale;
     }
-    return { real: carrier.re + resRe, imag: carrier.im + resIm };
-  }
-}
-
-class MockResidualParams {
-  k_residuals: number;
-  residual_cap: number;
-  radius_scale: number;
-  constructor(k_residuals: number, residual_cap: number, radius_scale: number) {
-    this.k_residuals = k_residuals;
-    this.residual_cap = residual_cap;
-    this.radius_scale = radius_scale;
+    this.c_re += uRe;
+    this.c_im += uIm;
+    return { real: this.c_re, imag: this.c_im };
   }
 }
 
 export default {
-  OrbitState: MockOrbitState,
-  ResidualParams: MockResidualParams,
-  step(
-    state: MockOrbitState,
-    dt: number,
-    params: object,
-    bandGates?: Float64Array | null
-  ) {
-    state.advance(dt);
-    return state.synthesize(params, bandGates);
-  },
-  synthesize(state: MockOrbitState, params: object, bandGates?: Float64Array | null) {
-    return state.synthesize(params, bandGates);
-  },
+  PlayerState: MockPlayerState,
   constants() {
     return {
       sample_rate: 48000,

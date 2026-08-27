@@ -7,6 +7,7 @@ use serde::Serialize;
 use num_complex::Complex64 as RustComplex;
 use runtime_core::controller::{
     OrbitState as RustOrbitState,
+    PlayerState as RustPlayerState,
     ResidualParams as RustResidualParams,
     synthesize as rust_synthesize,
     DEFAULT_K_RESIDUALS,
@@ -197,6 +198,85 @@ impl OrbitState {
     /// Advance state by dt seconds
     pub fn advance(&mut self, dt: f64) {
         self.inner.advance(dt);
+    }
+}
+
+/// Player c-space integrator wrapper for WASM (issue #88, Q2).
+///
+/// Holds `c` as persistent state and moves it toward a model-driven target
+/// point on the Mandelbrot boundary, biased along the Shore's contours via
+/// the minimap. This replaces the closed-loop carrier for audio-driven
+/// wandering.
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct PlayerState {
+    inner: RustPlayerState,
+}
+
+#[wasm_bindgen]
+impl PlayerState {
+    /// Create a PlayerState starting on the boundary at (s, alpha).
+    #[wasm_bindgen(constructor)]
+    pub fn new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> PlayerState {
+        PlayerState {
+            inner: RustPlayerState::new(lobe, sub_lobe, s, alpha),
+        }
+    }
+
+    /// Current c (real part).
+    #[wasm_bindgen(getter)]
+    pub fn c_re(&self) -> f64 {
+        self.inner.c.re
+    }
+
+    /// Current c (imaginary part).
+    #[wasm_bindgen(getter)]
+    pub fn c_im(&self) -> f64 {
+        self.inner.c.im
+    }
+
+    /// Current c-space velocity magnitude (Momentum diagnostic).
+    #[wasm_bindgen(getter)]
+    pub fn speed(&self) -> f64 {
+        self.inner.velocity.norm()
+    }
+
+    /// Set the mip level used for the contour step.
+    #[wasm_bindgen(setter)]
+    pub fn set_level(&mut self, level: usize) {
+        self.inner.level = level;
+    }
+
+    /// Set the target shore-proximity distance the servo pulls toward.
+    #[wasm_bindgen(setter)]
+    pub fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Set the maximum world-space step per frame.
+    #[wasm_bindgen(setter)]
+    pub fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
+    /// Apply model-predicted control signals.
+    pub fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
+        self.inner.apply_controls(s, alpha, omega_scale);
+    }
+
+    /// Switch the active Mandelbrot lobe.
+    pub fn set_lobe(&mut self, lobe: u32, sub_lobe: u32) {
+        self.inner.lobe = lobe;
+        self.inner.sub_lobe = sub_lobe;
+    }
+
+    /// Advance the Player by dt, moving c toward the model-driven target,
+    /// biased along the Shore's contours. Returns the new c.
+    pub fn step(&mut self, dt: f64, h: f64, band_gates: Option<Vec<f64>>) -> Complex {
+        let c = self
+            .inner
+            .step(dt, h, band_gates.as_deref());
+        c.into()
     }
 }
 

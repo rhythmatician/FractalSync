@@ -2,7 +2,8 @@
  * Tests for the wasm-backed orbit synthesizer adapter.
  *
  * Uses the deterministic mock wasm module (same math as runtime-core's
- * controller for lobe=1) so these run without the compiled binary.
+ * `PlayerState` c-space integrator for lobe=1) so these run without the
+ * compiled binary.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -24,55 +25,73 @@ describe('OrbitSynthesizer (wasm adapter)', () => {
     expect(() => new OrbitSynthesizer(6)).not.toThrow();
   });
 
-  it('advances theta by omega * dt each step', () => {
-    const synth = new OrbitSynthesizer(6, { theta: 0.0, omega: 1.0 });
-    synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
-    expect(synth.theta).toBeCloseTo(1 / 60, 10);
-    synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
-    expect(synth.theta).toBeCloseTo(2 / 60, 10);
-  });
-
-  it('wraps theta into [0, 2π)', () => {
-    const synth = new OrbitSynthesizer(6, { theta: 6.28, omega: 1.0 });
-    synth.step(0.1, [1, 1, 1, 1, 1, 1]);
-    expect(synth.theta).toBeGreaterThanOrEqual(0);
-    expect(synth.theta).toBeLessThan(2 * Math.PI);
-  });
-
-  it('returns carrier when alpha is zero', () => {
-    const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.0, theta: 0.5 });
-    const c = synth.step(0.016, [1, 1, 1, 1, 1, 1]);
-    // Carrier at theta=0.5+dt, s=1: c = mu/2 - mu^2/4
-    const theta = 0.5 + 0.016;
+  it('starts on the boundary at (s, alpha)', () => {
+    const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.25 });
+    // c = mu/2 - mu^2/4 with mu = s * e^{i * alpha * 2π}
+    const theta = 0.25 * 2 * Math.PI;
     const muRe = Math.cos(theta);
     const muIm = Math.sin(theta);
     const expectedRe = 0.5 * muRe - 0.25 * (muRe * muRe - muIm * muIm);
     const expectedIm = 0.5 * muIm - 0.25 * (2 * muRe * muIm);
-    expect(c.real).toBeCloseTo(expectedRe, 10);
-    expect(c.imag).toBeCloseTo(expectedIm, 10);
+    expect(synth.cRe).toBeCloseTo(expectedRe, 10);
+    expect(synth.cIm).toBeCloseTo(expectedIm, 10);
   });
 
-  it('adds gated residuals when alpha > 0', () => {
-    const closed = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.8 });
-    const cClosed = closed.step(0.016, [0, 0, 0, 0, 0, 0]);
+  it('moves c toward the model-driven target (no closed loop)', () => {
+    const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.0 });
+    const startRe = synth.cRe;
+    const startIm = synth.cIm;
+    // Move the target to alpha=0.5 (opposite side of the cardioid).
+    synth.applyControls({ sTarget: 1.0, alpha: 0.5, omegaScale: 1.0, bandGates: [] });
+    const c = synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
+    const moved = Math.hypot(c.real - startRe, c.imag - startIm);
+    expect(moved).toBeGreaterThan(1e-6);
+  });
 
-    const open = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.8 });
-    const cOpen = open.step(0.016, [1, 1, 1, 1, 1, 1]);
-
-    const dist = Math.hypot(cOpen.real - cClosed.real, cOpen.imag - cClosed.imag);
-    expect(dist).toBeGreaterThan(1e-6);
+  it('settles at a fixed target instead of tracing a loop', () => {
+    const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.5 });
+    // Hold the target fixed; c should converge and stay (no perpetual orbit).
+    for (let i = 0; i < 600; i++) {
+      synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
+    }
+    const beforeRe = synth.cRe;
+    const beforeIm = synth.cIm;
+    for (let i = 0; i < 60; i++) {
+      synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
+    }
+    const drift = Math.hypot(synth.cRe - beforeRe, synth.cIm - beforeIm);
+    expect(drift).toBeLessThan(1e-3);
   });
 
   it('applyControls updates s, alpha and omega from model output', () => {
-    const base = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.3, theta: 0.25 });
-    const before = base.step(0.0, [1, 1, 1, 1, 1, 1]);
+    const base = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.3 });
+    const before = base.step(1 / 60, [1, 1, 1, 1, 1, 1]);
 
-    const scaled = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.3, theta: 0.25 });
+    const scaled = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.3 });
     scaled.applyControls({ sTarget: 1.5, alpha: 0.9, omegaScale: 2.0, bandGates: [] });
-    const after = scaled.step(0.0, [1, 1, 1, 1, 1, 1]);
+    const after = scaled.step(1 / 60, [1, 1, 1, 1, 1, 1]);
 
     const dist = Math.hypot(after.real - before.real, after.imag - before.imag);
     expect(dist).toBeGreaterThan(1e-6);
+  });
+
+  it('keeps wandering when the model wiggles controls (momentum, no parking)', () => {
+    // Regression guard for the frozen-c bug: with saturated, slowly-varying
+    // controls (as the epoch-10 model produces), the momentum integrator
+    // must keep c moving. Constant controls legitimately settle at an
+    // equilibrium offset; real model output never holds still.
+    const synth = new OrbitSynthesizer(6, { s: 2.7, alpha: 0.95 });
+    let path = 0;
+    let prev = { real: synth.cRe, imag: synth.cIm };
+    for (let i = 0; i < 600; i++) {
+      const sT = 2.7 + 0.03 * Math.sin(i * 0.05);
+      const aT = Math.min(1, Math.max(0, 0.95 + 0.002 * Math.cos(i * 0.03)));
+      synth.applyControls({ sTarget: sT, alpha: aT, omegaScale: 4.0, bandGates: [] });
+      const c = synth.step(1 / 60, [0.95, 0.95, 0.95, 0.95, 0.95, 0.95]);
+      path += Math.hypot(c.real - prev.real, c.imag - prev.imag);
+      prev = c;
+    }
+    expect(path).toBeGreaterThan(0.05);
   });
 
   it('setLobe switches the active bulb', () => {
