@@ -93,3 +93,4 @@ runtime-core/data/mandelbrot_distance_8192.npy
 
 # Audits
 feedback-loop-health.json
+architecture-lens-report.json
