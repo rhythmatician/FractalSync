@@ -25,16 +25,16 @@ describe('OrbitSynthesizer (wasm adapter)', () => {
     expect(() => new OrbitSynthesizer(6)).not.toThrow();
   });
 
-  it('starts on the boundary at (s, alpha)', () => {
+  it('positions c from (s, alpha) on the first step', () => {
     const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.25 });
-    // c = mu/2 - mu^2/4 with mu = s * e^{i * alpha * 2π}
+    const c = synth.step(1 / 60, [0, 0, 0, 0, 0, 0]);
+    // May's mandelbrotBoundary(1.0, 0.25): theta=pi/2, r=0.25, scale=1.
     const theta = 0.25 * 2 * Math.PI;
-    const muRe = Math.cos(theta);
-    const muIm = Math.sin(theta);
-    const expectedRe = 0.5 * muRe - 0.25 * (muRe * muRe - muIm * muIm);
-    const expectedIm = 0.5 * muIm - 0.25 * (2 * muRe * muIm);
-    expect(synth.cRe).toBeCloseTo(expectedRe, 10);
-    expect(synth.cIm).toBeCloseTo(expectedIm, 10);
+    const r = 0.25 * (1 - Math.cos(theta));
+    const expectedRe = r * Math.cos(theta / 2);
+    const expectedIm = r * Math.sin(theta / 2);
+    expect(c.real).toBeCloseTo(expectedRe, 10);
+    expect(c.imag).toBeCloseTo(expectedIm, 10);
   });
 
   it('moves c toward the model-driven target (no closed loop)', () => {
@@ -48,19 +48,22 @@ describe('OrbitSynthesizer (wasm adapter)', () => {
     expect(moved).toBeGreaterThan(1e-6);
   });
 
-  it('settles at a fixed target instead of tracing a loop', () => {
+  it('wobbles around the model-driven position but never leaves it far', () => {
+    // May semantics: with FIXED controls, c stays near the boundary point
+    // (residuals are only ±0.05·k amplitude), unlike the old closed loop
+    // which traced the whole cardioid regardless of audio.
     const synth = new OrbitSynthesizer(6, { s: 1.0, alpha: 0.5 });
-    // Hold the target fixed; c should converge and stay (no perpetual orbit).
+    let maxDist = 0;
     for (let i = 0; i < 600; i++) {
-      synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
+      const c = synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
+      const theta = 0.5 * 2 * Math.PI;
+      const r = 0.25 * (1 - Math.cos(theta));
+      const baseRe = r * Math.cos(theta / 2);
+      const baseIm = r * Math.sin(theta / 2);
+      maxDist = Math.max(maxDist, Math.hypot(c.real - baseRe, c.imag - baseIm));
     }
-    const beforeRe = synth.cRe;
-    const beforeIm = synth.cIm;
-    for (let i = 0; i < 60; i++) {
-      synth.step(1 / 60, [1, 1, 1, 1, 1, 1]);
-    }
-    const drift = Math.hypot(synth.cRe - beforeRe, synth.cIm - beforeIm);
-    expect(drift).toBeLessThan(1e-3);
+    // Residuals bounded by sum of 0.05*gate ≈ 0.3 worst case; verify c hugs base.
+    expect(maxDist).toBeLessThan(0.35);
   });
 
   it('applyControls updates s, alpha and omega from model output', () => {
@@ -94,11 +97,9 @@ describe('OrbitSynthesizer (wasm adapter)', () => {
     expect(path).toBeGreaterThan(0.05);
   });
 
-  it('setLobe switches the active bulb', () => {
+  it('setLobe is accepted (no-op for cardioid-only May controller)', () => {
     const synth = new OrbitSynthesizer(6);
-    expect(synth.lobe).toBe(1);
-    synth.setLobe(2);
-    expect(synth.lobe).toBe(2);
+    expect(() => synth.setLobe(2)).not.toThrow();
   });
 
   it('clamps band gates to [0, 1]', () => {

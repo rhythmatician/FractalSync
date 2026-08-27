@@ -1,11 +1,10 @@
 /**
  * Deterministic mock of the wasm-orbit module used only in vitest runs.
  *
- * Implements the same math as runtime-core's `PlayerState` c-space integrator
- * for the main cardioid (lobe=1) so tests exercise real synthesis semantics
- * without the wasm binary. Mirrors `controller.rs::PlayerState`: c is held as
- * persistent state and moved toward the model-driven target point on the
- * boundary (no closed-loop carrier).
+ * Implements the same math as runtime-core's `OrbitController` — the restored
+ * May-proven controller (ported verbatim from the pre-fe1087b TS). Mirrors
+ * `controller.rs::OrbitController`: c is directly positioned by the model's
+ * (s, alpha) via mandelbrotBoundary, plus harmonic residual epicycles.
  */
 
 export interface MockState {
@@ -33,6 +32,53 @@ function lobePoint(lobe: number, subLobe: number, theta: number, s: number) {
     re: centre.re + s * radius * Math.cos(theta),
     im: centre.im + s * radius * Math.sin(theta),
   };
+}
+
+class MockOrbitController {
+  theta: number;
+  omega: number;
+  s: number;
+  alpha: number;
+
+  constructor(s: number, alpha: number, omega: number) {
+    this.theta = 0.0;
+    this.omega = omega;
+    this.s = Math.max(0.01, Math.min(3.0, s));
+    this.alpha = Math.max(0.0, Math.min(1.0, alpha));
+  }
+
+  apply_controls(s: number, alpha: number) {
+    this.s = Math.max(0.01, Math.min(3.0, s));
+    this.alpha = Math.max(0.0, Math.min(1.0, alpha));
+  }
+
+  // May's exact mandelbrotBoundary(s, alpha).
+  private boundary(): { re: number; im: number } {
+    const theta = TWO_PI * this.alpha;
+    const r = 0.25 * (1.0 - Math.cos(theta));
+    const scale = Math.min(this.s, 1.5);
+    return {
+      re: r * Math.cos(theta / 2.0) * scale,
+      im: r * Math.sin(theta / 2.0) * scale,
+    };
+  }
+
+  step(dt: number, bandGates?: Float64Array | null) {
+    this.theta = (this.theta + this.omega * dt) % TWO_PI;
+    const base = this.boundary();
+    let re = base.re;
+    let im = base.im;
+    if (bandGates) {
+      for (let k = 0; k < bandGates.length; k++) {
+        const gate = Math.max(0.0, Math.min(1.0, bandGates[k]));
+        const freq = k + 2;
+        const phase = freq * this.theta;
+        re += gate * 0.05 * Math.cos(phase);
+        im += gate * 0.05 * Math.sin(phase);
+      }
+    }
+    return { real: re, imag: im };
+  }
 }
 
 class MockPlayerState {
@@ -127,6 +173,7 @@ class MockPlayerState {
 }
 
 export default {
+  OrbitController: MockOrbitController,
   PlayerState: MockPlayerState,
   constants() {
     return {

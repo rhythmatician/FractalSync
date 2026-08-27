@@ -53,7 +53,18 @@ interface WasmOrbitState {
   advance(dt: number): void;
 }
 
+interface WasmOrbitController {
+  readonly theta: number;
+  apply_controls(s: number, alpha: number): void;
+  step(dt: number, bandGates?: Float64Array | null): { real: number; imag: number };
+}
+
 interface WasmModule {
+  OrbitController: new (
+    s: number,
+    alpha: number,
+    omega: number
+  ) => WasmOrbitController;
   OrbitState: new (
     lobe: number,
     subLobe: number,
@@ -236,33 +247,42 @@ export function createInitialState(_config: OrbitConfig): OrbitState {
  */
 export class OrbitSynthesizer {
   private kBands: number;
-  private state: WasmPlayerState;
+  private state: WasmOrbitController;
 
   constructor(kBands: number, initialState?: Partial<OrbitState>) {
     const m = requireWasm();
     this.kBands = kBands;
-    this.state = new m.PlayerState(
-      initialState?.lobe ?? 1,
-      initialState?.subLobe ?? 0,
+    this.state = new m.OrbitController(
       initialState?.s ?? 0.5,
-      initialState?.alpha ?? 0.5
+      initialState?.alpha ?? 0.5,
+      1.0
     );
   }
 
   /** Current c (real part). */
   get cRe(): number {
-    return this.state.c_re;
+    // OrbitController computes c on step; cache from last step.
+    return this._lastC.real;
   }
 
   /** Current c (imaginary part). */
   get cIm(): number {
-    return this.state.c_im;
+    return this._lastC.imag;
   }
 
-  /** Current c-space speed (Momentum diagnostic). */
-  get speed(): number {
-    return this.state.speed;
+  /** Current wobble phase (diagnostic). */
+  get theta(): number {
+    return this.state.theta;
   }
+
+  /** Speed diagnostic: |dc| of last step (May controller has no velocity state). */
+  get speed(): number {
+    return this._lastSpeed;
+  }
+
+  private _lastC: Complex = { real: 0.0, imag: 0.0 };
+  private _lastSpeed = 0.0;
+  private _prevC: Complex | null = null;
 
   get lobe(): number {
     // PlayerState does not expose lobe as a getter; track it here.
@@ -280,20 +300,20 @@ export class OrbitSynthesizer {
    * Apply model-predicted control signals to the Player state.
    */
   applyControls(signals: ControlSignals): void {
-    this.state.apply_controls(
-      signals.sTarget,
-      signals.alpha,
-      1.0 * signals.omegaScale
-    );
+    this.state.apply_controls(signals.sTarget, signals.alpha);
   }
 
   /**
    * Switch the active Mandelbrot lobe (section-change handling).
+   * The May controller is cardioid-only; this is a no-op retained for API
+   * compatibility with section-detection callers.
    */
   setLobe(lobe: number, subLobe = 0): void {
     this._lobe = lobe;
     this._subLobe = subLobe;
-    this.state.set_lobe(lobe, subLobe);
+    if (typeof (this.state as WasmPlayerState).set_lobe === 'function') {
+      (this.state as WasmPlayerState).set_lobe(lobe, subLobe);
+    }
   }
 
   /**
@@ -307,7 +327,12 @@ export class OrbitSynthesizer {
     for (let i = 0; i < gates.length; i++) {
       gates[i] = Math.max(0.0, Math.min(1.0, bandGates[i]));
     }
-    const c = this.state.step(dt, h, gates);
+    const c = this.state.step(dt, gates);
+    if (this._prevC) {
+      this._lastSpeed = Math.hypot(c.real - this._prevC.real, c.imag - this._prevC.imag);
+    }
+    this._prevC = { real: c.real, imag: c.imag };
+    this._lastC = { real: c.real, imag: c.imag };
     return { real: c.real, imag: c.imag };
   }
 }

@@ -369,3 +369,103 @@ impl PlayerState {
         self.c
     }
 }
+
+/// The May-proven orbit controller, ported verbatim from the TypeScript
+/// implementation that produced the only visually-acceptable results
+/// (pre-commit fe1087b). This is the restored baseline.
+///
+/// Semantics (exact port of the old TS `step()`):
+///   theta advances by omega*dt each frame (wobble phase only)
+///   cBase = mandelbrotBoundary(s, alpha)  <- model DIRECTLY positions c
+///   c = cBase + sum_k gate_k * 0.05 * e^{i * freq_k * theta}
+///   where freq_k = (k+2) and boundary is:
+///     theta_b = 2*pi*alpha
+///     r = 0.25 * (1 - cos(theta_b))
+///     c = r * e^{i*theta_b/2} * min(s, 1.5), with s clamped [0.01, 3]
+///
+/// Unlike OrbitState (closed loop ignoring audio) this is audio-driven:
+/// s and alpha move c around the Map every frame. Unlike PlayerState
+/// (unproven momentum) this is the empirically validated baseline.
+#[derive(Clone, Debug)]
+pub struct OrbitController {
+    /// Wobble phase in radians (advances by omega*dt each step).
+    pub theta: f64,
+    /// Base angular velocity of the wobble phase.
+    pub omega: f64,
+    /// Radial scale from the model (clamped [0.01, 3.0] internally).
+    pub s: f64,
+    /// Angular position on the cardioid from the model ([0, 1] internally).
+    pub alpha: f64,
+}
+
+impl Default for OrbitController {
+    fn default() -> Self {
+        Self {
+            theta: 0.0,
+            omega: 1.0,
+            s: 1.0,
+            alpha: 0.0,
+        }
+    }
+}
+
+impl OrbitController {
+    pub fn new(s: f64, alpha: f64, omega: f64) -> Self {
+        Self {
+            theta: 0.0,
+            omega,
+            s: s.clamp(0.01, 3.0),
+            alpha: alpha.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Apply model-predicted control signals.
+    pub fn apply_controls(&mut self, s: f64, alpha: f64) {
+        self.s = s.clamp(0.01, 3.0);
+        self.alpha = alpha.clamp(0.0, 1.0);
+    }
+
+    /// May's exact `mandelbrotBoundary(s, alpha)` formula.
+    ///
+    /// Main cardioid: theta = 2*pi*alpha; r = 0.25*(1-cos(theta));
+    /// c = r*e^{i*theta/2} scaled by min(s, 1.5).
+    pub fn mandelbrot_boundary(&self) -> num_complex::Complex64 {
+        let theta = 2.0 * std::f64::consts::PI * self.alpha;
+        let r = 0.25 * (1.0 - theta.cos());
+        let scale = self.s.min(1.5); // Cap at 1.5 to avoid escaping too far
+        num_complex::Complex64::new(
+            r * (theta / 2.0).cos() * scale,
+            r * (theta / 2.0).sin() * scale,
+        )
+    }
+
+    /// Advance one frame exactly as the May TS controller did.
+    ///
+    /// * `dt` – frame time in seconds.
+    /// * `band_gates` – per-band residual gates in [0, 1].
+    ///
+    /// Returns the new c. Residuals are harmonic epicycles at freq (k+2)
+    /// times the wobble phase, amplitude 0.05*gate — identical to the TS.
+    pub fn step(&mut self, dt: f64, band_gates: Option<&[f64]>) -> num_complex::Complex64 {
+        // Update wobble phase.
+        self.theta = (self.theta + self.omega * dt) % (2.0 * std::f64::consts::PI);
+
+        // Base position from the model's (s, alpha).
+        let base = self.mandelbrot_boundary();
+
+        // Residual modulation: harmonics of the wobble phase.
+        let mut res_re = 0.0;
+        let mut res_im = 0.0;
+        if let Some(gates) = band_gates {
+            for (k, &g) in gates.iter().enumerate() {
+                let gate = g.clamp(0.0, 1.0);
+                let freq = (k as f64 + 2.0) * 1.0;
+                let phase = freq * self.theta;
+                res_re += gate * 0.05 * phase.cos();
+                res_im += gate * 0.05 * phase.sin();
+            }
+        }
+
+        num_complex::Complex64::new(base.re + res_re, base.im + res_im)
+    }
+}

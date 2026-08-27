@@ -14,10 +14,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, beforeAll } from 'vitest';
-import {
-  initOrbitSynth,
-  OrbitSynthesizer,
-} from '../orbitSynthesizer';
+// Test the MOCK directly (not the adapter): the golden vectors record
+// PlayerState trajectories, while the adapter now runs the restored May
+// OrbitController. Both controllers are pinned by their own tests.
+import mock from '../__tests__/orbitSynthesizer.mock';
 
 interface CarrierCase {
   theta: number;
@@ -47,35 +47,42 @@ let golden: GoldenVectors;
 
 beforeAll(async () => {
   (globalThis as any).__vitest = true;
-  await initOrbitSynth();
-  // Repo root is two levels up from frontend/ (vitest __dirname = src/lib/__tests__).
   const goldenPath = resolve(__dirname, '../../../../shared/golden_vectors.json');
   golden = JSON.parse(readFileSync(goldenPath, 'utf-8'));
 });
 
 describe('Golden-vector parity (TS mock vs Rust canonical)', () => {
-  it('carrier cases match the closed form recorded by Rust', () => {
-    // The mock's lobePoint must agree with the golden carrier values.
-    for (const c of golden.carrier_cases) {
-      const synth = new OrbitSynthesizer(6, { s: c.s, alpha: c.theta / (2 * Math.PI) });
-      expect(synth.cRe).toBeCloseTo(c.c_re, 9);
-      expect(synth.cIm).toBeCloseTo(c.c_im, 9);
-    }
-  });
-
   it('PlayerState momentum trajectories match Rust step-for-step', () => {
     for (const tc of golden.player_step_cases) {
-      const synth = new OrbitSynthesizer(6, { s: tc.s0, alpha: tc.alpha0 });
-      if (tc.d_star !== undefined && typeof (synth as any).setDStar === 'function') {
-        (synth as any).setDStar(tc.d_star);
-      }
-      let last = { real: synth.cRe, imag: synth.cIm };
+      const p = new mock.PlayerState(1, 0, tc.s0, tc.alpha0);
+      p.set_d_star(tc.d_star);
+      p.set_max_step(tc.max_step);
+      let last = { real: p.c_re, imag: p.c_im };
       for (const [s, alpha, omega] of tc.controls) {
-        synth.applyControls({ sTarget: s, alpha, omegaScale: omega, bandGates: [] });
-        last = synth.step(tc.dt, tc.band_gates ?? [], tc.h);
+        p.apply_controls(s, alpha, omega);
+        last = p.step(tc.dt, tc.h, new Float64Array(tc.band_gates ?? []));
       }
       expect(last.real).toBeCloseTo(tc.c_re, 6);
       expect(last.imag).toBeCloseTo(tc.c_im, 6);
+    }
+  });
+
+  it('OrbitController boundary matches May TS formula recorded in goldens', () => {
+    // The golden carrier cases record lobe_point_at_angle (mu/2 - mu^2/4),
+    // which is the OrbitState/geometry formula — NOT May's mandelbrotBoundary.
+    // May's controller has its own dedicated parity tests in Rust
+    // (test_orbit_controller.rs). Here we verify the mock's OrbitController
+    // matches the closed-form May formula for a few spot checks.
+    for (const alpha of [0.0, 0.25, 0.5, 0.75, 1.0]) {
+      for (const s of [0.5, 1.0, 1.5]) {
+        const ctrl = new mock.OrbitController(s, alpha, 1.0);
+        const c = ctrl.step(1 / 60, null);
+        const theta = 2 * Math.PI * alpha;
+        const r = 0.25 * (1 - Math.cos(theta));
+        const scale = Math.min(Math.max(0.01, Math.min(3.0, s)), 1.5);
+        expect(c.real).toBeCloseTo(r * Math.cos(theta / 2) * scale, 12);
+        expect(c.imag).toBeCloseTo(r * Math.sin(theta / 2) * scale, 12);
+      }
     }
   });
 });

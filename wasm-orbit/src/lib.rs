@@ -8,6 +8,7 @@ use num_complex::Complex64 as RustComplex;
 use runtime_core::controller::{
     OrbitState as RustOrbitState,
     PlayerState as RustPlayerState,
+    OrbitController as RustOrbitController,
     ResidualParams as RustResidualParams,
     synthesize as rust_synthesize,
     DEFAULT_K_RESIDUALS,
@@ -425,4 +426,38 @@ pub fn contour_biased_step(
         real, imag, u_real, u_imag, h, d_star, max_step, level,
     )?;
     Ok(vec![nr, ni])
+}
+
+/// --- May-proven OrbitController bindings (restored baseline) ---
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct OrbitController {
+    inner: RustOrbitController,
+}
+
+#[wasm_bindgen]
+impl OrbitController {
+    #[wasm_bindgen(constructor)]
+    pub fn new(s: f64, alpha: f64, omega: f64) -> OrbitController {
+        OrbitController {
+            inner: RustOrbitController::new(s, alpha, omega),
+        }
+    }
+
+    /// Wobble phase (diagnostic).
+    #[wasm_bindgen(getter)]
+    pub fn theta(&self) -> f64 {
+        self.inner.theta
+    }
+
+    /// Apply model-predicted control signals (s, alpha).
+    pub fn apply_controls(&mut self, s: f64, alpha: f64) {
+        self.inner.apply_controls(s, alpha);
+    }
+
+    /// Advance one frame; returns the new c.
+    pub fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>) -> Complex {
+        self.inner.step(dt, band_gates.as_deref()).into()
+    }
 }

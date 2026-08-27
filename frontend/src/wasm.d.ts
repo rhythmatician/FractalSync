@@ -48,6 +48,17 @@ declare module '/wasm/orbit_synth_wasm.js' {
     ): { real: number; imag: number };
   }
 
+  /** May-proven orbit controller (restored baseline). */
+  export class OrbitController {
+    constructor(s: number, alpha: number, omega: number);
+    theta: number;
+    apply_controls(s: number, alpha: number): void;
+    step(
+      dt: number,
+      band_gates?: Float64Array | null
+    ): { real: number; imag: number };
+  }
+
   export function step(
     state: OrbitState,
     dt: number,
