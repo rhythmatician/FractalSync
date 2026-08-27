@@ -217,7 +217,21 @@ export class ModelInference {
 
           // Load the minimaps so the Player's contour-biased stepper can
           // follow the Shore (best-effort; falls back to plain motion).
-          await loadMipPyramid();
+          const pyramidLoaded = await loadMipPyramid();
+
+          // Shore-bias refinement (ADR 0001, opt-in flag, default OFF):
+          // route motion through the minimap's contour_biased_step so c
+          // hugs the Shore's contours between transients and can cross
+          // them on hits (h). Requires the pyramid; silently no-ops
+          // without one. d_star 0.5 = target shore proximity, max_step
+          // 0.05 caps per-frame travel.
+          if (pyramidLoaded) {
+            this.orbitSynthesizer.setShoreBias(true, 0.5, 0.05);
+            console.log('[ModelInference] Shore bias enabled (pyramid loaded)');
+          } else {
+            console.warn('[ModelInference] Shore bias unavailable (no pyramid)');
+          }
+
           console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');

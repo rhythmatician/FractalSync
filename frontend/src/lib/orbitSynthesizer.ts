@@ -366,9 +366,25 @@ export class OrbitSynthesizer {
 
   /** Refinement 2: shore bias via minimap contour stepping. Default OFF. */
   setShoreBias(on: boolean, dStar = 0.5, maxStep = 0.05): void {
-    this.state.set_shore_bias(on);
-    this.state.set_d_star(dStar);
-    this.state.set_max_step(maxStep);
+    // wasm-bindgen exposes Rust setters as JS property setters; try the
+    // method form first (mock/test doubles), fall back to properties.
+    const s = this.state as unknown as {
+      shore_bias: boolean;
+      d_star: number;
+      max_step: number;
+      set_shore_bias?: (on: boolean) => void;
+      set_d_star?: (d: number) => void;
+      set_max_step?: (m: number) => void;
+    };
+    if (typeof s.set_shore_bias === 'function') {
+      s.set_shore_bias(on);
+      s.set_d_star(dStar);
+      s.set_max_step(maxStep);
+    } else {
+      s.shore_bias = on;
+      s.d_star = dStar;
+      s.max_step = maxStep;
+    }
   }
 
   /**
