@@ -168,7 +168,7 @@ vec2 potentialGradient(vec2 z0, vec2 c, int iterN, float eps) {
 // numeric literal when assembling the final shader (e.g. 2.700000).
 
 // The rest of the shader body (shadePixel, smoothing, DE, main) - preserved
-// verbatim from the inline version in `juliaRenderer.ts`.
+// verbatim from the inline version in juliaRenderer.ts.
 
 float span = __BASE_SPAN__ / max(u_zoom, 1.0e-6);
 

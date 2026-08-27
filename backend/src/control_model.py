@@ -130,7 +130,7 @@ class AudioToControlModel(nn.Module):
             nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
-            nn.Sigmoid(),  # Alpha in [0, 1]
+            nn.Sigmoid(),  # Alpha in [0, 1], rescaled below
         )
 
         self.omega_head = nn.Sequential(
@@ -209,6 +209,13 @@ class AudioToControlModel(nn.Module):
         # s_target: map to [0.2, 3.0] using sigmoid + scaling
         s_target = 0.2 + 2.8 * torch.sigmoid(s_raw)  # [0.2, 3.0]
 
+        # Alpha: map to [0.05, 0.95]. The May boundary formula
+        # r = 0.25*(1-cos(2*pi*alpha)) has ZERO radius AND ZERO gradient at
+        # alpha=0 and alpha=1 — a sigmoid saturated there can never escape
+        # (observed live as c pinned to (0,0)). Keeping alpha strictly inside
+        # (0, 1) makes both r and dr/dalpha nonzero everywhere.
+        alpha = 0.05 + 0.90 * alpha  # [0.05, 0.95]
+
         # omega_scale: map to [0.1, 5.0] using softplus
         omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
         omega_scale = torch.clamp(omega_scale, 0.1, 5.0)
@@ -227,7 +234,7 @@ class AudioToControlModel(nn.Module):
         """
         ranges = {
             "s_target": (0.2, 3.0),
-            "alpha": (0.0, 1.0),
+            "alpha": (0.05, 0.95),  # kept off the formula's null points
             "omega_scale": (0.1, 5.0),
         }
         for k in range(self.k_bands):
