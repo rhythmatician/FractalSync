@@ -70,6 +70,13 @@ interface WasmModule {
     alpha: number,
     omega: number
   ) => WasmOrbitController;
+  constants(): {
+    default_residual_cap: number;
+    default_residual_omega_scale: number;
+    default_base_omega: number;
+    default_orbit_seed: number;
+    controller_version?: string;
+  };
   OrbitState: new (
     lobe: number,
     subLobe: number,
@@ -162,6 +169,19 @@ export async function initOrbitSynth(): Promise<void> {
 /** Test seam: inject a wasm-shaped module directly. */
 export function setWasmModuleForTesting(mod: WasmModule | null): void {
   wasm = mod;
+}
+
+/**
+ * The runtime's controller contract version (from the Rust constant via
+ * wasm constants). Returns 'unknown' if the wasm build predates the field.
+ */
+export function getControllerVersion(): string {
+  if (!wasm) return 'unknown';
+  try {
+    return wasm.constants().controller_version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 /**

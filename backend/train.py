@@ -62,6 +62,23 @@ def _run_preflight_parity() -> None:
         sys.exit(result.returncode)
 
 
+def _runtime_controller_version() -> str:
+    """Read CONTROLLER_VERSION from the installed runtime_core.
+
+    The stamp comes from the same Rust source the preflight verifies against,
+    so the model records exactly the contract the mirror was checked against.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "CONTROLLER_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def main():
     """Main training function."""
     # Configure logging so ControlTrainer messages are visible
@@ -527,6 +544,10 @@ def execute_training_workflow(args):
                 "input_dim": model.input_dim,
                 "timestamp": iso_timestamp,
                 "git_hash": git_hash,
+                # Controller contract stamp (ADR 0001): the browser refuses
+                # to load an orbit_control model whose controller_version
+                # differs from its own runtime's version.
+                "controller_version": _runtime_controller_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")

@@ -17,6 +17,7 @@ use crate::controller::{
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
+    CONTROLLER_VERSION,
     DEFAULT_RESIDUAL_CAP,
     DEFAULT_RESIDUAL_OMEGA_SCALE,
     HOP_LENGTH,
@@ -820,6 +821,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+    m.add("CONTROLLER_VERSION", CONTROLLER_VERSION)?;
 
     m.add_class::<ResidualParams>()?;
 

@@ -57,6 +57,10 @@ struct PlayerStepCase {
 struct GoldenVectors {
     generator: String,
     authority: String,
+    /// Contract version of the controller that generated these vectors.
+    /// The preflight and cargo tests assert this matches the runtime's
+    /// CONTROLLER_VERSION, so stale goldens cannot masquerade as current.
+    controller_version: String,
     carrier_cases: Vec<CarrierCase>,
     orbit_cases: Vec<OrbitCase>,
     player_step_cases: Vec<PlayerStepCase>,
@@ -84,6 +88,7 @@ fn main() {
     let mut g = GoldenVectors {
         generator: format!("runtime_core {}", env!("CARGO_PKG_VERSION")),
         authority: "docs/adr/0001-rust-first-parity.md".to_string(),
+        controller_version: runtime_core::controller::CONTROLLER_VERSION.to_string(),
         carrier_cases: Vec::new(),
         orbit_cases: Vec::new(),
         player_step_cases: Vec::new(),

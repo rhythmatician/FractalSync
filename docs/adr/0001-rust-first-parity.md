@@ -63,3 +63,21 @@ npx vitest run src/lib/__tests__/goldenParity.test.ts               # frontend p
   divergence is caught by tests, not discovered at runtime.
 - Training sessions are gated on preflight success; this adds a small startup cost
   but prevents multi-hour runs from being silently invalidated.
+
+## Amendment: controller version contract (2026-08-27)
+
+**Invariant:** an `orbit_control` model deployed to the runtime must have been
+trained against the same controller semantics the runtime executes.
+
+- `runtime-core/src/controller.rs` defines `CONTROLLER_VERSION` (single source).
+  Bump it in the SAME commit as any change to the flags-off semantics of
+  `OrbitController::step`, together with regenerated goldens and updated mirrors.
+- Training stamps the exported ONNX metadata with `controller_version`
+  (read from the installed `runtime_core.CONTROLLER_VERSION` — the same source
+  the preflight verified against).
+- The browser **refuses to load** an orbit_control model whose
+  `controller_version` differs from its runtime's version. A model missing the
+  field (pre-contract legacy) loads with a loud warning and cannot be verified.
+- The preflight (check f) fails if `shared/golden_vectors.json` was generated
+  by a different controller version than the installed runtime — stale goldens
+  cannot silently verify the wrong contract.

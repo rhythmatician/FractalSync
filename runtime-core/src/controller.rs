@@ -25,6 +25,18 @@ pub const DEFAULT_RESIDUAL_OMEGA_SCALE: f64 = 2.0;
 pub const DEFAULT_BASE_OMEGA: f64 = 1.0;
 pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 
+/// Contract version of the runtime controller.
+///
+/// Every exported model records this in its ONNX metadata
+/// (`controller_version`); the browser refuses to load an orbit_control
+/// model whose version differs from its own. Bump whenever the flags-off
+/// semantics of OrbitController::step change (constants, formula, order of
+/// operations) - in the SAME commit as regenerating shared/golden_vectors.json
+/// and updating the trainer mirror. Version history:
+///   1 - May baseline restored (mandelbrotBoundary + harmonic epicycles),
+///       with momentum/shore_bias as opt-in flags (default off).
+pub const CONTROLLER_VERSION: &str = "orbit-controller/1";
+
 /// Parameters controlling the residual epicycle sums.  These values
 /// determine the number of residuals and the cap on their combined
 /// magnitude.  The same parameters are used for both Python and

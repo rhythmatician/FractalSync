@@ -14,6 +14,7 @@ use runtime_core::controller::{
     DEFAULT_K_RESIDUALS,
     DEFAULT_RESIDUAL_CAP,
     DEFAULT_RESIDUAL_OMEGA_SCALE,
+    CONTROLLER_VERSION,
     DEFAULT_BASE_OMEGA,
     DEFAULT_ORBIT_SEED,
     SAMPLE_RATE,
@@ -36,6 +37,7 @@ pub fn constants() -> JsValue {
         default_residual_omega_scale: f64,
         default_base_omega: f64,
         default_orbit_seed: u64,
+        controller_version: String,
     }
 
     let c = Constants {
@@ -47,6 +49,7 @@ pub fn constants() -> JsValue {
         default_residual_cap: DEFAULT_RESIDUAL_CAP,
         default_residual_omega_scale: DEFAULT_RESIDUAL_OMEGA_SCALE,
         default_base_omega: DEFAULT_BASE_OMEGA,
+        controller_version: CONTROLLER_VERSION.to_string(),
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };
 

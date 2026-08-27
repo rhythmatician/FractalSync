@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -28,6 +28,8 @@ export interface ModelMetadata {
   git_hash?: string;
   model_type?: string; // 'orbit_control' or legacy
   k_bands?: number;
+  /** Controller contract stamp (ADR 0001). Missing = pre-contract legacy. */
+  controller_version?: string;
 }
 
 export interface PerformanceMetrics {
@@ -162,6 +164,27 @@ export class ModelInference {
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
           this.orbitTheta = 0.0;
+
+          // Controller contract check (ADR 0001): the model must have been
+          // trained against the same controller semantics this runtime runs.
+          const runtimeVersion = getControllerVersion();
+          const modelVersion = this.metadata.controller_version;
+          if (!modelVersion) {
+            console.warn(
+              `[ModelInference] ⚠️ Model has no controller_version stamp ` +
+                `(pre-contract legacy model). Trained against UNKNOWN ` +
+                `controller semantics — visuals may not match training.`
+            );
+          } else if (modelVersion !== runtimeVersion) {
+            throw new Error(
+              `Controller version mismatch: model was trained against ` +
+                `'${modelVersion}' but this runtime is '${runtimeVersion}'. ` +
+                `Refusing to load — retrain the model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Controller contract OK: ${runtimeVersion}`);
+          }
+
           // Load the minimaps so the Player's contour-biased stepper can
           // follow the Shore (best-effort; falls back to plain motion).
           await loadMipPyramid();

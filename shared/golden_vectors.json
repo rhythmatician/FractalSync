@@ -1,6 +1,7 @@
 {
   "generator": "runtime_core 0.1.0",
   "authority": "docs/adr/0001-rust-first-parity.md",
+  "controller_version": "orbit-controller/1",
   "carrier_cases": [
     {
       "lobe": 1,
