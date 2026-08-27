@@ -344,8 +344,24 @@ export class OrbitSynthesizer {
 
   /** Refinement 1: momentum (persistent velocity + drag). Default OFF. */
   setMomentum(on: boolean, drag = 0.9): void {
-    this.state.set_momentum(on);
-    this.state.set_drag(drag);
+    // wasm-bindgen exposes Rust setters as JS property setters:
+    // set_momentum(on) -> `momentum` accessor, set_drag(d) -> `drag`.
+    const s = this.state as unknown as {
+      momentum: boolean;
+      drag: number;
+      set_momentum?: (on: boolean) => void;
+      set_drag?: (d: number) => void;
+    };
+    if (typeof s.set_momentum === 'function') {
+      s.set_momentum(on);
+    } else {
+      s.momentum = on;
+    }
+    if (typeof s.set_drag === 'function') {
+      s.set_drag(drag);
+    } else {
+      s.drag = drag;
+    }
   }
 
   /** Refinement 2: shore bias via minimap contour stepping. Default OFF. */
