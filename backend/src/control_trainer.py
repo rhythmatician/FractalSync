@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .cspace_proxies import (
     cardioid_proximity,
-    player_step_sequence,
+    orbit_controller_sequence,
     shore_proximity,
     synthesize_c,
 )
@@ -941,14 +941,14 @@ class ControlTrainer:
                 )
                 avg_features = features_reshaped.mean(dim=1)
 
-                # Supervise through the SAME integrator the browser executes:
-                # PlayerState momentum (v = drag*v + accel; c += v*dt). The
-                # old path supervised the closed-loop OrbitState carrier,
-                # which is why trained controls saturated and c parked.
-                c_complex = player_step_sequence(
+                # Supervise through the SAME controller the browser executes:
+                # OrbitController (May baseline, flags off). The old paths
+                # supervised closed-loop OrbitState / PlayerState momentum —
+                # neither matches runtime physics.
+                c_complex = orbit_controller_sequence(
                     s_target=s_target,
                     alpha=alpha,
-                    omega_scale=omega_scale,
+                    omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
                 )
@@ -1082,12 +1082,12 @@ class ControlTrainer:
                 transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
                 loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
 
-                # Legacy path also supervises through the PlayerState momentum
-                # integrator so both supervision paths match runtime physics.
-                c_complex = player_step_sequence(
+                # Legacy path also supervises through OrbitController so both
+                # supervision paths match runtime physics.
+                c_complex = orbit_controller_sequence(
                     s_target=s_target,
                     alpha=alpha,
-                    omega_scale=omega_scale,
+                    omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
                 )

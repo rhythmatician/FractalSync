@@ -13,6 +13,7 @@ use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
     PlayerState as RustPlayerState,
+    OrbitController as RustOrbitController,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
@@ -152,6 +153,49 @@ impl PlayerState {
         band_gates: Option<Vec<f64>>,
     ) -> (f64, f64) {
         let c = self.inner.step(dt, h, band_gates.as_deref());
+        (c.re, c.im)
+    }
+}
+
+/// Python wrapper for the May-proven OrbitController (runtime baseline).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct OrbitController {
+    inner: RustOrbitController,
+}
+
+#[pymethods]
+impl OrbitController {
+    #[new]
+    fn py_new(s: f64, alpha: f64, omega: f64) -> Self {
+        Self {
+            inner: RustOrbitController::new(s, alpha, omega),
+        }
+    }
+
+    /// Wobble phase (diagnostic).
+    #[getter]
+    fn theta(&self) -> f64 {
+        self.inner.theta
+    }
+
+    /// Apply model-predicted control signals (s, alpha).
+    fn apply_controls(&mut self, s: f64, alpha: f64) {
+        self.inner.apply_controls(s, alpha);
+    }
+
+    /// Refinement toggles (all default off = May baseline).
+    fn set_momentum(&mut self, on: bool) {
+        self.inner.momentum = on;
+    }
+
+    fn set_shore_bias(&mut self, on: bool) {
+        self.inner.shore_bias = on;
+    }
+
+    /// Advance one frame; returns (re, im).
+    fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>) -> (f64, f64) {
+        let c = self.inner.step(dt, band_gates.as_deref());
         (c.re, c.im)
     }
 }
@@ -799,6 +843,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         let _ = os_ty.setattr("alpha", 0.3f64);
     }
     m.add_class::<PlayerState>()?;
+    m.add_class::<OrbitController>()?;
 
     m.add_class::<FeatureExtractor>()?;
 

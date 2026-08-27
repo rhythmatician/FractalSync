@@ -90,72 +90,48 @@ class TestMirrorGolden:
         assert max_err < 1e-5, f"mirror diverged from golden: max_err={max_err}"
 
 
-class TestPlayerGolden:
-    """PlayerState momentum integrator trajectories."""
+class TestOrbitControllerMirrorGolden:
+    """The differentiable OrbitController mirror vs the Rust binding.
 
-    def test_player_step_matches_golden(self, golden):
+    This is THE parity contract for training: if this fails, the trainer
+    supervises physics the browser does not execute.
+    """
+
+    def test_orbit_mirror_matches_rust(self):
+        import numpy as np
         import runtime_core
-
-        for case in golden["player_step_cases"]:
-            p = runtime_core.PlayerState(1, 0, case["s0"], case["alpha0"])
-            p.set_d_star(case["d_star"])
-            p.set_max_step(case["max_step"])
-            p.set_level(case["level"])
-            c_re = c_im = None
-            for ctrl in case["controls"]:
-                s, alpha, omega_scale = ctrl
-                p.apply_controls(s, alpha, omega_scale)
-                c_re, c_im = p.step(case["dt"], case["h"], case["band_gates"])
-            err = max(abs(c_re - case["c_re"]), abs(c_im - case["c_im"]))
-            assert err < 1e-6, (
-                f"PlayerState trajectory diverged from golden: err={err} "
-                "(did Rust math change without regenerating golden_vectors.json?)"
-            )
-
-    def test_player_mirror_matches_golden(self, golden):
-        """The differentiable PyTorch mirror must reproduce Rust trajectories.
-
-        This is THE parity contract for training: if this fails, the trainer
-        supervises physics the browser does not execute.
-        """
         import torch
 
-        from src.cspace_proxies import player_step_sequence
+        from src.cspace_proxies import orbit_controller_sequence
 
-        max_err = 0.0
-        for case in golden["player_step_cases"]:
-            controls = case["controls"]
-            n = len(controls)
-            s_t = torch.tensor([c[0] for c in controls])
-            a_t = torch.tensor([c[1] for c in controls])
-            w_t = torch.tensor([c[2] for c in controls])
-            gates = (
-                torch.tensor([case["band_gates"]], dtype=torch.float32)
-                .repeat(n, 1)
-            )
-            seg = torch.zeros(n, dtype=torch.int64)
+        rng = np.random.RandomState(0)
+        n_steps = 120
+        s_vals = torch.tensor(
+            np.clip(rng.uniform(0.2, 3.0, n_steps), 0.2, 3.0), dtype=torch.float32
+        )
+        a_vals = torch.tensor(rng.uniform(0.0, 1.0, n_steps), dtype=torch.float32)
+        gates = torch.tensor(rng.uniform(0.0, 1.0, (n_steps, 6)), dtype=torch.float32)
+        seg = torch.zeros(n_steps, dtype=torch.int64)
 
-            # Start on the boundary at (s0, alpha0) like PlayerState::new.
-            theta0 = case["alpha0"] * 2.0 * math.pi
-            mu0 = case["s0"] * cmath.exp(1j * theta0)
-            c0_complex = mu0 / 2 - mu0**2 / 4
+        c = runtime_core.OrbitController(float(s_vals[0]), float(a_vals[0]), 1.0)
+        rust_re = rust_im = 0.0
+        for i in range(n_steps):
+            c.apply_controls(float(s_vals[i]), float(a_vals[i]))
+            rust_re, rust_im = c.step(1.0 / 60.0, gates[i].tolist())
 
-            pt_c = player_step_sequence(
-                s_target=s_t,
-                alpha=a_t,
-                omega_scale=w_t,
-                band_gates=gates,
-                segment_ids=seg,
-                dt=case["dt"],
-                c0=(c0_complex.real, c0_complex.imag),
-            )
-            err = max(
-                abs(pt_c[-1].real.item() - case["c_re"]),
-                abs(pt_c[-1].imag.item() - case["c_im"]),
-            )
-            max_err = max(max_err, err)
-        assert max_err < 1e-5, (
-            f"PlayerState mirror diverged from golden: max_err={max_err} "
+        pt_c = orbit_controller_sequence(
+            s_target=s_vals,
+            alpha=a_vals,
+            omega=1.0,
+            band_gates=gates,
+            segment_ids=seg,
+        )
+        err = max(
+            abs(rust_re - pt_c[-1].real.item()),
+            abs(rust_im - pt_c[-1].imag.item()),
+        )
+        assert err < 1e-5, (
+            f"OrbitController mirror diverged from Rust: err={err} "
             "(trainer would supervise wrong physics)"
         )
 

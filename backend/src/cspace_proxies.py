@@ -238,3 +238,75 @@ def player_step_sequence(
         c_im[i] = cur_im
 
     return torch.complex(c_re, c_im)
+
+
+# ---------------------------------------------------------------------------
+# OrbitController mirror (the RUNTIME controller — May-proven baseline)
+#
+# Mirrors ``runtime_core::controller::OrbitController::step`` with all
+# refinement flags OFF (the default runtime path). Constants must match
+# controller.rs exactly:
+#   boundary: theta_b = 2*pi*alpha; r = 0.25*(1-cos(theta_b));
+#             c = r*e^(i*theta_b/2) * min(s, 1.5), s clamped [0.01, 3]
+#   residuals: sum_k gate_k * 0.05 * e^(i*(k+2)*theta), theta += omega*dt
+# ---------------------------------------------------------------------------
+
+ORBIT_RESIDUAL_AMP = 0.05
+
+
+def orbit_controller_sequence(
+    s_target: torch.Tensor,
+    alpha: torch.Tensor,
+    omega: float,
+    band_gates: torch.Tensor,
+    segment_ids: torch.Tensor,
+    dt: float = 1.0 / 60.0,
+) -> torch.Tensor:
+    """Differentiable replay of OrbitController::step (May baseline).
+
+    This is THE training-time mirror of the controller the browser executes.
+    Per frame: theta += omega*dt; c = mandelbrot_boundary(s, alpha) +
+    sum_k gate_k*0.05*e^(i*(k+2)*theta). Fully differentiable w.r.t. s, alpha,
+    and band_gates.
+
+    Parity is pinned by backend/tests/test_golden_parity.py and by the
+    preflight player-mirror check against runtime_core.OrbitController.
+    """
+    n = s_target.shape[0]
+    device = s_target.device
+
+    s = s_target.reshape(-1).float().clamp(0.01, 3.0)
+    a = alpha.reshape(-1).float().clamp(0.0, 1.0)
+
+    # May's mandelbrotBoundary(s, alpha), vectorized:
+    # theta_b = 2*pi*alpha; r = 0.25*(1-cos(theta_b)); scale = min(s, 1.5)
+    theta_b = a * 2.0 * math.pi
+    r = 0.25 * (1.0 - torch.cos(theta_b))
+    scale = torch.clamp(s, max=1.5)
+    base_re = r * torch.cos(theta_b / 2.0) * scale
+    base_im = r * torch.sin(theta_b / 2.0) * scale
+
+    # Wobble phase: sequential scan of theta += omega*dt, reset per segment.
+    seg = segment_ids.reshape(-1)
+    seg_boundary = torch.zeros(n, dtype=torch.bool, device=device)
+    if n > 1:
+        seg_boundary[1:] = seg[1:] != seg[:-1]
+
+    two_pi = 2.0 * math.pi
+    theta = torch.zeros(n, device=device, dtype=torch.float32)
+    th = torch.zeros((), device=device, dtype=torch.float32)
+    for i in range(n):
+        if seg_boundary[i]:
+            th = torch.zeros_like(th)
+        th = (th + omega * dt) % two_pi
+        theta[i] = th
+
+    # Residual epicycles: gate_k * 0.05 * e^(i*(k+2)*theta).
+    k_idx = torch.arange(band_gates.shape[1], device=device, dtype=torch.float32)
+    freqs = k_idx + 2.0
+    phase = theta.reshape(-1, 1) * freqs.reshape(1, -1)
+    gates = band_gates.float().clamp(0.0, 1.0)
+    res_re = (gates * ORBIT_RESIDUAL_AMP * torch.cos(phase)).sum(dim=1)
+    res_im = (gates * ORBIT_RESIDUAL_AMP * torch.sin(phase)).sum(dim=1)
+
+    return torch.complex(base_re + res_re, base_im + res_im)
