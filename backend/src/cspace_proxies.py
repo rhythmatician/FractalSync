@@ -310,3 +310,89 @@ def orbit_controller_sequence(
     res_im = (gates * ORBIT_RESIDUAL_AMP * torch.sin(phase)).sum(dim=1)
 
     return torch.complex(base_re + res_re, base_im + res_im)
+
+
+def orbit_controller_momentum_sequence(
+    s_target: torch.Tensor,
+    alpha: torch.Tensor,
+    omega: float,
+    band_gates: torch.Tensor,
+    segment_ids: torch.Tensor,
+    dt: float = 1.0 / 60.0,
+    drag: float = 0.90,
+) -> torch.Tensor:
+    """Differentiable replay of OrbitController::step with momentum ON.
+
+    Mirrors the Rust momentum path exactly (controller.rs):
+      theta += omega*dt
+      target = mandelbrot_boundary(s, alpha) + residual epicycles
+      a = (target - c) * 2*dt          # pull-as-acceleration
+      v = v*drag + a
+      c += v*dt
+    c starts at the first frame's boundary point; velocity resets at
+    segment boundaries. Fully differentiable w.r.t. s, alpha, band_gates.
+
+    Parity is pinned by preflight check (e2) against the Rust binding with
+    set_momentum(true).
+    """
+    n = s_target.shape[0]
+    device = s_target.device
+
+    s = s_target.reshape(-1).float().clamp(0.01, 3.0)
+    a = alpha.reshape(-1).float().clamp(0.0, 1.0)
+
+    theta_b = a * 2.0 * math.pi
+    r = 0.25 * (1.0 - torch.cos(theta_b))
+    scale = torch.clamp(s, max=1.5)
+    base_re = r * torch.cos(theta_b / 2.0) * scale
+    base_im = r * torch.sin(theta_b / 2.0) * scale
+
+    seg = segment_ids.reshape(-1)
+    seg_boundary = torch.zeros(n, dtype=torch.bool, device=device)
+    if n > 1:
+        seg_boundary[1:] = seg[1:] != seg[:-1]
+
+    two_pi = 2.0 * math.pi
+    theta = torch.zeros(n, device=device, dtype=torch.float32)
+    th = torch.zeros((), device=device, dtype=torch.float32)
+    for i in range(n):
+        if seg_boundary[i]:
+            th = torch.zeros_like(th)
+        th = (th + omega * dt) % two_pi
+        theta[i] = th
+
+    k_idx = torch.arange(band_gates.shape[1], device=device, dtype=torch.float32)
+    freqs = k_idx + 2.0
+    phase = theta.reshape(-1, 1) * freqs.reshape(1, -1)
+    gates = band_gates.float().clamp(0.0, 1.0)
+    res_re = (gates * ORBIT_RESIDUAL_AMP * torch.cos(phase)).sum(dim=1)
+    res_im = (gates * ORBIT_RESIDUAL_AMP * torch.sin(phase)).sum(dim=1)
+
+    tgt_re = base_re + res_re
+    tgt_im = base_im + res_im
+
+    # Sequential momentum integration (differentiable through time).
+    c_re = torch.zeros(n, device=device, dtype=torch.float32)
+    c_im = torch.zeros(n, device=device, dtype=torch.float32)
+    v_re = torch.zeros((), device=device, dtype=torch.float32)
+    v_im = torch.zeros((), device=device, dtype=torch.float32)
+
+    # Rust: c starts at (0,0) from Default; first step pulls from there.
+    cur_re = torch.zeros((), device=device, dtype=torch.float32)
+    cur_im = torch.zeros((), device=device, dtype=torch.float32)
+    accel_gain = 2.0 * dt
+
+    for i in range(n):
+        if seg_boundary[i]:
+            v_re = torch.zeros_like(v_re)
+            v_im = torch.zeros_like(v_im)
+        a_re = (tgt_re[i] - cur_re) * accel_gain
+        a_im = (tgt_im[i] - cur_im) * accel_gain
+        v_re = v_re * drag + a_re
+        v_im = v_im * drag + a_im
+        cur_re = cur_re + v_re * dt
+        cur_im = cur_im + v_im * dt
+        c_re[i] = cur_re
+        c_im[i] = cur_im
+
+    return torch.complex(c_re, c_im)

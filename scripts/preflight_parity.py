@@ -160,12 +160,15 @@ def check_mirror_parity(rc) -> tuple[bool, float]:
 
 
 def check_player_mirror_parity(rc) -> tuple[bool, float]:
-    """(e) PlayerState mirror vs Rust PlayerState trajectories.
+    """(e) OrbitController mirror vs Rust OrbitController trajectories.
 
     THE critical check: the trainer must supervise through the same controller
-    the browser executes (OrbitController, May baseline). A divergence here
-    means training optimizes physics the runtime does not run — the exact
-    failure that wasted a 90-minute session and produced saturated controls.
+    semantics the browser executes. Verifies BOTH runtime paths:
+      e1) flags-off (May baseline) — orbit_controller_sequence
+      e2) momentum ON — orbit_controller_momentum_sequence
+    A divergence in either means training optimizes physics the runtime does
+    not run. (e2 exists because momentum was enabled in the browser without
+    retraining/mirror support — the exact gap this check now closes.)
     """
     try:
         import torch
@@ -175,7 +178,10 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
             "backend requirements: pip install -r backend/requirements.txt"
         ) from exc
 
-    from src.cspace_proxies import orbit_controller_sequence
+    from src.cspace_proxies import (
+        orbit_controller_sequence,
+        orbit_controller_momentum_sequence,
+    )
 
     rng = torch.Generator().manual_seed(0)
     n_steps = 60
@@ -186,7 +192,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         gates = torch.rand(n_steps, K_RESIDUALS, generator=rng)
         seg = torch.zeros(n_steps, dtype=torch.int64)
 
-        # Rust reference: replay through the actual binding.
+        # ---- e1: flags-off path ----
         c = rc.OrbitController(float(s_vals[0]), float(a_vals[0]), 1.0)
         rust_re = rust_im = 0.0
         for i in range(n_steps):
@@ -195,7 +201,6 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
                 1.0 / 60.0, [float(g) for g in gates[i]]
             )
 
-        # Mirror: same controls through the differentiable sequence.
         pt_c = orbit_controller_sequence(
             s_target=s_vals,
             alpha=a_vals,
@@ -208,6 +213,31 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
             abs(rust_im - pt_c[-1].imag.item()),
         )
         max_err = max(max_err, err)
+
+        # ---- e2: momentum path (browser runs this when setMomentum(true)) ----
+        cm = rc.OrbitController(float(s_vals[0]), float(a_vals[0]), 1.0)
+        cm.set_momentum(True)
+        cm.set_drag(0.90)
+        rust_mre = rust_mim = 0.0
+        for i in range(n_steps):
+            cm.apply_controls(float(s_vals[i]), float(a_vals[i]))
+            rust_mre, rust_mim = cm.step(
+                1.0 / 60.0, [float(g) for g in gates[i]]
+            )
+
+        pt_cm = orbit_controller_momentum_sequence(
+            s_target=s_vals,
+            alpha=a_vals,
+            omega=1.0,
+            band_gates=gates,
+            segment_ids=seg,
+            drag=0.90,
+        )
+        err_m = max(
+            abs(rust_mre - pt_cm[-1].real.item()),
+            abs(rust_mim - pt_cm[-1].imag.item()),
+        )
+        max_err = max(max_err, err_m)
     return max_err <= MIRROR_TOL, max_err
 
 

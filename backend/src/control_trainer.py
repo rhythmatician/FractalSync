@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .control_model import AudioToControlModel
 from .cspace_proxies import (
     cardioid_proximity,
+    orbit_controller_momentum_sequence,
     orbit_controller_sequence,
     shore_proximity,
     synthesize_c,
@@ -942,15 +943,17 @@ class ControlTrainer:
                 avg_features = features_reshaped.mean(dim=1)
 
                 # Supervise through the SAME controller the browser executes:
-                # OrbitController (May baseline, flags off). The old paths
-                # supervised closed-loop OrbitState / PlayerState momentum —
-                # neither matches runtime physics.
-                c_complex = orbit_controller_sequence(
+                # OrbitController with momentum ON (drag 0.90) — the runtime
+                # enables this refinement for smooth audio-driven motion.
+                # Parity of this mirror vs the Rust momentum path is pinned
+                # by preflight check (e).
+                c_complex = orbit_controller_momentum_sequence(
                     s_target=s_target,
                     alpha=alpha,
                     omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
+                    drag=0.90,
                 )
 
                 spectral_centroid = avg_features[:, 0]
@@ -1082,14 +1085,15 @@ class ControlTrainer:
                 transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
                 loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
 
-                # Legacy path also supervises through OrbitController so both
-                # supervision paths match runtime physics.
-                c_complex = orbit_controller_sequence(
+                # Legacy path also supervises through OrbitController (momentum
+                # ON) so both supervision paths match runtime physics.
+                c_complex = orbit_controller_momentum_sequence(
                     s_target=s_target,
                     alpha=alpha,
                     omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
+                    drag=0.90,
                 )
 
             # Sequence-level terms: smooth off-hit, allow/encourage transitions on hits.

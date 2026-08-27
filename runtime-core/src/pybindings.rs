@@ -190,6 +190,11 @@ impl OrbitController {
         self.inner.momentum = on;
     }
 
+    /// Per-frame velocity retention for momentum (default 0.90).
+    fn set_drag(&mut self, drag: f64) {
+        self.inner.drag = drag;
+    }
+
     fn set_shore_bias(&mut self, on: bool) {
         self.inner.shore_bias = on;
     }
