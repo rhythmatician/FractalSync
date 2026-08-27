@@ -22,6 +22,7 @@ data/cache/
 *.log
 .coverage
 .coverage.*
+logs/
 
 # Copilot's verbose markdown files
 /docs/copilot/*.md
@@ -89,3 +90,6 @@ runtime-core/data/mandelbrot_distance_4096.npy
 runtime-core/data/mandelbrot_distance_8192.bin
 runtime-core/data/mandelbrot_distance_8192.json
 runtime-core/data/mandelbrot_distance_8192.npy
+
+# Audits
+feedback-loop-health.json
