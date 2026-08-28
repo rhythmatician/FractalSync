@@ -58,10 +58,12 @@ interface WasmOrbitController {
   apply_controls(s: number, alpha: number): void;
   set_momentum(on: boolean): void;
   set_drag(drag: number): void;
+  set_thrust(thrust: number): void;
+  set_energy(energy: number): void;
   set_shore_bias(on: boolean): void;
   set_d_star(d_star: number): void;
   set_max_step(max_step: number): void;
-  step(dt: number, bandGates?: Float64Array | null): { real: number; imag: number };
+  step(dt: number, h: number, bandGates?: Float64Array | null): { real: number; imag: number };
 }
 
 interface WasmModule {
@@ -376,7 +378,7 @@ export class OrbitSynthesizer {
       set_d_star?: (d: number) => void;
       set_max_step?: (m: number) => void;
     };
-    if (typeof s.set_shore_bias === 'function') {
+    if (typeof s.set_shore_bias === 'function' && typeof s.set_d_star === 'function' && typeof s.set_max_step === 'function') {
       s.set_shore_bias(on);
       s.set_d_star(dStar);
       s.set_max_step(maxStep);
@@ -384,6 +386,34 @@ export class OrbitSynthesizer {
       s.shore_bias = on;
       s.d_star = dStar;
       s.max_step = maxStep;
+    }
+  }
+
+  /** Audio thrust: sustained loudness builds inertia (tangential acceleration). */
+  setThrust(thrust: number): void {
+    const s = this.state as unknown as {
+      thrust: number;
+      set_thrust?: (v: number) => void;
+    };
+    const clamped = Math.max(0, Math.min(0.2, thrust));
+    if (typeof s.set_thrust === 'function') {
+      s.set_thrust(clamped);
+    } else {
+      s.thrust = clamped;
+    }
+  }
+
+  /** Audio energy in [0,1]: loud audio pulls c toward the Shore (energy servo). */
+  setEnergy(energy: number): void {
+    const s = this.state as unknown as {
+      energy: number;
+      set_energy?: (v: number) => void;
+    };
+    const clamped = Math.max(0, Math.min(1, energy));
+    if (typeof s.set_energy === 'function') {
+      s.set_energy(clamped);
+    } else {
+      s.energy = clamped;
     }
   }
 
@@ -404,15 +434,16 @@ export class OrbitSynthesizer {
   /**
    * Advance the Player by dt and synthesize c(t).
    *
-   * `h` is the transient/hit signal in [0, 1]; near 1 allows crossing the
-   * Shore's contours (used for section changes / onsets).
+   * `h` is the transient/hit signal in [0, 1]; near 1 opens the Shore wall
+   * (boundary crossing becomes easy — the "Skyrim clip"). Used for section
+   * changes / onsets.
    */
-  step(dt: number, bandGates: number[], _h = 0.0): Complex {
+  step(dt: number, bandGates: number[], h = 0.0): Complex {
     const gates = new Float64Array(Math.min(bandGates.length, this.kBands));
     for (let i = 0; i < gates.length; i++) {
       gates[i] = Math.max(0.0, Math.min(1.0, bandGates[i]));
     }
-    const c = this.state.step(dt, gates);
+    const c = this.state.step(dt, Math.max(0.0, Math.min(1.0, h)), gates);
     if (this._prevC) {
       this._lastSpeed = Math.hypot(c.real - this._prevC.real, c.imag - this._prevC.imag);
     }

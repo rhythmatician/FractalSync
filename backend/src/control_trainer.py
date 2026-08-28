@@ -657,7 +657,10 @@ class ControlTrainer:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
 
         n = c_sequence.shape[0]
-        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        # Analytic proximity (differentiable). The minimap S field is a
+        # ridge detector (0 interior / 1 boundary) with zero gradient
+        # inside the set — unusable as a distance axis for losses.
+        proximity = cardioid_proximity(c_sequence)
 
         # mu = 1 - sqrt(1-4c): the cardioid parameterization. Its angle is
         # the position along the boundary — the second perceptual axis.
@@ -837,7 +840,10 @@ class ControlTrainer:
         if c_sequence.shape[0] < 2 or self.anti_dwell_weight <= 0.0:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
 
-        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        # Analytic proximity (differentiable): S field is flat 0 inside the
+        # set, which would zero the anti-dwell scale everywhere c actually
+        # parks.
+        proximity = cardioid_proximity(c_sequence)
         # Local feature scale: floor at a small epsilon so deep-interior points
         # (proximity ~ 0) still demand some minimal motion.
         local_scale = torch.clamp(proximity, min=0.02)
@@ -846,7 +852,7 @@ class ControlTrainer:
         step_ok = torch.ones_like(proximity, dtype=torch.bool)
         if seg.shape[0] > 1:
             step_ok[1:] = seg[1:] == seg[:-1]
-            step_ok[0] = False  # no predecessor for first point
+        step_ok[0] = False  # no predecessor for first point
 
         dc = c_sequence[1:] - c_sequence[:-1]
         displacement = torch.abs(dc)
@@ -898,10 +904,17 @@ class ControlTrainer:
 
         The interesting band is a thin shell hugging the set boundary. We
         penalize proximity outside [zone_min, zone_max] with a smooth hinge.
+
+        IMPORTANT: this uses the ANALYTIC cardioid proximity (differentiable
+        closed form), NOT the minimap S field. S is a ridge detector — 0
+        across the whole interior, ~1 at the boundary — so a zone band built
+        on S has no gradient inside the set (flat 0) and actively PENALIZES
+        the boundary (S≈1 > zone_max). That bug trained the model to park in
+        the gravity valley and never approach the Shore.
         """
         if self.zone_weight <= 0.0:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
-        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        proximity = cardioid_proximity(c_sequence)
         below = torch.relu(self.zone_min - proximity)
         above = torch.relu(proximity - self.zone_max)
         return (below**2 + above**2).mean()
@@ -935,7 +948,9 @@ class ControlTrainer:
         if c_sequence.shape[0] < 2 or self.julia_stability_weight <= 0.0:
             return torch.tensor(0.0, device=self.device, dtype=torch.float32)
 
-        proximity = self._cardioid_proximity_differentiable(c_sequence)
+        # Analytic proximity (differentiable): same flat-S reasoning as
+        # anti-dwell — the perceptual scale must be nonzero in the interior.
+        proximity = cardioid_proximity(c_sequence)
         # Local feature scale: near the boundary J(c) is infinitely detailed,
         # so tiny dc = huge visual change; far away the same dc is invisible.
         local_scale = torch.clamp(proximity, min=0.02)
@@ -1251,11 +1266,42 @@ class ControlTrainer:
                 )
                 avg_features = features_reshaped.mean(dim=1)
 
+                _rms_for_thrust = avg_features[:, 2]
+                thrust_for_c = torch.sigmoid(_rms_for_thrust) * 0.06  # sigmoid so centered norm RMS still orbits
+                # Music push energy (orbit-controller/3): sigmoid of RMS in
+                # [0,1] — drives the uphill push toward the Shore in the
+                # mirror integrator (gravity provides the counterforce).
+                energy_for_c = torch.sigmoid(_rms_for_thrust)
                 # Supervise through the SAME controller the browser executes:
                 # OrbitController with momentum ON (drag 0.90) — the runtime
                 # enables this refinement for smooth audio-driven motion.
                 # Parity of this mirror vs the Rust momentum path is pinned
                 # by preflight check (e).
+                # Domain-randomized initial c per segment (orbit |c|~boundary or |c|~2).
+                _n = s_target.shape[0]
+                _dev = s_target.device
+                _seg = segment_ids.reshape(-1)
+                _uniq = torch.unique(_seg)
+                _starts_re = {}
+                _starts_im = {}
+                for _sid in _uniq.tolist():
+                    if torch.rand((), device=_dev).item() < 0.10:
+                        _ang = torch.rand((), device=_dev).item() * 2 * 3.141592653589793
+                        _r = 1.8 + torch.rand((), device=_dev).item() * 0.4
+                        import math as _math
+                        _starts_re[_sid] = _math.cos(_ang) * _r
+                        _starts_im[_sid] = _math.sin(_ang) * _r
+                    else:
+                        _t = torch.rand((), device=_dev).item() * 2 * 3.141592653589793
+                        import math as _math2
+                        _mu = complex(_math2.cos(_t), _math2.sin(_t))
+                        _cb = _mu * 0.5 - _mu * _mu * 0.25
+                        _j = (torch.rand((), device=_dev).item() - 0.5) * 0.30
+                        _starts_re[_sid] = _cb.real + _j * _mu.real * 0.5
+                        _starts_im[_sid] = _cb.imag + _j * _mu.imag * 0.5
+                _ic_re = torch.tensor([_starts_re[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
+                _ic_im = torch.tensor([_starts_im[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
+                _initial_c = torch.complex(_ic_re, _ic_im)
                 c_complex = orbit_controller_momentum_sequence(
                     s_target=s_target,
                     alpha=alpha,
@@ -1263,6 +1309,9 @@ class ControlTrainer:
                     band_gates=band_gates,
                     segment_ids=segment_ids,
                     drag=0.90,
+                    thrust=thrust_for_c,
+                    initial_c=_initial_c,
+                    energy=energy_for_c,
                 )
 
                 spectral_centroid = avg_features[:, 0]
@@ -1282,7 +1331,10 @@ class ControlTrainer:
 
                 # Loudness ↔ boundary proximity: louder audio should push c
                 # closer to the Mandelbrot boundary (more intricate visuals).
-                proximity = self._cardioid_proximity_differentiable(c_complex)
+                # Analytic proximity: S field is 0 across the interior, so a
+                # correlation against S would be degenerate exactly where c
+                # parks.
+                proximity = cardioid_proximity(c_complex)
                 loudness_distance_loss = self.correlation_loss(-spectral_rms, proximity)
 
                 timbre_color_loss = self._sanitize_scalar(timbre_color_loss)
@@ -1396,6 +1448,8 @@ class ControlTrainer:
 
                 # Legacy path also supervises through OrbitController (momentum
                 # ON) so both supervision paths match runtime physics.
+                # Note: thrust/initial_c domain randomization only in the c-space path;
+                # legacy path uses (0,0) starts and no thrust (rendered supervision is dominant).
                 c_complex = orbit_controller_momentum_sequence(
                     s_target=s_target,
                     alpha=alpha,

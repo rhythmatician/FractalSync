@@ -157,6 +157,13 @@ def shore_proximity(c: torch.Tensor, level: int = 2) -> torch.Tensor:
 
 PLAYER_DRAG = 0.90
 PLAYER_JITTER_AMP = 0.004
+# Gravity valley (orbit-controller/3): restoring acceleration toward the
+# origin. Must match runtime-core controller.rs GRAVITY_ACCEL exactly.
+GRAVITY_ACCEL = 0.01
+# Music push (uphill toward the Shore). Must match minimap.rs
+# MUSIC_PUSH_GAIN. Applied along the analytic cardioid normal in this
+# mirror (the trainer supervises the no-pyramid path).
+MUSIC_PUSH_GAIN = 0.55
 
 
 def player_step_sequence(
@@ -320,19 +327,20 @@ def orbit_controller_momentum_sequence(
     segment_ids: torch.Tensor,
     dt: float = 1.0 / 60.0,
     drag: float = 0.90,
-    thrust: float = 0.0,
+    thrust: float | torch.Tensor = 0.0,
+    initial_c: torch.Tensor | None = None,
+    energy: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Differentiable replay of OrbitController::step with momentum ON.
 
-    Mirrors the Rust momentum path exactly (controller.rs):
+    Mirrors the Rust momentum path exactly (controller.rs, v3):
       theta += omega*dt
       target = mandelbrot_boundary(s, alpha) + residual epicycles
       a = (target - c) * 2*dt          # pull-as-acceleration
-        + thrust * tangent(target - c)  # audio thrust (sustained energy
-                                        # builds inertia; c orbits its
-                                        # target instead of parking on it)
+        - GRAVITY_ACCEL * c            # gravity valley (settle at origin)
+        + thrust * tangent(target - c) # audio thrust (inertia)
       v = v*drag + a
-      c += v*dt
+      c += v*dt + MUSIC_PUSH_GAIN * energy * shore_normal(c)
     c starts at the first frame's boundary point; velocity resets at
     segment boundaries. Fully differentiable w.r.t. s, alpha, band_gates.
 
@@ -381,29 +389,63 @@ def orbit_controller_momentum_sequence(
     v_re = torch.zeros((), device=device, dtype=torch.float32)
     v_im = torch.zeros((), device=device, dtype=torch.float32)
 
-    # Rust: c starts at (0,0) from Default; first step pulls from there.
-    cur_re = torch.zeros((), device=device, dtype=torch.float32)
-    cur_im = torch.zeros((), device=device, dtype=torch.float32)
+    # Rust: c starts at (0,0) Default unless domain-randomized.
+    ic: torch.Tensor | None = None
+    if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.numel() > 0:
+        ic = initial_c
+        if ic.is_complex() and ic.numel() == n:
+            cur_re = ic[0].real.float()
+            cur_im = ic[0].imag.float()
+        elif ic.is_complex():
+            cur_re = ic.real.float().squeeze()
+            cur_im = ic.imag.float().squeeze()
+        else:
+            cur_re = torch.zeros((), device=device, dtype=torch.float32)
+            cur_im = torch.zeros((), device=device, dtype=torch.float32)
+    else:
+        cur_re = torch.zeros((), device=device, dtype=torch.float32)
+        cur_im = torch.zeros((), device=device, dtype=torch.float32)
     accel_gain = 2.0 * dt
 
     for i in range(n):
         if seg_boundary[i]:
             v_re = torch.zeros_like(v_re)
             v_im = torch.zeros_like(v_im)
+            if ic is not None and ic.is_complex() and ic.numel() == n:
+                cur_re = ic[i].real.float()
+                cur_im = ic[i].imag.float()
         dx = tgt_re[i] - cur_re
         dy = tgt_im[i] - cur_im
-        a_re = dx * accel_gain
-        a_im = dy * accel_gain
-        if thrust > 0.0:
-            # Tangential thrust (perpendicular to the pull): sustained
-            # energy keeps c orbiting its target instead of parking on it.
+        a_re = dx * accel_gain - GRAVITY_ACCEL * cur_re
+        a_im = dy * accel_gain - GRAVITY_ACCEL * cur_im
+        thi = thrust[i] if isinstance(thrust, torch.Tensor) and thrust.ndim > 0 else thrust
+        if isinstance(thi, torch.Tensor):
+            thi = float(thi.item())
+        if thi != 0.0 and thi > 0.0:
             d = torch.sqrt(dx * dx + dy * dy + 1e-12)
-            a_re = a_re + thrust * (-dy / d)
-            a_im = a_im + thrust * (dx / d)
+            a_re = a_re + thi * (-dy / d)
+            a_im = a_im + thi * (dx / d)
         v_re = v_re * drag + a_re
         v_im = v_im * drag + a_im
         cur_re = cur_re + v_re * dt
         cur_im = cur_im + v_im * dt
+        # Music push: uphill along the analytic cardioid normal, scaled by
+        # energy. The analytic normal of p(c) = ||mu|-1| points toward the
+        # boundary; computed per-frame with a finite-difference of the
+        # closed form (differentiable through cur via the closed form).
+        if energy is not None:
+            e_i = energy.reshape(-1).float()[i]
+            inner = torch.sqrt((1.0 - 4.0 * cur_re).abs() + 4.0 * cur_im * cur_im + 1e-12)
+            # d(mu)/dc direction: mu = 1 - sqrt(1-4c); the proximity
+            # gradient points along -d|mu|/dc toward the boundary. Use the
+            # analytic direction of the cardioid inward normal: from c
+            # toward the nearest boundary point ~ direction of mu itself.
+            mu_re = 0.5 - (cur_re * 0.5 - cur_re * cur_re * 0.25 + cur_im * cur_im * 0.25) / (inner + 1e-12)
+            mu_im = -(cur_im * 0.5 - cur_re * cur_im * 0.5) / (inner + 1e-12)
+            mu_norm = torch.sqrt(mu_re * mu_re + mu_im * mu_im + 1e-12)
+            push = MUSIC_PUSH_GAIN * e_i * dt
+            cur_re = cur_re + (mu_re / mu_norm) * push
+            cur_im = cur_im + (mu_im / mu_norm) * push
         c_re[i] = cur_re
         c_im[i] = cur_im
 

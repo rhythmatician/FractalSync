@@ -320,6 +320,13 @@ impl PlayerState {
         self.inner.max_step = max_step;
     }
 
+    /// Set the audio energy in [0, 1] (loudness). Raises the servo's
+    /// target shore-proximity: loud audio pulls c toward the Shore.
+    #[wasm_bindgen(setter)]
+    pub fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
     /// Apply model-predicted control signals.
     pub fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
         self.inner.apply_controls(s, alpha, omega_scale);
@@ -481,9 +488,10 @@ pub fn contour_biased_step(
     d_star: f64,
     max_step: f64,
     level: usize,
+    energy: f64,
 ) -> Result<Vec<f64>, JsValue> {
     let (nr, ni) = runtime_core::minimap::contour_biased_step(
-        real, imag, u_real, u_imag, h, d_star, max_step, level,
+        real, imag, u_real, u_imag, h, d_star, max_step, level, energy,
     )?;
     Ok(vec![nr, ni])
 }
@@ -534,6 +542,13 @@ impl OrbitController {
         self.inner.thrust = thrust;
     }
 
+    /// Audio energy in [0, 1]: raises the servo's target shore-proximity
+    /// (loud audio pulls c toward the Shore).
+    #[wasm_bindgen(setter)]
+    pub fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
     /// Refinement 2 toggle: shore bias via minimap contour stepping.
     #[wasm_bindgen(setter)]
     pub fn set_shore_bias(&mut self, on: bool) {
@@ -552,8 +567,9 @@ impl OrbitController {
         self.inner.max_step = max_step;
     }
 
-    /// Advance one frame; returns the new c.
-    pub fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>) -> Complex {
-        self.inner.step(dt, band_gates.as_deref()).into()
+    /// Advance one frame; returns the new c. `h` is the transient signal
+    /// in [0, 1] — near 1 opens the Shore wall for boundary crossing.
+    pub fn step(&mut self, dt: f64, h: f64, band_gates: Option<Vec<f64>>) -> Complex {
+        self.inner.step(dt, band_gates.as_deref(), h).into()
     }
 }

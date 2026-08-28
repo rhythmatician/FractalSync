@@ -53,7 +53,7 @@ fn step_matches_ts_semantics() {
             tim += g * 0.05 * phase.sin();
         }
         ctrl.apply_controls(1.2, 0.4);
-        let c = ctrl.step(dt, Some(&gates));
+        let c = ctrl.step(dt, Some(&gates), 0.0);
         assert!((c.re - tre).abs() < 1e-12 && (c.im - tim).abs() < 1e-12);
     }
 }
@@ -63,9 +63,9 @@ fn audio_drives_position_not_time() {
     // The whole point of the May controller: changing (s, alpha) moves c,
     // regardless of time. Freeze theta by omega=0 and vary controls.
     let mut ctrl = OrbitController::new(1.0, 0.0, 0.0);
-    let c1 = ctrl.step(1.0 / 60.0, None);
+    let c1 = ctrl.step(1.0 / 60.0, None, 0.0);
     ctrl.apply_controls(1.0, 0.5); // opposite side of cardioid
-    let c2 = ctrl.step(1.0 / 60.0, None);
+    let c2 = ctrl.step(1.0 / 60.0, None, 0.0);
     let moved = ((c2.re - c1.re).powi(2) + (c2.im - c1.im).powi(2)).sqrt();
     assert!(moved > 0.1, "controls must move c directly, moved={}", moved);
 }
@@ -90,7 +90,7 @@ fn baseline_unchanged_with_flags_off() {
             tim += g * 0.05 * phase.sin();
         }
         ctrl.apply_controls(1.2, 0.4);
-        let c = ctrl.step(dt, Some(&gates));
+        let c = ctrl.step(dt, Some(&gates), 0.0);
         assert!((c.re - tre).abs() < 1e-12 && (c.im - tim).abs() < 1e-12);
     }
 }
@@ -104,17 +104,17 @@ fn momentum_refinement_smooths_jitter() {
 
     let mut plain = OrbitController::new(1.0, 0.0, 1.0);
     plain.apply_controls(1.0, 0.0);
-    let _ = plain.step(1.0 / 60.0, Some(&gates));
+    let _ = plain.step(1.0 / 60.0, Some(&gates), 0.0);
     plain.apply_controls(1.0, 0.5); // jump to opposite side
-    let cp = plain.step(1.0 / 60.0, Some(&gates));
+    let cp = plain.step(1.0 / 60.0, Some(&gates), 0.0);
 
     let mut smooth = OrbitController::new(1.0, 0.0, 1.0);
     smooth.momentum = true;
     smooth.c = plain.mandelbrot_boundary(); // same start
     smooth.apply_controls(1.0, 0.0);
-    let _ = smooth.step(1.0 / 60.0, Some(&gates));
+    let _ = smooth.step(1.0 / 60.0, Some(&gates), 0.0);
     smooth.apply_controls(1.0, 0.5);
-    let cs = smooth.step(1.0 / 60.0, Some(&gates));
+    let cs = smooth.step(1.0 / 60.0, Some(&gates), 0.0);
 
     let target = plain.mandelbrot_boundary();
     let d_plain = ((cp.re - target.re).powi(2) + (cp.im - target.im).powi(2)).sqrt();
@@ -135,7 +135,7 @@ fn shore_bias_engages_only_with_pyramid() {
     ctrl.shore_bias = true;
     ctrl.c = ctrl.mandelbrot_boundary();
     ctrl.apply_controls(1.0, 0.5);
-    let c = ctrl.step(1.0 / 60.0, None);
+    let c = ctrl.step(1.0 / 60.0, None, 0.0);
     // Should have moved toward the new boundary point (clamped by max_step).
     let moved = ((c.re - ctrl.mandelbrot_boundary().re).abs()
         + (c.im - ctrl.mandelbrot_boundary().im).abs());

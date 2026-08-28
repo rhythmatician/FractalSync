@@ -39,6 +39,18 @@ class MockOrbitController {
   omega: number;
   s: number;
   alpha: number;
+  momentum = false;
+  drag = 0.9;
+  thrust = 0.0;
+  energy = 0.0;
+  shore_bias = false;
+  d_star = 0.5;
+  max_step = 0.05;
+  // Momentum state (used when momentum is on).
+  v_re = 0;
+  v_im = 0;
+  c_re = 0;
+  c_im = 0;
 
   constructor(s: number, alpha: number, omega: number) {
     this.theta = 0.0;
@@ -63,7 +75,7 @@ class MockOrbitController {
     };
   }
 
-  step(dt: number, bandGates?: Float64Array | null) {
+  step(dt: number, h = 0.0, bandGates?: Float64Array | null) {
     this.theta = (this.theta + this.omega * dt) % TWO_PI;
     const base = this.boundary();
     let re = base.re;
@@ -77,7 +89,30 @@ class MockOrbitController {
         im += gate * 0.05 * Math.sin(phase);
       }
     }
-    return { real: re, imag: im };
+    if (!this.momentum && !this.shore_bias) {
+      // Baseline path: c IS the target (bit-identical to May).
+      this.c_re = re;
+      this.c_im = im;
+      return { real: re, imag: im };
+    }
+    // Momentum path: pull toward target is an acceleration.
+    const accelGain = 2.0 * dt;
+    let aRe = (re - this.c_re) * accelGain;
+    let aIm = (im - this.c_im) * accelGain;
+    if (this.thrust > 0) {
+      const dx = re - this.c_re;
+      const dy = im - this.c_im;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1e-9) {
+        aRe += this.thrust * (-dy / d);
+        aIm += this.thrust * (dx / d);
+      }
+    }
+    this.v_re = this.v_re * this.drag + aRe;
+    this.v_im = this.v_im * this.drag + aIm;
+    this.c_re += this.v_re * dt;
+    this.c_im += this.v_im * dt;
+    return { real: this.c_re, imag: this.c_im };
   }
 }
 
@@ -145,6 +180,9 @@ class MockPlayerState {
     const accelGain = Math.max(0.1, Math.min(10.0, this.omega_scale)) * 2.0 * dt;
     let aRe = (target.re - this.c_re) * accelGain;
     let aIm = (target.im - this.c_im) * accelGain;
+    // Gravity valley (orbit-controller/3): restoring pull toward the origin.
+    aRe -= 0.01 * this.c_re;
+    aIm -= 0.01 * this.c_im;
     // Optional residual jitter from band gates (impulse per frame).
     if (bandGates) {
       for (let k = 0; k < bandGates.length; k++) {

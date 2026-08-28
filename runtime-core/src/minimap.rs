@@ -267,16 +267,26 @@ static PYRAMID: Lazy<RwLock<Option<MipPyramid>>> = Lazy::new(|| RwLock::new(None
 
 /// Contour-biased integrator step for Physics (issue #88, Q2).
 ///
-/// Moves c from `(c_re, c_im)` by the proposed delta `(u_re, u_im)`, biased to
-/// follow the Shore's contours:
-/// - The proposed motion is decomposed into tangent (along the contour) and
-///   normal (toward/away from the Shore) components using the slope of the
-///   shore-proximity field at c.
-/// - Tangential motion always passes through; normal motion is suppressed
-///   except during transients (`h` near 1), where crossing contours is
-///   allowed.
-/// - A soft servo pulls the distance toward `d_star`.
-/// - The total step is clamped to `max_step` in world units.
+/// The Map's boundary is a WALL in a third "fractal" dimension: J(c) grows
+/// infinitely volatile as c approaches the Shore, so the same world-space
+/// velocity produces enormous visual change there. Physics models this as a
+/// curved surface that redirects c:
+///
+/// - **Wall (Skyrim clip)**: crossing the Shore (entering/exiting the set)
+///   is possible but must be "clipped through" — normal (cross-boundary)
+///   motion is heavily damped between transients and passes freely during
+///   them (`h` near 1). Not a hard wall: spontaneous crossings happen, but
+///   transients make them systematically easier.
+/// - **Fractal tilt**: near the Shore (high |∇S|) the surface steepens —
+///   normal motion is additionally damped by the local gradient magnitude,
+///   so c appears to slow in the complex plane while its momentum is
+///   "retained" in the fractal dimension (as visual change, not travel).
+/// - **Music push (uphill)**: audio energy pushes c UP the slope, along
+///   the shore normal toward the boundary — like a rider pumping a ramp.
+///   There is no fixed target height: the resting height emerges from the
+///   balance between this push and the controller's gravity (the valley
+///   at the origin). Loud audio holds c near the ridgeline; quiet audio
+///   lets gravity pull it back down into the valley.
 ///
 /// When no pyramid is loaded, falls back to plain clamped motion (the
 /// proposed delta clamped to max_step).
@@ -289,8 +299,10 @@ pub fn contour_biased_step(
     d_star: f64,
     max_step: f64,
     level: usize,
+    energy: f64,
 ) -> Result<(f64, f64), String> {
     let u_mag = (u_re * u_re + u_im * u_im).sqrt();
+    let energy = energy.clamp(0.0, 1.0);
 
     with_pyramid(|pyr| {
         let pyr = match pyr {
@@ -303,18 +315,22 @@ pub fn contour_biased_step(
         };
 
         let c = num_complex::Complex64::new(c_re, c_im);
-        let d = pyr
-            .shore_proximity_at(c, level)
-            .ok_or_else(|| "level out of range".to_string())? as f64;
         let (gx, gy) = pyr
             .slope(c, level)
             .ok_or_else(|| "level out of range".to_string())?;
         let grad_norm = (gx * gx + gy * gy).sqrt();
 
-        // Gradient too small to define a contour: fall back to clamped u.
+        // Gradient too small to define a contour: the map is FLAT here
+        // (deep interior/exterior, where F and S are constant). The minimap
+        // gives no direction, but the analytic cardioid proximity
+        // p = ||mu|-1| (mu = 1 - sqrt(1-4c)) still points at the Shore.
+        // Run the energy servo along that analytic normal so loud audio
+        // draws c toward the boundary even in featureless regions.
         if grad_norm <= 1e-12 {
-            let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
-            return Ok((c_re + u_re * scale, c_im + u_im * scale));
+            let (fr, fi) = cardioid_fallback_step(
+                c_re, c_im, u_re, u_im, h, d_star, max_step, energy,
+            )?;
+            return Ok((fr, fi));
         }
 
         // Normal points toward increasing proximity (away from the Shore);
@@ -327,19 +343,37 @@ pub fn contour_biased_step(
         let proj_t = u_re * tx + u_im * ty;
         let proj_n = u_re * nx + u_im * ny;
 
-        // Between transients, hug the contour; during hits, allow crossing.
-        let normal_scale_no_hit = 0.05_f64;
-        let normal_scale_hit = 1.0_f64;
-        let tangential_scale = 1.0_f64;
-        let normal_scale =
-            normal_scale_no_hit + (normal_scale_hit - normal_scale_no_hit) * h.clamp(0.0, 1.0);
+        // ---- The Wall (Skyrim clip) ----
+        // Between transients the boundary is nearly solid (2% normal
+        // bleed — slow drift across is still possible, so crossings
+        // happen spontaneously); during transients the clip is easy
+        // (full normal motion). This is the physics-level guarantee the
+        // user asked for: crossing difficulty is integral to the engine,
+        // not delegated to the model.
+        let wall_no_hit = 0.02_f64;
+        let wall_hit = 1.0_f64;
+        let h_c = h.clamp(0.0, 1.0);
+        let wall_scale = wall_no_hit + (wall_hit - wall_no_hit) * h_c;
 
-        // Soft servo toward the target distance.
-        let servo_gain = 0.2_f64;
-        let servo = servo_gain * (d_star - d);
+        // ---- Fractal tilt ----
+        // Near the Shore the "surface" steepens: damp normal motion by the
+        // local gradient magnitude so c visually slows as J(c) volatility
+        // rises (momentum is retained in the fractal dimension). The
+        // damping saturates so deep-interior/exterior flat regions are
+        // unaffected. During transients the surface FLATTENS (scaled by
+        // 1-h): clipping through the wall means the tilt relaxes too.
+        let tilt = 1.0 / (1.0 + FRACTAL_TILT_GAIN * grad_norm * (1.0 - h_c));
 
-        let mut dx = tx * (proj_t * tangential_scale) + nx * (proj_n * normal_scale + servo);
-        let mut dy = ty * (proj_t * tangential_scale) + ny * (proj_n * normal_scale + servo);
+        // ---- Music push (uphill) ----
+        // Audio energy pushes c UP the slope along the shore normal
+        // (toward the boundary). This is a FORCE, not a target: the
+        // resting height comes from the balance against the controller's
+        // gravity. Loud audio → strong push → c rides the ridgeline;
+        // silence → no push → gravity drains c back into the valley.
+        let push = MUSIC_PUSH_GAIN * energy;
+
+        let mut dx = tx * proj_t + nx * (proj_n * wall_scale * tilt + push);
+        let mut dy = ty * proj_t + ny * (proj_n * wall_scale * tilt + push);
 
         let mag = (dx * dx + dy * dy).sqrt();
         if mag > max_step && mag > 0.0 {
@@ -350,6 +384,80 @@ pub fn contour_biased_step(
 
         Ok((c_re + dx, c_im + dy))
     })
+}
+
+/// How strongly the local gradient magnitude (J(c) volatility) damps
+/// normal (cross-Shore) motion. Higher = c slows more near the boundary.
+pub const FRACTAL_TILT_GAIN: f64 = 2.5;
+
+/// How hard audio energy pushes c UP the slope (toward the Shore), per
+/// frame at energy = 1. This is a force, not a target height: the resting
+/// proximity emerges from the balance against the controller's gravity
+/// (GRAVITY_ACCEL). Rough equilibrium: push ≈ gravity·|c| ⇒ |c| ≈ 0.55/0.01
+/// would be far outside the map, so in practice the wall + tilt cap the
+/// climb and loud audio pins c against the ridgeline.
+pub const MUSIC_PUSH_GAIN: f64 = 0.55;
+
+/// Servo gain for the analytic-cardioid fallback (flat-map regions).
+pub const CARDIOID_FALLBACK_SERVO_GAIN: f64 = 0.05;
+
+/// Step for flat-map regions (minimap gradient ~ 0): plain clamped motion
+/// plus an energy servo along the ANALYTIC cardioid normal.
+///
+/// The cardioid proximity p(c) = ||mu| - 1| with mu = 1 - sqrt(1-4c) is
+/// smooth everywhere off the real-axis branch cut and its gradient points
+/// toward the boundary. When energy raises the effective target above the
+/// current proximity, c is pulled shoreward even where the baked map is
+/// featureless — this is what lets c escape the cardioid interior.
+fn cardioid_fallback_step(
+    c_re: f64,
+    c_im: f64,
+    u_re: f64,
+    u_im: f64,
+    _h: f64,
+    _d_star: f64,
+    max_step: f64,
+    energy: f64,
+) -> Result<(f64, f64), String> {
+    // Analytic gradient of p(c) = ||mu| - 1|, mu = 1 - sqrt(1-4c).
+    // Computed with central differences on the analytic formula (cheap,
+    // exact enough for a direction).
+    let p = |re: f64, im: f64| -> f64 {
+        let cc = num_complex::Complex64::new(re, im);
+        let inner = (1.0 - 4.0 * cc).sqrt();
+        let mu = num_complex::Complex64::new(1.0, 0.0) - inner;
+        (mu.norm() - 1.0).abs()
+    };
+    let eps = 1e-4_f64;
+    let gx = (p(c_re + eps, c_im) - p(c_re - eps, c_im)) / (2.0 * eps);
+    let gy = (p(c_re, c_im + eps) - p(c_re, c_im - eps)) / (2.0 * eps);
+    let gnorm = (gx * gx + gy * gy).sqrt();
+
+    let u_mag = (u_re * u_re + u_im * u_im).sqrt();
+    let scale = if u_mag > max_step { max_step / u_mag } else { 1.0 };
+    let mut dx = u_re * scale;
+    let mut dy = u_im * scale;
+
+    if gnorm > 1e-12 {
+        // Uphill push along the analytic normal, proportional to energy.
+        // Same force model as the pyramid path: no target height, the
+        // resting height emerges from the balance against gravity.
+        // NOTE THE SIGN: p(c) = ||mu|-1| DECREASES toward the boundary, so
+        // the boundary direction is -∇p. The gradient points away from the
+        // Shore; we must DESCEND it. (Getting this wrong shoves c into the
+        // valley — the exact opposite of the music push.)
+        let push = MUSIC_PUSH_GAIN * energy;
+        dx -= gx / gnorm * push;
+        dy -= gy / gnorm * push;
+        let mag = (dx * dx + dy * dy).sqrt();
+        if mag > max_step && mag > 0.0 {
+            let s = max_step / mag;
+            dx *= s;
+            dy *= s;
+        }
+    }
+
+    Ok((c_re + dx, c_im + dy))
 }
 
 /// Install the process-wide pyramid (used by bindings and tests).

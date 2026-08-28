@@ -161,8 +161,10 @@ def collect_c_traces(
 ) -> Dict[str, np.ndarray]:
     """Run the model over each training file and record its c(t) path.
 
-    Uses the same momentum-mode controller replay the trainer supervises
-    through, so the plot shows exactly the physics the runtime executes.
+    Replays through the CANONICAL Rust OrbitController (momentum + shore
+    bias) with the mip pyramid loaded, so the plot shows exactly the physics
+    the browser executes — including the Shore wall (transient-gated
+    boundary crossing), the fractal tilt, and the energy servo.
 
     Args:
         model: the trained AudioToControlModel (eval mode expected).
@@ -176,11 +178,21 @@ def collect_c_traces(
     """
     import torch
 
-    from .cspace_proxies import orbit_controller_momentum_sequence
+    import runtime_core
+
+    from .control_trainer import _ensure_mip_pyramid_loaded
 
     was_training = model.training
     model.eval()
     traces: Dict[str, np.ndarray] = {}
+
+    # Load the Map so the wall/tilt/energy physics is active in the replay.
+    pyramid_loaded = _ensure_mip_pyramid_loaded()
+    if not pyramid_loaded:
+        logger.warning(
+            "c-trace: mip pyramid unavailable — replaying without the "
+            "Shore wall (picture will not show boundary physics)"
+        )
 
     with torch.no_grad():
         for idx, audio_file in enumerate(dataset_files):
@@ -208,17 +220,58 @@ def collect_c_traces(
             out = model(x)
             parsed = model.parse_output(out)
             n = x.shape[0]
-            seg = torch.zeros(n, dtype=torch.int64)
+            # Audio energy + transient signals (same features the runtime uses).
+            feat2 = x.view(n, -1, 6) if x.shape[1] % 6 == 0 else x.view(n, -1, 1)
+            _rms_ct = feat2[:, :, 2].mean(dim=1) if feat2.shape[2] >= 3 else torch.zeros(n, device=x.device)
+            _onset_ct = feat2[:, :, 4].mean(dim=1) if feat2.shape[2] >= 5 else torch.zeros(n, device=x.device)
+            energy_ct = torch.sigmoid(_rms_ct)          # [0,1] loudness
+            thrust_ct = energy_ct * 0.06                 # tangential inertia
+            h_ct = torch.clamp(_onset_ct, 0.0, 1.0)      # transient gate
 
-            c = orbit_controller_momentum_sequence(
-                s_target=parsed["s_target"],
-                alpha=parsed["alpha"],
-                omega=1.0,
-                band_gates=parsed["band_gates"],
-                segment_ids=seg,
-                drag=0.90,
+            # Domain-randomized start (90%: boundary, 10%: dust) seeded per file.
+            _seed = abs(hash(audio_file.stem)) % (1 << 31)
+            _g = torch.Generator(device=parsed["s_target"].device)
+            _g.manual_seed(_seed)
+            _is_dust = torch.rand((), generator=_g).item() < 0.10
+            if _is_dust:
+                _ang = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
+                _r = 1.8 + torch.rand((), generator=_g).item() * 0.4
+                import math as _m3
+                _ic_re = _m3.cos(_ang) * _r
+                _ic_im = _m3.sin(_ang) * _r
+            else:
+                _t = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
+                _mu = complex(__import__("math").cos(_t), __import__("math").sin(_t))
+                _cb = _mu * 0.5 - _mu * _mu * 0.25
+                _j = (torch.rand((), generator=_g).item() - 0.5) * 0.30
+                _ic_re = _cb.real + _j * _mu.real * 0.5
+                _ic_im = _cb.imag + _j * _mu.imag * 0.5
+
+            # Replay through the canonical Rust controller (momentum + shore
+            # bias + energy). This is the same code path the browser runs.
+            ctrl = runtime_core.OrbitController(
+                float(parsed["s_target"][0]), float(parsed["alpha"][0]), 1.0
             )
-            traces[audio_file.stem] = c.detach().cpu().numpy()
+            ctrl.set_momentum(True)
+            ctrl.set_drag(0.90)
+            ctrl.set_thrust(float(thrust_ct[0]))
+            ctrl.set_energy(float(energy_ct[0]))
+            ctrl.set_shore_bias(pyramid_loaded)
+            ctrl.set_d_star(0.5)
+            ctrl.set_max_step(0.05)
+            ctrl.set_c(float(_ic_re), float(_ic_im))
+            c_list: list[complex] = []
+            for i in range(n):
+                if i > 0:
+                    ctrl.apply_controls(
+                        float(parsed["s_target"][i]), float(parsed["alpha"][i])
+                    )
+                    ctrl.set_thrust(float(thrust_ct[i]))
+                    ctrl.set_energy(float(energy_ct[i]))
+                gates = [float(g) for g in parsed["band_gates"][i]]
+                re, im = ctrl.step(1.0 / 60.0, gates, float(h_ct[i]))
+                c_list.append(complex(re, im))
+            traces[audio_file.stem] = np.asarray(c_list, dtype=np.complex128)
 
     if was_training:
         model.train()

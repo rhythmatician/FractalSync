@@ -1,7 +1,7 @@
 {
   "generator": "runtime_core 0.1.0",
   "authority": "docs/adr/0001-rust-first-parity.md",
-  "controller_version": "orbit-controller/1",
+  "controller_version": "orbit-controller/3",
   "feature_version": "features/2",
   "carrier_cases": [
     {
@@ -2506,8 +2506,8 @@
         0.95,
         0.95
       ],
-      "c_re": -0.16500930367076883,
-      "c_im": 0.5866393507799665
+      "c_re": -0.1535559232878178,
+      "c_im": 0.5461516931268875
     },
     {
       "s0": 2.7,
@@ -3127,8 +3127,8 @@
         0.95,
         0.95
       ],
-      "c_re": -0.14411382676205028,
-      "c_im": 0.6051893030137734
+      "c_re": -0.13260080207723227,
+      "c_im": 0.5635644790323628
     }
   ],
   "proximity_cases": [

@@ -29,7 +29,7 @@ fn linear_pyramid() -> MipPyramid {
 fn no_pyramid_falls_back_to_clamped_motion() {
     runtime_core::minimap::clear_pyramid();
     // Huge proposed delta must be clamped to max_step.
-    let (x, y) = contour_biased_step(0.0, 0.0, 10.0, 0.0, 0.0, 0.5, 0.01, 2)
+    let (x, y) = contour_biased_step(0.0, 0.0, 10.0, 0.0, 0.0, 0.5, 0.01, 2, 0.0)
         .expect("step with no pyramid");
     let dx = x - 0.0;
     assert!((dx - 0.01).abs() < 1e-9, "expected clamped step, got {}", dx);
@@ -41,7 +41,7 @@ fn tangential_motion_passes_through() {
     // Contours run along Im (gradient is along Re). Moving purely along Im
     // is tangential: it should pass through nearly unmodified.
     // d_star = current proximity (~0.1667 at re=-0.5) so the servo is neutral.
-    let (x, y) = contour_biased_step(-0.5, 0.0, 0.0, 0.01, 0.0, 32.0 / 63.0, 1.0, 0)
+    let (x, y) = contour_biased_step(-0.5, 0.0, 0.0, 0.01, 0.0, 32.0 / 63.0, 1.0, 0, 0.0)
         .expect("tangential step");
     assert!((x - (-0.5)).abs() < 1e-3, "re should not change much");
     assert!((y - 0.01).abs() < 1e-3, "im should pass through, got {}", y);
@@ -52,9 +52,9 @@ fn tangential_motion_passes_through() {
 fn normal_motion_suppressed_between_hits() {
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     // Motion purely along the gradient (+Re) is normal to the contour.
-    // With h=0 (no transient), normal motion is suppressed to 5%.
+    // With h=0 (no transient), normal motion is suppressed to 2% (the wall).
     // d_star = current proximity so the servo is neutral.
-    let (x, y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 0.0, 32.0 / 63.0, 1.0, 0)
+    let (x, y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 0.0, 32.0 / 63.0, 1.0, 0, 0.0)
         .expect("normal step");
     let dx = x - (-0.5);
     assert!(
@@ -68,9 +68,9 @@ fn normal_motion_suppressed_between_hits() {
 #[test]
 fn normal_motion_allowed_during_hits() {
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
-    // With h=1 (full transient), normal motion passes through.
+    // With h=1 (full transient), the wall opens: normal motion passes through.
     // d_star = current proximity so the servo is neutral.
-    let (x, _y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 1.0, 32.0 / 63.0, 1.0, 0)
+    let (x, _y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 1.0, 32.0 / 63.0, 1.0, 0, 0.0)
         .expect("hit step");
     let dx = x - (-0.5);
     assert!(
@@ -82,23 +82,24 @@ fn normal_motion_allowed_during_hits() {
 }
 
 #[test]
-fn servo_pulls_toward_target_distance() {
+fn music_push_moves_uphill() {
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
-    // At c_re=-0.5, proximity ~0.1667. With d_star=0.8, the servo pulls c
-    // toward +Re even with zero proposed motion.
-    let (x0, _) = contour_biased_step(-0.5, 0.0, 0.0, 0.0, 0.0, 0.8, 1.0, 0)
-        .expect("servo step");
-    let (x1, _) = contour_biased_step(-0.5, 0.0, 0.0, 0.0, 0.0, 0.1, 1.0, 0)
-        .expect("servo step down");
+    // Zero proposed motion, zero energy: no push, c does not move.
+    let (x_quiet, _) = contour_biased_step(-0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 0, 0.0)
+        .expect("quiet step");
+    // Full energy: the music push drives c UP the slope (toward higher
+    // proximity = +Re in this fixture).
+    let (x_loud, _) = contour_biased_step(-0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 0, 1.0)
+        .expect("loud step");
     assert!(
-        x0 > -0.5,
-        "servo toward high d_star should move +Re, got {}",
-        x0
+        (x_quiet - (-0.5)).abs() < 1e-9,
+        "no energy = no push, got {}",
+        x_quiet
     );
     assert!(
-        x1 < -0.5,
-        "servo toward low d_star should move -Re, got {}",
-        x1
+        x_loud > -0.5,
+        "energy must push c uphill (toward the Shore), got {}",
+        x_loud
     );
     runtime_core::minimap::clear_pyramid();
 }
@@ -106,7 +107,7 @@ fn servo_pulls_toward_target_distance() {
 #[test]
 fn max_step_clamps_total_motion() {
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
-    let (x, y) = contour_biased_step(0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.02, 0)
+    let (x, y) = contour_biased_step(0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.02, 0, 0.0)
         .expect("clamped step");
     let dist = (x * x + y * y).sqrt();
     assert!(

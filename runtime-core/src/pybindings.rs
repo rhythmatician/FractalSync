@@ -144,6 +144,12 @@ impl PlayerState {
         self.inner.max_step = max_step;
     }
 
+    /// Set the audio energy in [0, 1] (loudness). Raises the servo's
+    /// target shore-proximity: loud audio pulls c toward the Shore.
+    fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
     /// Advance by dt; returns (re, im). `h` in [0,1] allows contour crossing
     /// during transients. Band gates optional.
     #[pyo3(signature = (dt, h, band_gates=None))]
@@ -200,13 +206,41 @@ impl OrbitController {
         self.inner.thrust = thrust;
     }
 
+    /// Audio energy in [0, 1]: raises the servo's target shore-proximity
+    /// (loud audio pulls c toward the Shore).
+    fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
     fn set_shore_bias(&mut self, on: bool) {
         self.inner.shore_bias = on;
     }
 
-    /// Advance one frame; returns (re, im).
-    fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>) -> (f64, f64) {
-        let c = self.inner.step(dt, band_gates.as_deref());
+    /// Target shore-proximity for the shore-bias servo.
+    fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Max world-space step per frame for shore bias.
+    fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
+    /// Mip level for the contour step.
+    fn set_level(&mut self, level: usize) {
+        self.inner.level = level;
+    }
+
+    /// Set the persistent c position (momentum/shore-bias paths).
+    fn set_c(&mut self, re: f64, im: f64) {
+        self.inner.c = num_complex::Complex64::new(re, im);
+    }
+
+    /// Advance one frame; returns (re, im). `h` is the transient signal
+    /// in [0, 1] — near 1 opens the Shore wall for boundary crossing.
+    #[pyo3(signature = (dt, band_gates=None, h=0.0))]
+    fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>, h: f64) -> (f64, f64) {
+        let c = self.inner.step(dt, band_gates.as_deref(), h);
         (c.re, c.im)
     }
 }
@@ -522,6 +556,7 @@ fn minimap_shore_proximity_batch_py(
 
 /// Contour-biased integrator step for Physics. Returns (new_re, new_im).
 #[pyfunction]
+#[pyo3(signature = (c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy=0.0))]
 fn contour_biased_step_py(
     c_re: f64,
     c_im: f64,
@@ -531,8 +566,9 @@ fn contour_biased_step_py(
     d_star: f64,
     max_step: f64,
     level: usize,
+    energy: f64,
 ) -> PyResult<(f64, f64)> {
-    crate::minimap::contour_biased_step(c_re, c_im, u_re, u_im, h, d_star, max_step, level)
+    crate::minimap::contour_biased_step(c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy)
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 

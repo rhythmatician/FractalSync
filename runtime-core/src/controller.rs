@@ -35,7 +35,27 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 /// and updating the trainer mirror. Version history:
 ///   1 - May baseline restored (mandelbrotBoundary + harmonic epicycles),
 ///       with momentum/shore_bias as opt-in flags (default off).
-pub const CONTROLLER_VERSION: &str = "orbit-controller/1";
+///   2 - Shore-wall physics: contour_biased_step gains the Skyrim wall
+///       (transient-gated boundary crossing), fractal tilt (gradient-damped
+///       normal motion near the Shore), and the energy servo (loud audio
+///       pulls c toward the Shore). step() signatures gain an `energy`
+///       argument; shore-bias paths now receive the real transient signal
+///       `h` instead of a hardcoded 0.0.
+///   3 - Gravity valley: the momentum integrators gain a constant restoring
+///       acceleration toward the valley floor at the origin (Physics runs
+///       always; quiet audio lets c settle into the valley). The energy
+///       servo becomes a pure uphill PUSH along the shore normal — the
+///       resting height now emerges from the gravity/push force balance
+///       (∝ energy) instead of a fixed d_star target.
+pub const CONTROLLER_VERSION: &str = "orbit-controller/3";
+
+/// Gravity: restoring acceleration toward the valley floor at the origin,
+/// per frame at |c| = 1. The Map is a landscape — the Shore ridges are
+/// HIGH, the interior valley at the lobe center is LOW. Without external
+/// forces c settles into the valley (domain contract: Physics runs always;
+/// Inside → settle toward lobe center). Audio energy provides the uphill
+/// push (see minimap::MUSIC_PUSH_GAIN); gravity is its constant counterforce.
+pub const GRAVITY_ACCEL: f64 = 0.01;
 
 /// Parameters controlling the residual epicycle sums.  These values
 /// determine the number of residuals and the cap on their combined
@@ -268,6 +288,10 @@ pub struct PlayerState {
     pub d_star: f64,
     /// Maximum world-space step per frame.
     pub max_step: f64,
+    /// Audio energy in [0, 1] (loudness). Raises the effective target
+    /// shore-proximity: loud audio pulls c toward the Shore (domain
+    /// contract: Energy governs distance from The Shore).
+    pub energy: f64,
 }
 
 impl Default for PlayerState {
@@ -284,6 +308,7 @@ impl Default for PlayerState {
             level: 0,
             d_star: 0.5,
             max_step: 0.05,
+            energy: 0.0,
         }
     }
 }
@@ -348,6 +373,12 @@ impl PlayerState {
         let mut a_re = (target.re - self.c.re) * accel_gain;
         let mut a_im = (target.im - self.c.im) * accel_gain;
 
+        // Gravity: the valley. Constant restoring pull toward the origin —
+        // the physics default that c falls back into when the music goes
+        // quiet and the player stops pushing uphill.
+        a_re -= GRAVITY_ACCEL * self.c.re;
+        a_im -= GRAVITY_ACCEL * self.c.im;
+
         // Optional residual jitter from the band gates (impulse per frame).
         if let Some(gates) = band_gates {
             for (k, &g) in gates.iter().enumerate() {
@@ -364,7 +395,9 @@ impl PlayerState {
         let proposed_re = self.velocity.re * dt;
         let proposed_im = self.velocity.im * dt;
 
-        // Bias the proposed motion along the Shore's contours.
+        // Bias the proposed motion along the Shore's contours. `h` gates
+        // the wall (transients make boundary crossing easy) and `energy`
+        // raises the servo's target proximity (loud → near Shore).
         let (nr, ni) = crate::minimap::contour_biased_step(
             self.c.re,
             self.c.im,
@@ -374,6 +407,7 @@ impl PlayerState {
             self.d_star,
             self.max_step,
             self.level,
+            self.energy,
         )
         .unwrap_or((self.c.re + proposed_re, self.c.im + proposed_im));
 
@@ -439,6 +473,10 @@ pub struct OrbitController {
     pub max_step: f64,
     /// Mip level for refinement 2.
     pub level: usize,
+    /// Audio energy in [0, 1] (loudness). Raises the effective target
+    /// shore-proximity: loud audio pulls c toward the Shore (domain
+    /// contract: Energy governs distance from The Shore).
+    pub energy: f64,
 }
 
 impl Default for OrbitController {
@@ -457,6 +495,7 @@ impl Default for OrbitController {
             d_star: 0.5,
             max_step: 0.05,
             level: 0,
+            energy: 0.0,
         }
     }
 }
@@ -496,6 +535,8 @@ impl OrbitController {
     ///
     /// * `dt` – frame time in seconds.
     /// * `band_gates` – per-band residual gates in [0, 1].
+    /// * `h` – transient/hit signal in [0, 1]; near 1 opens the Shore wall
+    ///   (boundary crossing becomes easy). Only used on refinement paths.
     ///
     /// Returns the new c. Residuals are harmonic epicycles at freq (k+2)
     /// times the wobble phase, amplitude 0.05*gate — identical to the TS.
@@ -504,7 +545,12 @@ impl OrbitController {
     /// to the May TS controller. Each flag layers ONE PlayerState idea:
     ///   momentum   -> c is persistent state; boundary point attracts
     ///   shore_bias -> motion routed through minimap contour biasing
-    pub fn step(&mut self, dt: f64, band_gates: Option<&[f64]>) -> num_complex::Complex64 {
+    pub fn step(
+        &mut self,
+        dt: f64,
+        band_gates: Option<&[f64]>,
+        h: f64,
+    ) -> num_complex::Complex64 {
         // Update wobble phase (unchanged by refinements).
         self.theta = (self.theta + self.omega * dt) % (2.0 * std::f64::consts::PI);
 
@@ -534,13 +580,19 @@ impl OrbitController {
             // Shore bias only: move from current c toward the target,
             // biased along contours. No velocity state.
             let proposed = target - self.c;
-            return self.apply_shore_bias(proposed.re, proposed.im, 0.0);
+            return self.apply_shore_bias(proposed.re, proposed.im, h);
         }
 
         // Momentum path: pull toward the target is an acceleration.
         let accel_gain = 2.0 * dt;
         let mut a_re = (target.re - self.c.re) * accel_gain;
         let mut a_im = (target.im - self.c.im) * accel_gain;
+
+        // Gravity: the valley. Constant restoring pull toward the origin —
+        // the physics default that c falls back into when the music goes
+        // quiet and the player stops pushing uphill.
+        a_re -= GRAVITY_ACCEL * self.c.re;
+        a_im -= GRAVITY_ACCEL * self.c.im;
 
         // Audio thrust: sustained volume builds inertia. The thrust is
         // TANGENTIAL to the vector from c to the target — perpendicular
@@ -568,7 +620,7 @@ impl OrbitController {
         let v_dt = self.velocity.scale(dt);
 
         if self.shore_bias {
-            self.apply_shore_bias(v_dt.re, v_dt.im, 0.0)
+            self.apply_shore_bias(v_dt.re, v_dt.im, h)
         } else {
             self.c = self.c + v_dt;
             self.c
@@ -592,6 +644,7 @@ impl OrbitController {
             self.d_star,
             self.max_step,
             self.level,
+            self.energy,
         )
         .unwrap_or((self.c.re + du_re, self.c.im + du_im));
         self.c = num_complex::Complex64::new(nr, ni);

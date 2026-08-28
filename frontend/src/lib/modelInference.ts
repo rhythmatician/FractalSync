@@ -319,15 +319,28 @@ export class ModelInference {
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
 
-      // Synthesize Julia parameter c(t) from the Player c-space integrator.
-      // `h` is the onset/transient signal: near 1 allows crossing the Shore's
-      // contours (section changes), otherwise the Player hugs the contour.
+      // Synthesize Julia parameter c(t) from Player c-space integrator.
+      // `h` onset/transient signal: near 1 OPENS THE SHORE WALL — boundary
+      // crossing (the "Skyrim clip") becomes easy during transients.
       const dt = 1.0 / 60.0; // Assume 60 FPS
       const h = Math.max(0.0, Math.min(1.0, avgOnset));
+      // Audio energy: sigmoid of normalized RMS in [0,1]. Drives two
+      // physics channels: (1) tangential thrust (sustained loudness builds
+      // inertia), (2) the energy servo (loud audio pulls c toward the
+      // Shore — contract: Energy governs distance from The Shore).
+      const energy = 1 / (1 + Math.exp(-avgRMS));
+      const thrust = energy * 0.06;
+      const synthAny = this.orbitSynthesizer as unknown as {
+        setThrust?: (v: number) => void;
+        setEnergy?: (v: number) => void;
+        thrust?: number;
+      };
+      if (typeof synthAny.setThrust === 'function') synthAny.setThrust(thrust);
+      else if ('thrust' in synthAny) (synthAny as unknown as { thrust: number }).thrust = thrust;
+      if (typeof synthAny.setEnergy === 'function') synthAny.setEnergy(energy);
       const c = this.orbitSynthesizer.step(dt, controlSignals.bandGates, h);
-
       console.log(
-        `📍 c = (${c.real.toFixed(4)}, ${c.imag.toFixed(4)}) | speed=${this.orbitSynthesizer.speed.toFixed(5)} | h=${h.toFixed(3)}`
+        `(${c.real.toFixed(4)}, ${c.imag.toFixed(4)}) speed=${this.orbitSynthesizer.speed.toFixed(5)} h=${h.toFixed(3)} energy=${energy.toFixed(3)} thrust=${thrust.toFixed(4)}`
       );
 
       // Map to visual parameters
