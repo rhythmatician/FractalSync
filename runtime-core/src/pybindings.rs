@@ -493,6 +493,44 @@ fn load_mip_pyramid_py(
     Ok((n, re_min, re_max, im_min, im_max))
 }
 
+/// Install a synthetic mip pyramid for parity tests and local debugging.
+///
+/// Each level plane is `widths[i] * heights[i]` floats (row-major). The same
+/// planes populate both the F (escape) and S (shore-proximity) fields of the
+/// pyramid; tests that need a separable field should call
+/// [`runtime_core.minimap_set_escape_field`] afterwards. Returns the
+/// number of levels installed.
+#[pyfunction]
+fn install_pyramid_py(
+    levels_data: Vec<Vec<f32>>,
+    widths: Vec<usize>,
+    heights: Vec<usize>,
+    re_min: f64,
+    re_max: f64,
+    im_min: f64,
+    im_max: f64,
+) -> PyResult<usize> {
+    let pyr = crate::minimap::MipPyramid::from_levels(
+        levels_data,
+        widths,
+        heights,
+        re_min,
+        re_max,
+        im_min,
+        im_max,
+    )
+    .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let n = pyr.num_levels();
+    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(n)
+}
+
+/// Clear the process-wide pyramid (test helper).
+#[pyfunction]
+fn clear_pyramid_py() {
+    crate::minimap::clear_pyramid();
+}
+
 /// The Player's full observation at c: 4×81 greys + 8 slope values = 332.
 #[pyfunction]
 fn player_observation_py(py: Python, c_re: f64, c_im: f64) -> PyResult<Vec<f32>> {
@@ -922,6 +960,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
     // Minimap / mip pyramid (the Player's windows onto the Map)
     m.add_function(wrap_pyfunction!(load_mip_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(install_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_pyramid_py, m)?)?;
     m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
     m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;

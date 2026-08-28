@@ -21,6 +21,7 @@ from .control_model import AudioToControlModel
 from .cspace_proxies import (
     cardioid_proximity,
     orbit_controller_momentum_sequence,
+    orbit_controller_oracle_sequence,
     shore_proximity,
     synthesize_c,
 )
@@ -1272,11 +1273,27 @@ class ControlTrainer:
                 # [0,1] — drives the uphill push toward the Shore in the
                 # mirror integrator (gravity provides the counterforce).
                 energy_for_c = torch.sigmoid(_rms_for_thrust)
+                # Transient (hit) signal for the shore wall. Same
+                # half-flux-half-onset proxy used by sequence losses, then
+                # normalized to [0,1] so the Rust wall gating sees a
+                # well-scaled h. Loud attacks open the wall (boundary
+                # crossing becomes easy); quiet frames hold c inside.
+                _flux = avg_features[:, 1]
+                _onset = avg_features[:, 4]
+                _hit_raw = 0.5 * _flux + 0.5 * _onset
+                _hit_min = float(_hit_raw.min().item())
+                _hit_max = float(_hit_raw.max().item())
+                if _hit_max - _hit_min > 1e-8:
+                    h_for_c = (_hit_raw - _hit_min) / (_hit_max - _hit_min)
+                else:
+                    h_for_c = torch.zeros_like(_hit_raw)
                 # Supervise through the SAME controller the browser executes:
-                # OrbitController with momentum ON (drag 0.90) — the runtime
-                # enables this refinement for smooth audio-driven motion.
-                # Parity of this mirror vs the Rust momentum path is pinned
-                # by preflight check (e).
+                # OrbitController with momentum + shore_bias ON (drag 0.90) —
+                # the runtime enables these refinements for smooth audio-
+                # driven motion that hugs the Shore. The forward simulation
+                # uses the Rust-oracle path so the model is trained on the
+                # exact physics the browser runs; parity is pinned by
+                # preflight checks (e) and (e4).
                 # Domain-randomized initial c per segment (orbit |c|~boundary or |c|~2).
                 _n = s_target.shape[0]
                 _dev = s_target.device
@@ -1302,7 +1319,12 @@ class ControlTrainer:
                 _ic_re = torch.tensor([_starts_re[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
                 _ic_im = torch.tensor([_starts_im[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
                 _initial_c = torch.complex(_ic_re, _ic_im)
-                c_complex = orbit_controller_momentum_sequence(
+                # Forward simulation routes through the Rust contour step
+                # (orbit_controller_oracle_sequence) so the trainer
+                # supervises EXACTLY the physics the browser executes.
+                # The integrator remains differentiable; only the
+                # contour step is non-grad (PyO3 boundary).
+                c_complex = orbit_controller_oracle_sequence(
                     s_target=s_target,
                     alpha=alpha,
                     omega=1.0,
@@ -1312,6 +1334,10 @@ class ControlTrainer:
                     thrust=thrust_for_c,
                     initial_c=_initial_c,
                     energy=energy_for_c,
+                    h=h_for_c,
+                    level=0,
+                    d_star=0.5,
+                    max_step=0.05,
                 )
 
                 spectral_centroid = avg_features[:, 0]
@@ -1450,7 +1476,10 @@ class ControlTrainer:
                 # ON) so both supervision paths match runtime physics.
                 # Note: thrust/initial_c domain randomization only in the c-space path;
                 # legacy path uses (0,0) starts and no thrust (rendered supervision is dominant).
-                c_complex = orbit_controller_momentum_sequence(
+                # The oracle forward keeps the legacy supervision consistent
+                # with the browser physics even though this path's primary
+                # signal is the rendered image loss.
+                c_complex = orbit_controller_oracle_sequence(
                     s_target=s_target,
                     alpha=alpha,
                     omega=1.0,

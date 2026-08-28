@@ -75,7 +75,7 @@ class MockOrbitController {
     };
   }
 
-  step(dt: number, h = 0.0, bandGates?: Float64Array | null) {
+  step(dt: number, _h = 0.0, bandGates?: Float64Array | null) {
     this.theta = (this.theta + this.omega * dt) % TWO_PI;
     const base = this.boundary();
     let re = base.re;

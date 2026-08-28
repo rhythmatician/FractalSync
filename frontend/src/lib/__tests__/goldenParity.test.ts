@@ -76,7 +76,7 @@ describe('Golden-vector parity (TS mock vs Rust canonical)', () => {
     for (const alpha of [0.0, 0.25, 0.5, 0.75, 1.0]) {
       for (const s of [0.5, 1.0, 1.5]) {
         const ctrl = new mock.OrbitController(s, alpha, 1.0);
-        const c = ctrl.step(1 / 60, null);
+        const c = ctrl.step(1 / 60, 0, null);
         const theta = 2 * Math.PI * alpha;
         const r = 0.25 * (1 - Math.cos(theta));
         const scale = Math.min(Math.max(0.01, Math.min(3.0, s)), 1.5);

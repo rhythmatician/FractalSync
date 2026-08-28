@@ -61,5 +61,27 @@ class TestPreflightChecks:
         assert all_ok
         statuses = {name: status for name, status, _ in results}
         for name, _, _ in results:
-            if name.startswith(("a)", "b)", "c)")):
+            if name.startswith(("a)", "b)", "c)", "e)", "e3)", "e4)")):
                 assert statuses[name] == "PASS", f"{name} did not pass"
+
+    def test_shore_biased_dynamics_parity(self, rc):
+        # The new e3 gate: Rust OrbitController (momentum + shore_bias)
+        # must agree with the Python oracle (which defers per-frame
+        # contour step to runtime_core.contour_biased_step_py). This is
+        # the check that closes the gap that let the Python mirror
+        # silently drift from the runtime while the parity suite stayed
+        # green. Parity is pinned to SHORE_TOL (1e-9, float rounding).
+        ok, max_err = preflight.check_shore_biased_dynamics_parity(rc)
+        assert ok, f"shore-biased dynamics parity failed: max abs err {max_err:.3e}"
+        assert max_err <= preflight.SHORE_TOL
+
+    def test_trainer_oracle_consistency(self, rc):
+        # The new e4 gate: the trainer's actual forward simulation
+        # (orbit_controller_oracle_sequence in control_trainer.py)
+        # must agree with the Rust runtime to within float-rounding
+        # compounding over 60 frames (TRAINER_TOL = 1e-6). A larger
+        # gap means a sign / constant error in the trainer's
+        # integrator math.
+        ok, max_err = preflight.check_trainer_oracle_consistency(rc)
+        assert ok, f"trainer-oracle consistency failed: max abs err {max_err:.3e}"
+        assert max_err <= preflight.TRAINER_TOL

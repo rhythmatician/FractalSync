@@ -422,6 +422,429 @@ def check_feature_version(rc) -> tuple[bool, float]:
     return True, 0.0
 
 
+# ---------------------------------------------------------------------------
+# Shore-biased dynamics parity (e3): explicit gate around the
+# `contour_biased_step` + `OrbitController(shore_bias=true, momentum=true)`
+# path the BROWSER runs after orbit-controller/3. The previous preflight
+# `e2` check verified the flags-off and momentum-only paths; it did NOT
+# exercise the shore-bias step, so the Python trainer's "energy push" could
+# (and did) drift from the runtime while the parity suite stayed green.
+#
+# The check installs a small in-memory mip pyramid via
+# `install_pyramid_py` (no filesystem ceremony), drives the Rust
+# `OrbitController` for N frames, and compares the resulting c to a Python
+# oracle that calls `runtime_core.contour_biased_step_py` (the same Rust
+# function the browser runs). If the trainer and runtime agree, the
+# oracle and the Rust `OrbitController` must agree to within float
+# rounding.
+# ---------------------------------------------------------------------------
+
+# Per-frame tolerance for c-re/im. Rust and Python both go through the
+# same `contour_biased_step_py` call here, so any disagreement is one
+# frame of float-rounding compounding.
+SHORE_TOL = 1e-9
+# Trainer-forward trajectory tolerance: 60 frames of float rounding
+# (Rust vs Python going through the same contour step) compounds to
+# roughly 1e-7 to 1e-6. A bigger gap means a sign / constant error,
+# not just IEEE-754 noise.
+TRAINER_TOL = 1e-6
+
+
+def _build_flat_pyramid() -> int:
+    """Install a uniform S field (all zeros): forces the analytic cardioid
+    fallback everywhere. `install_pyramid_py` returns the level count.
+    """
+    levels_data: list[list[float]] = []
+    widths: list[int] = []
+    heights: list[int] = []
+    for size in (64, 32, 16, 8, 4, 2, 1):
+        levels_data.append([0.0] * (size * size))
+        widths.append(size)
+        heights.append(size)
+    return _import_runtime_core().install_pyramid_py(
+        levels_data, widths, heights, -2.0, 1.0, -1.5, 1.5
+    )
+
+
+def _build_linear_pyramid() -> int:
+    """S = col / (size-1): S is flat in Im (contours run horizontally) and
+    increases with Re. Matches the Rust `linear_pyramid` test fixture so a
+    passing Rust test and a passing Python parity check exercise the same
+    field topology.
+    """
+    levels_data: list[list[float]] = []
+    widths: list[int] = []
+    heights: list[int] = []
+    for size in (64, 32, 16, 8, 4, 2, 1):
+        plane: list[float] = []
+        denom = max(1, size - 1)
+        for i in range(size * size):
+            col = i % size
+            plane.append(col / denom)
+        levels_data.append(plane)
+        widths.append(size)
+        heights.append(size)
+    return _import_runtime_core().install_pyramid_py(
+        levels_data, widths, heights, -2.0, 1.0, -1.5, 1.5
+    )
+
+
+def _rust_orbit_run(
+    rc, pyramid_kind: str, n_frames: int, *, energy_seq: list[float],
+    h_seq: list[float], max_step: float = 0.05,
+) -> tuple[list[float], list[float]]:
+    """Drive the Rust OrbitController (momentum + shore_bias) for n_frames
+    under the given per-frame (energy, h) schedule. Returns the (re, im)
+    trajectory of c. The starting c is set to the cardioid boundary at
+    (s, alpha)=(0.5, 0.5) so c is on the shore from frame 0.
+    """
+    ctrl = rc.OrbitController(0.5, 0.5, 1.0)
+    ctrl.set_momentum(True)
+    ctrl.set_shore_bias(True)
+    ctrl.set_drag(0.90)
+    ctrl.set_max_step(max_step)
+    ctrl.set_d_star(0.5)
+    ctrl.set_level(0)
+    # Reset c to the starting boundary point so the first step has a
+    # well-defined c.
+    start = _carrier_reference(math.pi * 0.5, 0.5)  # α=0.5 -> θ=π, mid-bottom of cardioid
+    ctrl.set_c(start.real, start.imag)
+
+    traj_re: list[float] = []
+    traj_im: list[float] = []
+    for i in range(n_frames):
+        # Keep controls boring but move them so the pull has somewhere to
+        # go — this is what catches the case where the proposed-delta path
+        # in Rust differs from the trainer's reconstruction.
+        s = 0.5 + 0.1 * math.cos(i * 0.1)
+        alpha = 0.5 + 0.1 * math.sin(i * 0.1)
+        ctrl.apply_controls(s, alpha)
+        ctrl.set_energy(energy_seq[i] if i < len(energy_seq) else 0.0)
+        h_val = h_seq[i] if i < len(h_seq) else 0.0
+        re, im = ctrl.step(1.0 / 60.0, [0.5, 0.5, 0.5, 0.5, 0.5, 0.5], h_val)
+        traj_re.append(re)
+        traj_im.append(im)
+    return traj_re, traj_im
+
+
+def _oracle_run(
+    rc, pyramid_kind: str, n_frames: int, *, energy_seq: list[float],
+    h_seq: list[float], max_step: float = 0.05,
+) -> tuple[list[float], list[float]]:
+    """Replay the SAME sequence against a Python oracle that mirrors the
+    Rust `OrbitController::step` math but routes the per-frame dynamics
+    through `runtime_core.contour_biased_step_py` (the same Rust function
+    the browser executes). If trainer and runtime agree, this oracle and
+    the Rust `_rust_orbit_run` must agree to within float rounding.
+    """
+    # Same construction as _rust_orbit_run: the oracle re-implements the
+    # momentum integrator in Python but DELIBERATELY defers the contour
+    # step to the Rust binding so the two trajectories are physically
+    # identical even when the trainer's `orbit_controller_momentum_sequence`
+    # uses a different (and possibly diverged) surrogate.
+    omega = 1.0
+    drag = 0.90
+    # Initialize c at the same starting point.
+    start = _carrier_reference(math.pi * 0.5, 0.5)
+    c_re = start.real
+    c_im = start.imag
+    v_re = 0.0
+    v_im = 0.0
+    theta = 0.0  # mimic the wobble phase the Rust controller advances
+    dt = 1.0 / 60.0
+    k_residuals = 6
+    orr = 0.05
+    max_step_sq = max_step * max_step
+    two_pi = 2.0 * math.pi
+
+    traj_re: list[float] = []
+    traj_im: list[float] = []
+    for i in range(n_frames):
+        s = 0.5 + 0.1 * math.cos(i * 0.1)
+        alpha = 0.5 + 0.1 * math.sin(i * 0.1)
+        theta = (theta + omega * dt) % two_pi
+        # Carrier + residuals — exact mirror of the May controller.
+        theta_b = alpha * two_pi
+        r = 0.25 * (1.0 - math.cos(theta_b))
+        scale = min(s, 1.5)
+        base_re = r * math.cos(theta_b / 2.0) * scale
+        base_im = r * math.sin(theta_b / 2.0) * scale
+        res_re = 0.0
+        res_im = 0.0
+        for k in range(k_residuals):
+            freq = k + 2
+            phase = freq * theta
+            res_re += 0.5 * orr * math.cos(phase)
+            res_im += 0.5 * orr * math.sin(phase)
+        target_re = base_re + res_re
+        target_im = base_im + res_im
+
+        # Pull as acceleration; gravity (orbit-controller/3).
+        accel_gain = 2.0 * dt
+        a_re = (target_re - c_re) * accel_gain - 0.01 * c_re
+        a_im = (target_im - c_im) * accel_gain - 0.01 * c_im
+        v_re = v_re * drag + a_re
+        v_im = v_im * drag + a_im
+        proposed_re = v_re * dt
+        proposed_im = v_im * dt
+
+        energy = energy_seq[i] if i < len(energy_seq) else 0.0
+        h_val = h_seq[i] if i < len(h_seq) else 0.0
+        # DEFER to the Rust binding — this is the whole point of the oracle.
+        c_re, c_im = rc.contour_biased_step_py(
+            c_re, c_im, proposed_re, proposed_im, h_val, 0.5, max_step, 0, energy,
+        )
+        traj_re.append(c_re)
+        traj_im.append(c_im)
+    return traj_re, traj_im
+
+
+def check_shore_biased_dynamics_parity(rc) -> tuple[bool, float]:
+    """(e3) Rust OrbitController (momentum+shore_bias) vs Python oracle.
+
+    The oracle mirrors the May-controller math and the momentum integrator
+    exactly, but DELEGATES the per-frame contour step to
+    `runtime_core.contour_biased_step_py` (the Rust function the browser
+    actually calls). This means the oracle and the runtime run the SAME
+    physics; the only thing that can differ is the per-frame float
+    rounding from running the integrator in Rust vs Python.
+
+    If the trainer's `orbit_controller_momentum_sequence` ever disagrees
+    with this oracle, the e3 check will (intentionally) still pass — the
+    check is between RUST and ORACLE-RUST, not between TRAINER and
+    RUNTIME. The dedicated trainer parity check (e) is what catches
+    trainer divergence from Rust. Together they pin the entire chain.
+    """
+    if not hasattr(rc, "contour_biased_step_py"):
+        raise RuntimeError(
+            "runtime_core does not expose contour_biased_step_py; rebuild "
+            "and reinstall the wheel (maturin develop --release)."
+        )
+    if not hasattr(rc, "install_pyramid_py"):
+        raise RuntimeError(
+            "runtime_core does not expose install_pyramid_py; rebuild and "
+            "reinstall the wheel (maturin develop --release)."
+        )
+
+    n_frames = 60
+    cases = [
+        # (name, pyramid_kind, energy_seq, h_seq, max_step)
+        # 1. Flat-S triggers analytic cardioid fallback; varying energy.
+        (
+            "flat-S analytic fallback (energy ramp)",
+            "flat",
+            [min(1.0, i / (n_frames - 1)) for i in range(n_frames)],
+            [0.0] * n_frames,
+            0.05,
+        ),
+        # 2. Linear S gradient (contours along Im); constant moderate energy.
+        (
+            "linear-S gradient (constant energy)",
+            "linear",
+            [0.5] * n_frames,
+            [0.0] * n_frames,
+            0.05,
+        ),
+        # 3. Energy 0 vs 1 contrast on flat-S — strongest sign-of-push signal.
+        (
+            "flat-S energy contrast (0 vs 1)",
+            "flat",
+            [0.0] * (n_frames // 2) + [1.0] * (n_frames // 2),
+            [0.0] * n_frames,
+            0.05,
+        ),
+        # 4. h=0 vs h=1 contrast on linear-S — wall vs open.
+        (
+            "linear-S h contrast (0 wall, 1 open)",
+            "linear",
+            [0.0] * n_frames,
+            [0.0] * (n_frames // 2) + [1.0] * (n_frames // 2),
+            0.05,
+        ),
+        # 5. max_step clamp: huge proposed motion must clamp.
+        (
+            "max_step clamp (huge proposed motion)",
+            "flat",
+            [0.0] * n_frames,
+            [1.0] * n_frames,  # open wall so we exercise the clamp, not the wall
+            0.005,  # very small max_step to force the clamp
+        ),
+    ]
+
+    max_err = 0.0
+    for name, pyramid_kind, energy_seq, h_seq, max_step in cases:
+        try:
+            if pyramid_kind == "flat":
+                _build_flat_pyramid()
+            else:
+                _build_linear_pyramid()
+            rust_re, rust_im = _rust_orbit_run(
+                rc, pyramid_kind, n_frames,
+                energy_seq=energy_seq, h_seq=h_seq, max_step=max_step,
+            )
+            oracle_re, oracle_im = _oracle_run(
+                rc, pyramid_kind, n_frames,
+                energy_seq=energy_seq, h_seq=h_seq, max_step=max_step,
+            )
+        finally:
+            rc.clear_pyramid_py()
+
+        for i, (rr, ri, orr_r, orr_i) in enumerate(
+            zip(rust_re, rust_im, oracle_re, oracle_im)
+        ):
+            err = max(abs(rr - orr_r), abs(ri - orr_i))
+            max_err = max(max_err, err)
+            if err > SHORE_TOL:
+                raise RuntimeError(
+                    f"e3 parity drift in case '{name}' at frame {i}: "
+                    f"rust=({rr:.9e},{ri:.9e}) oracle=({orr_r:.9e},{orr_i:.9e}) "
+                    f"|err|={err:.3e} > tol {SHORE_TOL:.0e}. The Rust "
+                    "OrbitController and the Python oracle (which defers "
+                    "to runtime_core.contour_biased_step_py) are running "
+                    "different physics — investigate the controller step "
+                    "path in src/controller.rs and the per-frame math in "
+                    "_oracle_run above."
+                )
+    return max_err <= SHORE_TOL, max_err
+
+
+# Trainer-vs-Rust-oracle consistency: this is the check that catches
+# drift in the Python differentiable mirror. The trainer's
+# ``orbit_controller_momentum_sequence`` implements an analytic surrogate
+# for the contour step (because the real ``contour_biased_step`` is not
+# PyTorch-differentiable). The surrogate SHOULD match the Rust forward
+# dynamics closely enough for gradient descent to learn the right thing;
+# if it doesn't, the model trains on physics the browser doesn't run.
+#
+# Tolerated discrepancy is the SURROGATE GAP, not float rounding. The
+# analytic surrogate is known to differ in detail (no S-field curvature,
+# no fractal tilt, no wall gating in the analytic path). What this check
+# guards against is the much coarser class of bugs that previously made
+# it to merge: sign flips, wrong normalization, extra dt factors, wrong
+# magnitudes, etc. The bar is "trajectory is qualitatively the same"
+# (same direction, same order of magnitude); exact equality is a much
+# bigger refactor. For now: if the trajectory stays within an
+# envelope-wide tolerance, the surrogate is fit for purpose.
+TRAINER_ORACLE_TOL = 0.5  # world units; cardioid is ~0.5 wide
+
+
+def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
+    """(e4) Trainer forward simulation vs Rust forward dynamics.
+
+    The trainer supervises c by running an *N*-frame forward simulation
+    (``orbit_controller_oracle_sequence`` in the c-space proxy path)
+    and computing losses against the resulting c. That forward path
+    routes the per-frame contour step through
+    ``runtime_core.contour_biased_step_py`` — the same Rust function
+    the browser executes. So the trainer's forward simulation and the
+    Rust ``OrbitController`` should agree to within float rounding.
+
+    A large gap here means the trainer is supervising on physics the
+    browser does not run, even though e3 (Rust vs Rust-oracle) is green.
+    """
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "torch is required for trainer-oracle consistency (e4). "
+            "Install backend requirements: pip install -r backend/requirements.txt"
+        ) from exc
+    if not hasattr(rc, "contour_biased_step_py") or not hasattr(rc, "install_pyramid_py"):
+        raise RuntimeError(
+            "runtime_core missing contour_biased_step_py / install_pyramid_py; "
+            "rebuild the wheel."
+        )
+
+    from src.cspace_proxies import orbit_controller_oracle_sequence
+
+    n_frames = 60
+    rng = torch.Generator().manual_seed(1234)
+    s_vals = (1.0 + 0.4 * torch.randn(n_frames, generator=rng)).clamp(0.2, 3.0)
+    a_vals = torch.rand(n_frames, generator=rng).clamp(0.0, 1.0)
+    gates = torch.rand(n_frames, K_RESIDUALS, generator=rng)
+    seg = torch.zeros(n_frames, dtype=torch.int64)
+    energy = torch.linspace(0.0, 1.0, n_frames, dtype=torch.float32)
+    h_vals = torch.zeros(n_frames, dtype=torch.float32)
+
+    # Start both paths at the same point. The trainer's actual call in
+    # the c-space proxy path passes a domain-randomized initial_c; for
+    # the parity check we use a deterministic boundary point so the
+    # trajectory agreement is checkable.
+    s0 = float(s_vals[0])
+    a0 = float(a_vals[0])
+    start = _carrier_reference(a0 * 2.0 * math.pi, s0)
+    init_re = torch.full((n_frames,), start.real, dtype=torch.float32)
+    init_im = torch.full((n_frames,), start.imag, dtype=torch.float32)
+    init_c = torch.complex(init_re, init_im)
+
+    # Trainer forward (used by control_trainer.py for c-space supervision).
+    _build_flat_pyramid()
+    try:
+        trainer_traj = orbit_controller_oracle_sequence(
+            s_target=s_vals,
+            alpha=a_vals,
+            omega=1.0,
+            band_gates=gates,
+            segment_ids=seg,
+            drag=0.90,
+            thrust=0.0,
+            initial_c=init_c,
+            energy=energy,
+            h=h_vals,
+            level=0,
+            d_star=0.5,
+            max_step=0.05,
+        ).detach().cpu().numpy()
+    finally:
+        rc.clear_pyramid_py()
+
+    # Rust runtime: the same OrbitController the browser instantiates.
+    # Reset its persistent c to the same starting point as the trainer.
+    _build_flat_pyramid()
+    try:
+        ctrl = rc.OrbitController(s0, a0, 1.0)
+        ctrl.set_momentum(True)
+        ctrl.set_shore_bias(True)
+        ctrl.set_drag(0.90)
+        ctrl.set_max_step(0.05)
+        ctrl.set_d_star(0.5)
+        ctrl.set_level(0)
+        ctrl.set_c(start.real, start.imag)
+        rust_re_l: list[float] = []
+        rust_im_l: list[float] = []
+        for i in range(n_frames):
+            ctrl.apply_controls(float(s_vals[i]), float(a_vals[i]))
+            ctrl.set_energy(float(energy[i]))
+            rre, rim = ctrl.step(
+                1.0 / 60.0,
+                [float(g) for g in gates[i]],
+                float(h_vals[i]),
+            )
+            rust_re_l.append(rre)
+            rust_im_l.append(rim)
+    finally:
+        rc.clear_pyramid_py()
+
+    max_err = 0.0
+    for i, (pre, pim, rre, rim) in enumerate(
+        zip(trainer_traj.real, trainer_traj.imag, rust_re_l, rust_im_l)
+    ):
+        err = max(abs(pre - rre), abs(pim - rim))
+        max_err = max(max_err, err)
+        if err > TRAINER_TOL:
+            raise RuntimeError(
+                f"e4 trainer-forward vs Rust-runtime drift at frame {i}: "
+                f"trainer=({pre:.9e},{pim:.9e}) rust=({rre:.9e},{rim:.9e}) "
+                f"|err|={err:.3e} > tol {TRAINER_TOL:.0e}. The trainer's "
+                "forward simulation diverges from the Rust runtime even "
+                "though both route through contour_biased_step_py. Check "
+                "the integrator math in orbit_controller_oracle_sequence "
+                "(src/cspace_proxies.py) — likely a missed constant or "
+                "sign error."
+            )
+    return max_err <= TRAINER_TOL, max_err
+
+
 CHECKS: list[tuple[str, bool, Callable]] = [
     ("a) Carrier parity (Rust vs closed form)", True, check_carrier_parity),
     ("b) Mirror parity (synthesize_c vs Rust)", True, check_mirror_parity),
@@ -430,6 +853,16 @@ CHECKS: list[tuple[str, bool, Callable]] = [
         "e) Orbit mirror parity (trainer vs runtime)",
         True,
         check_player_mirror_parity,
+    ),
+    (
+        "e3) Shore-biased dynamics parity (Rust vs Rust-oracle)",
+        True,
+        check_shore_biased_dynamics_parity,
+    ),
+    (
+        "e4) Trainer-oracle consistency (mirror vs Rust forward)",
+        True,
+        check_trainer_oracle_consistency,
     ),
     (
         "f) Golden vector version (stale-golden guard)",
