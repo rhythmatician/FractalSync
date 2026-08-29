@@ -407,6 +407,29 @@ impl OrbitState {
         self.inner.alpha
     }
 
+    // Setters for the fields the live controller mutates at runtime
+    // (lobe transitions and smoothed s / residual alpha).  theta and
+    // omega remain read-only: they are owned by the state machine.
+    #[setter]
+    fn set_lobe(&mut self, value: u32) {
+        self.inner.lobe = value;
+    }
+
+    #[setter]
+    fn set_sub_lobe(&mut self, value: u32) {
+        self.inner.sub_lobe = value;
+    }
+
+    #[setter]
+    fn set_s(&mut self, value: f64) {
+        self.inner.s = value;
+    }
+
+    #[setter]
+    fn set_alpha(&mut self, value: f64) {
+        self.inner.alpha = value;
+    }
+
     /// Advance time by dt and return the next c(t).  The band gates
     /// are applied to each residual.
     #[pyo3(signature = (dt, residual_params, band_gates=None))]
@@ -911,26 +934,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("NORM_EPS", crate::features::NORM_EPS)?;
 
     m.add_class::<ResidualParams>()?;
-
-    // Provide class-level defaults for ResidualParams members so the
-    // stub tests that inspect class attributes find builtin Python types.
-    if let Ok(rp_ty) = m.getattr("ResidualParams") {
-        let _ = rp_ty.setattr("k_residuals", DEFAULT_K_RESIDUALS);
-        let _ = rp_ty.setattr("residual_cap", DEFAULT_RESIDUAL_CAP);
-        let _ = rp_ty.setattr("radius_scale", 1.0_f64);
-    }
     m.add_class::<OrbitState>()?;
-
-    // Provide class-level defaults for OrbitState attributes so stub tests
-    // find builtin Python numeric types on the class object.
-    if let Ok(os_ty) = m.getattr("OrbitState") {
-        let _ = os_ty.setattr("lobe", 1u32);
-        let _ = os_ty.setattr("sub_lobe", 0u32);
-        let _ = os_ty.setattr("theta", 0.0f64);
-        let _ = os_ty.setattr("omega", DEFAULT_BASE_OMEGA);
-        let _ = os_ty.setattr("s", 1.02f64);
-        let _ = os_ty.setattr("alpha", 0.3f64);
-    }
     m.add_class::<PlayerState>()?;
     m.add_class::<OrbitController>()?;
 
@@ -938,20 +942,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<RuntimeVisualMetrics>()?;
 
-    // Provide class-level defaults for RuntimeVisualMetrics so stub tests find
-    // builtin Python types on the class object.
-    if let Ok(rvm_ty) = m.getattr("RuntimeVisualMetrics") {
-        let _ = rvm_ty.setattr("edge_density", 0.0f64);
-        let _ = rvm_ty.setattr("color_uniformity", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_mean", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_std", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_range", 0.0f64);
-        let _ = rvm_ty.setattr("mandelbrot_membership", false);
-    }
-
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
-    m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
     // Controller phase generation (shared with training for parity)
     m.add_function(wrap_pyfunction!(residual_phases_for_seed_py, m)?)?;
     // Distance-field helpers
@@ -975,81 +967,4 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
-}
-
-/// Return a JSON-serializable description of exposed bindings.
-#[pyfunction]
-fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
-    use pyo3::types::{PyDict, PyList};
-
-    let d = PyDict::new_bound(py);
-
-    // ResidualParams
-    let rp = PyDict::new_bound(py);
-    rp.set_item("attributes", PyList::new_bound(py, ["k_residuals", "residual_cap", "radius_scale"]))?;
-    let rp_methods = PyDict::new_bound(py);
-    rp_methods.set_item("__init__", "(k_residuals: int = 6, residual_cap: float = 0.5, radius_scale: float = 1.0)")?;
-    rp.set_item("methods", rp_methods)?;
-    d.set_item("ResidualParams", rp)?;
-
-    // OrbitState
-    let os = PyDict::new_bound(py);
-    os.set_item("attributes", PyList::new_bound(py, ["lobe", "sub_lobe", "theta", "omega", "s", "alpha"]))?;
-    let os_methods = PyDict::new_bound(py);
-    os_methods.set_item("__init__", "(lobe: int, sub_lobe: int, theta: float, omega: float, s: float, alpha: float, k_residuals: int, residual_omega_scale: float, seed: Optional[int] = None)")?;
-    os_methods.set_item("new_with_seed", "(lobe: int, sub_lobe: int, theta: float, omega: float, s: float, alpha: float, k_residuals: int, residual_omega_scale: float, seed: int) -> OrbitState")?;
-    os_methods.set_item("new_default_seeded", "(seed: int) -> OrbitState")?;
-    os_methods.set_item("advance", "(dt: float) -> None")?;
-    os_methods.set_item("carrier", "() -> complex")?;
-    os_methods.set_item("residual_phases", "() -> list[float]")?;
-    os_methods.set_item("residual_omegas", "() -> list[float]")?;
-    os_methods.set_item("synthesize", "(residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
-    os_methods.set_item("step", "(dt: float, residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
-    os.set_item("methods", os_methods)?;
-    d.set_item("OrbitState", os)?;
-
-    // FeatureExtractor
-    let fe = PyDict::new_bound(py);
-    fe.set_item("methods", PyDict::new_bound(py))?;
-
-    let fe_methods = PyDict::new_bound(py);
-    fe_methods.set_item("__init__", "(sr: int = 48000, hop_length: int = 1024, n_fft: int = 4096, include_delta: bool = False, include_delta_delta: bool = False)")?;
-    fe_methods.set_item("num_features_per_frame", "() -> int")?;
-    fe_methods.set_item("extract_windowed_features", "(audio: Sequence[float], window_frames: int = 10) -> ndarray")?;
-    fe_methods.set_item("test_simple", "() -> list[float]")?;
-    fe_methods.set_item("compute_normalization_stats", "(all_features: Sequence[Sequence[float]]) -> None")?;
-    fe_methods.set_item("normalize_features", "(features: Sequence[float]) -> list[float]")?;
-    let fe_attrs = PyList::new_bound(py, ["feature_mean", "feature_std"]);
-    fe.set_item("attributes", fe_attrs)?;
-    fe.set_item("methods", fe_methods)?;
-    d.set_item("FeatureExtractor", fe)?;
-
-    // RuntimeVisualMetrics
-    let rvm = PyDict::new_bound(py);
-    rvm.set_item("attributes", PyList::new_bound(py, ["edge_density", "color_uniformity", "brightness_mean", "brightness_std", "brightness_range", "mandelbrot_membership"]))?;
-    d.set_item("RuntimeVisualMetrics", rvm)?;
-
-    // Top-level functions
-    let funcs = PyDict::new_bound(py);
-    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c: complex, max_iter: int = 100) -> RuntimeVisualMetrics")?;
-    funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
-
-    funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
-    funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
-    funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
-    funcs.set_item("residual_phases_for_seed_py", "(seed: int, k_residuals: int) -> list[float]")?;
-    d.set_item("functions", funcs)?;
-    // Export simple constants and their types for stub generation
-    let consts = PyDict::new_bound(py);
-    consts.set_item("SAMPLE_RATE", "int")?;
-    consts.set_item("HOP_LENGTH", "int")?;
-    consts.set_item("N_FFT", "int")?;
-    consts.set_item("WINDOW_FRAMES", "int")?;
-    consts.set_item("DEFAULT_K_RESIDUALS", "int")?;
-    consts.set_item("DEFAULT_RESIDUAL_CAP", "float")?;
-    consts.set_item("DEFAULT_RESIDUAL_OMEGA_SCALE", "float")?;
-    consts.set_item("DEFAULT_BASE_OMEGA", "float")?;
-    consts.set_item("DEFAULT_ORBIT_SEED", "int")?;
-    d.set_item("constants", consts)?;
-    Ok(d.into())
 }

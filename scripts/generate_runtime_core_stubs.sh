@@ -8,9 +8,7 @@ pushd runtime-core
 maturin develop --release
 popd
 
-python -m pyo3_stubgen.generate runtime_core -o backend/stubs/runtime_core --package-name runtime_core || true
-
-# Additionally attempt to produce stubs from metadata exported by the bindings
-python scripts/generate_runtime_core_stubs_from_metadata.py -o backend/stubs/runtime_core || true
+# Generate the stubs by introspecting the live module
+python scripts/generate_runtime_core_stubs.py -o backend/stubs/runtime_core
 
 echo "Runtime core stubs generated to backend/stubs/runtime_core/"

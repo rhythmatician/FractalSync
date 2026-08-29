@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import types
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -209,14 +210,20 @@ def test_class_members_have_expected_types():
         for member_name, expected_type in member_types.items():
             actual_member = None
             # Prefer the instance value for property/data members. PyO3
-            # exposes `#[pyo3(get, set)]` fields as getset_descriptors at
-            # class level, so the class attribute is a descriptor object,
-            # not the declared runtime type. Reading from an instance (when
-            # available) yields the real value and is the meaningful check.
+            # exposes `#[pyo3(get)]` fields and `#[getter]` methods as
+            # getset_descriptors at class level, so the class attribute is
+            # a descriptor object, not the declared runtime type. Reading
+            # from an instance (when available) yields the real value and
+            # is the meaningful check. When no instance can be built we
+            # skip the check rather than misreading the descriptor.
             if inst is not None and hasattr(inst, member_name):
                 actual_member = getattr(inst, member_name)
             elif hasattr(cls, member_name):
-                actual_member = getattr(cls, member_name)
+                class_member = getattr(cls, member_name)
+                if not isinstance(
+                    class_member, (types.GetSetDescriptorType, types.MemberDescriptorType)
+                ):
+                    actual_member = class_member
 
             if actual_member is not None:
                 # If the member is a callable (likely a method) and we have an
