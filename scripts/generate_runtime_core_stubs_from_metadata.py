@@ -111,11 +111,13 @@ def main() -> None:
     out_path.write_text(pyi_text, encoding="utf-8")
     print(f"Wrote {out_path}")
 
-    # Also write a copy into the runtime-core crate so it can be included in
-    # the built wheel (maturin) and installed as part of the package.
-    runtime_core_pyi = Path("runtime-core") / "runtime_core.pyi"
-    runtime_core_pyi.write_text(pyi_text, encoding="utf-8")
-    print(f"Wrote {runtime_core_pyi}")
+    # Do NOT overwrite runtime-core/runtime_core.pyi: that file is the
+    # hand-authored canonical stub shipped in the wheel (see
+    # runtime-core/pyproject.toml) and validated by
+    # runtime-core/tests/test_stub_parity.rs. The auto-generated output is
+    # lower fidelity (Any-typed attributes, missing constants) and must not
+    # clobber it — doing so made the stub-verification workflow dirty on
+    # every run.
 
 
 if __name__ == "__main__":

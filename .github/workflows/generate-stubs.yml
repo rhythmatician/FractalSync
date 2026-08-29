@@ -36,15 +36,17 @@ jobs:
                   uv pip install --python .venv/bin/python maturin pyo3-stubgen
 
             - name: Generate runtime_core stubs
+              # Invoke via `bash` instead of chmod +x: the executable bit is
+              # not committed, so chmod would dirty the tree and fail the
+              # verification step below.
               run: |
-                  chmod +x scripts/generate_runtime_core_stubs.sh
-                  ./scripts/generate_runtime_core_stubs.sh
+                  bash scripts/generate_runtime_core_stubs.sh
 
             - name: Check for changes
               run: |
                   git --no-pager status --porcelain
                   if [ -n "$(git --no-pager status --porcelain)" ]; then
-                    echo "Generated stubs differ from committed stubs. Please run './scripts/generate_runtime_core_stubs.sh' locally and commit the updates.";
-                    git --no-pager diff --patch -- backend/stubs/runtime_core || true
+                    echo "Generated stubs differ from committed stubs. Please run 'bash scripts/generate_runtime_core_stubs.sh' locally and commit the updates.";
+                    git --no-pager diff --patch -- runtime-core/runtime_core.pyi backend/stubs/runtime_core scripts/generate_runtime_core_stubs.sh || true
                     exit 1
                   fi
