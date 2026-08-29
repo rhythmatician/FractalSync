@@ -374,11 +374,13 @@ import numpy as np
 '''
 
 # Instance-construction recipes for attribute type inference. Classes
-# absent from this map fall back to the annotation table.
+# absent from this map fall back to the annotation table. Lookups go
+# through getattr because Pylance resolves `runtime_core` to the
+# installed stub, which does not declare these classes.
 INSTANCE_RECIPES: dict[str, Callable[[], Any]] = {
-    "ResidualParams": lambda: rc.ResidualParams(),
-    "OrbitState": lambda: rc.OrbitState.new_default_seeded(42),
-    "FeatureExtractor": lambda: rc.FeatureExtractor(),
+    "ResidualParams": lambda: getattr(rc, "ResidualParams")(),
+    "OrbitState": lambda: getattr(rc, "OrbitState").new_default_seeded(42),
+    "FeatureExtractor": lambda: getattr(rc, "FeatureExtractor")(),
 }
 
 
@@ -525,7 +527,9 @@ def _render_class(cls_name: str, cls: type) -> str:
             )
         elif callable(member):
             lines.append(
-                _render_method(cls_name, member_name, member, method_types.get(member_name))
+                _render_method(
+                    cls_name, member_name, member, method_types.get(member_name)
+                )
             )
 
     lines.append("")
@@ -610,10 +614,14 @@ def generate_pyi() -> str:
 
     # Report table keys that no longer match the live module (drift guard
     # for the annotation tables themselves).
-    live_funcs = {n for n in dir(rc) if not n.startswith("_") and callable(getattr(rc, n))}
+    live_funcs = {
+        n for n in dir(rc) if not n.startswith("_") and callable(getattr(rc, n))
+    }
     stale = sorted(set(FUNCTION_TYPES) - live_funcs)
     if stale:
-        raise RuntimeError(f"FUNCTION_TYPES has stale entries not on the module: {stale}")
+        raise RuntimeError(
+            f"FUNCTION_TYPES has stale entries not on the module: {stale}"
+        )
 
     return "".join(out)
 

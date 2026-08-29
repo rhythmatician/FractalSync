@@ -221,7 +221,8 @@ def test_class_members_have_expected_types():
             elif hasattr(cls, member_name):
                 class_member = getattr(cls, member_name)
                 if not isinstance(
-                    class_member, (types.GetSetDescriptorType, types.MemberDescriptorType)
+                    class_member,
+                    (types.GetSetDescriptorType, types.MemberDescriptorType),
                 ):
                     actual_member = class_member
 
@@ -278,12 +279,12 @@ def test_orbit_state_python_properties_preserve_instance_state():
     state-machine-owned quantities (theta, omega) stay read-only.
     """
     state = rc.OrbitState(
-        2,      # lobe
-        1,      # sub_lobe
-        0.5,    # theta
-        2.0,    # omega
-        1.5,    # s
-        0.6,    # alpha
+        2,  # lobe
+        1,  # sub_lobe
+        0.5,  # theta
+        2.0,  # omega
+        1.5,  # s
+        0.6,  # alpha
         6,
         1.0,
     )
