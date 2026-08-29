@@ -696,7 +696,9 @@ class ControlTrainer:
             # Normalized dwell: how far below the region radius the recent
             # spread sits. spread >= region radius -> not dwelling (0 loss).
             dwell_p = torch.relu(self.region_dwell_p - spread_p) / self.region_dwell_p
-            dwell_phi = torch.relu(self.region_dwell_phi - spread_phi) / self.region_dwell_phi
+            dwell_phi = (
+                torch.relu(self.region_dwell_phi - spread_phi) / self.region_dwell_phi
+            )
             # Both axes must be confined for a true dwell (moving along one
             # axis alone still changes J(c) meaningfully).
             dwell = dwell_p * dwell_phi
@@ -984,10 +986,7 @@ class ControlTrainer:
         # allowed >= required + margin for all energy levels.
         energy = torch.nan_to_num(audio_energy.reshape(-1).float(), nan=0.0)
         energy = torch.clamp(energy, 0.0, 1.0)[1:]
-        allowed = (
-            self.julia_stability_base
-            + self.julia_stability_loud_gain * energy
-        )
+        allowed = self.julia_stability_base + self.julia_stability_loud_gain * energy
 
         excess = torch.relu(perceptual_dc - allowed) * quiet_gate
         valid = step_ok[1:]
@@ -1268,7 +1267,9 @@ class ControlTrainer:
                 avg_features = features_reshaped.mean(dim=1)
 
                 _rms_for_thrust = avg_features[:, 2]
-                thrust_for_c = torch.sigmoid(_rms_for_thrust) * 0.06  # sigmoid so centered norm RMS still orbits
+                thrust_for_c = (
+                    torch.sigmoid(_rms_for_thrust) * 0.06
+                )  # sigmoid so centered norm RMS still orbits
                 # Music push energy (orbit-controller/3): sigmoid of RMS in
                 # [0,1] — drives the uphill push toward the Shore in the
                 # mirror integrator (gravity provides the counterforce).
@@ -1303,21 +1304,33 @@ class ControlTrainer:
                 _starts_im = {}
                 for _sid in _uniq.tolist():
                     if torch.rand((), device=_dev).item() < 0.10:
-                        _ang = torch.rand((), device=_dev).item() * 2 * 3.141592653589793
+                        _ang = (
+                            torch.rand((), device=_dev).item() * 2 * 3.141592653589793
+                        )
                         _r = 1.8 + torch.rand((), device=_dev).item() * 0.4
                         import math as _math
+
                         _starts_re[_sid] = _math.cos(_ang) * _r
                         _starts_im[_sid] = _math.sin(_ang) * _r
                     else:
                         _t = torch.rand((), device=_dev).item() * 2 * 3.141592653589793
                         import math as _math2
+
                         _mu = complex(_math2.cos(_t), _math2.sin(_t))
                         _cb = _mu * 0.5 - _mu * _mu * 0.25
                         _j = (torch.rand((), device=_dev).item() - 0.5) * 0.30
                         _starts_re[_sid] = _cb.real + _j * _mu.real * 0.5
                         _starts_im[_sid] = _cb.imag + _j * _mu.imag * 0.5
-                _ic_re = torch.tensor([_starts_re[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
-                _ic_im = torch.tensor([_starts_im[int(s)] for s in _seg.tolist()], device=_dev, dtype=torch.float32)
+                _ic_re = torch.tensor(
+                    [_starts_re[int(s)] for s in _seg.tolist()],
+                    device=_dev,
+                    dtype=torch.float32,
+                )
+                _ic_im = torch.tensor(
+                    [_starts_im[int(s)] for s in _seg.tolist()],
+                    device=_dev,
+                    dtype=torch.float32,
+                )
                 _initial_c = torch.complex(_ic_re, _ic_im)
                 # Forward simulation routes through the Rust contour step
                 # (orbit_controller_oracle_sequence) so the trainer
@@ -1559,9 +1572,7 @@ class ControlTrainer:
             # Song identity: different songs claim different home regions,
             # consistently within each song. Directly answers "why does it
             # always converge to the same region".
-            song_identity_loss = self._song_identity_loss(
-                c_complex, segment_ids
-            )
+            song_identity_loss = self._song_identity_loss(c_complex, segment_ids)
             song_identity_loss = self._sanitize_scalar(song_identity_loss)
 
             # Region dwell: c must not occupy the same J(c)-region for the

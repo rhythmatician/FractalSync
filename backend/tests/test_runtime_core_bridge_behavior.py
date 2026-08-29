@@ -43,7 +43,14 @@ if "runtime_core" not in sys.modules:
 
     # Minimal FeatureExtractor stub
     class _FeatureExtractor:
-        def __init__(self, sr=48000, hop_length=1024, n_fft=4096, include_delta=False, include_delta_delta=False):
+        def __init__(
+            self,
+            sr=48000,
+            hop_length=1024,
+            n_fft=4096,
+            include_delta=False,
+            include_delta_delta=False,
+        ):
             pass
 
         def num_features_per_frame(self):

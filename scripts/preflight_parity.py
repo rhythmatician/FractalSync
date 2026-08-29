@@ -120,8 +120,8 @@ def check_mirror_parity(rc) -> tuple[bool, float]:
 
     rng = torch.Generator().manual_seed(0)
     n = 64
-    s_vals = 0.5 + 1.5 * torch.rand(n, generator=rng)          # [0.5, 2.0]
-    alpha_vals = 0.2 + 0.8 * torch.rand(n, generator=rng)      # [0.2, 1.0]
+    s_vals = 0.5 + 1.5 * torch.rand(n, generator=rng)  # [0.5, 2.0]
+    alpha_vals = 0.2 + 0.8 * torch.rand(n, generator=rng)  # [0.2, 1.0]
     theta_vals = 2.0 * math.pi * torch.rand(n, generator=rng)
 
     rp = rc.ResidualParams(
@@ -137,8 +137,15 @@ def check_mirror_parity(rc) -> tuple[bool, float]:
         theta_val = float(theta_vals[idx])
 
         state = rc.OrbitState.new_with_seed(
-            1, 0, theta_val, 1.0, s_val, alpha_val,
-            K_RESIDUALS, 2.0, DEFAULT_ORBIT_SEED,
+            1,
+            0,
+            theta_val,
+            1.0,
+            s_val,
+            alpha_val,
+            K_RESIDUALS,
+            2.0,
+            DEFAULT_ORBIT_SEED,
         )
         rust_c = state.synthesize(rp, band_gates=gates)
 
@@ -197,9 +204,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         rust_re = rust_im = 0.0
         for i in range(n_steps):
             c.apply_controls(float(s_vals[i]), float(a_vals[i]))
-            rust_re, rust_im = c.step(
-                1.0 / 60.0, [float(g) for g in gates[i]]
-            )
+            rust_re, rust_im = c.step(1.0 / 60.0, [float(g) for g in gates[i]])
 
         pt_c = orbit_controller_sequence(
             s_target=s_vals,
@@ -221,9 +226,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         rust_mre = rust_mim = 0.0
         for i in range(n_steps):
             cm.apply_controls(float(s_vals[i]), float(a_vals[i]))
-            rust_mre, rust_mim = cm.step(
-                1.0 / 60.0, [float(g) for g in gates[i]]
-            )
+            rust_mre, rust_mim = cm.step(1.0 / 60.0, [float(g) for g in gates[i]])
 
         pt_cm = orbit_controller_momentum_sequence(
             s_target=s_vals,
@@ -248,9 +251,7 @@ def check_shared_phase_source(rc) -> tuple[bool, float]:
     for seed in (1337, 42, 7):
         for k in (3, 6):
             shared = list(rc.residual_phases_for_seed_py(seed, k))
-            state = rc.OrbitState.new_with_seed(
-                1, 0, 0.0, 1.0, 1.02, 0.3, k, 2.0, seed
-            )
+            state = rc.OrbitState.new_with_seed(1, 0, 0.0, 1.0, 1.02, 0.3, k, 2.0, seed)
             from_state = list(state.residual_phases())
             if len(shared) != len(from_state):
                 ok = False
@@ -291,10 +292,7 @@ def check_minimap_availability(rc) -> tuple[bool, float]:
         for name, p in found.items():
             print(f"  {name}: {p}")
     if not has_binding:
-        print(
-            "WARNING [minimap]: runtime_core does not expose "
-            "load_mip_pyramid_py"
-        )
+        print("WARNING [minimap]: runtime_core does not expose load_mip_pyramid_py")
     else:
         print("Minimap binding available: runtime_core.load_mip_pyramid_py")
     return True, 0.0
@@ -380,16 +378,17 @@ def check_feature_golden_parity(rc) -> tuple[bool, float]:
         noise = np.empty(n_samples, dtype=np.float64)
         for i in range(n_samples):
             lcg = lcg * MUL + ADD
-            noise[i] = (np.int64(lcg >> np.uint64(33)).astype(np.float64)
-                        / float(np.int64(1) << np.int64(30)) - 1.0) * 0.05
+            noise[i] = (
+                np.int64(lcg >> np.uint64(33)).astype(np.float64)
+                / float(np.int64(1) << np.int64(30))
+                - 1.0
+            ) * 0.05
         audio = np.clip(audio + noise, -1.0, 1.0).astype(np.float32)
 
         fe = PythonFeatureExtractor()
         windows = fe.extract_windowed_features(audio.tolist(), window_frames)  # type: ignore[arg-type]
         if len(windows) == 0:
-            raise RuntimeError(
-                f"Python extractor produced no window for seed {seed}"
-            )
+            raise RuntimeError(f"Python extractor produced no window for seed {seed}")
         got = np.asarray(windows[0], dtype=np.float64)
         if got.shape != expected.shape:
             raise RuntimeError(
@@ -490,8 +489,13 @@ def _build_linear_pyramid() -> int:
 
 
 def _rust_orbit_run(
-    rc, pyramid_kind: str, n_frames: int, *, energy_seq: list[float],
-    h_seq: list[float], max_step: float = 0.05,
+    rc,
+    pyramid_kind: str,
+    n_frames: int,
+    *,
+    energy_seq: list[float],
+    h_seq: list[float],
+    max_step: float = 0.05,
 ) -> tuple[list[float], list[float]]:
     """Drive the Rust OrbitController (momentum + shore_bias) for n_frames
     under the given per-frame (energy, h) schedule. Returns the (re, im)
@@ -507,7 +511,9 @@ def _rust_orbit_run(
     ctrl.set_level(0)
     # Reset c to the starting boundary point so the first step has a
     # well-defined c.
-    start = _carrier_reference(math.pi * 0.5, 0.5)  # α=0.5 -> θ=π, mid-bottom of cardioid
+    start = _carrier_reference(
+        math.pi * 0.5, 0.5
+    )  # α=0.5 -> θ=π, mid-bottom of cardioid
     ctrl.set_c(start.real, start.imag)
 
     traj_re: list[float] = []
@@ -528,8 +534,13 @@ def _rust_orbit_run(
 
 
 def _oracle_run(
-    rc, pyramid_kind: str, n_frames: int, *, energy_seq: list[float],
-    h_seq: list[float], max_step: float = 0.05,
+    rc,
+    pyramid_kind: str,
+    n_frames: int,
+    *,
+    energy_seq: list[float],
+    h_seq: list[float],
+    max_step: float = 0.05,
 ) -> tuple[list[float], list[float]]:
     """Replay the SAME sequence against a Python oracle that mirrors the
     Rust `OrbitController::step` math but routes the per-frame dynamics
@@ -592,7 +603,15 @@ def _oracle_run(
         h_val = h_seq[i] if i < len(h_seq) else 0.0
         # DEFER to the Rust binding — this is the whole point of the oracle.
         c_re, c_im = rc.contour_biased_step_py(
-            c_re, c_im, proposed_re, proposed_im, h_val, 0.5, max_step, 0, energy,
+            c_re,
+            c_im,
+            proposed_re,
+            proposed_im,
+            h_val,
+            0.5,
+            max_step,
+            0,
+            energy,
         )
         traj_re.append(c_re)
         traj_im.append(c_im)
@@ -679,12 +698,20 @@ def check_shore_biased_dynamics_parity(rc) -> tuple[bool, float]:
             else:
                 _build_linear_pyramid()
             rust_re, rust_im = _rust_orbit_run(
-                rc, pyramid_kind, n_frames,
-                energy_seq=energy_seq, h_seq=h_seq, max_step=max_step,
+                rc,
+                pyramid_kind,
+                n_frames,
+                energy_seq=energy_seq,
+                h_seq=h_seq,
+                max_step=max_step,
             )
             oracle_re, oracle_im = _oracle_run(
-                rc, pyramid_kind, n_frames,
-                energy_seq=energy_seq, h_seq=h_seq, max_step=max_step,
+                rc,
+                pyramid_kind,
+                n_frames,
+                energy_seq=energy_seq,
+                h_seq=h_seq,
+                max_step=max_step,
             )
         finally:
             rc.clear_pyramid_py()
@@ -749,7 +776,9 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
             "torch is required for trainer-oracle consistency (e4). "
             "Install backend requirements: pip install -r backend/requirements.txt"
         ) from exc
-    if not hasattr(rc, "contour_biased_step_py") or not hasattr(rc, "install_pyramid_py"):
+    if not hasattr(rc, "contour_biased_step_py") or not hasattr(
+        rc, "install_pyramid_py"
+    ):
         raise RuntimeError(
             "runtime_core missing contour_biased_step_py / install_pyramid_py; "
             "rebuild the wheel."
@@ -780,21 +809,26 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
     # Trainer forward (used by control_trainer.py for c-space supervision).
     _build_flat_pyramid()
     try:
-        trainer_traj = orbit_controller_oracle_sequence(
-            s_target=s_vals,
-            alpha=a_vals,
-            omega=1.0,
-            band_gates=gates,
-            segment_ids=seg,
-            drag=0.90,
-            thrust=0.0,
-            initial_c=init_c,
-            energy=energy,
-            h=h_vals,
-            level=0,
-            d_star=0.5,
-            max_step=0.05,
-        ).detach().cpu().numpy()
+        trainer_traj = (
+            orbit_controller_oracle_sequence(
+                s_target=s_vals,
+                alpha=a_vals,
+                omega=1.0,
+                band_gates=gates,
+                segment_ids=seg,
+                drag=0.90,
+                thrust=0.0,
+                initial_c=init_c,
+                energy=energy,
+                h=h_vals,
+                level=0,
+                d_star=0.5,
+                max_step=0.05,
+            )
+            .detach()
+            .cpu()
+            .numpy()
+        )
     finally:
         rc.clear_pyramid_py()
 

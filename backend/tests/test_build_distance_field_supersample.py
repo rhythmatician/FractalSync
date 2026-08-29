@@ -64,6 +64,6 @@ def test_supersampled_reduces_error():
     max_ds = err_ds.max()
 
     # Supersampled max error should be strictly smaller
-    assert (
-        max_ds < max_low
-    ), f"Supersampled error {max_ds} not less than low-res {max_low}"
+    assert max_ds < max_low, (
+        f"Supersampled error {max_ds} not less than low-res {max_low}"
+    )

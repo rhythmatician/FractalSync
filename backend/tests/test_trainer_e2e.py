@@ -60,9 +60,9 @@ def test_trainer_e2e():
         break
     assert model_exported, "Model export message not found in output"
 
-    assert any(
-        line.startswith("[OK] Training complete!") for line in result_stdout
-    ), "Trainer script did not complete successfully"
+    assert any(line.startswith("[OK] Training complete!") for line in result_stdout), (
+        "Trainer script did not complete successfully"
+    )
 
     # Clean up epoch 1 models created during the test
     clean_up()

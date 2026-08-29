@@ -5,6 +5,7 @@ This module provides small wrappers that replace the legacy
 stable, and easily-reviewable migration target while we phase out the
 bridge module.
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,7 +28,9 @@ DEFAULT_BASE_OMEGA = rc.DEFAULT_BASE_OMEGA
 DEFAULT_ORBIT_SEED = rc.DEFAULT_ORBIT_SEED
 
 
-def _rust_extractor_sanity_check(include_delta: bool, include_delta_delta: bool, timeout: float = 2.0) -> bool:
+def _rust_extractor_sanity_check(
+    include_delta: bool, include_delta_delta: bool, timeout: float = 2.0
+) -> bool:
     import sys
     import subprocess
 
@@ -56,7 +59,9 @@ def _rust_extractor_sanity_check(include_delta: bool, include_delta_delta: bool,
         )
         return False
     except subprocess.TimeoutExpired:
-        logger.warning("Rust extractor sanity subprocess timed out after %s seconds", timeout)
+        logger.warning(
+            "Rust extractor sanity subprocess timed out after %s seconds", timeout
+        )
         return False
     except Exception as exc:
         logger.exception("Unexpected error while probing Rust extractor: %s", exc)
@@ -101,7 +106,9 @@ class FeatureExtractorProxy:
         return (features - self.feature_mean) / self.feature_std
 
 
-def make_feature_extractor(include_delta: bool = False, include_delta_delta: bool = False) -> FeatureExtractorProxy:
+def make_feature_extractor(
+    include_delta: bool = False, include_delta_delta: bool = False
+) -> FeatureExtractorProxy:
     """Create a runtime_core.FeatureExtractor and wrap it with a small
     proxy object. We run a short sanity subprocess check to avoid calling
     the Rust extractor from the main process if it is known to hang.
@@ -109,9 +116,17 @@ def make_feature_extractor(include_delta: bool = False, include_delta_delta: boo
     """
     if _rust_extractor_sanity_check(include_delta, include_delta_delta):
         logger.info("Using Rust FeatureExtractor for extraction (sanity check passed)")
-        fe = rc.FeatureExtractor(sr=SAMPLE_RATE, hop_length=HOP_LENGTH, n_fft=N_FFT, include_delta=include_delta, include_delta_delta=include_delta_delta)
+        fe = rc.FeatureExtractor(
+            sr=SAMPLE_RATE,
+            hop_length=HOP_LENGTH,
+            n_fft=N_FFT,
+            include_delta=include_delta,
+            include_delta_delta=include_delta_delta,
+        )
         return FeatureExtractorProxy(fe)
-    logger.error("Rust FeatureExtractor sanity check failed; refusing to fall back to Python extractor")
+    logger.error(
+        "Rust FeatureExtractor sanity check failed; refusing to fall back to Python extractor"
+    )
     raise RuntimeError(
         "Rust FeatureExtractor sanity check failed. "
         "This indicates a problem with the runtime_core native extension. "
@@ -121,23 +136,65 @@ def make_feature_extractor(include_delta: bool = False, include_delta_delta: boo
 
 
 # Simple convenience wrappers mirroring the bridge
-def make_residual_params(k_residuals: int = DEFAULT_K_RESIDUALS, residual_cap: float = DEFAULT_RESIDUAL_CAP, radius_scale: float = 1.0) -> rc.ResidualParams:
-    return rc.ResidualParams(k_residuals=k_residuals, residual_cap=residual_cap, radius_scale=radius_scale)
+def make_residual_params(
+    k_residuals: int = DEFAULT_K_RESIDUALS,
+    residual_cap: float = DEFAULT_RESIDUAL_CAP,
+    radius_scale: float = 1.0,
+) -> rc.ResidualParams:
+    return rc.ResidualParams(
+        k_residuals=k_residuals, residual_cap=residual_cap, radius_scale=radius_scale
+    )
 
 
-def make_orbit_state(*, lobe: int = 1, sub_lobe: int = 0, theta: float = 0.0, omega: float = DEFAULT_BASE_OMEGA, s: float = 1.02, alpha: float = 0.3, k_residuals: int = DEFAULT_K_RESIDUALS, residual_omega_scale: float = DEFAULT_RESIDUAL_OMEGA_SCALE, seed: Optional[int] = DEFAULT_ORBIT_SEED) -> rc.OrbitState:
+def make_orbit_state(
+    *,
+    lobe: int = 1,
+    sub_lobe: int = 0,
+    theta: float = 0.0,
+    omega: float = DEFAULT_BASE_OMEGA,
+    s: float = 1.02,
+    alpha: float = 0.3,
+    k_residuals: int = DEFAULT_K_RESIDUALS,
+    residual_omega_scale: float = DEFAULT_RESIDUAL_OMEGA_SCALE,
+    seed: Optional[int] = DEFAULT_ORBIT_SEED,
+) -> rc.OrbitState:
     if seed is None:
-        return rc.OrbitState(lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale)
+        return rc.OrbitState(
+            lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale
+        )
     if hasattr(rc.OrbitState, "new_with_seed"):
-        return rc.OrbitState.new_with_seed(lobe, sub_lobe, theta, omega, s, alpha, k_residuals, residual_omega_scale, seed)
-    raise RuntimeError("make_orbit_state: seed provided but OrbitState.new_with_seed() not available")
+        return rc.OrbitState.new_with_seed(
+            lobe,
+            sub_lobe,
+            theta,
+            omega,
+            s,
+            alpha,
+            k_residuals,
+            residual_omega_scale,
+            seed,
+        )
+    raise RuntimeError(
+        "make_orbit_state: seed provided but OrbitState.new_with_seed() not available"
+    )
 
 
-def step_orbit(state: rc.OrbitState, dt: float, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Sequence[float]] = None) -> complex:
+def step_orbit(
+    state: rc.OrbitState,
+    dt: float,
+    residual_params: Optional[rc.ResidualParams] = None,
+    band_gates: Optional[Sequence[float]] = None,
+) -> complex:
     rp = residual_params or make_residual_params()
-    return state.step(dt, rp, band_gates=list(band_gates) if band_gates is not None else None)  # type: ignore[return-value]  # PyO3 returns a Complex object
+    return state.step(
+        dt, rp, band_gates=list(band_gates) if band_gates is not None else None
+    )  # type: ignore[return-value]  # PyO3 returns a Complex object
 
 
-def synthesize(state: rc.OrbitState, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Iterable[float]] = None) -> complex:
+def synthesize(
+    state: rc.OrbitState,
+    residual_params: Optional[rc.ResidualParams] = None,
+    band_gates: Optional[Iterable[float]] = None,
+) -> complex:
     rp = residual_params or make_residual_params()
     return state.synthesize(rp, list(band_gates) if band_gates is not None else None)  # type: ignore[return-value]  # PyO3 returns a Complex

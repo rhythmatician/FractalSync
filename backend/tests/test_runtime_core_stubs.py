@@ -180,7 +180,6 @@ def test_compile_classes_returns_nonempty_dict():
 
 
 def test_class_members_have_expected_types():
-
     classes_with_types = gather_expected_member_types()
     assert classes_with_types is not None, "Could not gather expected member types"
     assert classes_with_types != {}, "No classes with expected member types found"

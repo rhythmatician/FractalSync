@@ -40,9 +40,7 @@ def test_manifest_mirrors_are_pinned_by_preflight_checks() -> None:
     import json
 
     manifest = json.loads(
-        (REPO_ROOT / "shared" / "architecture_mirrors.json").read_text(
-            encoding="utf-8"
-        )
+        (REPO_ROOT / "shared" / "architecture_mirrors.json").read_text(encoding="utf-8")
     )
     preflight_text = (REPO_ROOT / "scripts" / "preflight_parity.py").read_text(
         encoding="utf-8"
@@ -73,19 +71,15 @@ def test_manifest_mirrors_are_pinned_by_preflight_checks() -> None:
                     or ".test.ts" in entry
                 )
                 assert references_something, (
-                    f"{path}: parity entry does not reference a check or test: "
-                    f"{entry}"
+                    f"{path}: parity entry does not reference a check or test: {entry}"
                 )
                 if "preflight_parity.py" in entry:
                     # The referenced check letter must exist in the preflight.
-                    assert (
-                        "check" in preflight_text
-                    ), "preflight registry missing"
+                    assert "check" in preflight_text, "preflight registry missing"
         else:
             # Diagnostic/experimental: parity must be 'none' with a reason.
             assert parity, (
-                f"{path}: kind={kind} mirror must state 'none' parity with a "
-                f"reason"
+                f"{path}: kind={kind} mirror must state 'none' parity with a reason"
             )
             assert all("none" in entry.lower() for entry in parity), (
                 f"{path}: kind={kind} mirror must not claim real parity checks"

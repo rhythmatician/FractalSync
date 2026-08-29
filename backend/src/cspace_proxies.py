@@ -73,9 +73,7 @@ def synthesize_c(
     radius = 0.25
 
     if phases is None:
-        phases = [
-            float((k * GOLDEN_ANGLE) % (2.0 * np.pi)) for k in range(k_residuals)
-        ]
+        phases = [float((k * GOLDEN_ANGLE) % (2.0 * np.pi)) for k in range(k_residuals)]
 
     residual_re = torch.zeros(batch_size, device=device, dtype=s_target.dtype)
     residual_im = torch.zeros(batch_size, device=device, dtype=s_target.dtype)
@@ -154,9 +152,9 @@ def shore_proximity(c: torch.Tensor, level: int = 2) -> torch.Tensor:
     re = flat.real.tolist()
     im = flat.imag.tolist()
     values = runtime_core.minimap_shore_proximity_batch_py(re, im, level)
-    return torch.tensor(
-        values, dtype=torch.float32, device=c.device
-    ).reshape(c.shape if c.dim() > 0 else ())
+    return torch.tensor(values, dtype=torch.float32, device=c.device).reshape(
+        c.shape if c.dim() > 0 else ()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -238,8 +236,8 @@ def player_step_sequence(
     v_re = torch.zeros((), device=device, dtype=torch.float32)
     v_im = torch.zeros((), device=device, dtype=torch.float32)
 
-    start_re, start_im = c0 if c0 is not None else (
-        float(tgt_re[0].detach()), float(tgt_im[0].detach())
+    start_re, start_im = (
+        c0 if c0 is not None else (float(tgt_re[0].detach()), float(tgt_im[0].detach()))
     )
     cur_re = torch.tensor(start_re, device=device, dtype=torch.float32)
     cur_im = torch.tensor(start_im, device=device, dtype=torch.float32)
@@ -415,7 +413,11 @@ def orbit_controller_momentum_sequence(
 
     # Rust: c starts at (0,0) Default unless domain-randomized.
     ic: torch.Tensor | None = None
-    if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.numel() > 0:
+    if (
+        initial_c is not None
+        and isinstance(initial_c, torch.Tensor)
+        and initial_c.numel() > 0
+    ):
         ic = initial_c
         if ic.is_complex() and ic.numel() == n:
             cur_re = ic[0].real.float()
@@ -442,7 +444,11 @@ def orbit_controller_momentum_sequence(
         dy = tgt_im[i] - cur_im
         a_re = dx * accel_gain - GRAVITY_ACCEL * cur_re
         a_im = dy * accel_gain - GRAVITY_ACCEL * cur_im
-        thi = thrust[i] if isinstance(thrust, torch.Tensor) and thrust.ndim > 0 else thrust
+        thi = (
+            thrust[i]
+            if isinstance(thrust, torch.Tensor) and thrust.ndim > 0
+            else thrust
+        )
         if isinstance(thi, torch.Tensor):
             thi = float(thi.item())
         if thi != 0.0 and thi > 0.0:
@@ -459,12 +465,16 @@ def orbit_controller_momentum_sequence(
         # closed form (differentiable through cur via the closed form).
         if energy is not None:
             e_i = energy.reshape(-1).float()[i]
-            inner = torch.sqrt((1.0 - 4.0 * cur_re).abs() + 4.0 * cur_im * cur_im + 1e-12)
+            inner = torch.sqrt(
+                (1.0 - 4.0 * cur_re).abs() + 4.0 * cur_im * cur_im + 1e-12
+            )
             # d(mu)/dc direction: mu = 1 - sqrt(1-4c); the proximity
             # gradient points along -d|mu|/dc toward the boundary. Use the
             # analytic direction of the cardioid inward normal: from c
             # toward the nearest boundary point ~ direction of mu itself.
-            mu_re = 0.5 - (cur_re * 0.5 - cur_re * cur_re * 0.25 + cur_im * cur_im * 0.25) / (inner + 1e-12)
+            mu_re = 0.5 - (
+                cur_re * 0.5 - cur_re * cur_re * 0.25 + cur_im * cur_im * 0.25
+            ) / (inner + 1e-12)
             mu_im = -(cur_im * 0.5 - cur_re * cur_im * 0.5) / (inner + 1e-12)
             mu_norm = torch.sqrt(mu_re * mu_re + mu_im * mu_im + 1e-12)
             # Per-frame displacement (matches Rust MUSIC_PUSH_GAIN * energy;
@@ -597,7 +607,11 @@ def orbit_controller_oracle_sequence(
         h_t = h.reshape(-1).float()
 
     ic: torch.Tensor | None = None
-    if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.numel() > 0:
+    if (
+        initial_c is not None
+        and isinstance(initial_c, torch.Tensor)
+        and initial_c.numel() > 0
+    ):
         ic = initial_c
         if ic.is_complex() and ic.numel() == n:
             cur_re = ic[0].real.float()
@@ -624,7 +638,11 @@ def orbit_controller_oracle_sequence(
         dy = tgt_im[i] - cur_im
         a_re = dx * accel_gain - GRAVITY_ACCEL * cur_re
         a_im = dy * accel_gain - GRAVITY_ACCEL * cur_im
-        thi = thrust[i] if isinstance(thrust, torch.Tensor) and thrust.ndim > 0 else thrust
+        thi = (
+            thrust[i]
+            if isinstance(thrust, torch.Tensor) and thrust.ndim > 0
+            else thrust
+        )
         if isinstance(thi, torch.Tensor):
             thi = float(thi.item())
         if thi != 0.0 and thi > 0.0:
@@ -649,9 +667,15 @@ def orbit_controller_oracle_sequence(
         # to learn s/alpha/thrust adjustments, and exact for the
         # forward trajectory.
         delta_re, delta_im = _ContourStep.apply(
-            cur_re, cur_im,
-            proposed_re, proposed_im,
-            h_i, d_star_t, max_step_t, level_t, e_i,
+            cur_re,
+            cur_im,
+            proposed_re,
+            proposed_im,
+            h_i,
+            d_star_t,
+            max_step_t,
+            level_t,
+            e_i,
         )
         # ``+`` keeps the autograd graph connected: the integrator
         # above (target - c) -> c -> losses backpropagates through

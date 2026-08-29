@@ -215,7 +215,11 @@ def _is_comment_line(line: str, suffix: str) -> bool:
     stripped = line.strip()
     if suffix in {".py"}:
         return stripped.startswith("#")
-    return stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*")
+    return (
+        stripped.startswith("//")
+        or stripped.startswith("/*")
+        or stripped.startswith("*")
+    )
 
 
 def _load_manifest() -> dict:
@@ -235,9 +239,7 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
     if path.name.endswith(".d.ts"):
         return []  # generated binding declarations, not implementations
     is_manifested = rel in _manifest_paths(manifest)
-    is_adapter = rel in {
-        a.replace("\\", "/") for a in manifest.get("adapters", [])
-    }
+    is_adapter = rel in {a.replace("\\", "/") for a in manifest.get("adapters", [])}
     violations: list[str] = []
     lines = text.splitlines()
     for rule in RULES:
@@ -275,9 +277,7 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--verbose", action="store_true", help="list scanned files"
-    )
+    parser.add_argument("--verbose", action="store_true", help="list scanned files")
     args = parser.parse_args(argv)
 
     manifest = _load_manifest()
