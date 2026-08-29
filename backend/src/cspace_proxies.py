@@ -102,6 +102,23 @@ def synthesize_c(
     return torch.complex(c_re.float(), c_im.float())
 
 
+def cardioid_mu(c: torch.Tensor) -> torch.Tensor:
+    """Differentiable cardioid parameterization mu = 1 - sqrt(1 - 4c).
+
+    Mirrors ``runtime_core::proxies`` cardioid math (the same mu that
+    :func:`cardioid_proximity` reduces to ``||mu| - 1|``). The angle of mu
+    is the position along the cardioid boundary nearest c — the second
+    perceptual axis used by region-style losses.
+
+    Single shared implementation: other modules must import this rather
+    than re-deriving ``1 - sqrt(1-4c)`` inline (architecture guardrail,
+    issue #90).
+    """
+    inner = 1.0 - 4.0 * c
+    w = torch.sqrt(inner.to(torch.complex64))
+    return 1.0 - w
+
+
 def cardioid_proximity(c: torch.Tensor) -> torch.Tensor:
     """Differentiable distance proxy to the main cardioid boundary.
 
@@ -112,9 +129,7 @@ def cardioid_proximity(c: torch.Tensor) -> torch.Tensor:
         Sunset per issue #88: the minimaps (mip pyramid S field) are the
         shore-distance oracle. Use :func:`shore_proximity` instead.
     """
-    inner = 1.0 - 4.0 * c
-    w = torch.sqrt(inner.to(torch.complex64))
-    mu = 1.0 - w
+    mu = cardioid_mu(c)
     return torch.abs(torch.abs(mu) - 1.0)
 
 

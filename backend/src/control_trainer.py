@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
 from .cspace_proxies import (
+    cardioid_mu,
     cardioid_proximity,
     orbit_controller_momentum_sequence,
     orbit_controller_oracle_sequence,
@@ -665,9 +666,8 @@ class ControlTrainer:
 
         # mu = 1 - sqrt(1-4c): the cardioid parameterization. Its angle is
         # the position along the boundary — the second perceptual axis.
-        inner = 1.0 - 4.0 * c_sequence
-        w = torch.sqrt(inner.to(torch.complex64))
-        mu = 1.0 - w
+        # Shared helper (cspace_proxies) — do not re-derive inline.
+        mu = cardioid_mu(c_sequence)
         phi = torch.atan2(mu.imag.float(), mu.real.float())
 
         # Region signature: (p, phi). Two frames are "same region" when both

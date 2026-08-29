@@ -94,8 +94,12 @@ jobs:
       - name: Run pytest (includes preflight-parity + golden-parity gate)
         run: |
           cd backend
-          python -m pytest tests/ -v  # covers test_preflight_parity.py (scripts/preflight_parity.py) and test_golden_parity.py
+          python -m pytest tests/ -v  # covers test_preflight_parity.py (scripts/preflight_parity.py), test_golden_parity.py, and test_architecture_guardrail.py
             python ../scripts/preflight_parity.py  # same gate wired into train.py
+
+      - name: Architecture guardrail (runtime-core single authority)
+        run: |
+          python scripts/architecture_guardrail.py
 
   runtime-core-build:
     name: Runtime-Core Build (maturin)

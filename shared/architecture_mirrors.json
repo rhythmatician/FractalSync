@@ -1,0 +1,76 @@
+{
+  "$schema": "Architecture allowlist for Rust-owned runtime math (issue #90)",
+  "rule": "Shared cross-runtime behavior has one authority: runtime-core (Rust). Other languages consume bindings. Intentional mirrors require an entry here AND a parity check that pins them to the Rust authority.",
+  "mirrors": [
+    {
+      "path": "backend/src/cspace_proxies.py",
+      "rust_authority": "runtime-core/src/controller.rs (synthesize, PlayerState::step), runtime-core/src/proxies.rs (mandelbrot_cardioid_proximity)",
+      "reason": "Differentiable PyTorch surrogates so gradients flow during training. The Rust bindings are non-differentiable; the oracle path (orbit_controller_oracle_sequence / _ContourStep) defers the per-frame contour step to the Rust binding and only the backward pass is a surrogate.",
+      "parity": [
+        "scripts/preflight_parity.py check (b) mirror parity",
+        "scripts/preflight_parity.py check (e) orbit mirror parity",
+        "scripts/preflight_parity.py check (e3) shore-biased dynamics parity",
+        "scripts/preflight_parity.py check (e4) trainer-oracle consistency",
+        "backend/tests/test_golden_parity.py",
+        "backend/tests/test_synthesis_parity.py"
+      ]
+    },
+    {
+      "path": "backend/src/python_feature_extractor.py",
+      "rust_authority": "runtime-core/src/features.rs (FeatureExtractor, FEATURE_VERSION features/2)",
+      "reason": "Fallback extractor used when the Rust extractor fails its subprocess sanity check, and for computing dataset normalization stats. Literal numpy port of the Rust formulas.",
+      "parity": [
+        "scripts/preflight_parity.py check (g) feature golden parity",
+        "scripts/preflight_parity.py check (h) feature golden version"
+      ]
+    },
+    {
+      "path": "frontend/src/lib/__tests__/orbitSynthesizer.mock.ts",
+      "rust_authority": "runtime-core/src/controller.rs (OrbitController, PlayerState)",
+      "reason": "Test-only mock substituted under vitest (globalThis.__vitest) so frontend unit tests run without loading the wasm binary. Never imported in production code.",
+      "parity": [
+        "frontend/src/lib/__tests__/goldenParity.test.ts (replays shared/golden_vectors.json)"
+      ]
+    },
+    {
+      "path": "backend/src/visual_metrics.py",
+      "rust_authority": "runtime-core/src/visual_metrics.rs",
+      "reason": "Training-time CPU Julia renderer for loss-facing visual metrics (render_julia_set). Rendering-scoped, not controller/feature authority; the distance/proximity metrics delegate to runtime_core.sample_distance_field_py.",
+      "parity": [
+        "backend/tests/test_visual_metrics.py",
+        "backend/tests/test_visual_metrics_builtin.py"
+      ]
+    },
+    {
+      "path": "backend/src/julia_gpu.py",
+      "rust_authority": "runtime-core/src/visual_metrics.rs",
+      "reason": "GPU (ModernGL) Julia renderer for training-time visual metrics with CPU fallback. Rendering-scoped; optional (--no-gpu-rendering bypasses it).",
+      "parity": [
+        "backend/tests/test_visual_metrics.py"
+      ]
+    },
+    {
+      "path": "backend/src/c_trace_plot.py",
+      "rust_authority": "runtime-core/src/minimap.rs (Mandelbrot geometry)",
+      "reason": "Diagnostic-only plotting: cardioid/bulb outlines and an escape-time background grid for the c-trace figure. Never consumed by training, runtime, or the model.",
+      "parity": [
+        "none (diagnostic-only; excluded from runtime paths by review)"
+      ]
+    },
+    {
+      "path": "backend/src/live_controller.py",
+      "rust_authority": "runtime-core/src/features.rs",
+      "reason": "EXPERIMENTAL live-performance controller (only referenced by backend/examples/live_controller_demo.py). Computes a separate analysis vocabulary (mel bands, tonalness, onset rate) that is NOT the canonical features/2 contract. Not wired into training or the runtime; must not become one without either delegating to runtime_core.FeatureExtractor or registering a real parity check.",
+      "parity": [
+        "none (experimental; see reason — do not promote without parity)"
+      ]
+    }
+  ],
+  "adapters": [
+    "frontend/src/lib/orbitSynthesizer.ts",
+    "frontend/src/lib/canonicalFeatures.ts",
+    "frontend/src/lib/modelInference.ts",
+    "backend/src/distance_utils.py",
+    "backend/src/runtime_core_bridge.py"
+  ]
+}

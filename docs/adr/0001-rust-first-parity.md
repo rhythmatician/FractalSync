@@ -134,3 +134,78 @@ invalid for the new pipeline and must be retrained.
 
 CI enforces this via `.github/workflows/pytest.yml` (runs `scripts/preflight_parity.py` via `backend/tests/test_preflight_parity.py` and `backend/tests/test_golden_parity.py`) and the `train.py` preflight gate.
 
+## Amendment: machine-enforced ownership guardrail (2026-08-28, issue #90)
+
+**Rule:** shared cross-runtime behavior has one authority: `runtime-core`.
+Other languages consume bindings. Intentional mirrors require an explicit
+documented exception and parity enforcement.
+
+### The guardrail
+
+`scripts/architecture_guardrail.py` is a deterministic, dependency-free
+check that scans `frontend/src`, `backend/src`, `backend/api`, `scripts`,
+and `shared` for re-implementations of Rust-owned runtime concepts:
+
+- competing `OrbitController` / `OrbitSynthesizer` / `PlayerState` classes
+  with a `step` method (binding wrappers are exempt — wrapping is their job)
+- the cardioid parameterization `mu = 1 - sqrt(1-4c)` (import
+  `cspace_proxies.cardioid_mu` instead of re-deriving it)
+- the cardioid boundary outline `c = e^{it}/2 - e^{2it}/4`
+- residual epicycle amplitude ladder `2^(k+1)` with per-band gates
+- Julia/Mandelbrot escape iteration (`z = z^2 + c` with bailout)
+- the features/2 causal transform `log1p(100x)`
+- `PhaseTracker` / `CycleBank` (planned Rust-owned concepts — they must be
+  born in Rust, not prototyped in TS/Python)
+- shore/minimap physics named APIs (`contour_biased_step`,
+  `MUSIC_PUSH_GAIN`, ...) in code (comment mentions are fine)
+
+The rules guard architectural concepts with corroborating evidence, not
+ordinary math tokens, so they stay low-noise. Generated binding
+declarations (`*.d.ts`) and the guardrail/preflight scripts themselves are
+excluded.
+
+### The exception manifest
+
+`shared/architecture_mirrors.json` is the checked-in allowlist of
+intentional mirrors. Each entry states:
+
+- `path` — the mirror file
+- `rust_authority` — the Rust module that owns the canonical behavior
+- `reason` — why the mirror exists (e.g. differentiable training surrogate)
+- `parity` — the checks/tests that pin it to the authority
+
+The guardrail fails if a manifest entry's path does not exist, lacks a
+`rust_authority`, or lacks a `parity` list. `backend/tests/
+test_architecture_guardrail.py` additionally verifies every parity entry
+references a real check or test file.
+
+### How to add a legitimate exception
+
+1. Implement the mirror with a header comment naming the Rust authority.
+2. Add an entry to `shared/architecture_mirrors.json` with `path`,
+   `rust_authority`, `reason`, and `parity`.
+3. Add the parity check (preflight check, golden test, or pytest/vitest
+   parity test) and list it in the entry's `parity`.
+4. Run `python scripts/architecture_guardrail.py` and the parity tests —
+   both must pass in the same commit.
+
+Do not work around the guardrail by renaming symbols or splitting formulas
+across lines; that converts an accidental second authority into a
+deliberate one, which is exactly what the manifest exists to make visible.
+
+### Current mirror inventory (audited 2026-08-28)
+
+| Mirror | Authority | Parity |
+|---|---|---|
+| `backend/src/cspace_proxies.py` | `controller.rs`, `proxies.rs` | preflight (b)(e)(e3)(e4), golden tests |
+| `backend/src/python_feature_extractor.py` | `features.rs` | preflight (g)(h) |
+| `frontend/src/lib/__tests__/orbitSynthesizer.mock.ts` | `controller.rs` | vitest goldenParity |
+| `backend/src/visual_metrics.py` | `visual_metrics.rs` | test_visual_metrics* |
+| `backend/src/julia_gpu.py` | `visual_metrics.rs` | test_visual_metrics* |
+| `backend/src/c_trace_plot.py` | minimap geometry | diagnostic-only (stated in manifest) |
+| `backend/src/live_controller.py` | `features.rs` | experimental, NOT parity-pinned — must not be promoted to training/runtime without delegating to `runtime_core.FeatureExtractor` or adding a real parity check |
+
+Clean adapters (verified, no formulas): `frontend/src/lib/orbitSynthesizer.ts`,
+`frontend/src/lib/canonicalFeatures.ts`, `frontend/src/lib/modelInference.ts`,
+`backend/src/distance_utils.py`, `backend/src/runtime_core_bridge.py`.
+
