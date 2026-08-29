@@ -154,8 +154,10 @@ and `shared` for re-implementations of Rust-owned runtime concepts:
 - residual epicycle amplitude ladder `2^(k+1)` with per-band gates
 - Julia/Mandelbrot escape iteration (`z = z^2 + c` with bailout)
 - the features/2 causal transform `log1p(100x)`
-- `PhaseTracker` / `CycleBank` (planned Rust-owned concepts — they must be
-  born in Rust, not prototyped in TS/Python)
+- `PhaseTracker` / `CycleBank` (planned Rust-owned concepts — only
+  *implementation-shaped* declarations (`class`/`def`/`function`/
+  `interface`/`type`) are flagged; binding consumers and manifest adapters
+  are exempt, mirroring the controller rule)
 - shore/minimap physics named APIs (`contour_biased_step`,
   `MUSIC_PUSH_GAIN`, ...) in code (comment mentions are fine)
 
@@ -170,19 +172,31 @@ excluded.
 intentional mirrors. Each entry states:
 
 - `path` — the mirror file
+- `kind` — one of `differentiable_mirror`, `behavioral_mirror`,
+  `diagnostic`, `experimental`
 - `rust_authority` — the Rust module that owns the canonical behavior
 - `reason` — why the mirror exists (e.g. differentiable training surrogate)
 - `parity` — the checks/tests that pin it to the authority
 
+The parity contract is enforced per kind, so "parity required" is real
+rather than satisfied by a `"none (diagnostic-only)"` string:
+
+- `differentiable_mirror` / `behavioral_mirror` — MUST have a nonempty
+  `parity` list of real executable checks; a `"none"` entry fails.
+- `diagnostic` / `experimental` — MUST declare `"none"` parity with a
+  reason; claiming real checks fails (an experimental mirror must not
+  pretend to be pinned).
+
 The guardrail fails if a manifest entry's path does not exist, lacks a
-`rust_authority`, or lacks a `parity` list. `backend/tests/
-test_architecture_guardrail.py` additionally verifies every parity entry
-references a real check or test file.
+`rust_authority`, has a missing/invalid `kind`, or violates its kind's
+parity contract. `backend/tests/test_architecture_guardrail.py`
+additionally verifies every behavioral mirror's parity entry references a
+real check or test file.
 
 ### How to add a legitimate exception
 
 1. Implement the mirror with a header comment naming the Rust authority.
-2. Add an entry to `shared/architecture_mirrors.json` with `path`,
+2. Add an entry to `shared/architecture_mirrors.json` with `path`, `kind`,
    `rust_authority`, `reason`, and `parity`.
 3. Add the parity check (preflight check, golden test, or pytest/vitest
    parity test) and list it in the entry's `parity`.
@@ -195,15 +209,15 @@ deliberate one, which is exactly what the manifest exists to make visible.
 
 ### Current mirror inventory (audited 2026-08-28)
 
-| Mirror | Authority | Parity |
-|---|---|---|
-| `backend/src/cspace_proxies.py` | `controller.rs`, `proxies.rs` | preflight (b)(e)(e3)(e4), golden tests |
-| `backend/src/python_feature_extractor.py` | `features.rs` | preflight (g)(h) |
-| `frontend/src/lib/__tests__/orbitSynthesizer.mock.ts` | `controller.rs` | vitest goldenParity |
-| `backend/src/visual_metrics.py` | `visual_metrics.rs` | test_visual_metrics* |
-| `backend/src/julia_gpu.py` | `visual_metrics.rs` | test_visual_metrics* |
-| `backend/src/c_trace_plot.py` | minimap geometry | diagnostic-only (stated in manifest) |
-| `backend/src/live_controller.py` | `features.rs` | experimental, NOT parity-pinned — must not be promoted to training/runtime without delegating to `runtime_core.FeatureExtractor` or adding a real parity check |
+| Mirror | Kind | Authority | Parity |
+|---|---|---|---|
+| `backend/src/cspace_proxies.py` | differentiable_mirror | `controller.rs`, `proxies.rs` | preflight (b)(e)(e3)(e4), golden tests |
+| `backend/src/python_feature_extractor.py` | behavioral_mirror | `features.rs` | preflight (g)(h) |
+| `frontend/src/lib/__tests__/orbitSynthesizer.mock.ts` | behavioral_mirror | `controller.rs` | vitest goldenParity |
+| `backend/src/visual_metrics.py` | behavioral_mirror | `visual_metrics.rs` | test_visual_metrics* |
+| `backend/src/julia_gpu.py` | behavioral_mirror | `visual_metrics.rs` | test_visual_metrics* |
+| `backend/src/c_trace_plot.py` | diagnostic | minimap geometry | none (diagnostic-only) |
+| `backend/src/live_controller.py` | experimental | `features.rs` | none — must not be promoted to training/runtime without delegating to `runtime_core.FeatureExtractor` or adding a real parity check |
 
 Clean adapters (verified, no formulas): `frontend/src/lib/orbitSynthesizer.ts`,
 `frontend/src/lib/canonicalFeatures.ts`, `frontend/src/lib/modelInference.ts`,

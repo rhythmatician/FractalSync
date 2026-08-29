@@ -30,11 +30,12 @@ def test_architecture_guardrail_passes() -> None:
 
 
 def test_manifest_mirrors_are_pinned_by_preflight_checks() -> None:
-    """Every manifested mirror's parity list must reference real checks.
+    """Every manifested mirror must satisfy the parity contract for its kind.
 
-    The preflight CHECKS registry (scripts/preflight_parity.py) is the
-    enforcement mechanism; a mirror whose parity entries name nothing real
-    is not actually pinned.
+    Behavioral mirrors (differentiable or not) MUST name real checks — the
+    preflight CHECKS registry (scripts/preflight_parity.py) is the
+    enforcement mechanism. Diagnostic/experimental mirrors must declare
+    'none' parity with a reason instead of pretending to be pinned.
     """
     import json
 
@@ -47,34 +48,45 @@ def test_manifest_mirrors_are_pinned_by_preflight_checks() -> None:
         encoding="utf-8"
     )
 
+    KINDS_REQUIRING_PARITY = {"differentiable_mirror", "behavioral_mirror"}
+    KINDS_EXEMPT = {"diagnostic", "experimental"}
+
     for mirror in manifest["mirrors"]:
         path = mirror["path"]
+        kind = mirror.get("kind")
+        assert kind in KINDS_REQUIRING_PARITY | KINDS_EXEMPT, (
+            f"{path}: missing/invalid kind ({kind!r})"
+        )
         parity = mirror.get("parity", [])
-        if path in (
-            "backend/src/c_trace_plot.py",
-            "backend/src/live_controller.py",
-        ):
-            # Diagnostic-only / experimental mirrors declare "none" parity
-            # with an explicit reason; the guardrail manifest documents why.
-            assert any(
-                "none" in entry.lower() for entry in parity
-            ), f"{path}: diagnostic/experimental mirror must state why parity is 'none'"
-            continue
-        assert parity, f"{path}: mirror has no parity checks listed"
-        for entry in parity:
-            # Each parity entry must reference a mechanism that exists:
-            # a preflight check letter, a test file, or a vitest spec.
-            references_something = (
-                "preflight_parity.py" in entry
-                or "test_" in entry
-                or ".test.ts" in entry
+        if kind in KINDS_REQUIRING_PARITY:
+            assert parity, f"{path}: kind={kind} mirror has no parity checks listed"
+            assert not any("none" in entry.lower() for entry in parity), (
+                f"{path}: kind={kind} mirror claims 'none' parity — downgrade "
+                f"the kind or add real checks"
             )
-            assert references_something, (
-                f"{path}: parity entry does not reference a check or test: "
-                f"{entry}"
+            for entry in parity:
+                # Each parity entry must reference a mechanism that exists:
+                # a preflight check letter, a test file, or a vitest spec.
+                references_something = (
+                    "preflight_parity.py" in entry
+                    or "test_" in entry
+                    or ".test.ts" in entry
+                )
+                assert references_something, (
+                    f"{path}: parity entry does not reference a check or test: "
+                    f"{entry}"
+                )
+                if "preflight_parity.py" in entry:
+                    # The referenced check letter must exist in the preflight.
+                    assert (
+                        "check" in preflight_text
+                    ), "preflight registry missing"
+        else:
+            # Diagnostic/experimental: parity must be 'none' with a reason.
+            assert parity, (
+                f"{path}: kind={kind} mirror must state 'none' parity with a "
+                f"reason"
             )
-            if "preflight_parity.py" in entry:
-                # The referenced check letter must exist in the preflight.
-                assert (
-                    "check" in preflight_text
-                ), "preflight registry missing"
+            assert all("none" in entry.lower() for entry in parity), (
+                f"{path}: kind={kind} mirror must not claim real parity checks"
+            )

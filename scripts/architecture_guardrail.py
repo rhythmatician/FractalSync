@@ -155,15 +155,21 @@ RULES: list[Rule] = [
         ),
     ),
     # 7. Named future concepts: PhaseTracker / CycleBank must be born in Rust.
+    #    Only *implementation-shaped* declarations are flagged (class/def/
+    #    function/interface/type). Binding consumers (``rc.PhaseTracker(...)``,
+    #    ``import { PhaseTracker } from 'wasm-orbit'``) and wrapper adapters
+    #    are legitimate — they consume the Rust authority, they do not
+    #    replace it. Manifest adapters are exempt entirely, mirroring the
+    #    controller-class rule.
     Rule(
         name="phase-tracker-concept",
-        pattern=r"\b(PhaseTracker|CycleBank)\b",
+        pattern=r"\b(class|def|function|interface|type)\s+\w*(PhaseTracker|CycleBank)\w*",
         evidence=[],
         file_level=False,
         description=(
-            "PhaseTracker/CycleBank are planned Rust-owned concepts; any "
-            "occurrence outside runtime-core must be a binding consumer or "
-            "a manifested mirror."
+            "PhaseTracker/CycleBank are planned Rust-owned concepts; a "
+            "class/function declaration outside runtime-core must be a "
+            "manifested mirror (binding consumers and adapters are fine)."
         ),
     ),
     # 8. Shore/minimap physics: contour-biased step / shore-normal push.
@@ -251,9 +257,13 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
                 # Manifested mirrors are allowed; the manifest's parity list
                 # is the enforcement contract.
                 continue
-            if is_adapter and rule.name == "controller-class":
-                # Adapters may wrap the Rust controller class — that is their
-                # whole job. They are still scanned for formula rules.
+            if is_adapter and rule.name in {
+                "controller-class",
+                "phase-tracker-concept",
+            }:
+                # Adapters may wrap the Rust controller class or declare
+                # binding-consumer types for planned Rust concepts — that is
+                # their whole job. They are still scanned for formula rules.
                 continue
             violations.append(
                 f"{rel}:{i + 1}: [{rule.name}] {rule.description}\n"
@@ -273,15 +283,45 @@ def main(argv: list[str] | None = None) -> int:
     manifest = _load_manifest()
     manifested = _manifest_paths(manifest)
 
-    # Manifest sanity: every listed mirror must exist and name a parity check.
+    # Manifest sanity: every listed mirror must exist, declare a valid kind,
+    # and satisfy the parity contract for that kind. Behavioral mirrors
+    # (differentiable or not) MUST name real parity checks; diagnostic and
+    # experimental entries must NOT pretend to have them — they state "none"
+    # with a reason instead, so "parity required" is actually enforced.
+    MIRROR_KINDS_REQUIRING_PARITY = {"differentiable_mirror", "behavioral_mirror"}
+    MIRROR_KINDS_EXEMPT = {"diagnostic", "experimental"}
     problems: list[str] = []
     for m in manifest.get("mirrors", []):
         if not (REPO_ROOT / m["path"]).exists():
             problems.append(f"manifest mirror path does not exist: {m['path']}")
         if not m.get("rust_authority"):
             problems.append(f"manifest mirror missing rust_authority: {m['path']}")
-        if not m.get("parity"):
-            problems.append(f"manifest mirror missing parity list: {m['path']}")
+        kind = m.get("kind")
+        if kind not in MIRROR_KINDS_REQUIRING_PARITY | MIRROR_KINDS_EXEMPT:
+            problems.append(
+                f"manifest mirror missing/invalid kind (expected one of "
+                f"{sorted(MIRROR_KINDS_REQUIRING_PARITY | MIRROR_KINDS_EXEMPT)}): "
+                f"{m['path']}"
+            )
+            continue
+        parity = m.get("parity", [])
+        if kind in MIRROR_KINDS_REQUIRING_PARITY:
+            if not parity:
+                problems.append(
+                    f"manifest mirror kind={kind} requires a nonempty parity "
+                    f"list: {m['path']}"
+                )
+            elif any("none" in entry.lower() for entry in parity):
+                problems.append(
+                    f"manifest mirror kind={kind} claims 'none' parity — "
+                    f"downgrade the kind or add real checks: {m['path']}"
+                )
+        else:
+            if parity and not all("none" in entry.lower() for entry in parity):
+                problems.append(
+                    f"manifest mirror kind={kind} must declare 'none' parity "
+                    f"with a reason, not real checks: {m['path']}"
+                )
 
     files = _iter_files()
     violations: list[str] = []

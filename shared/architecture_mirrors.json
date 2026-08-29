@@ -1,6 +1,12 @@
 {
   "$schema": "Architecture allowlist for Rust-owned runtime math (issue #90)",
-  "rule": "Shared cross-runtime behavior has one authority: runtime-core (Rust). Other languages consume bindings. Intentional mirrors require an entry here AND a parity check that pins them to the Rust authority.",
+  "rule": "Shared cross-runtime behavior has one authority: runtime-core (Rust). Other languages consume bindings. Intentional mirrors require an entry here AND a parity contract for their kind: differentiable_mirror/behavioral_mirror must name real executable parity checks; diagnostic/experimental must declare 'none' parity with a reason.",
+  "kinds": {
+    "differentiable_mirror": "Differentiable surrogate of Rust-owned math (training gradients flow through it). Real parity checks REQUIRED.",
+    "behavioral_mirror": "Non-differentiable behavioral reimplementation. Real parity checks REQUIRED.",
+    "diagnostic": "Offline/diagnostic tool, never consumed by training, runtime, or the model. Parity 'none' with reason.",
+    "experimental": "Not wired into training or runtime; must not be promoted without a real parity check. Parity 'none' with reason."
+  },
   "mirrors": [
     {
       "path": "backend/src/cspace_proxies.py",
@@ -13,10 +19,12 @@
         "scripts/preflight_parity.py check (e4) trainer-oracle consistency",
         "backend/tests/test_golden_parity.py",
         "backend/tests/test_synthesis_parity.py"
-      ]
+      ],
+      "kind": "differentiable_mirror"
     },
     {
       "path": "backend/src/python_feature_extractor.py",
+      "kind": "behavioral_mirror",
       "rust_authority": "runtime-core/src/features.rs (FeatureExtractor, FEATURE_VERSION features/2)",
       "reason": "Fallback extractor used when the Rust extractor fails its subprocess sanity check, and for computing dataset normalization stats. Literal numpy port of the Rust formulas.",
       "parity": [
@@ -26,6 +34,7 @@
     },
     {
       "path": "frontend/src/lib/__tests__/orbitSynthesizer.mock.ts",
+      "kind": "behavioral_mirror",
       "rust_authority": "runtime-core/src/controller.rs (OrbitController, PlayerState)",
       "reason": "Test-only mock substituted under vitest (globalThis.__vitest) so frontend unit tests run without loading the wasm binary. Never imported in production code.",
       "parity": [
@@ -34,6 +43,7 @@
     },
     {
       "path": "backend/src/visual_metrics.py",
+      "kind": "behavioral_mirror",
       "rust_authority": "runtime-core/src/visual_metrics.rs",
       "reason": "Training-time CPU Julia renderer for loss-facing visual metrics (render_julia_set). Rendering-scoped, not controller/feature authority; the distance/proximity metrics delegate to runtime_core.sample_distance_field_py.",
       "parity": [
@@ -43,6 +53,7 @@
     },
     {
       "path": "backend/src/julia_gpu.py",
+      "kind": "behavioral_mirror",
       "rust_authority": "runtime-core/src/visual_metrics.rs",
       "reason": "GPU (ModernGL) Julia renderer for training-time visual metrics with CPU fallback. Rendering-scoped; optional (--no-gpu-rendering bypasses it).",
       "parity": [
@@ -51,6 +62,7 @@
     },
     {
       "path": "backend/src/c_trace_plot.py",
+      "kind": "diagnostic",
       "rust_authority": "runtime-core/src/minimap.rs (Mandelbrot geometry)",
       "reason": "Diagnostic-only plotting: cardioid/bulb outlines and an escape-time background grid for the c-trace figure. Never consumed by training, runtime, or the model.",
       "parity": [
@@ -59,10 +71,11 @@
     },
     {
       "path": "backend/src/live_controller.py",
+      "kind": "experimental",
       "rust_authority": "runtime-core/src/features.rs",
       "reason": "EXPERIMENTAL live-performance controller (only referenced by backend/examples/live_controller_demo.py). Computes a separate analysis vocabulary (mel bands, tonalness, onset rate) that is NOT the canonical features/2 contract. Not wired into training or the runtime; must not become one without either delegating to runtime_core.FeatureExtractor or registering a real parity check.",
       "parity": [
-        "none (experimental; see reason — do not promote without parity)"
+        "none (experimental; see reason \u00e2\u20ac\u201d do not promote without parity)"
       ]
     }
   ],
