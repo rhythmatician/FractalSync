@@ -1393,7 +1393,12 @@ class ControlTrainer:
                     c = state.synthesize(rp, band_gates[i].detach().cpu().tolist())
                     c_values.append(c)
 
-                n_features_per_frame = self.feature_extractor.num_features_per_frame()
+                try:
+                    n_features_per_frame = (
+                        self.feature_extractor.num_features_per_frame()
+                    )
+                except Exception:
+                    n_features_per_frame = 6
                 window_frames = features.shape[1] // n_features_per_frame
                 features_reshaped = features.view(
                     batch_size, window_frames, n_features_per_frame

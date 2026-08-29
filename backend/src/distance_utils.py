@@ -4,14 +4,14 @@ from a variety of Python types (torch.Tensor, numpy.ndarray, sequences).
 The goal is to centralize coercion logic so callers (e.g., LossVisualMetrics)
 don't replicate it and so we can optimize zero-copy paths for numpy/torch.
 """
-from typing import Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import numpy as np
 
 try:
     import torch
 except Exception:  # pragma: no cover - optional
-    torch = None
+    torch = None  # type: ignore[assignment]
 
 import runtime_core
 

@@ -932,9 +932,9 @@ class LiveController:
         )
 
         overlay = f"""FractalSync Live
-Lobe: {info['lobe']}-{info['sub_lobe']} {'[TRANSITION]' if info['in_transition'] else ''}
-s: {info['s']:.3f} → {info['s_target']:.3f}
-L/T/N: {info['loudness']:.2f}/{info['tonalness']:.2f}/{info['noisiness']:.2f}
+Lobe: {info["lobe"]}-{info["sub_lobe"]} {"[TRANSITION]" if info["in_transition"] else ""}
+s: {info["s"]:.3f} → {info["s_target"]:.3f}
+L/T/N: {info["loudness"]:.2f}/{info["tonalness"]:.2f}/{info["noisiness"]:.2f}
 Impacts (5s): {recent_impacts}
 Boundaries (30s): {recent_boundaries}
 """

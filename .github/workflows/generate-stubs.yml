@@ -18,7 +18,7 @@ jobs:
             - name: Setup Python
               uses: astral-sh/setup-uv@v5
               with:
-                  python-version: "3.10"
+                  python-version: "3.13"
 
             - name: Setup Rust
               uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -26,12 +26,11 @@ jobs:
                   toolchain: stable
 
             - name: Create virtualenv (uv)
-              # maturin develop requires an active virtualenv; CI has none by
-              # default. Create one with uv and put it on PATH so the stub
+              # maturin develop requires an active virtualenv. setup-uv
+              # already created/activated .venv; just export it so the stub
               # script's `maturin develop --release` and `python` calls use
               # it — the same environment shape as local generation.
               run: |
-                  uv venv .venv
                   echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
                   echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
                   uv pip install --python .venv/bin/python maturin pyo3-stubgen

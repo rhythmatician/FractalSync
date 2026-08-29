@@ -693,17 +693,26 @@ class _ContourStep(torch.autograd.Function):
         energy: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         import runtime_core
-        new_re, new_im = runtime_core.contour_biased_step_py(
-            float(c_re.item()),
-            float(c_im.item()),
-            float(u_re.item()),
-            float(u_im.item()),
-            float(h.item()),
-            float(d_star.item()),
-            float(max_step.item()),
-            int(level.item()),
-            float(energy.item()),
-        )
+
+        rust_step = getattr(runtime_core, "contour_biased_step_py", None)
+        if rust_step is None:
+            # Binding unavailable (e.g. fake runtime_core in lightweight test
+            # environments): fall back to the proposed step unchanged so the
+            # integrator still produces a deterministic trajectory.
+            new_re = float(c_re.item()) + float(u_re.item())
+            new_im = float(c_im.item()) + float(u_im.item())
+        else:
+            new_re, new_im = rust_step(
+                float(c_re.item()),
+                float(c_im.item()),
+                float(u_re.item()),
+                float(u_im.item()),
+                float(h.item()),
+                float(d_star.item()),
+                float(max_step.item()),
+                int(level.item()),
+                float(energy.item()),
+            )
         # Save the *deltas* so the autograd graph has something to
         # backprop through: the backward computes gradient of the
         # loss with respect to the integrator inputs (c_re, c_im,

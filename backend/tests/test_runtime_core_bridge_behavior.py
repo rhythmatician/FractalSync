@@ -1,5 +1,6 @@
 import sys
 import types
+import importlib
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -117,13 +118,26 @@ if "runtime_core" not in sys.modules:
 
     fake_rc.Complex = _Complex
 
+    # Version stamps required by src/data_loader.py's import contract
+    fake_rc.FEATURE_VERSION = "fake-feature-version"
+    fake_rc.CONTROLLER_VERSION = "fake-controller-version"
+
     sys.modules["runtime_core"] = fake_rc
 
 from src.runtime_core_helpers import FeatureExtractorProxy
 
 # Provide a minimal 'librosa' shim so importing modules that reference it at
 # import-time (e.g., DataLoader) doesn't fail in lightweight test envs.
+# Only install the shim when librosa is genuinely missing — never shadow a
+# real librosa, and always restore the real one after these tests finish so
+# later test modules see the genuine library.
+_real_librosa = None
 if "librosa" not in sys.modules:
+    try:
+        _real_librosa = importlib.import_module("librosa")
+    except Exception:
+        _real_librosa = None
+if _real_librosa is None and "librosa" not in sys.modules:
     fake_librosa = types.ModuleType("librosa")
 
     def _load_dummy(path, sr, mono=True, duration=None):
@@ -158,12 +172,15 @@ def test_num_features_per_frame_callable_and_attr():
 
 
 class DummyVisualMetrics:
-    def render_julia_set(self, seed_real, seed_imag, width, height, max_iter):
+    def render_julia_set(self, seed, width, height, max_iter, **kwargs):
         # return a small dummy image
         return np.zeros((height, width, 3), dtype=np.uint8)
 
     def compute_all_metrics(self, image, prev_image=None):
         return {"temporal_change": 0.0}
+
+    def mandelbrot_distance_estimate(self, c_values):
+        return torch.zeros(len(c_values))
 
 
 def test_control_trainer_falls_back_on_num_features_exception():
@@ -176,7 +193,11 @@ def test_control_trainer_falls_back_on_num_features_exception():
         def num_features_per_frame(self):
             raise RuntimeError("boom")
 
-    # Create trainer with the bad feature extractor
+    # Create trainer with the bad feature extractor. The c-space proxy
+    # fast path routes the contour step through the real Rust binding
+    # (contour_biased_step_py), which the fake runtime_core module does
+    # not implement — disable it so this test exercises only the
+    # num_features_per_frame fallback behavior.
     trainer = ControlTrainer(
         model=model,
         visual_metrics=DummyVisualMetrics(),
@@ -186,6 +207,7 @@ def test_control_trainer_falls_back_on_num_features_exception():
         use_curriculum=False,
         num_workers=0,
         k_residuals=6,
+        use_cspace_proxies=False,
     )
 
     # Create synthetic feature tensor (11 frames, input dim = 6*10)

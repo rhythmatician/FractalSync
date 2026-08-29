@@ -1,6 +1,11 @@
+import sys
 from pathlib import Path
 import json
-from backend.scripts.telemetry_summary import iter_entries, summarize
+
+# Import via the backend directory layout regardless of where pytest is
+# invoked from (repo root or backend/).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts.telemetry_summary import iter_entries, summarize
 
 
 def test_summarize(tmp_path, monkeypatch):

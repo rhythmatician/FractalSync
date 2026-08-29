@@ -133,11 +133,11 @@ def make_orbit_state(*, lobe: int = 1, sub_lobe: int = 0, theta: float = 0.0, om
     raise RuntimeError("make_orbit_state: seed provided but OrbitState.new_with_seed() not available")
 
 
-def step_orbit(state: rc.OrbitState, dt: float, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Sequence[float]] = None) -> rc.Complex:
+def step_orbit(state: rc.OrbitState, dt: float, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Sequence[float]] = None) -> complex:
     rp = residual_params or make_residual_params()
-    return state.step(dt, rp, band_gates=list(band_gates) if band_gates is not None else None)
+    return state.step(dt, rp, band_gates=list(band_gates) if band_gates is not None else None)  # type: ignore[return-value]  # PyO3 returns a Complex object
 
 
-def synthesize(state: rc.OrbitState, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Iterable[float]] = None) -> rc.Complex:
+def synthesize(state: rc.OrbitState, residual_params: Optional[rc.ResidualParams] = None, band_gates: Optional[Iterable[float]] = None) -> complex:
     rp = residual_params or make_residual_params()
-    return state.synthesize(rp, list(band_gates) if band_gates is not None else None)
+    return state.synthesize(rp, list(band_gates) if band_gates is not None else None)  # type: ignore[return-value]  # PyO3 returns a Complex

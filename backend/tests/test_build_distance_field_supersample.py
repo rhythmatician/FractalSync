@@ -7,7 +7,7 @@ from scipy import ndimage
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
-from scripts.build_distance_field import build_signed_distance
+from scripts.build_distance_field import Coords, build_signed_distance
 
 
 def generate_circle_mask(res, xmin, xmax, ymin, ymax, cx=0.0, cy=0.0, r=0.5):
@@ -37,16 +37,15 @@ def test_supersampled_reduces_error():
 
     # low-res mask and SDF
     low_mask = generate_circle_mask(res, xmin, xmax, ymin, ymax, cx=0.0, cy=0.0, r=0.5)
-    signed_low, dx_low, dy_low = build_signed_distance(low_mask, xmin, xmax, ymin, ymax)
+    coords = Coords(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+    signed_low, dx_low, dy_low = build_signed_distance(low_mask, coords)
 
     # high-res mask and SDF
     high_res = res * ss
     high_mask = generate_circle_mask(
         high_res, xmin, xmax, ymin, ymax, cx=0.0, cy=0.0, r=0.5
     )
-    signed_high, dx_high, dy_high = build_signed_distance(
-        high_mask, xmin, xmax, ymin, ymax
-    )
+    signed_high, dx_high, dy_high = build_signed_distance(high_mask, coords)
 
     # downsample high-res SDF
     signed_ds = downsample_signed(signed_high, ss, res)

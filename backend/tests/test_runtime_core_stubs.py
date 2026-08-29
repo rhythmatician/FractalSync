@@ -197,18 +197,27 @@ def test_class_members_have_expected_types():
                     inst = cls(0.0, 0.0)
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
+                elif cls_name == "PlayerState":
+                    inst = cls(1, 0, 0.0, 0.1)
+                elif cls_name == "OrbitState":
+                    inst = cls.new_default_seeded(42)
+                elif cls_name == "OrbitController":
+                    inst = cls(1.0, 0.3, 1)
             except Exception:
                 inst = None
 
         type_mismatches = {}
         for member_name, expected_type in member_types.items():
             actual_member = None
-            # Check class-level member
-            if hasattr(cls, member_name):
-                actual_member = getattr(cls, member_name)
-            # Check instance-level member
-            elif inst is not None and hasattr(inst, member_name):
+            # Prefer the instance value for property/data members. PyO3
+            # exposes `#[pyo3(get, set)]` fields as getset_descriptors at
+            # class level, so the class attribute is a descriptor object,
+            # not the declared runtime type. Reading from an instance (when
+            # available) yields the real value and is the meaningful check.
+            if inst is not None and hasattr(inst, member_name):
                 actual_member = getattr(inst, member_name)
+            elif hasattr(cls, member_name):
+                actual_member = getattr(cls, member_name)
 
             if actual_member is not None:
                 # If the member is a callable (likely a method) and we have an
