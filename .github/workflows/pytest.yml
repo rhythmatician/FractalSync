@@ -205,7 +205,7 @@ jobs:
       - name: Run cargo tests
         run: |
           cd runtime-core
-          cargo test --lib --release
+          cargo test --release
 
   wasm-orbit-build:
     name: WASM-Orbit Build (wasm-pack)
