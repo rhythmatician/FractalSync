@@ -93,7 +93,7 @@ executes, with identical window layout and normalization semantics.
 extraction. Training runs it via the Python bindings; the browser runs it via
 a new `FeatureExtractor` binding in `wasm-orbit`, fed raw PCM from
 `AnalyserNode.getFloatTimeDomainData` (resampled to 48 kHz). The former
-JavaScript reimplementation (`frontend/src/lib/audioFeatures.ts` extraction logic) is retired — the file remains only as a hard-failing stub —
+JavaScript reimplementation (`frontend/src/lib/audioFeatures.ts` extraction logic) is retired and deleted —
 it had drifted from training on FFT size (2048 vs 4096), smoothing,
 dB-domain math, and per-file min-max normalization that the browser cannot
 reproduce.

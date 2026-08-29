@@ -45,7 +45,6 @@ ALWAYS_EXCLUDE = {
     "scripts/architecture_guardrail.py",
     "scripts/preflight_parity.py",
     "scripts/build_distance_field/__init__.py",
-    "frontend/src/lib/audioFeatures.ts",  # retired hard-failing stub (ADR 0001)
 }
 
 # Suffixes that are binding declarations (generated from the Rust API).
