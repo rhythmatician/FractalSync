@@ -268,6 +268,67 @@ def test_gather_expected_member_types_returns_nonempty_dict():
             assert isinstance(expected_type, type)
 
 
+def test_orbit_state_python_properties_preserve_instance_state():
+    """Binding semantics: property reads reflect per-instance Rust state.
+
+    Type-level stub checks cannot catch a class-attribute shadowing
+    regression (shadowed values are still valid int/float). This test
+    encodes the actual invariant: constructor values survive reads,
+    writable controller inputs mutate per-instance state, and
+    state-machine-owned quantities (theta, omega) stay read-only.
+    """
+    state = rc.OrbitState(
+        2,      # lobe
+        1,      # sub_lobe
+        0.5,    # theta
+        2.0,    # omega
+        1.5,    # s
+        0.6,    # alpha
+        6,
+        1.0,
+    )
+
+    assert state.lobe == 2
+    assert state.sub_lobe == 1
+    assert state.theta == pytest.approx(0.5)
+    assert state.omega == pytest.approx(2.0)
+    assert state.s == pytest.approx(1.5)
+    assert state.alpha == pytest.approx(0.6)
+
+    state.lobe = 3
+    state.sub_lobe = 2
+    state.s = 0.8
+    state.alpha = 0.25
+
+    assert state.lobe == 3
+    assert state.sub_lobe == 2
+    assert state.s == pytest.approx(0.8)
+    assert state.alpha == pytest.approx(0.25)
+
+    with pytest.raises(AttributeError):
+        state.theta = 1.0
+
+    with pytest.raises(AttributeError):
+        state.omega = 1.0
+
+
+def test_residual_params_python_properties_preserve_instance_state():
+    """Binding semantics for ResidualParams (same shadowing mechanism)."""
+    params = rc.ResidualParams(k_residuals=6, residual_cap=4.0, radius_scale=0.75)
+
+    assert params.k_residuals == 6
+    assert params.residual_cap == pytest.approx(4.0)
+    assert params.radius_scale == pytest.approx(0.75)
+
+    params.k_residuals = 8
+    params.residual_cap = 2.5
+    params.radius_scale = 1.25
+
+    assert params.k_residuals == 8
+    assert params.residual_cap == pytest.approx(2.5)
+    assert params.radius_scale == pytest.approx(1.25)
+
+
 def gather_expected_member_types() -> dict[str, dict[str, type]] | None:
     """Gather expected member types for select classes from the stubs.
 
