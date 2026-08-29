@@ -12,6 +12,7 @@ import logging
 from typing import Iterable, Optional, Sequence
 
 import numpy as np
+from numpy.typing import NDArray
 
 import runtime_core as rc
 
@@ -75,8 +76,8 @@ class FeatureExtractorProxy:
 
     def __init__(self, fe: rc.FeatureExtractor):
         self._fe = fe
-        self.feature_mean = None
-        self.feature_std = None
+        self.feature_mean: Optional[NDArray[np.float64]] = None
+        self.feature_std: Optional[NDArray[np.float64]] = None
 
     def num_features_per_frame(self) -> int:
         attr = getattr(self._fe, "num_features_per_frame", None)

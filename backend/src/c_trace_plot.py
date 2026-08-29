@@ -86,10 +86,10 @@ def plot_c_traces(
         The path written, or None if matplotlib is unavailable.
     """
     try:
-        import matplotlib
+        import matplotlib  # type: ignore[import-not-found]
 
         matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt  # type: ignore[import-not-found]
     except ImportError:
         logger.warning("matplotlib unavailable; skipping c-trace plot")
         return None

@@ -23,7 +23,7 @@ fn boundary_matches_ts_reference() {
         for j in 0..8 {
             let alpha = i as f64 / 16.0;
             let s = 0.2 + 2.6 * j as f64 / 7.0;
-            let mut ctrl = OrbitController::new(s, alpha, 1.0);
+            let ctrl = OrbitController::new(s, alpha, 1.0);
             let c = ctrl.mandelbrot_boundary();
             let (re, im) = ts_mandelbrot_boundary(s, alpha);
             assert!(
@@ -137,7 +137,7 @@ fn shore_bias_engages_only_with_pyramid() {
     ctrl.apply_controls(1.0, 0.5);
     let c = ctrl.step(1.0 / 60.0, None, 0.0);
     // Should have moved toward the new boundary point (clamped by max_step).
-    let moved = ((c.re - ctrl.mandelbrot_boundary().re).abs()
-        + (c.im - ctrl.mandelbrot_boundary().im).abs());
+    let moved = (c.re - ctrl.mandelbrot_boundary().re).abs()
+        + (c.im - ctrl.mandelbrot_boundary().im).abs();
     assert!(moved > 0.0, "shore_bias without pyramid must still move toward target");
 }

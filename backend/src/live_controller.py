@@ -10,6 +10,7 @@ Implements the new architecture with:
 
 import numpy as np
 import librosa
+from numpy.typing import NDArray
 from typing import Tuple, Dict, List, Optional, Union, cast
 from dataclasses import dataclass
 from collections import deque
@@ -101,8 +102,8 @@ class AudioFeatureStream:
         self.mel_fb = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=self.n_bands)
 
         # State for computing deltas
-        self.prev_spectrum = None
-        self.prev_band_energies = None
+        self.prev_spectrum: Optional[NDArray[np.float64]] = None
+        self.prev_band_energies: Optional[NDArray[np.float64]] = None
 
     def compute_fast_features(
         self, audio_frame: np.ndarray, timestamp: float

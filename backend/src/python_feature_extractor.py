@@ -16,7 +16,7 @@ Contract (FEATURE_VERSION = features/2):
 import numpy as np
 import librosa
 from numpy.typing import NDArray
-from typing import cast
+from typing import Optional, cast
 
 
 class PythonFeatureExtractor:
@@ -35,8 +35,8 @@ class PythonFeatureExtractor:
         self.n_fft = n_fft
         self.include_delta = include_delta
         self.include_delta_delta = include_delta_delta
-        self.feature_mean = None
-        self.feature_std = None
+        self.feature_mean: Optional[NDArray[np.float64]] = None
+        self.feature_std: Optional[NDArray[np.float64]] = None
 
     def num_features_per_frame(self) -> int:
         """Return number of features per frame."""

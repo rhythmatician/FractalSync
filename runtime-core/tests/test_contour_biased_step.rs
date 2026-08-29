@@ -1,11 +1,25 @@
 //! Tests for the contour-biased stepper (Physics reading the slope).
 
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
 use runtime_core::minimap::{contour_biased_step, MipPyramid};
+
+/// The pyramid is process-global state (`minimap::set_pyramid`), so tests
+/// that install/clear it must not run concurrently — a parallel test's
+/// `clear_pyramid()` makes another test's step take the no-map fallback
+/// path and produce zero motion, failing its assertions intermittently.
+/// Every test in this file takes this lock for its entire body.
+fn pyramid_lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    match LOCK.get_or_init(|| Mutex::new(())).lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
 
 /// Pyramid with a linear shore-proximity field increasing with column
 /// (toward +Re). Gradient points toward +Re; contours run along Im.
 fn linear_pyramid() -> MipPyramid {
-    let w = 64usize;
     let mut levels = Vec::new();
     let mut widths = Vec::new();
     let mut heights = Vec::new();
@@ -27,9 +41,10 @@ fn linear_pyramid() -> MipPyramid {
 
 #[test]
 fn no_pyramid_falls_back_to_clamped_motion() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::clear_pyramid();
     // Huge proposed delta must be clamped to max_step.
-    let (x, y) = contour_biased_step(0.0, 0.0, 10.0, 0.0, 0.0, 0.5, 0.01, 2, 0.0)
+    let (x, _y) = contour_biased_step(0.0, 0.0, 10.0, 0.0, 0.0, 0.5, 0.01, 2, 0.0)
         .expect("step with no pyramid");
     let dx = x - 0.0;
     assert!((dx - 0.01).abs() < 1e-9, "expected clamped step, got {}", dx);
@@ -37,6 +52,7 @@ fn no_pyramid_falls_back_to_clamped_motion() {
 
 #[test]
 fn tangential_motion_passes_through() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     // Contours run along Im (gradient is along Re). Moving purely along Im
     // is tangential: it should pass through nearly unmodified.
@@ -50,11 +66,12 @@ fn tangential_motion_passes_through() {
 
 #[test]
 fn normal_motion_suppressed_between_hits() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     // Motion purely along the gradient (+Re) is normal to the contour.
     // With h=0 (no transient), normal motion is suppressed to 2% (the wall).
     // d_star = current proximity so the servo is neutral.
-    let (x, y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 0.0, 32.0 / 63.0, 1.0, 0, 0.0)
+    let (x, _y) = contour_biased_step(-0.5, 0.0, 0.01, 0.0, 0.0, 32.0 / 63.0, 1.0, 0, 0.0)
         .expect("normal step");
     let dx = x - (-0.5);
     assert!(
@@ -67,6 +84,7 @@ fn normal_motion_suppressed_between_hits() {
 
 #[test]
 fn normal_motion_allowed_during_hits() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     // With h=1 (full transient), the wall opens: normal motion passes through.
     // d_star = current proximity so the servo is neutral.
@@ -83,6 +101,7 @@ fn normal_motion_allowed_during_hits() {
 
 #[test]
 fn music_push_moves_uphill() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     // Zero proposed motion, zero energy: no push, c does not move.
     let (x_quiet, _) = contour_biased_step(-0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 0, 0.0)
@@ -106,6 +125,7 @@ fn music_push_moves_uphill() {
 
 #[test]
 fn max_step_clamps_total_motion() {
+    let _guard = pyramid_lock();
     runtime_core::minimap::set_pyramid(linear_pyramid()).unwrap();
     let (x, y) = contour_biased_step(0.0, 0.0, 1.0, 1.0, 1.0, 0.5, 0.02, 0, 0.0)
         .expect("clamped step");
@@ -145,6 +165,7 @@ fn cardioid_proximity(c_re: f64, c_im: f64) -> f64 {
 
 #[test]
 fn cardioid_fallback_sign_regression() {
+    let _guard = pyramid_lock();
     // Regression test for the music-push sign bug in cardioid_fallback_step.
     //
     // p(c) = ||mu|-1| DECREASES toward the cardioid boundary, so the
