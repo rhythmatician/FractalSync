@@ -16,7 +16,7 @@ jobs:
                   fetch-depth: 0
 
             - name: Setup Python
-              uses: actions/setup-python@v4
+              uses: astral-sh/setup-uv@v5
               with:
                   python-version: "3.10"
 
@@ -25,17 +25,16 @@ jobs:
               with:
                   toolchain: stable
 
-            - name: Create virtualenv
+            - name: Create virtualenv (uv)
               # maturin develop requires an active virtualenv; CI has none by
-              # default. Create one and put it on PATH so the stub script's
-              # `maturin develop --release` and `python` calls use it — the
-              # same environment shape as local generation.
+              # default. Create one with uv and put it on PATH so the stub
+              # script's `maturin develop --release` and `python` calls use
+              # it — the same environment shape as local generation.
               run: |
-                  python -m venv .venv
+                  uv venv .venv
                   echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
                   echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-                  .venv/bin/python -m pip install --upgrade pip
-                  .venv/bin/python -m pip install maturin pyo3-stubgen
+                  uv pip install --python .venv/bin/python maturin pyo3-stubgen
 
             - name: Generate runtime_core stubs
               run: |
