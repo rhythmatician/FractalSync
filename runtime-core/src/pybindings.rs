@@ -1024,6 +1024,14 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Feature-extraction contract (ADR 0001): version + pinned epsilon.
     m.add("FEATURE_VERSION", crate::features::FEATURE_VERSION)?;
     m.add("NORM_EPS", crate::features::NORM_EPS)?;
+    // Analysis-pipeline contract (issue #93): how audio reaches the
+    // extractor (resampling ownership, hop scheduling, epoch semantics).
+    // Distinct from FEATURE_VERSION (the formulas). Stamped into ONNX
+    // metadata; the browser refuses mismatches.
+    m.add(
+        "ANALYSIS_PIPELINE_VERSION",
+        crate::timebase::ANALYSIS_PIPELINE_VERSION,
+    )?;
 
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;

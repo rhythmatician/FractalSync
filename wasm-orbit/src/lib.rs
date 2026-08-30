@@ -27,6 +27,7 @@ use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
 use runtime_core::timebase::{
     AnalysisTimebase as RustAnalysisTimebase,
     ResetReason as RustResetReason,
+    ANALYSIS_PIPELINE_VERSION,
 };
 
 /// Shared constants exposed to JavaScript
@@ -45,6 +46,7 @@ pub fn constants() -> JsValue {
         default_orbit_seed: u64,
         controller_version: String,
         feature_version: String,
+        analysis_pipeline_version: String,
         norm_eps: f64,
     }
 
@@ -59,6 +61,7 @@ pub fn constants() -> JsValue {
         default_base_omega: DEFAULT_BASE_OMEGA,
         controller_version: CONTROLLER_VERSION.to_string(),
         feature_version: FEATURE_VERSION.to_string(),
+        analysis_pipeline_version: ANALYSIS_PIPELINE_VERSION.to_string(),
         norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };

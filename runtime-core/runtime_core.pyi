@@ -25,6 +25,7 @@ DEFAULT_BASE_OMEGA: float
 DEFAULT_ORBIT_SEED: int
 CONTROLLER_VERSION: str
 FEATURE_VERSION: str
+ANALYSIS_PIPELINE_VERSION: str
 NORM_EPS: float
 
 class FeatureExtractor:
@@ -46,6 +47,19 @@ class FeatureExtractor:
     def num_features_per_frame(self) -> int: ...
 
     def test_simple(self) -> list[float]: ...
+
+
+class AnalysisTimebase:
+
+    def __init__(self, ) -> None: ...
+
+    def diagnostics(self) -> dict: ...
+
+    def flush(self) -> list[dict]: ...
+
+    def ingest(self, samples: Union[Sequence[float], NDArray[np.floating]], source_sample_rate: int, source_start_frame: int) -> list[dict]: ...
+
+    def reset(self) -> None: ...
 
 
 class ResidualParams:

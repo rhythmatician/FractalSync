@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
 export interface VisualParameters {
@@ -33,6 +33,7 @@ export interface ModelMetadata {
   controller_version?: string;
   /** Feature-extraction contract stamp. Missing = pre-contract legacy. */
   feature_version?: string;
+  analysis_pipeline_version?: string;
 }
 
 export interface PerformanceMetrics {
@@ -219,6 +220,34 @@ export class ModelInference {
             );
           } else {
             console.log(`[ModelInference] Feature contract OK: ${runtimeFeatureVersion}`);
+          }
+
+          // Analysis-pipeline contract (issue #93): the model must have been
+          // trained against the same ingestion pipeline this runtime runs
+          // (resampling ownership, hop scheduling, epoch semantics) — even
+          // when the feature FORMULAS are identical, inputs produced by a
+          // different pipeline have different semantics. A model without the
+          // stamp predates the pipeline contract and is refused (unlike
+          // feature_version, where legacy models get a warning): every
+          // pre-timebase model was trained on the librosa-resampled path the
+          // runtime no longer executes.
+          const runtimePipelineVersion = getAnalysisPipelineVersion();
+          const modelPipelineVersion = this.metadata.analysis_pipeline_version;
+          if (!modelPipelineVersion) {
+            throw new Error(
+              `Model has no analysis_pipeline_version stamp (pre-timebase ` +
+                `legacy model). It was trained on an ingestion pipeline this ` +
+                `runtime does not execute. Refusing to load — retrain the model.`
+            );
+          } else if (modelPipelineVersion !== runtimePipelineVersion) {
+            throw new Error(
+              `Analysis pipeline version mismatch: model was trained against ` +
+                `'${modelPipelineVersion}' but this runtime runs ` +
+                `'${runtimePipelineVersion}'. Refusing to load — retrain the ` +
+                `model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Analysis pipeline contract OK: ${runtimePipelineVersion}`);
           }
 
           // Load the minimaps so the Player's contour-biased stepper can

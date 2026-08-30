@@ -26,9 +26,11 @@ import librosa
 # from direct extractor calls to the canonical AnalysisTimebase). Old caches
 # computed by a different pipeline MUST NOT be reused — they were produced
 # by a path the runtime does not execute (the #93 failure mode).
+# NOTE: the authoritative pipeline version lives in Rust
+# (runtime_core.ANALYSIS_PIPELINE_VERSION) and is stamped into ONNX
+# metadata + checked by the browser; this local copy only keys the feature
+# cache and must be kept in sync with the Rust constant.
 PIPELINE_VERSION = "timebase/1"
-
-import librosa
 
 
 class AudioDataset:
@@ -155,12 +157,18 @@ class AudioDataset:
                 cache_file.unlink(missing_ok=True)
 
         logging.info(f"Extracting features from {audio_file.name}...")
-        # Limit decode time to avoid reading entire multi-hour files in quick runs
-        audio, _ = librosa.load(
-            str(audio_file), sr=SAMPLE_RATE, mono=True, duration=5 * 60
+        # Decode at the file's NATIVE rate (sr=None). The browser sends its
+        # actual source rate into the Rust StreamingResampler; training must
+        # do the same. Resampling with librosa first (sr=SAMPLE_RATE) would
+        # mean training and runtime run DIFFERENT resamplers on the same
+        # source — a production-path divergence the component tests cannot
+        # see (the #93 class, one layer deeper).
+        audio, source_rate_raw = librosa.load(
+            str(audio_file), sr=None, mono=True, duration=5 * 60
         )
+        source_rate = int(source_rate_raw)
 
-        features = self._extract_via_timebase(audio)
+        features = self._extract_via_timebase(audio, source_rate)
 
         if cache_file:
             try:
@@ -170,34 +178,37 @@ class AudioDataset:
 
         return features
 
-    def _extract_via_timebase(self, audio: NDArray[np.floating]) -> NDArray[np.float64]:
+    def _extract_via_timebase(
+        self, audio: NDArray[np.floating], source_rate: int
+    ) -> NDArray[np.float64]:
         """Extract features through the canonical AnalysisTimebase.
 
         Training must execute the SAME ingestion pipeline the browser
-        executes (ADR 0001, issue #93): PCM → AnalysisTimebase (stateful
-        resampling, exactly-once validation, 1024-sample hop scheduling,
-        epoch semantics) → Rust FeatureExtractor → ticks. Calling the
-        extractor directly on the whole file bypasses the timebase and
-        produces features the runtime path cannot reproduce (different
-        window alignment, no streaming history semantics).
+        executes (ADR 0001, issue #93): native-rate PCM → AnalysisTimebase
+        (stateful Rust resampling, exactly-once validation, 1024-sample hop
+        scheduling, epoch semantics) → Rust FeatureExtractor → ticks.
 
-        The file is fed as one contiguous PCM block at the canonical rate
-        (librosa already resampled to SAMPLE_RATE); the timebase schedules
-        the hops and runs the extractor exactly as the browser's wasm
-        timebase does. Ticks are collected in order; each tick's feature
-        vector is one training window.
+        ``source_rate`` is the file's NATIVE rate (from the decoder), the
+        same role the browser's AudioWorklet ``sampleRate`` plays. The Rust
+        StreamingResampler does ALL rate conversion — never resample in
+        Python first, or training and runtime run different resamplers.
+
+        Ticks are collected in order; each tick's feature vector is one
+        training window.
         """
         timebase = AnalysisTimebase()
         all_windows: List[List[float]] = []
 
         # Feed in bounded blocks (mirrors the worklet's block cadence and
-        # avoids large PyO3 boundary payloads on Windows).
-        block_size = SAMPLE_RATE  # 1 s blocks
+        # avoids large PyO3 boundary payloads on Windows). Block size is
+        # expressed in SOURCE frames; cadence does not affect output
+        # (chunk invariance is a timebase guarantee).
+        block_size = source_rate  # ~1 s blocks
         n = len(audio)
         for start in range(0, n, block_size):
             end = min(start + block_size, n)
             block = np.ascontiguousarray(audio[start:end], dtype=np.float32)
-            ticks = timebase.ingest(block.tolist(), SAMPLE_RATE, start)
+            ticks = timebase.ingest(block.tolist(), source_rate, start)
             for tick in ticks:
                 all_windows.append(tick["features"])
         # End-of-stream: recover the deferred final sample/tick.

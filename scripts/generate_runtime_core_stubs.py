@@ -273,6 +273,18 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
             RET: "tuple[float, float]",
         },
     },
+    "AnalysisTimebase": {
+        "__init__": {RET: "None"},
+        "ingest": {
+            "samples": "Union[Sequence[float], NDArray[np.floating]]",
+            "source_sample_rate": "int",
+            "source_start_frame": "int",
+            RET: "list[dict]",
+        },
+        "flush": {RET: "list[dict]"},
+        "reset": {RET: "None"},
+        "diagnostics": {RET: "dict"},
+    },
 }
 
 # Attribute annotations for getset_descriptor members (rendered as
@@ -322,12 +334,14 @@ CONSTANT_TYPES: dict[str, str] = {
     "DEFAULT_ORBIT_SEED": "int",
     "CONTROLLER_VERSION": "str",
     "FEATURE_VERSION": "str",
+    "ANALYSIS_PIPELINE_VERSION": "str",
     "NORM_EPS": "float",
 }
 
 # Classes to document, in stable order.
 CLASS_ORDER = [
     "FeatureExtractor",
+    "AnalysisTimebase",
     "ResidualParams",
     "OrbitState",
     "PlayerState",

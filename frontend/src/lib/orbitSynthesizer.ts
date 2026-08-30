@@ -79,6 +79,7 @@ interface WasmModule {
     default_orbit_seed: number;
     controller_version?: string;
     feature_version?: string;
+    analysis_pipeline_version?: string;
     sample_rate?: number;
     hop_length?: number;
     n_fft?: number;
@@ -207,6 +208,21 @@ export function getFeatureVersion(): string {
   if (!wasm) return 'unknown';
   try {
     return wasm.constants().feature_version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * The runtime's analysis-pipeline contract version (from the Rust constant
+ * via wasm constants). Versions HOW audio reaches the extractor (resampling
+ * ownership, hop scheduling, epoch semantics) — distinct from the feature
+ * FORMULA version. Returns 'unknown' if the wasm build predates the field.
+ */
+export function getAnalysisPipelineVersion(): string {
+  if (!wasm) return 'unknown';
+  try {
+    return wasm.constants().analysis_pipeline_version ?? 'unknown';
   } catch {
     return 'unknown';
   }

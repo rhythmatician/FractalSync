@@ -232,6 +232,54 @@ fn restart_bumps_epoch_and_resets_schedule() {
 }
 
 #[test]
+fn reset_clears_history_post_reset_features_are_new_signal_only() {
+    // PRODUCTION-PATH PARITY (epoch hygiene): after a reset (song change,
+    // mic reconnect, detected gap), the first feature windows of the new
+    // epoch must depend ONLY on the new signal. reset() previously kept
+    // `history`, so post-reset windows could contain previous-epoch audio —
+    // catastrophic for CycleBank, where an epoch boundary is a song change.
+    //
+    // Two radically different signals: a 220 Hz tone, then silence. If any
+    // pre-reset audio leaked into post-reset features, the post-reset
+    // features would differ from a fresh timebase fed only the second
+    // signal.
+    let tone: Vec<f32> = (0..48_000usize)
+        .map(|i| {
+            let t = i as f32 / 48_000.0;
+            0.5 * (2.0 * std::f32::consts::PI * 220.0 * t).sin()
+        })
+        .collect();
+    let silence = vec![0.0f32; 48_000];
+
+    // Path A: tone → reset → silence.
+    let mut tb = AnalysisTimebase::new();
+    tb.ingest(&tone, 48_000, 0).unwrap();
+    tb.reset(ResetReason::SourceReplacement);
+    let post_reset = tb.ingest(&silence, 48_000, 0).unwrap();
+    assert!(!post_reset.is_empty(), "post-reset stream produced no ticks");
+
+    // Path B (reference): a FRESH timebase fed only silence.
+    let mut fresh = AnalysisTimebase::new();
+    let reference = fresh.ingest(&silence, 48_000, 0).unwrap();
+    assert_eq!(post_reset.len(), reference.len());
+
+    for (i, (a, b)) in post_reset.iter().zip(reference.iter()).enumerate() {
+        assert_eq!(a.sample_index, b.sample_index);
+        let max_err = a
+            .features
+            .iter()
+            .zip(b.features.iter())
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_err < 1e-9,
+            "tick {i}: post-reset features leaked previous-epoch audio \
+             (max_err={max_err}); reset() must clear feature history"
+        );
+    }
+}
+
+#[test]
 fn rate_change_mid_stream_is_rejected() {
     let mut tb = AnalysisTimebase::new();
     tb.ingest(&vec![0.0f32; 1024], 48_000, 0).unwrap();

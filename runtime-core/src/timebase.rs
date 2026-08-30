@@ -27,6 +27,25 @@ pub const CANONICAL_SAMPLE_RATE: usize = SAMPLE_RATE;
 /// Canonical hop length in canonical samples (runtime-core authority).
 pub const CANONICAL_HOP_LENGTH: usize = HOP_LENGTH;
 
+/// Contract version of the ANALYSIS PIPELINE (distinct from FEATURE_VERSION,
+/// which versions the feature formulas). This versions HOW audio reaches the
+/// extractor: resampling ownership, hop scheduling, epoch semantics, and
+/// window anchoring. A model trained against a different analysis pipeline
+/// consumes inputs with different semantics even when the feature formulas
+/// are identical — so the browser must refuse a model whose
+/// analysis_pipeline_version differs from its own.
+///
+/// Bump whenever ANY of these change:
+///   - who performs resampling (e.g. Python/librosa vs Rust StreamingResampler)
+///   - hop scheduling or window anchoring (TICK_WINDOW_SAMPLES)
+///   - epoch/reset semantics (e.g. whether history survives a reset)
+///
+/// Version history:
+///   analysis/1 - Rust-owned timebase end-to-end: native-rate PCM into
+///       StreamingResampler on BOTH surfaces, hop-anchored feature windows,
+///       history cleared on reset.
+pub const ANALYSIS_PIPELINE_VERSION: &str = "analysis/1";
+
 /// Canonical samples feeding one tick's feature window: exactly enough to
 /// cover n_fft + (WINDOW_FRAMES - 1) hops. Tick windows are anchored to the
 /// hop boundary (their END is fixed at the hop sample and their length is a
@@ -376,13 +395,19 @@ impl AnalysisTimebase {
     }
 
     /// Declare a stream discontinuity (start/stop/source replacement). Bumps
-    /// the epoch and clears resampler phase + hop accounting. History is
-    /// kept (the extractor needs warm-up PCM) but hop scheduling restarts.
+    /// the epoch and clears resampler phase, hop accounting, AND feature
+    /// history. History MUST be cleared: after changing songs, reconnecting
+    /// a mic, or detecting a gap, the first feature windows of the new
+    /// epoch must depend only on the NEW signal — retaining previous-epoch
+    /// audio would leak the old stream into the new one's features (the
+    /// extractor's warm-up cost is a few windows of silence, not a parity
+    /// hazard; cross-epoch contamination is).
     pub fn reset(&mut self, reason: ResetReason) {
         self.epoch += 1;
         self.canonical_pos = 0;
         self.next_hop_sample = 0;
         self.expected_source_frame = 0;
+        self.history.clear();
         if let Some(r) = self.resampler.as_mut() {
             r.reset();
         }
