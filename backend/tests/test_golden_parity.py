@@ -72,7 +72,9 @@ class TestMirrorGolden:
             # the phases the Rust generator used — recover them via runtime_core.
             import runtime_core
 
-            phases = runtime_core.residual_phases_for_seed_py(case["seed"], len(case["band_gates"]))
+            phases = runtime_core.residual_phases_for_seed_py(
+                case["seed"], len(case["band_gates"])
+            )
             pt_c = synthesize_c(
                 s_target=torch.tensor([case["s"]]),
                 alpha=torch.tensor([case["alpha"]]),

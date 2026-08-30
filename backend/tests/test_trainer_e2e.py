@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import pytest
 import re
 import os
@@ -17,14 +18,19 @@ WINDOW_FRAMES = runtime_core.WINDOW_FRAMES
 
 
 def test_trainer_e2e():
-    command = "python train.py  --data-dir data/testing"
+    # Interpreter consistency (multi-interpreter pitfall): this repo may have
+    # a base interpreter AND a project .venv, each with its own runtime_core
+    # install. Shelling out to bare `python` resolves from PATH and can pick
+    # a DIFFERENT interpreter with a STALE wheel — the test then validates
+    # bindings pytest never imported. Always reuse sys.executable so the
+    # subprocess runs the exact interpreter (and wheel) pytest is using.
+    command = [sys.executable, "train.py", "--data-dir", "data/testing"]
     # Use the backend directory (calculated from this test file) so the test
     # behaves the same regardless of where pytest is invoked from.
     working_dir = str(Path(__file__).resolve().parent.parent)
 
     result = subprocess.run(
         command,
-        shell=True,
         cwd=working_dir,
         capture_output=True,
         text=True,

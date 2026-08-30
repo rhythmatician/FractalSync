@@ -197,9 +197,7 @@ class AudioDataset:
         for start in range(0, n, block_size):
             end = min(start + block_size, n)
             block = np.ascontiguousarray(audio[start:end], dtype=np.float32)
-            ticks = timebase.ingest(
-                block.tolist(), SAMPLE_RATE, start
-            )
+            ticks = timebase.ingest(block.tolist(), SAMPLE_RATE, start)
             for tick in ticks:
                 all_windows.append(tick["features"])
         # End-of-stream: recover the deferred final sample/tick.

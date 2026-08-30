@@ -84,6 +84,7 @@ If anything here seems off or incomplete (e.g., ports, paths, or training params
 - `checkpoints/` — where checkpoints, ONNX models and metadata are saved.
 
 ## Developer workflows (short)
+- **Python interpreter rule (multi-interpreter pitfall)**: this repo may have a base interpreter AND a project `.venv`, each with its own `runtime_core` wheel. ALWAYS run Python through the venv explicitly (`& .venv\Scripts\python.exe -m pytest backend`, `& .venv\Scripts\python.exe backend\train.py ...`) and ALWAYS reuse `sys.executable` in subprocesses — never bare `python` (PATH may resolve the other interpreter with a stale wheel). `backend/tests/test_interpreter_consistency.py` enforces this in CI.
 - Backend setup (Windows):
   - `cd backend`
   - `pip install -r requirements.txt`

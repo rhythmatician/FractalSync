@@ -57,7 +57,11 @@ def load_manifest() -> dict:
 
 def extract_pyclasses(source: str) -> set[str]:
     """Names of structs annotated #[pyclass] in pybindings.rs."""
-    return set(re.findall(r"#\[\s*pyclass[^\]]*\]\s*(?:#[^\]]*\]\s*)*pub\s+struct\s+(\w+)", source))
+    return set(
+        re.findall(
+            r"#\[\s*pyclass[^\]]*\]\s*(?:#[^\]]*\]\s*)*pub\s+struct\s+(\w+)", source
+        )
+    )
 
 
 def extract_wasm_classes(source: str) -> set[str]:
