@@ -578,8 +578,10 @@ def orbit_controller_oracle_sequence(
     ``level`` (mip level for the contour step), and ``d_star`` (target
     shore-proximity for the servo).
     """
-    import runtime_core
-
+    # Note: ``runtime_core`` is imported lazily inside
+    # ``_ContourStep.forward`` (line ~746) where the actual binding is
+    # used. Importing here would be a no-op binding lookup that ruff
+    # flags as F401.
     n = s_target.shape[0]
     device = s_target.device
 
@@ -780,7 +782,9 @@ class _ContourStep(torch.autograd.Function):
         )
 
     @staticmethod
-    def backward(ctx, grad_delta_re: torch.Tensor, grad_delta_im: torch.Tensor):
+    def backward(  # type: ignore[override]
+        ctx, grad_delta_re: torch.Tensor, grad_delta_im: torch.Tensor
+    ):
         # Identity surrogate: gradient of the loss with respect to
         # the new c equals the gradient of the loss with respect to
         # the old c (the contour step is treated as a small constant

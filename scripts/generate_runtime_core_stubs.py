@@ -9,7 +9,10 @@ bindings. Only Python-facing type annotations live in the table below,
 because PyO3 0.21 does not expose Python types through introspection.
 
 Usage:
-    python scripts/generate_runtime_core_stubs.py -o backend/stubs/runtime_core
+    python scripts/generate_runtime_core_stubs.py
+    # writes to backend/stubs/runtime_core/__init__.pyi
+    python scripts/generate_runtime_core_stubs.py -o /tmp/stubs
+    # writes to /tmp/stubs/runtime_core/__init__.pyi
 
 Requires the ``runtime_core`` extension to be importable (run
 ``maturin develop --release`` in runtime-core/ first).
@@ -642,14 +645,29 @@ def generate_pyi() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--output-dir", default="backend/stubs/runtime_core")
+    # The installed wheel exports a *package* (has ``__init__.py``), so
+    # the matching Pyright stub must be at
+    # ``<out_dir>/runtime_core/__init__.pyi``. Writing a flat
+    # ``<out_dir>/runtime_core.pyi`` would be silently ignored by Pyright
+    # for ``import runtime_core`` resolution because the stub is searched
+    # by import name, not by filename. Always write the package form.
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        default="backend/stubs",
+        help=(
+            "Parent directory that will contain the ``runtime_core`` "
+            "package stub. The script always writes to "
+            "``<output-dir>/runtime_core/__init__.pyi``."
+        ),
+    )
     args = parser.parse_args()
 
     pyi_text = generate_pyi()
 
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "runtime_core.pyi"
+    package_dir = Path(args.output_dir) / "runtime_core"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    out_path = package_dir / "__init__.pyi"
     out_path.write_text(pyi_text, encoding="utf-8")
     print(f"Wrote {out_path}")
 
