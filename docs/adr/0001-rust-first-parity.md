@@ -466,3 +466,58 @@ Clean adapters (verified, no formulas): `frontend/src/lib/orbitSynthesizer.ts`,
 > semantics (parameter range interpretation, observation unpacking,
 > output-to-controls mapping) that belong in Rust per the decision test.
 
+
+## Amendment: canonical pipeline boundary and analysis-pipeline version (2026-08-30, issue #93)
+
+**Canonical pipeline boundary.** The canonical shared pipeline BEGINS at
+decoded PCM + native sample rate:
+
+    decoded PCM (native rate) + native sample rate
+                |
+            runtime-core
+                |
+    AnalysisTimebase.ingest(samples, source_sample_rate, source_start_frame)
+
+Media DECODING is surface-specific and legitimately NOT shared: Python may
+use librosa/soundfile, the browser may use Web Audio
+(`decodeAudioData` / `MediaStream`). Everything downstream MUST be
+identical: native-rate PCM enters `runtime-core` and the Rust
+`StreamingResampler` owns ALL rate conversion on every surface. Never
+pre-resample in Python (`librosa.load(sr=SAMPLE_RATE)`) or in TypeScript
+before the timebase — that reintroduces a second resampler authority and
+is exactly the divergence class the production-path parity tests
+(`backend/tests/test_audio_pipeline_parity.py`) exist to catch.
+
+Phase-critical file-mode comparisons must use PCM/WAV fixtures: MP3/AAC
+decoders apply codec-specific priming/delay that shifts sample alignment
+between decoders. Live microphone input is already PCM, so the issue does
+not exist there.
+
+**Analysis-pipeline version contract.** `ANALYSIS_PIPELINE_VERSION`
+(`runtime-core/src/timebase.rs`, currently `analysis/1`) versions HOW audio
+reaches the extractor: resampling ownership, hop scheduling, epoch
+semantics, and window anchoring. It is deliberately DISTINCT from
+`FEATURE_VERSION`, which versions the feature FORMULAS — a model trained
+against a different pipeline consumes inputs with different semantics even
+when the formulas are identical.
+
+- Bump `ANALYSIS_PIPELINE_VERSION` whenever resampling ownership, hop
+  scheduling, window anchoring (`TICK_WINDOW_SAMPLES`), or epoch/reset
+  semantics change.
+- It is exported through PyO3 and wasm `constants()`, stamped into ONNX
+  metadata as `analysis_pipeline_version`, and the browser REFUSES models
+  with a missing or mismatched stamp (no legacy warning path: every
+  pre-timebase model was trained on a pipeline the runtime no longer
+  executes).
+- Consumers must ALIAS the binding value, never restate it:
+  `data_loader.PIPELINE_VERSION = ANALYSIS_PIPELINE_VERSION` (Python) and
+  `constants().analysis_pipeline_version` (browser). The architecture
+  guardrail (`hardcoded-pipeline-version`,
+  `hardcoded-shared-constant`, `hardcoded-hop-length`) rejects restated
+  constants and version strings outside runtime-core.
+
+**Constant authority in TypeScript.** `SAMPLE_RATE`, `HOP_LENGTH`, and
+`N_FFT` have NO TypeScript literal. Runtime code reads them from
+`wasm.constants()` (`getWasmConstants()` + `getRuntimeConstants()`); tests
+inject/mock the binding constants. A missing binding throws — it must
+never silently fall back to a second authority.

@@ -229,6 +229,20 @@ export function getAnalysisPipelineVersion(): string {
 }
 
 /**
+ * The wasm module's raw constants (runtime-core authority for SAMPLE_RATE,
+ * HOP_LENGTH, N_FFT, WINDOW_FRAMES). Returns null before initOrbitSynth().
+ * Consumers must handle null — there is no TypeScript fallback authority.
+ */
+export function getWasmConstants(): ReturnType<WasmModule['constants']> | null {
+  if (!wasm) return null;
+  try {
+    return wasm.constants();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Construct a fresh Rust `AnalysisTimebase` (issue #91) from the wasm
  * module. Throws if the wasm build predates the timebase binding — there is
  * no JS fallback, so the canonical clock cannot silently drift.

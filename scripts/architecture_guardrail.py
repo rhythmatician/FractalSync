@@ -217,16 +217,58 @@ RULES: list[Rule] = [
     #     whose LHS matches a canonical constant name; right-hand side
     #     contains the canonical literal value (48000 for SAMPLE_RATE,
     #     NORM_EPS epsilon-like 1e-5, etc).
+    #     Extended (issue #93 review): also covers the TS constant names
+    #     (RUNTIME_SAMPLE_RATE / HOP_LENGTH / CANONICAL_SAMPLE_RATE /
+    #     CANONICAL_HOP_LENGTH) and the pipeline-version string — the
+    #     browser must read constants from wasm.constants() and Python
+    #     must ALIAS runtime_core values, never restate them.
     Rule(
         name="hardcoded-shared-constant",
-        pattern=r"\b(SAMPLE_RATE|WINDOW_FRAMES|K_RESIDUALS|NORM_EPS|FEATURE_VERSION|CONTROLLER_VERSION)\s*[=:]\s*(48000|48000\.0|6|1e-5|0\.00001|\d+)",
+        pattern=(
+            r"\b(SAMPLE_RATE|WINDOW_FRAMES|K_RESIDUALS|NORM_EPS|"
+            r"FEATURE_VERSION|CONTROLLER_VERSION|ANALYSIS_PIPELINE_VERSION|"
+            r"RUNTIME_SAMPLE_RATE|CANONICAL_SAMPLE_RATE|CANONICAL_HOP_LENGTH)\s*[=:]\s*"
+            r"(48000|48000\.0|6|1e-5|0\.00001|\d+)"
+        ),
         evidence=[],
         file_level=False,
         description=(
             "Hard-coded canonical constant outside runtime-core/ and "
             "outside an approved mirror/binding. Read it from the Rust "
-            "binding (runtime_core.SAMPLE_RATE, rc.WINDOW_FRAMES, etc.) "
+            "binding (runtime_core.SAMPLE_RATE, wasm constants(), etc.) "
             "instead of restating the value."
+        ),
+    ),
+    # 10b. HOP_LENGTH restatement: the TS name collides with the Rust
+    #     binding name, so the numeric rule above cannot distinguish a
+    #     binding re-export from a literal. Flag any `HOP_LENGTH = <int>`
+    #     assignment outside runtime-core; bindings re-export via
+    #     `constants()` objects, not named const assignments.
+    Rule(
+        name="hardcoded-hop-length",
+        pattern=r"\b(?:const|let|var)?\s*HOP_LENGTH\s*[=:]\s*\d+",
+        evidence=[],
+        file_level=False,
+        description=(
+            "Hard-coded HOP_LENGTH outside runtime-core/. Read the hop "
+            "length from the wasm binding (constants().hop_length) — a "
+            "TypeScript literal is a second authority that can drift from "
+            "runtime-core."
+        ),
+    ),
+    # 10c. Pipeline-version string restatement: the analysis pipeline
+    #     version is Rust-owned ("analysis/1"); Python/TS must alias the
+    #     binding value, never declare their own version string.
+    Rule(
+        name="hardcoded-pipeline-version",
+        pattern=r"""PIPELINE_VERSION\s*[=:]\s*["'](?:timebase|analysis)/""",
+        evidence=[],
+        file_level=False,
+        description=(
+            "Hard-coded analysis pipeline version string. Alias the Rust "
+            "constant (runtime_core.ANALYSIS_PIPELINE_VERSION / wasm "
+            "constants().analysis_pipeline_version) instead of restating "
+            "a version literal that can silently drift."
         ),
     ),
 ]

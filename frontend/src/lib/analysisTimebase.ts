@@ -25,15 +25,12 @@
  *   AnalysisTick { features, sampleIndex, timeSeconds, dtSeconds, streamEpoch }
  *           ↓
  *   audio-driven consumers (model inference / future CycleBank)
+ *
+ * Canonical constants (sample rate, hop length) are NOT redeclared here:
+ * read them from the wasm binding via getWasmConstants() (orbitSynthesizer)
+ * + getRuntimeConstants() (canonicalFeatures) — runtime-core is the only
+ * authority.
  */
-
-import { RUNTIME_SAMPLE_RATE, HOP_LENGTH } from './canonicalFeatures';
-
-/** Canonical analysis timeline sample rate (runtime-core authority). */
-export const CANONICAL_SAMPLE_RATE = RUNTIME_SAMPLE_RATE;
-
-/** Canonical hop length in canonical samples (runtime-core authority). */
-export const CANONICAL_HOP_LENGTH = HOP_LENGTH;
 
 /** A block of PCM observed from the Web Audio sample clock. */
 export interface PcmBlock {

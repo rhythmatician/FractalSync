@@ -10,11 +10,13 @@ import logging
 
 import numpy as np
 from numpy.typing import NDArray
+import runtime_core
 from runtime_core import (
     SAMPLE_RATE,
     HOP_LENGTH,
     N_FFT,
     FEATURE_VERSION,
+    ANALYSIS_PIPELINE_VERSION,
     WINDOW_FRAMES,
     FeatureExtractor,
     AnalysisTimebase,
@@ -22,15 +24,12 @@ from runtime_core import (
 
 import librosa
 
-# Bump when the training ingestion pipeline changes shape (e.g. switching
-# from direct extractor calls to the canonical AnalysisTimebase). Old caches
-# computed by a different pipeline MUST NOT be reused — they were produced
-# by a path the runtime does not execute (the #93 failure mode).
-# NOTE: the authoritative pipeline version lives in Rust
+# The authoritative pipeline version lives in Rust
 # (runtime_core.ANALYSIS_PIPELINE_VERSION) and is stamped into ONNX
-# metadata + checked by the browser; this local copy only keys the feature
-# cache and must be kept in sync with the Rust constant.
-PIPELINE_VERSION = "timebase/1"
+# metadata + checked by the browser. This is a direct ALIAS, not a copy:
+# there is no second value to drift. It keys the feature cache so caches
+# computed by a different pipeline are never reused (the #93 failure mode).
+PIPELINE_VERSION = ANALYSIS_PIPELINE_VERSION
 
 
 class AudioDataset:

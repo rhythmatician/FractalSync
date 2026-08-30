@@ -11,10 +11,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   AnalysisTimebase,
-  CANONICAL_SAMPLE_RATE,
-  CANONICAL_HOP_LENGTH,
   type WasmAnalysisTimebase,
 } from '../analysisTimebase';
+import { getRuntimeConstants } from '../canonicalFeatures';
 
 /** A mock wasm AnalysisTimebase that records calls and returns canned ticks. */
 function makeMockWasm(overrides: Partial<WasmAnalysisTimebase> = {}): {
@@ -53,9 +52,18 @@ function makeMockWasm(overrides: Partial<WasmAnalysisTimebase> = {}): {
 }
 
 describe('constants', () => {
-  it('canonical rate and hop come from the runtime authority', () => {
-    expect(CANONICAL_SAMPLE_RATE).toBe(48000);
-    expect(CANONICAL_HOP_LENGTH).toBe(1024);
+  it('runtime constants come from the injected wasm binding, not TS literals', () => {
+    // The binding constants are injected (mocked here, live from wasm in
+    // production). There is no TypeScript fallback authority: a missing
+    // binding must throw, not silently fall back to a restated literal.
+    const constants = getRuntimeConstants({ sample_rate: 48000, hop_length: 1024 });
+    expect(constants.sampleRate).toBe(48000);
+    expect(constants.hopLength).toBe(1024);
+  });
+
+  it('throws when the wasm binding has not supplied constants', () => {
+    expect(() => getRuntimeConstants({})).toThrow(/no TypeScript fallback/);
+    expect(() => getRuntimeConstants(undefined as never)).toThrow();
   });
 });
 

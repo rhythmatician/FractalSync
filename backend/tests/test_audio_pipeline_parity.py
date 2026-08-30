@@ -183,7 +183,10 @@ class TestAudioPipelineParity:
         }
         key = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         assert key  # pipeline_version participates in the key derivation
-        assert PIPELINE_VERSION.startswith("timebase/")
+        # The cache-key version is the Rust-owned constant (aliased, not
+        # restated) — see TestAnalysisPipelineVersionContract for the
+        # equality assertion against runtime_core.ANALYSIS_PIPELINE_VERSION.
+        assert PIPELINE_VERSION == runtime_core.ANALYSIS_PIPELINE_VERSION
 
 
 class TestNativeRateDecodeParity:
@@ -303,14 +306,18 @@ class TestAnalysisPipelineVersionContract:
     """ANALYSIS_PIPELINE_VERSION must be Rust-owned and consistent."""
 
     def test_pipeline_version_is_rust_owned(self):
-        """The authoritative pipeline version lives in Rust and is exported
-        through PyO3; the Python cache-key copy must match it."""
-        rust_version = runtime_core.ANALYSIS_PIPELINE_VERSION
-        assert rust_version.startswith("analysis/"), (
-            f"unexpected pipeline version format: {rust_version}"
+        """The Python PIPELINE_VERSION must be a direct ALIAS of the Rust
+        constant — actual equality, not a restated literal. A test that
+        asserts a local literal while claiming to check Rust parity is the
+        false-green pattern this suite exists to eliminate."""
+        assert PIPELINE_VERSION == runtime_core.ANALYSIS_PIPELINE_VERSION, (
+            f"Python PIPELINE_VERSION ({PIPELINE_VERSION!r}) is not the Rust "
+            f"ANALYSIS_PIPELINE_VERSION ({runtime_core.ANALYSIS_PIPELINE_VERSION!r}) "
+            "— data_loader.py must alias the Rust constant, never restate it"
         )
-        assert PIPELINE_VERSION == "timebase/1", (
-            "Python PIPELINE_VERSION drifted from the Rust contract"
+        assert runtime_core.ANALYSIS_PIPELINE_VERSION.startswith("analysis/"), (
+            f"unexpected pipeline version format: "
+            f"{runtime_core.ANALYSIS_PIPELINE_VERSION}"
         )
 
     def test_pipeline_version_distinct_from_feature_version(self):
