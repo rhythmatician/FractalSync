@@ -60,7 +60,7 @@ def _is_bare_python_invocation(line: str) -> bool:
 class TestNoBarePythonSubprocess:
     """Backend tests must reuse sys.executable, never PATH python."""
 
-    def test_no_bare_python_in_test_files(self):
+    def test_no_bare_python_in_test_files(self) -> None:
         offenders: list[str] = []
         for test_file in sorted(TESTS_DIR.glob("test_*.py")):
             text = test_file.read_text(encoding="utf-8", errors="replace")

@@ -75,7 +75,9 @@ class TestAudioPipelineParity:
             ticks.append(dict(tick))
         return ticks
 
-    def _training_ticks(self, audio: np.ndarray, source_rate: int = SAMPLE_RATE) -> list[dict]:
+    def _training_ticks(
+        self, audio: np.ndarray, source_rate: int = SAMPLE_RATE
+    ) -> list[dict]:
         """Training semantics: the actual backend ingestion path.
 
         AudioDataset._extract_via_timebase is the production training
@@ -144,7 +146,7 @@ class TestAudioPipelineParity:
                 tick["sample_index"] / SAMPLE_RATE, abs=1e-12
             )
 
-    def test_resampled_source_matches_canonical_rate_pipeline(self):
+    def test_resampled_source_matches_canonical_rate_pipeline(self) -> None:
         """A 44.1 kHz source through the timebase must land on the same
         canonical hop boundaries as the browser's resampled stream."""
         src_rate = 44_100
@@ -204,14 +206,13 @@ class TestNativeRateDecodeParity:
     @pytest.fixture()
     def wav_44100(self, tmp_path: Path) -> Path:
         """A real 44.1 kHz WAV file with deterministic tonal content."""
-        import soundfile as sf
+        import soundfile as sf  # type: ignore[import-untyped]
 
         src_rate = 44_100
         n = src_rate  # 1.0 s
         t = np.arange(n, dtype=np.float64) / src_rate
         audio = (
-            0.4 * np.sin(2 * np.pi * 330.0 * t)
-            + 0.2 * np.sin(2 * np.pi * 660.0 * t)
+            0.4 * np.sin(2 * np.pi * 330.0 * t) + 0.2 * np.sin(2 * np.pi * 660.0 * t)
         ).astype(np.float32)
         path = tmp_path / "parity_44100.wav"
         sf.write(str(path), audio, src_rate, subtype="PCM_16")
@@ -241,7 +242,8 @@ class TestNativeRateDecodeParity:
         surfaces."""
         import librosa as _librosa
 
-        audio, native_rate = _librosa.load(str(wav_44100), sr=None, mono=True)
+        audio, native_rate_raw = _librosa.load(str(wav_44100), sr=None, mono=True)
+        native_rate = int(native_rate_raw)
         assert native_rate == 44_100
 
         # Runtime semantics: native-rate PCM → timebase (what the browser's
@@ -276,7 +278,10 @@ class TestNativeRateDecodeParity:
         test's premise is void and the fixture should be reviewed."""
         import librosa as _librosa
 
-        audio_native, native_rate = _librosa.load(str(wav_44100), sr=None, mono=True)
+        audio_native, native_rate_raw = _librosa.load(
+            str(wav_44100), sr=None, mono=True
+        )
+        native_rate = int(native_rate_raw)
         audio_presampled, _ = _librosa.load(str(wav_44100), sr=SAMPLE_RATE, mono=True)
 
         def extract(audio: np.ndarray, rate: int) -> np.ndarray:
@@ -292,9 +297,7 @@ class TestNativeRateDecodeParity:
         # overlapping prefix.
         n = min(len(correct), len(wrong))
         assert n > 0
-        diff = float(
-            np.max(np.abs(correct[:n] - wrong[:n]))
-        )
+        diff = float(np.max(np.abs(correct[:n] - wrong[:n])))
         assert diff > 1e-4, (
             "librosa-presampled and native-rate paths produced identical "
             f"features (max diff={diff}) — the fixture may not exercise the "

@@ -1,5 +1,4 @@
 {
-    "$schema": "Architecture allowlist for Rust-owned runtime math (issue #90 + capability-constrained amendment 2026-08-29)",
     "rule": "Shared cross-runtime behavior has one authority: runtime-core (Rust). Other languages consume bindings. Intentional mirrors require an entry here AND a parity contract for their kind: differentiable_mirror/behavioral_mirror/transitional_mirror must name real executable parity checks; diagnostic/experimental must declare 'none' parity with a reason. Each mirror MUST declare a `why_outside_rust` capability referencing the top-level capabilities block (ADR 0001, 2026-08-29 amendment).",
     "kinds": {
         "differentiable_mirror": "Differentiable surrogate of Rust-owned math (training gradients flow through it). Real parity checks REQUIRED.",
