@@ -186,6 +186,49 @@ RULES: list[Rule] = [
             "mirror — the contour step lives in runtime-core/src/minimap.rs."
         ),
     ),
+    # 9. Domain-state type re-declaration (capability-constrained amendment,
+    #    2026-08-29): TypeScript/Python files outside runtime-core/ that
+    #    declare a class/interface/type whose name matches a Rust-exported
+    #    domain-state type, AND that contains a structural-field token,
+    #    are re-declaring canonical structure instead of consuming the
+    #    binding. Evidence: type name AND a field token (phase/c/mu/freq/
+    #    band/etc) in the same file. Binding declarations (*.d.ts) are
+    #    exempt — they're the legitimate surface for type re-export.
+    Rule(
+        name="domain-type-redeclaration",
+        pattern=r"\b(class|interface|type)\s+\w*(OrbitState|PlayerState|PlayerObservation|CycleHypothesis|CycleBank|AnalysisTick|ResidualParams|OrbitController|OrbitSynthesizer|PhaseTracker|FeatureExtractor|AnalysisTimebase)\w*",
+        evidence=["phase", "c", "mu"],
+        file_level=True,
+        description=(
+            "Re-declaration of a Rust-exported domain-state type outside "
+            "runtime-core/ — declare the binding consumer (type alias or "
+            "interface re-export) instead of restating the fields. Names "
+            "covered: OrbitState, PlayerState, PlayerObservation, "
+            "CycleHypothesis, CycleBank, AnalysisTick, ResidualParams, "
+            "OrbitController, OrbitSynthesizer, PhaseTracker, "
+            "FeatureExtractor, AnalysisTimebase."
+        ),
+    ),
+    # 10. Hard-coded shared constants (capability-constrained amendment,
+    #     2026-08-29): magic-number copies of canonical constants in
+    #     non-binding, non-manifested code. Bindings (wasm .d.ts,
+    #     runtime-core-bridge-style files) are exempt because exposing
+    #     the constant IS the binding. Pattern: an assignment statement
+    #     whose LHS matches a canonical constant name; right-hand side
+    #     contains the canonical literal value (48000 for SAMPLE_RATE,
+    #     NORM_EPS epsilon-like 1e-5, etc).
+    Rule(
+        name="hardcoded-shared-constant",
+        pattern=r"\b(SAMPLE_RATE|WINDOW_FRAMES|K_RESIDUALS|NORM_EPS|FEATURE_VERSION|CONTROLLER_VERSION)\s*[=:]\s*(48000|48000\.0|6|1e-5|0\.00001|\d+)",
+        evidence=[],
+        file_level=False,
+        description=(
+            "Hard-coded canonical constant outside runtime-core/ and "
+            "outside an approved mirror/binding. Read it from the Rust "
+            "binding (runtime_core.SAMPLE_RATE, rc.WINDOW_FRAMES, etc.) "
+            "instead of restating the value."
+        ),
+    ),
 ]
 
 # Python AST refinement for the cardioid rule: only flag when the sqrt is
@@ -240,6 +283,11 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
         return []  # generated binding declarations, not implementations
     is_manifested = rel in _manifest_paths(manifest)
     is_adapter = rel in {a.replace("\\", "/") for a in manifest.get("adapters", [])}
+    is_transitional = rel in {
+        m["path"]
+        for m in manifest.get("mirrors", [])
+        if m.get("kind") == "transitional_mirror"
+    }
     violations: list[str] = []
     lines = text.splitlines()
     for rule in RULES:
@@ -255,17 +303,25 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
                 # skip.
                 if not all(ev in text for ev in rule.evidence):
                     continue
-            if is_manifested:
-                # Manifested mirrors are allowed; the manifest's parity list
+            if is_manifested and not is_transitional:
+                # Stable mirrors are allowed; the manifest's parity list
                 # is the enforcement contract.
+                continue
+            if is_transitional:
+                # Transitional mirrors are tracked debt. They are exempt
+                # from the formula rules; their parity + sunset fields are
+                # the enforcement contract instead.
                 continue
             if is_adapter and rule.name in {
                 "controller-class",
                 "phase-tracker-concept",
+                "domain-type-redeclaration",
             }:
                 # Adapters may wrap the Rust controller class or declare
                 # binding-consumer types for planned Rust concepts — that is
-                # their whole job. They are still scanned for formula rules.
+                # their whole job. They are still scanned for formula rules
+                # and for hardcoded-shared-constant (so an adapter cannot
+                # silently restate SAMPLE_RATE).
                 continue
             violations.append(
                 f"{rel}:{i + 1}: [{rule.name}] {rule.description}\n"
@@ -285,11 +341,23 @@ def main(argv: list[str] | None = None) -> int:
 
     # Manifest sanity: every listed mirror must exist, declare a valid kind,
     # and satisfy the parity contract for that kind. Behavioral mirrors
-    # (differentiable or not) MUST name real parity checks; diagnostic and
-    # experimental entries must NOT pretend to have them — they state "none"
-    # with a reason instead, so "parity required" is actually enforced.
-    MIRROR_KINDS_REQUIRING_PARITY = {"differentiable_mirror", "behavioral_mirror"}
+    # (differentiable, behavioral, or transitional) MUST name real parity
+    # checks; diagnostic and experimental entries must NOT pretend to have
+    # them — they state "none" with a reason instead, so "parity required"
+    # is actually enforced.
+    #
+    # Transitional mirrors add a sunset contract: parity is real (no
+    # 'none') AND a non-empty sunset field naming the follow-up ADR/issue
+    # AND an ISO `sunset_required_by` date. Transitional mirrors are also
+    # exempt from the formula rules (their debt is the whole point); the
+    # sunset path is what removes them.
+    MIRROR_KINDS_REQUIRING_PARITY = {
+        "differentiable_mirror",
+        "behavioral_mirror",
+        "transitional_mirror",
+    }
     MIRROR_KINDS_EXEMPT = {"diagnostic", "experimental"}
+    capabilities = manifest.get("capabilities", {})
     problems: list[str] = []
     for m in manifest.get("mirrors", []):
         if not (REPO_ROOT / m["path"]).exists():
@@ -304,6 +372,29 @@ def main(argv: list[str] | None = None) -> int:
                 f"{m['path']}"
             )
             continue
+        # Capability-constrained amendment (2026-08-29): every mirror must
+        # declare which capability justifies its existence outside Rust.
+        why = m.get("why_outside_rust")
+        if not why:
+            problems.append(
+                f"manifest mirror missing why_outside_rust capability: {m['path']}"
+            )
+        else:
+            lang, _, cap = why.partition(":")
+            lang = lang.strip()
+            cap = cap.strip()
+            lang_caps = capabilities.get(lang, {})
+            allowed = lang_caps.get("allowed_responsibilities", [])
+            if not allowed:
+                problems.append(
+                    f"manifest mirror why_outside_rust references unknown "
+                    f"language {lang!r}: {m['path']}"
+                )
+            elif cap not in allowed:
+                problems.append(
+                    f"manifest mirror why_outside_rust={why!r} is not in "
+                    f"{lang}.allowed_responsibilities={allowed}: {m['path']}"
+                )
         parity = m.get("parity", [])
         if kind in MIRROR_KINDS_REQUIRING_PARITY:
             if not parity:
@@ -316,6 +407,18 @@ def main(argv: list[str] | None = None) -> int:
                     f"manifest mirror kind={kind} claims 'none' parity — "
                     f"downgrade the kind or add real checks: {m['path']}"
                 )
+            if kind == "transitional_mirror":
+                if not m.get("sunset"):
+                    problems.append(
+                        f"manifest mirror kind=transitional_mirror requires "
+                        f"a non-empty sunset field naming the follow-up ADR/"
+                        f"issue: {m['path']}"
+                    )
+                if not m.get("sunset_required_by"):
+                    problems.append(
+                        f"manifest mirror kind=transitional_mirror requires "
+                        f"a sunset_required_by ISO date: {m['path']}"
+                    )
         else:
             if parity and not all("none" in entry.lower() for entry in parity):
                 problems.append(
