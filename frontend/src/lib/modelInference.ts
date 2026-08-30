@@ -4,6 +4,7 @@
 
 import * as ort from 'onnxruntime-web';
 import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion } from './orbitSynthesizer';
+import type { AnalysisTick } from './analysisTimebase';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -65,6 +66,11 @@ export class ModelInference {
   // Performance tracking
   private inferenceTimings: number[] = [];
   private maxTimingHistory: number = 100;
+  // Tick-ordering queue: analysis ticks can arrive faster than async ONNX
+  // inference completes. Physics is stateful, so ticks must be applied in
+  // order — serialize processing rather than letting tick N+1 reorder
+  // before tick N (issue #91, invariant 7).
+  private tickQueue: Promise<void> = Promise.resolve();
   private lastMetrics: PerformanceMetrics = {
     lastInferenceTime: 0,
     averageInferenceTime: 0,
@@ -249,9 +255,29 @@ export class ModelInference {
   }
 
   /**
-   * Run inference on audio features with latency tracking.
+   * Enqueue an analysis tick for ordered inference. Ticks are processed
+   * strictly in arrival order so stateful Physics steps are never reordered
+   * by asynchronous ONNX completion (issue #91, invariant 7). Returns a
+   * promise resolving to the visual params for THIS tick.
    */
-  async infer(features: number[]): Promise<VisualParameters> {
+  inferTick(tick: AnalysisTick): Promise<VisualParameters> {
+    const result = this.tickQueue.then(() => this.infer(tick));
+    // Keep the queue alive even if one tick rejects, without unhandled
+    // rejection warnings; the error still propagates to this tick's caller.
+    this.tickQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  /**
+   * Run inference on one analysis tick with latency tracking. Advances
+   * audio-driven Physics using the tick's authoritative sample-time delta
+   * (`dtSeconds`), never a hard-coded render-rate timestep.
+   */
+  async infer(tick: AnalysisTick): Promise<VisualParameters> {
+    const features = tick.features;
     if (!this.session) {
       throw new Error('Model not loaded');
     }
@@ -322,7 +348,10 @@ export class ModelInference {
       // Synthesize Julia parameter c(t) from Player c-space integrator.
       // `h` onset/transient signal: near 1 OPENS THE SHORE WALL — boundary
       // crossing (the "Skyrim clip") becomes easy during transients.
-      const dt = 1.0 / 60.0; // Assume 60 FPS
+      //
+      // Authoritative audio time (issue #91): advance Physics by the tick's
+      // canonical sample-time delta, NOT a hard-coded render-rate timestep.
+      const dt = tick.dtSeconds;
       const h = Math.max(0.0, Math.min(1.0, avgOnset));
       // Audio energy: sigmoid of normalized RMS in [0,1]. Drives two
       // physics channels: (1) tangential thrust (sustained loudness builds

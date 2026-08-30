@@ -79,6 +79,18 @@ interface WasmModule {
     default_orbit_seed: number;
     controller_version?: string;
     feature_version?: string;
+    sample_rate?: number;
+    hop_length?: number;
+    n_fft?: number;
+    window_frames?: number;
+  };
+  /** Canonical sample-clock timebase (issue #91), constructed per stream. */
+  AnalysisTimebase?: new () => {
+    ingest(samples: Float32Array, sourceSampleRate: number, sourceStartFrame: bigint): unknown;
+    flush(): unknown;
+    reset(): void;
+    diagnostics(): unknown;
+    free(): void;
   };
   OrbitState: new (
     lobe: number,
@@ -198,6 +210,21 @@ export function getFeatureVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * Construct a fresh Rust `AnalysisTimebase` (issue #91) from the wasm
+ * module. Throws if the wasm build predates the timebase binding — there is
+ * no JS fallback, so the canonical clock cannot silently drift.
+ */
+export function createAnalysisTimebase(): import('./analysisTimebase').WasmAnalysisTimebase {
+  const m = requireWasm();
+  if (typeof m.AnalysisTimebase !== 'function') {
+    throw new Error(
+      '[orbitSynthesizer] wasm build has no AnalysisTimebase binding; rebuild wasm-orbit'
+    );
+  }
+  return new m.AnalysisTimebase();
 }
 
 /**

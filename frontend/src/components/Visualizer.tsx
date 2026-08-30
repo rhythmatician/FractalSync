@@ -8,6 +8,7 @@ import { JuliaRenderer, VisualParameters } from '../lib/juliaRenderer';
 import { ModelInference, PerformanceMetrics, ModelMetadata } from '../lib/modelInference';
 import { AudioCapture } from './AudioCapture';
 import { FullscreenToggle } from './FullscreenToggle';
+import type { AnalysisTick } from '../lib/analysisTimebase';
 
 export function Visualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -119,13 +120,13 @@ export function Visualizer() {
     loadModel();
   }, []);
 
-  const handleFeatures = async (features: number[]) => {
+  const handleTick = async (tick: AnalysisTick) => {
     if (!rendererRef.current) return;
 
     try {
       if (modelRef.current && modelRef.current.isLoaded()) {
-        // Run inference with the model
-        const params = await modelRef.current.infer(features);
+        // Run inference with the model (ordered by the inference queue).
+        const params = await modelRef.current.inferTick(tick);
         
         // Update metrics display
         const modelMetrics = modelRef.current.getMetrics();
@@ -476,7 +477,7 @@ export function Visualizer() {
       </div>
 
       {isVisualizing && (
-        <AudioCapture onFeatures={handleFeatures} enabled={isVisualizing} audioFile={audioFile} />
+        <AudioCapture onTick={handleTick} enabled={isVisualizing} audioFile={audioFile} />
       )}
     </div>
   );

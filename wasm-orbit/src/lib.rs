@@ -24,6 +24,10 @@ use runtime_core::controller::{
 };
 use runtime_core::features::{FEATURE_VERSION, NORM_EPS};
 use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
+use runtime_core::timebase::{
+    AnalysisTimebase as RustAnalysisTimebase,
+    ResetReason as RustResetReason,
+};
 
 /// Shared constants exposed to JavaScript
 #[wasm_bindgen]
@@ -108,6 +112,127 @@ impl FeatureExtractor {
 }
 
 impl Default for FeatureExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Authoritative sample-clock audio timebase (issue #91).
+///
+/// The browser's AudioWorklet transport feeds non-overlapping PCM blocks
+/// here; the Rust timebase validates monotonicity, resamples statefully to
+/// the canonical 48 kHz timeline, schedules exact 1024-sample hops, and runs
+/// the canonical FeatureExtractor — all in Rust, so there is no TypeScript
+/// mirror of the timing/scheduling math (ADR 0001).
+#[wasm_bindgen]
+pub struct AnalysisTimebase {
+    inner: RustAnalysisTimebase,
+}
+
+/// A single emitted analysis tick, serialized to JS.
+#[derive(Serialize)]
+struct AnalysisTickJs {
+    features: Vec<f64>,
+    sample_index: u64,
+    time_seconds: f64,
+    dt_seconds: f64,
+    stream_epoch: u64,
+}
+
+#[wasm_bindgen]
+impl AnalysisTimebase {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> AnalysisTimebase {
+        AnalysisTimebase {
+            inner: RustAnalysisTimebase::new(),
+        }
+    }
+
+    /// Ingest one non-overlapping PCM block. Returns a JS array of ticks
+    /// (possibly empty). Throws on overlap / mid-stream rate change.
+    #[wasm_bindgen]
+    pub fn ingest(
+        &mut self,
+        samples: Vec<f32>,
+        source_sample_rate: usize,
+        source_start_frame: u64,
+    ) -> Result<JsValue, JsValue> {
+        let ticks = self
+            .inner
+            .ingest(&samples, source_sample_rate, source_start_frame)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let js: Vec<AnalysisTickJs> = ticks
+            .into_iter()
+            .map(|t| AnalysisTickJs {
+                features: t.features,
+                sample_index: t.sample_index,
+                time_seconds: t.time_seconds,
+                dt_seconds: t.dt_seconds,
+                stream_epoch: t.stream_epoch,
+            })
+            .collect();
+        serde_wasm_bindgen::to_value(&js).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Flush end-of-stream (recovers the deferred final sample/tick).
+    #[wasm_bindgen]
+    pub fn flush(&mut self) -> JsValue {
+        let js: Vec<AnalysisTickJs> = self
+            .inner
+            .flush()
+            .into_iter()
+            .map(|t| AnalysisTickJs {
+                features: t.features,
+                sample_index: t.sample_index,
+                time_seconds: t.time_seconds,
+                dt_seconds: t.dt_seconds,
+                stream_epoch: t.stream_epoch,
+            })
+            .collect();
+        serde_wasm_bindgen::to_value(&js).unwrap_or(JsValue::NULL)
+    }
+
+    /// Declare a stream discontinuity. `reason` is informational; the epoch
+    /// always bumps and the schedule resets.
+    #[wasm_bindgen]
+    pub fn reset(&mut self) {
+        self.inner.reset(RustResetReason::SourceReplacement);
+    }
+
+    /// Diagnostic snapshot for verifying the clock manually.
+    #[wasm_bindgen]
+    pub fn diagnostics(&self) -> JsValue {
+        let d = self.inner.diagnostics();
+        #[derive(Serialize)]
+        struct Diag {
+            source_sample_rate: usize,
+            source_frames_ingested: u64,
+            canonical_sample_index: u64,
+            analysis_hop_count: u64,
+            time_seconds: f64,
+            stream_epoch: u64,
+            detected_gaps: u64,
+            detected_overlaps: u64,
+            last_source_start_frame: u64,
+            last_source_end_frame: u64,
+        }
+        serde_wasm_bindgen::to_value(&Diag {
+            source_sample_rate: d.source_sample_rate,
+            source_frames_ingested: d.source_frames_ingested,
+            canonical_sample_index: d.canonical_sample_index,
+            analysis_hop_count: d.analysis_hop_count,
+            time_seconds: d.time_seconds,
+            stream_epoch: d.stream_epoch,
+            detected_gaps: d.detected_gaps,
+            detected_overlaps: d.detected_overlaps,
+            last_source_start_frame: d.last_source_start_frame,
+            last_source_end_frame: d.last_source_end_frame,
+        })
+        .unwrap_or(JsValue::NULL)
+    }
+}
+
+impl Default for AnalysisTimebase {
     fn default() -> Self {
         Self::new()
     }
