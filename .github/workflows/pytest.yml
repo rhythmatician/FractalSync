@@ -358,6 +358,11 @@ jobs:
           cd wasm-orbit
           wasm-pack build --target web
 
+      - name: Copy wasm to frontend
+        run: |
+          mkdir -p frontend/src/wasm
+          cp -r wasm-orbit/pkg/* frontend/src/wasm/
+
       - name: Build frontend
         run: |
           npm ci  --prefix frontend
