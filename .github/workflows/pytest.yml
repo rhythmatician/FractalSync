@@ -3,7 +3,7 @@ name: Run all test suites
 on:
   pull_request:
     branches:
-      - '*'
+      - "*"
 
 jobs:
   backend-tests:
@@ -91,10 +91,15 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
+      - name: Run pytest (includes preflight-parity + golden-parity gate)
         run: |
           cd backend
-          python -m pytest tests/ -v
+          python -m pytest tests/ -v  # covers test_preflight_parity.py (scripts/preflight_parity.py), test_golden_parity.py, and test_architecture_guardrail.py
+            python ../scripts/preflight_parity.py  # same gate wired into train.py
+
+      - name: Architecture guardrail (runtime-core single authority)
+        run: |
+          python scripts/architecture_guardrail.py
 
   runtime-core-build:
     name: Runtime-Core Build (maturin)
@@ -200,7 +205,7 @@ jobs:
       - name: Run cargo tests
         run: |
           cd runtime-core
-          cargo test --lib --release
+          cargo test --release
 
   wasm-orbit-build:
     name: WASM-Orbit Build (wasm-pack)
@@ -291,7 +296,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
           cache: "pip"
           cache-dependency-path: "backend/requirements.txt"
 

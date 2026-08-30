@@ -25,7 +25,7 @@ pub fn clear_distance_field() {
 }
 
 pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
-    Err("loading .npy from Rust is not implemented on this build; call set_distance_field_from_vec from Python instead".into())
+    Err("loading .npy from Rust is not implemented in this build; use `set_distance_field_from_vec` (Python) or `load_builtin_distance_field` instead".into())
 }
 
 pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> Result<(), String> {
@@ -210,5 +210,141 @@ pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f3
             out.push(s);
         }
     }
+    Ok(out)
+}
+
+const DEFAULT_MANDELBROT_MAX_ITER: usize = 8192;
+const DEFAULT_MANDELBROT_BAILOUT: f64 = 1e6;
+const DEFAULT_MANDELBROT_PERIMETER_SAMPLES: usize = 512;
+
+pub fn mandelbrot_distance_estimate(cs: &[num_complex::Complex64]) -> Result<Vec<f32>, String> {
+    // Public, user-friendly wrapper that uses sensible defaults.
+    mandelbrot_distance_estimate_with_params(
+        cs,
+        DEFAULT_MANDELBROT_MAX_ITER,
+        DEFAULT_MANDELBROT_BAILOUT,
+        DEFAULT_MANDELBROT_PERIMETER_SAMPLES,
+    )
+}
+
+pub fn mandelbrot_distance_estimate_with_params(
+    cs: &[num_complex::Complex64],
+    max_iter: usize,
+    bailout: f64,
+    perimeter_samples: usize,
+) -> Result<Vec<f32>, String> {
+    // Ensure builtin field is loaded via sample_distance_field if needed
+    let mut out: Vec<f32> = Vec::with_capacity(cs.len());
+
+    // helper: analytic DEM estimator with bounded short-cycle detection
+    // Returns (Option<distance>, cycle_detected)
+    let analytic_dem = |c: num_complex::Complex64| -> (Option<f64>, bool) {
+        let mut z = num_complex::Complex64::new(0.0, 0.0);
+        let mut dz = num_complex::Complex64::new(0.0, 0.0);
+        let max_period: usize = 20;
+        let tol: f64 = 1e-12;
+        let mut history: Vec<num_complex::Complex64> = Vec::new();
+        for _ in 0..max_iter {
+            dz = num_complex::Complex64::new(2.0, 0.0) * z * dz + num_complex::Complex64::new(1.0, 0.0);
+            z = z * z + c;
+            // detect short cycles
+            for &prev in &history {
+                if (z - prev).norm() < tol {
+                    // Short cycle detected -> treat as non-escaping (inside)
+                    return (None, true);
+                }
+            }
+            history.push(z);
+            if history.len() > max_period { history.remove(0); }
+            if z.norm() > bailout {
+                let denom = dz.norm();
+                if denom == 0.0 || !denom.is_finite() { return (None, false); }
+                // 2*|z|*ln|z|/|dz|
+                let val: f64 = 2.0_f64 * z.norm() * z.norm().ln() / denom;
+                if val.is_finite() { return (Some(val), false); } else { return (None, false); }
+            }
+        }
+        (None, false)
+    };
+
+    // helper: perimeter min distance using signed SDF
+    let perimeter_min = |xr: f64, yr: f64| -> Result<f64, String> {
+        // read builtin metadata (best-effort)
+        let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
+        if guard.is_none() {
+            drop(guard);
+            load_builtin_distance_field("mandelbrot_default")?;
+        }
+        let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
+        let df = guard.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
+        let xmin = df.xmin;
+        let xmax = df.xmax;
+        let ymin = df.ymin;
+        let ymax = df.ymax;
+
+        let xs_top: Vec<f64> = (0..perimeter_samples).map(|i| xmin + (xmax - xmin) * (i as f64) / ((perimeter_samples - 1) as f64)).collect();
+        let ys_lr: Vec<f64> = (0..perimeter_samples).map(|i| ymin + (ymax - ymin) * (i as f64) / ((perimeter_samples - 1) as f64)).collect();
+
+        let mut perimeter_cs: Vec<num_complex::Complex64> = Vec::with_capacity(perimeter_samples * 4);
+        perimeter_cs.extend(xs_top.iter().map(|&x| num_complex::Complex64::new(x, ymax)));
+        perimeter_cs.extend(xs_top.iter().map(|&x| num_complex::Complex64::new(x, ymin)));
+        perimeter_cs.extend(ys_lr.iter().map(|&y| num_complex::Complex64::new(xmin, y)));
+        perimeter_cs.extend(ys_lr.iter().map(|&y| num_complex::Complex64::new(xmax, y)));
+
+        let sdf_vals = sample_distance_field(&perimeter_cs)?;
+        if sdf_vals.len() != perimeter_cs.len() { return Err("sdf length mismatch".to_string()) }
+        let mut best = std::f64::INFINITY;
+        for (p, &sdf) in perimeter_cs.iter().zip(sdf_vals.iter()) {
+            let xb = p.re;
+            let yb = p.im;
+            let d = ((xr - xb) * (xr - xb) + (yr - yb) * (yr - yb)).sqrt() + (sdf as f64).abs();
+            if d < best { best = d }
+        }
+        Ok(best)
+    };
+
+    for c in cs.iter() {
+        let xr = c.re;
+        let yr = c.im;
+        let (dem_opt, cycle_detected) = analytic_dem(*c);
+        if let Some(dem) = dem_opt {
+            // compute perimeter-based candidate and pick min
+            match perimeter_min(xr, yr) {
+                Ok(per) => {
+                    let per_val: f64 = per;
+                    let chosen: f64 = if dem.is_finite() && dem < per_val { dem } else { per_val };
+                    out.push(chosen as f32);
+                }
+                Err(_) => out.push(dem as f32),
+            }
+        } else {
+            // use signed SDF, but compare against a perimeter-based outside candidate and
+            // pick the value (or its magnitude) that gives the smaller absolute distance.
+            let v_signed = sample_distance_field(&[*c])?;
+            let v = v_signed[0] as f64;
+            match perimeter_min(xr, yr) {
+                Ok(per) => {
+                    let mut chosen: f64 = if v.abs() > per { per } else { v };
+                    // If a short-cycle was detected (analytic-dem found a cycle), we
+                    // have high confidence this is an interior/non-escaping point.
+                    if cycle_detected && chosen > 0.0 {
+                        chosen = 0.0;
+                    }
+                    out.push(chosen as f32);
+                }
+                Err(_) => {
+                    let mut chosen: f64 = v;
+                    if cycle_detected && chosen > 0.0 {
+                        chosen = 0.0;
+                    }
+                    if chosen > 0.0 && chosen.abs() < 1e-8 {
+                        chosen = 0.0;
+                    }
+                    out.push(chosen as f32)
+                },
+            }
+        }
+    }
+
     Ok(out)
 }

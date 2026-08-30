@@ -12,9 +12,12 @@ use pyo3::types::PyComplex;
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
+    PlayerState as RustPlayerState,
+    OrbitController as RustOrbitController,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
     DEFAULT_ORBIT_SEED,
+    CONTROLLER_VERSION,
     DEFAULT_RESIDUAL_CAP,
     DEFAULT_RESIDUAL_OMEGA_SCALE,
     HOP_LENGTH,
@@ -23,11 +26,13 @@ use crate::controller::{
     WINDOW_FRAMES,
     step as rust_step,
     synthesize as rust_synthesize,
+    residual_phases_for_seed as rust_residual_phases_for_seed,
 };
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
+use crate::proxies as rust_proxies;
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
-use crate::distance_field::{load_distance_field, sample_distance_field};
+use crate::distance_field::{sample_distance_field};
 
 
 /// Python wrapper for `ResidualParams`.
@@ -76,6 +81,167 @@ impl From<ResidualParams> for RustResidualParams {
             residual_cap: p.residual_cap,
             radius_scale: p.radius_scale,
         }
+    }
+}
+
+/// Python wrapper for the Player c-space integrator (momentum + drag).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct PlayerState {
+    inner: RustPlayerState,
+}
+
+#[pymethods]
+impl PlayerState {
+    #[new]
+    fn py_new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> Self {
+        Self {
+            inner: RustPlayerState::new(lobe, sub_lobe, s, alpha),
+        }
+    }
+
+    /// Current c (real part).
+    #[getter]
+    fn c_re(&self) -> f64 {
+        self.inner.c.re
+    }
+
+    /// Current c (imaginary part).
+    #[getter]
+    fn c_im(&self) -> f64 {
+        self.inner.c.im
+    }
+
+    /// Current c-space speed (Momentum diagnostic).
+    #[getter]
+    fn speed(&self) -> f64 {
+        self.inner.velocity.norm()
+    }
+
+    /// Apply model-predicted control signals.
+    fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
+        self.inner.apply_controls(s, alpha, omega_scale);
+    }
+
+    /// Switch the active Mandelbrot lobe.
+    fn set_lobe(&mut self, lobe: u32, sub_lobe: u32) {
+        self.inner.lobe = lobe;
+        self.inner.sub_lobe = sub_lobe;
+    }
+
+    /// Set the mip level for the contour step.
+    fn set_level(&mut self, level: usize) {
+        self.inner.level = level;
+    }
+
+    /// Set the target shore-proximity distance.
+    fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Set the maximum world-space step per frame.
+    fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
+    /// Set the audio energy in [0, 1] (loudness). Raises the servo's
+    /// target shore-proximity: loud audio pulls c toward the Shore.
+    fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
+    /// Advance by dt; returns (re, im). `h` in [0,1] allows contour crossing
+    /// during transients. Band gates optional.
+    #[pyo3(signature = (dt, h, band_gates=None))]
+    fn step(
+        &mut self,
+        dt: f64,
+        h: f64,
+        band_gates: Option<Vec<f64>>,
+    ) -> (f64, f64) {
+        let c = self.inner.step(dt, h, band_gates.as_deref());
+        (c.re, c.im)
+    }
+}
+
+/// Python wrapper for the May-proven OrbitController (runtime baseline).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct OrbitController {
+    inner: RustOrbitController,
+}
+
+#[pymethods]
+impl OrbitController {
+    #[new]
+    fn py_new(s: f64, alpha: f64, omega: f64) -> Self {
+        Self {
+            inner: RustOrbitController::new(s, alpha, omega),
+        }
+    }
+
+    /// Wobble phase (diagnostic).
+    #[getter]
+    fn theta(&self) -> f64 {
+        self.inner.theta
+    }
+
+    /// Apply model-predicted control signals (s, alpha).
+    fn apply_controls(&mut self, s: f64, alpha: f64) {
+        self.inner.apply_controls(s, alpha);
+    }
+
+    /// Refinement toggles (all default off = May baseline).
+    fn set_momentum(&mut self, on: bool) {
+        self.inner.momentum = on;
+    }
+
+    /// Per-frame velocity retention for momentum (default 0.90).
+    fn set_drag(&mut self, drag: f64) {
+        self.inner.drag = drag;
+    }
+
+    /// Audio thrust magnitude for momentum: sustained energy builds inertia.
+    fn set_thrust(&mut self, thrust: f64) {
+        self.inner.thrust = thrust;
+    }
+
+    /// Audio energy in [0, 1]: raises the servo's target shore-proximity
+    /// (loud audio pulls c toward the Shore).
+    fn set_energy(&mut self, energy: f64) {
+        self.inner.energy = energy.clamp(0.0, 1.0);
+    }
+
+    fn set_shore_bias(&mut self, on: bool) {
+        self.inner.shore_bias = on;
+    }
+
+    /// Target shore-proximity for the shore-bias servo.
+    fn set_d_star(&mut self, d_star: f64) {
+        self.inner.d_star = d_star;
+    }
+
+    /// Max world-space step per frame for shore bias.
+    fn set_max_step(&mut self, max_step: f64) {
+        self.inner.max_step = max_step;
+    }
+
+    /// Mip level for the contour step.
+    fn set_level(&mut self, level: usize) {
+        self.inner.level = level;
+    }
+
+    /// Set the persistent c position (momentum/shore-bias paths).
+    fn set_c(&mut self, re: f64, im: f64) {
+        self.inner.c = num_complex::Complex64::new(re, im);
+    }
+
+    /// Advance one frame; returns (re, im). `h` is the transient signal
+    /// in [0, 1] — near 1 opens the Shore wall for boundary crossing.
+    #[pyo3(signature = (dt, band_gates=None, h=0.0))]
+    fn step(&mut self, dt: f64, band_gates: Option<Vec<f64>>, h: f64) -> (f64, f64) {
+        let c = self.inner.step(dt, band_gates.as_deref(), h);
+        (c.re, c.im)
     }
 }
 
@@ -241,6 +407,29 @@ impl OrbitState {
         self.inner.alpha
     }
 
+    // Setters for the fields the live controller mutates at runtime
+    // (lobe transitions and smoothed s / residual alpha).  theta and
+    // omega remain read-only: they are owned by the state machine.
+    #[setter]
+    fn set_lobe(&mut self, value: u32) {
+        self.inner.lobe = value;
+    }
+
+    #[setter]
+    fn set_sub_lobe(&mut self, value: u32) {
+        self.inner.sub_lobe = value;
+    }
+
+    #[setter]
+    fn set_s(&mut self, value: f64) {
+        self.inner.s = value;
+    }
+
+    #[setter]
+    fn set_alpha(&mut self, value: f64) {
+        self.inner.alpha = value;
+    }
+
     /// Advance time by dt and return the next c(t).  The band gates
     /// are applied to each residual.
     #[pyo3(signature = (dt, residual_params, band_gates=None))]
@@ -251,20 +440,6 @@ impl OrbitState {
 }
 
 
-/// Load a precomputed signed distance field (.npy) and optional .json metadata.
-///
-/// Note: This function is not currently implemented and will always return an error.
-/// The underlying Rust implementation (`crate::distance_field::load_distance_field`)
-/// does not support loading .npy files. Use `set_distance_field_py` to provide an
-/// in-memory distance field, or `get_builtin_distance_field_py` to use an embedded
-/// distance field instead.
-#[pyfunction]
-fn load_distance_field_py(path: &str) -> PyResult<()> {
-    match load_distance_field(path) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
-    }
-}
 
 /// Set the in-memory distance field from a nested Python list of floats.
 /// Accepts a list of rows [[r0c0, r0c1, ...], [r1c0, ...], ...] plus bounding box.
@@ -292,6 +467,16 @@ fn set_distance_field_py(data: Vec<Vec<f32>>, xmin: f64, xmax: f64, ymin: f64, y
     }
 }
 
+/// Generate the deterministic residual phases for a given seed.
+///
+/// Single source of truth for residual phase generation, shared by the
+/// runtime controller and the training-time differentiable mirror so both
+/// use identical phase statistics.
+#[pyfunction]
+fn residual_phases_for_seed_py(seed: u64, k_residuals: usize) -> Vec<f64> {
+    rust_residual_phases_for_seed(seed, k_residuals)
+}
+
 /// Sample a loaded distance field at complex-valued coordinates.
 #[pyfunction]
 fn sample_distance_field_py(py: Python, coords: Vec<Py<PyComplex>>) -> PyResult<Vec<f32>> {
@@ -315,6 +500,221 @@ fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64
     }
 }
 
+/// Load the baked mip pyramid (the Map's multi-scale minimaps) from files and
+/// register it as the process-wide pyramid.
+#[pyfunction]
+fn load_mip_pyramid_py(
+    f_bin_path: &str,
+    s_bin_path: &str,
+    meta_path: &str,
+) -> PyResult<(usize, f64, f64, f64, f64)> {
+    let pyr = crate::minimap::load_pyramid_from_files(f_bin_path, s_bin_path, meta_path)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let n = pyr.num_levels();
+    let (re_min, re_max, im_min, im_max) = (pyr.re_min, pyr.re_max, pyr.im_min, pyr.im_max);
+    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok((n, re_min, re_max, im_min, im_max))
+}
+
+/// Install a synthetic mip pyramid for parity tests and local debugging.
+///
+/// Each level plane is `widths[i] * heights[i]` floats (row-major). The same
+/// planes populate both the F (escape) and S (shore-proximity) fields of the
+/// pyramid; tests that need a separable field should call
+/// [`runtime_core.minimap_set_escape_field`] afterwards. Returns the
+/// number of levels installed.
+#[pyfunction]
+fn install_pyramid_py(
+    levels_data: Vec<Vec<f32>>,
+    widths: Vec<usize>,
+    heights: Vec<usize>,
+    re_min: f64,
+    re_max: f64,
+    im_min: f64,
+    im_max: f64,
+) -> PyResult<usize> {
+    let pyr = crate::minimap::MipPyramid::from_levels(
+        levels_data,
+        widths,
+        heights,
+        re_min,
+        re_max,
+        im_min,
+        im_max,
+    )
+    .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let n = pyr.num_levels();
+    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(n)
+}
+
+/// Clear the process-wide pyramid (test helper).
+#[pyfunction]
+fn clear_pyramid_py() {
+    crate::minimap::clear_pyramid();
+}
+
+/// The Player's full observation at c: 4×81 greys + 8 slope values = 332.
+#[pyfunction]
+fn player_observation_py(py: Python, c_re: f64, c_im: f64) -> PyResult<Vec<f32>> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded; call load_mip_pyramid_py first")
+        })?;
+        let c = num_complex::Complex64::new(c_re, c_im);
+        pyr.player_observation(c)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
+            .map_err(|e| e.into())
+            .map(|obs| {
+                let _ = py;
+                obs
+            })
+    })
+}
+
+/// Slope of the shore-proximity field at c on a level.
+#[pyfunction]
+fn minimap_slope_py(c_re: f64, c_im: f64, level: usize) -> PyResult<(f64, f64)> {
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
+        })?;
+        let c = num_complex::Complex64::new(c_re, c_im);
+        pyr.slope(c, level)
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
+    })
+}
+
+/// Batch shore proximity (S field) sampled at points on a mip level.
+#[pyfunction]
+fn minimap_shore_proximity_batch_py(
+    re: Vec<f64>,
+    im: Vec<f64>,
+    level: usize,
+) -> PyResult<Vec<f32>> {
+    if re.len() != im.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "re/im length mismatch",
+        ));
+    }
+    crate::minimap::with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
+        })?;
+        let mut out = Vec::with_capacity(re.len());
+        for (&r, &i) in re.iter().zip(im.iter()) {
+            let c = num_complex::Complex64::new(r, i);
+            let (fx, fy) = pyr
+                .world_to_texel_pub(level, c)
+                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("bad level"))?;
+            let cx = fx.round() as isize;
+            let cy = fy.round() as isize;
+            out.push(pyr.sample_field_pub(level, cx, cy));
+        }
+        Ok(out)
+    })
+}
+
+/// Contour-biased integrator step for Physics. Returns (new_re, new_im).
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy=0.0))]
+fn contour_biased_step_py(
+    c_re: f64,
+    c_im: f64,
+    u_re: f64,
+    u_im: f64,
+    h: f64,
+    d_star: f64,
+    max_step: f64,
+    level: usize,
+    energy: f64,
+) -> PyResult<(f64, f64)> {
+    crate::minimap::contour_biased_step(c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Mandelbrot distance estimate. Accepts:
+/// 1) `mandelbrot_distance_estimate(coords: Sequence[complex])` -> list[float]
+/// 2) `mandelbrot_distance_estimate((x_seq, y_seq))` -> list[float]
+/// 3) `mandelbrot_distance_estimate(xs, ys)` (two equal-length sequences)
+///
+/// Signed distances: positive outside the set, non-positive inside.
+#[pyfunction]
+#[pyo3(signature = (coords, ys=None))]
+fn mandelbrot_distance_estimate_py(
+    coords: &Bound<'_, PyAny>,
+    ys: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Vec<f32>> {
+    // Two-sequence form: (xs, ys)
+    if let Some(ys) = ys {
+        let xv: Vec<f64> = coords.extract()?;
+        let yv: Vec<f64> = ys.extract()?;
+        if xv.len() != yv.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "x and y sequences must have equal length",
+            ));
+        }
+        let cs: Vec<num_complex::Complex64> = xv
+            .iter()
+            .zip(yv.iter())
+            .map(|(&xr, &yr)| num_complex::Complex64::new(xr, yr))
+            .collect();
+        return crate::distance_field::mandelbrot_distance_estimate(&cs)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err);
+    }
+
+    // Tuple-of-sequences form: (xs, ys)
+    if let Ok((xv, yv)) = coords.extract::<(Vec<f64>, Vec<f64>)>() {
+        if xv.len() != yv.len() {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "x and y sequences must have equal length",
+            ));
+        }
+        let cs: Vec<num_complex::Complex64> = xv
+            .iter()
+            .zip(yv.iter())
+            .map(|(&xr, &yr)| num_complex::Complex64::new(xr, yr))
+            .collect();
+        return crate::distance_field::mandelbrot_distance_estimate(&cs)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err);
+    }
+
+    // Sequence of complex-like values
+    let mut cs: Vec<num_complex::Complex64> = Vec::new();
+    match coords.iter() {
+        Ok(seq) => {
+            for item in seq {
+                let el = item?;
+                if let Ok((r, i)) = el.extract::<(f64, f64)>() {
+                    cs.push(num_complex::Complex64::new(r, i));
+                    continue;
+                }
+                if let (Ok(rp), Ok(ip)) = (el.getattr("real"), el.getattr("imag")) {
+                    let r: f64 = rp.extract()?;
+                    let i: f64 = ip.extract()?;
+                    cs.push(num_complex::Complex64::new(r, i));
+                    continue;
+                }
+                if let Ok(r) = el.extract::<f64>() {
+                    cs.push(num_complex::Complex64::new(r, 0.0));
+                    continue;
+                }
+                return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "coords must be complex-like values or (real, imag) tuples",
+                ));
+            }
+        }
+        Err(_) => {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "coords must be a sequence of complex-like values or an (xs, ys) pair",
+            ))
+        }
+    }
+
+    crate::distance_field::mandelbrot_distance_estimate(&cs)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
 /// Module-level __getattr__ to dynamically provide fallback callables for
 /// missing top-level functions. This helps tests that delete attributes via
 /// monkeypatch and provides a safety net when the compiled extension is
@@ -332,11 +732,6 @@ fn __getattr__(py: Python, name: &str) -> PyResult<PyObject> {
         "set_distance_field_py" => {
             let func = wrap_pyfunction!(set_distance_field_py, module.clone())?;
             module.setattr("set_distance_field_py", func.clone())?;
-            Ok(func.into())
-        }
-        "load_distance_field_py" => {
-            let func = wrap_pyfunction!(load_distance_field_py, module.clone())?;
-            module.setattr("load_distance_field_py", func.clone())?;
             Ok(func.into())
         }
         "get_builtin_distance_field_py" => {
@@ -426,6 +821,31 @@ fn lobe_point_at_angle(py: Python, lobe: u32, sub_lobe: u32, theta: f64, s: f64)
     Ok(PyComplex::from_doubles_bound(py, c.re, c.im).into())
 }
 
+/// Free function: compute cardioid-boundary proximity for a batch of points.
+#[pyfunction]
+#[pyo3(signature = (coords))]
+fn mandelbrot_cardioid_proximity_batch(
+    coords: Vec<Bound<'_, PyComplex>>,
+) -> PyResult<Vec<f64>> {
+    let cs: Vec<num_complex::Complex64> = coords
+        .iter()
+        .map(|c| num_complex::Complex64::new(c.real(), c.imag()))
+        .collect();
+    Ok(rust_proxies::mandelbrot_cardioid_proximity_batch(&cs))
+}
+
+/// Free function: compute orbit path metrics over a c(t) trajectory.
+#[pyfunction]
+#[pyo3(signature = (coords))]
+fn orbit_path_metrics_py(coords: Vec<Bound<'_, PyComplex>>) -> PyResult<(f64, f64, f64)> {
+    let pts: Vec<num_complex::Complex64> = coords
+        .iter()
+        .map(|c| num_complex::Complex64::new(c.real(), c.imag()))
+        .collect();
+    let m = rust_proxies::orbit_path_metrics(&pts);
+    Ok((m.mean_speed, m.max_speed, m.spread))
+}
+
 /// Runtime visual metrics computed in Rust.
 #[pyclass]
 #[derive(Clone, Debug)]
@@ -508,129 +928,43 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DEFAULT_RESIDUAL_OMEGA_SCALE", DEFAULT_RESIDUAL_OMEGA_SCALE)?;
     m.add("DEFAULT_BASE_OMEGA", DEFAULT_BASE_OMEGA)?;
     m.add("DEFAULT_ORBIT_SEED", DEFAULT_ORBIT_SEED)?;
+    m.add("CONTROLLER_VERSION", CONTROLLER_VERSION)?;
+    // Feature-extraction contract (ADR 0001): version + pinned epsilon.
+    m.add("FEATURE_VERSION", crate::features::FEATURE_VERSION)?;
+    m.add("NORM_EPS", crate::features::NORM_EPS)?;
 
     m.add_class::<ResidualParams>()?;
-
-    // Provide class-level defaults for ResidualParams members so the
-    // stub tests that inspect class attributes find builtin Python types.
-    if let Ok(rp_ty) = m.getattr("ResidualParams") {
-        let _ = rp_ty.setattr("k_residuals", DEFAULT_K_RESIDUALS);
-        let _ = rp_ty.setattr("residual_cap", DEFAULT_RESIDUAL_CAP);
-        let _ = rp_ty.setattr("radius_scale", 1.0_f64);
-    }
     m.add_class::<OrbitState>()?;
+    m.add_class::<PlayerState>()?;
+    m.add_class::<OrbitController>()?;
 
-    // Provide class-level defaults for OrbitState attributes so stub tests
-    // find builtin Python numeric types on the class object.
-    if let Ok(os_ty) = m.getattr("OrbitState") {
-        let _ = os_ty.setattr("lobe", 1u32);
-        let _ = os_ty.setattr("sub_lobe", 0u32);
-        let _ = os_ty.setattr("theta", 0.0f64);
-        let _ = os_ty.setattr("omega", DEFAULT_BASE_OMEGA);
-        let _ = os_ty.setattr("s", 1.02f64);
-        let _ = os_ty.setattr("alpha", 0.3f64);
-    }
     m.add_class::<FeatureExtractor>()?;
-
-
 
     m.add_class::<RuntimeVisualMetrics>()?;
 
-    // Provide class-level defaults for RuntimeVisualMetrics so stub tests find
-    // builtin Python types on the class object.
-    if let Ok(rvm_ty) = m.getattr("RuntimeVisualMetrics") {
-        let _ = rvm_ty.setattr("edge_density", 0.0f64);
-        let _ = rvm_ty.setattr("color_uniformity", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_mean", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_std", 0.0f64);
-        let _ = rvm_ty.setattr("brightness_range", 0.0f64);
-        let _ = rvm_ty.setattr("mandelbrot_membership", false);
-    }
-
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
-    m.add_function(wrap_pyfunction!(export_binding_metadata, m)?)?;
+    // Controller phase generation (shared with training for parity)
+    m.add_function(wrap_pyfunction!(residual_phases_for_seed_py, m)?)?;
     // Distance-field helpers
-    m.add_function(wrap_pyfunction!(load_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
+    // Minimap / mip pyramid (the Player's windows onto the Map)
+    m.add_function(wrap_pyfunction!(load_mip_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(install_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_pyramid_py, m)?)?;
+    m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
+    m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
+    m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;
+    m.add_function(wrap_pyfunction!(contour_biased_step_py, m)?)?;
+    m.add_function(wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
+    // Alias without the _py suffix (tests and distance_utils use this name)
+    m.add("mandelbrot_distance_estimate", wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
+    // Differentiable-proxy reference implementations (training supervision)
+    m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;
+    m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
-}
-
-/// Return a JSON-serializable description of exposed bindings.
-#[pyfunction]
-fn export_binding_metadata(py: Python) -> PyResult<PyObject> {
-    use pyo3::types::{PyDict, PyList};
-
-    let d = PyDict::new_bound(py);
-
-    // ResidualParams
-    let rp = PyDict::new_bound(py);
-    rp.set_item("attributes", PyList::new_bound(py, ["k_residuals", "residual_cap", "radius_scale"]))?;
-    let rp_methods = PyDict::new_bound(py);
-    rp_methods.set_item("__init__", "(k_residuals: int = 6, residual_cap: float = 0.5, radius_scale: float = 1.0)")?;
-    rp.set_item("methods", rp_methods)?;
-    d.set_item("ResidualParams", rp)?;
-
-    // OrbitState
-    let os = PyDict::new_bound(py);
-    os.set_item("attributes", PyList::new_bound(py, ["lobe", "sub_lobe", "theta", "omega", "s", "alpha"]))?;
-    let os_methods = PyDict::new_bound(py);
-    os_methods.set_item("__init__", "(lobe: int, sub_lobe: int, theta: float, omega: float, s: float, alpha: float, k_residuals: int, residual_omega_scale: float, seed: Optional[int] = None)")?;
-    os_methods.set_item("new_with_seed", "(lobe: int, sub_lobe: int, theta: float, omega: float, s: float, alpha: float, k_residuals: int, residual_omega_scale: float, seed: int) -> OrbitState")?;
-    os_methods.set_item("new_default_seeded", "(seed: int) -> OrbitState")?;
-    os_methods.set_item("advance", "(dt: float) -> None")?;
-    os_methods.set_item("carrier", "() -> complex")?;
-    os_methods.set_item("residual_phases", "() -> list[float]")?;
-    os_methods.set_item("residual_omegas", "() -> list[float]")?;
-    os_methods.set_item("synthesize", "(residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
-    os_methods.set_item("step", "(dt: float, residual_params: ResidualParams, band_gates: Optional[list[float]] = None) -> complex")?;
-    os.set_item("methods", os_methods)?;
-    d.set_item("OrbitState", os)?;
-
-    // FeatureExtractor
-    let fe = PyDict::new_bound(py);
-    fe.set_item("methods", PyDict::new_bound(py))?;
-
-    let fe_methods = PyDict::new_bound(py);
-    fe_methods.set_item("__init__", "(sr: int = 48000, hop_length: int = 1024, n_fft: int = 4096, include_delta: bool = False, include_delta_delta: bool = False)")?;
-    fe_methods.set_item("num_features_per_frame", "() -> int")?;
-    fe_methods.set_item("extract_windowed_features", "(audio: Sequence[float], window_frames: int = 10) -> ndarray")?;
-    fe_methods.set_item("test_simple", "() -> list[float]")?;
-    fe_methods.set_item("compute_normalization_stats", "(all_features: Sequence[Sequence[float]]) -> None")?;
-    fe_methods.set_item("normalize_features", "(features: Sequence[float]) -> list[float]")?;
-    let fe_attrs = PyList::new_bound(py, ["feature_mean", "feature_std"]);
-    fe.set_item("attributes", fe_attrs)?;
-    fe.set_item("methods", fe_methods)?;
-    d.set_item("FeatureExtractor", fe)?;
-
-    // RuntimeVisualMetrics
-    let rvm = PyDict::new_bound(py);
-    rvm.set_item("attributes", PyList::new_bound(py, ["edge_density", "color_uniformity", "brightness_mean", "brightness_std", "brightness_range", "mandelbrot_membership"]))?;
-    d.set_item("RuntimeVisualMetrics", rvm)?;
-
-    // Top-level functions
-    let funcs = PyDict::new_bound(py);
-    funcs.set_item("compute_runtime_visual_metrics", "(image: Sequence[float], width: int, height: int, channels: int, c: complex, max_iter: int = 100) -> RuntimeVisualMetrics")?;
-    funcs.set_item("lobe_point_at_angle", "(period: int, sub_lobe: int, theta: float, s: float = 1.0) -> complex")?;
-    funcs.set_item("load_distance_field_py", "(path: str) -> None")?;
-    funcs.set_item("set_distance_field_py", "(data: Sequence[Sequence[float]], xmin: float, xmax: float, ymin: float, ymax: float) -> None")?;
-    funcs.set_item("sample_distance_field_py", "(coords: Sequence[complex]) -> list[float]")?;
-    funcs.set_item("get_builtin_distance_field_py", "(name: str) -> tuple[int, int, float, float, float, float]")?;
-    d.set_item("functions", funcs)?;
-    // Export simple constants and their types for stub generation
-    let consts = PyDict::new_bound(py);
-    consts.set_item("SAMPLE_RATE", "int")?;
-    consts.set_item("HOP_LENGTH", "int")?;
-    consts.set_item("N_FFT", "int")?;
-    consts.set_item("WINDOW_FRAMES", "int")?;
-    consts.set_item("DEFAULT_K_RESIDUALS", "int")?;
-    consts.set_item("DEFAULT_RESIDUAL_CAP", "float")?;
-    consts.set_item("DEFAULT_RESIDUAL_OMEGA_SCALE", "float")?;
-    consts.set_item("DEFAULT_BASE_OMEGA", "float")?;
-    consts.set_item("DEFAULT_ORBIT_SEED", "int")?;
-    d.set_item("constants", consts)?;
-    Ok(d.into())
 }

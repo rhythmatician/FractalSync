@@ -39,3 +39,6 @@ tests/fixtures/*.json
 
 # Copilot's verbose markdown files
 docs/copilot/*
+
+# stub files
+stubs/

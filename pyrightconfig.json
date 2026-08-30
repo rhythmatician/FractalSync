@@ -8,6 +8,10 @@
         {
             "root": "backend",
             "stubPath": "stubs"
+        },
+        {
+            "root": "scripts",
+            "extraPaths": ["backend"]
         }
     ]
 }

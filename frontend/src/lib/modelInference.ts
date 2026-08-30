@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type OrbitState, type Complex, createInitialState } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion } from './orbitSynthesizer';
 
 export interface VisualParameters {
   juliaSeed: Complex;
@@ -28,6 +28,10 @@ export interface ModelMetadata {
   git_hash?: string;
   model_type?: string; // 'orbit_control' or legacy
   k_bands?: number;
+  /** Controller contract stamp (ADR 0001). Missing = pre-contract legacy. */
+  controller_version?: string;
+  /** Feature-extraction contract stamp. Missing = pre-contract legacy. */
+  feature_version?: string;
 }
 
 export interface PerformanceMetrics {
@@ -46,7 +50,6 @@ export class ModelInference {
   
   // Orbit-based synthesis (new architecture)
   private orbitSynthesizer: OrbitSynthesizer | null = null;
-  private orbitState: OrbitState | null = null;
   private isOrbitModel: boolean = false;
   
   // Color-based section detection for lobe switching
@@ -156,10 +159,79 @@ export class ModelInference {
         this.isOrbitModel = this.metadata.model_type === 'orbit_control';
 
         if (this.isOrbitModel) {
-          // Initialize orbit synthesizer for control-signal models
+          // Initialize orbit synthesizer for control-signal models.
+          // Backed by the canonical Rust implementation via wasm-orbit.
+          await initOrbitSynth();
           const kBands = this.metadata.k_bands || 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
-          this.orbitState = createInitialState({ kResiduals: kBands });
+
+          // Momentum refinement (ADR 0001, opt-in flag, default OFF): c is
+          // persistent state with drag; the boundary target pulls via
+          // acceleration. Smooths the frame-to-frame jitter of the raw
+          // baseline (c teleporting to each new boundary point) while
+          // staying audio-driven — the model still chooses WHERE to go,
+          // momentum just shapes HOW c travels there.
+          this.orbitSynthesizer.setMomentum(true, 0.90);
+
+          // Controller contract check (ADR 0001): the model must have been
+          // trained against the same controller semantics this runtime runs.
+          const runtimeVersion = getControllerVersion();
+          const modelVersion = this.metadata.controller_version;
+          if (!modelVersion) {
+            console.warn(
+              `[ModelInference] ⚠️ Model has no controller_version stamp ` +
+                `(pre-contract legacy model). Trained against UNKNOWN ` +
+                `controller semantics — visuals may not match training.`
+            );
+          } else if (modelVersion !== runtimeVersion) {
+            throw new Error(
+              `Controller version mismatch: model was trained against ` +
+                `'${modelVersion}' but this runtime is '${runtimeVersion}'. ` +
+                `Refusing to load — retrain the model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Controller contract OK: ${runtimeVersion}`);
+          }
+
+          // Feature-extraction contract (ADR 0001): the model must have been
+          // trained on features produced by the same extraction pipeline this
+          // runtime executes (same Rust code via wasm-orbit).
+          const runtimeFeatureVersion = getFeatureVersion();
+          const modelFeatureVersion = this.metadata.feature_version;
+          if (!modelFeatureVersion) {
+            console.warn(
+              `[ModelInference] ⚠️ Model has no feature_version stamp ` +
+                `(pre-contract legacy model). Trained on UNKNOWN feature ` +
+                `semantics — inputs may not match training.`
+            );
+          } else if (modelFeatureVersion !== runtimeFeatureVersion) {
+            throw new Error(
+              `Feature version mismatch: model was trained against ` +
+                `'${modelFeatureVersion}' but this runtime extracts with ` +
+                `'${runtimeFeatureVersion}'. Refusing to load — retrain the ` +
+                `model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Feature contract OK: ${runtimeFeatureVersion}`);
+          }
+
+          // Load the minimaps so the Player's contour-biased stepper can
+          // follow the Shore (best-effort; falls back to plain motion).
+          const pyramidLoaded = await loadMipPyramid();
+
+          // Shore-bias refinement (ADR 0001, opt-in flag, default OFF):
+          // route motion through the minimap's contour_biased_step so c
+          // hugs the Shore's contours between transients and can cross
+          // them on hits (h). Requires the pyramid; silently no-ops
+          // without one. d_star 0.5 = target shore proximity, max_step
+          // 0.05 caps per-frame travel.
+          if (pyramidLoaded) {
+            this.orbitSynthesizer.setShoreBias(true, 0.5, 0.05);
+            console.log('[ModelInference] Shore bias enabled (pyramid loaded)');
+          } else {
+            console.warn('[ModelInference] Shore bias unavailable (no pyramid)');
+          }
+
           console.log('[ModelInference] Loaded orbit-based control model');
         } else {
           console.log('[ModelInference] Loaded legacy visual parameter model');
@@ -221,8 +293,8 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer && this.orbitState) {
-      // NEW ORBIT-BASED CONTROL MODEL
+    if (this.isOrbitModel && this.orbitSynthesizer) {
+      // NEW ORBIT-BASED CONTROL MODEL (canonical Rust synthesis via wasm-orbit)
       // Parse control signals from model output
       const controlSignals: ControlSignals = {
         sTarget: params[0],
@@ -232,22 +304,11 @@ export class ModelInference {
       };
 
       // Update orbit state with new control signals
-      this.orbitState.s = controlSignals.sTarget;
-      this.orbitState.alpha = controlSignals.alpha;
-      this.orbitState.omega = 1.0 * controlSignals.omegaScale; // Base omega * scale
+      this.orbitSynthesizer.applyControls(controlSignals);
 
-      console.log(`🎯 Orbit Controls: lobe=${this.orbitState.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
+      console.log(`🎯 Orbit Controls: lobe=${this.orbitSynthesizer.lobe}, s=${controlSignals.sTarget.toFixed(3)}, α=${controlSignals.alpha.toFixed(3)}, ω_scale=${controlSignals.omegaScale.toFixed(3)}`);
 
-      // Synthesize Julia parameter c(t) from orbit
-      const dt = 1.0 / 60.0; // Assume 60 FPS
-      const { c, newState } = this.orbitSynthesizer.step(
-        this.orbitState,
-        dt,
-        controlSignals.bandGates
-      );
-      this.orbitState = newState;
-
-      // Extract audio features for color mapping
+      // Extract audio features for color mapping and the transient/hit signal.
       const numFeatures = 6;
       const windowFrames = Math.floor(features.length / numFeatures);
       let avgRMS = 0, avgOnset = 0;
@@ -257,6 +318,30 @@ export class ModelInference {
       }
       avgRMS /= windowFrames;
       avgOnset /= windowFrames;
+
+      // Synthesize Julia parameter c(t) from Player c-space integrator.
+      // `h` onset/transient signal: near 1 OPENS THE SHORE WALL — boundary
+      // crossing (the "Skyrim clip") becomes easy during transients.
+      const dt = 1.0 / 60.0; // Assume 60 FPS
+      const h = Math.max(0.0, Math.min(1.0, avgOnset));
+      // Audio energy: sigmoid of normalized RMS in [0,1]. Drives two
+      // physics channels: (1) tangential thrust (sustained loudness builds
+      // inertia), (2) the energy servo (loud audio pulls c toward the
+      // Shore — contract: Energy governs distance from The Shore).
+      const energy = 1 / (1 + Math.exp(-avgRMS));
+      const thrust = energy * 0.06;
+      const synthAny = this.orbitSynthesizer as unknown as {
+        setThrust?: (v: number) => void;
+        setEnergy?: (v: number) => void;
+        thrust?: number;
+      };
+      if (typeof synthAny.setThrust === 'function') synthAny.setThrust(thrust);
+      else if ('thrust' in synthAny) (synthAny as unknown as { thrust: number }).thrust = thrust;
+      if (typeof synthAny.setEnergy === 'function') synthAny.setEnergy(energy);
+      const c = this.orbitSynthesizer.step(dt, controlSignals.bandGates, h);
+      console.log(
+        `(${c.real.toFixed(4)}, ${c.imag.toFixed(4)}) speed=${this.orbitSynthesizer.speed.toFixed(5)} h=${h.toFixed(3)} energy=${energy.toFixed(3)} thrust=${thrust.toFixed(4)}`
+      );
 
       // Map to visual parameters
       const currentHue = (avgRMS * 2.0) % 1.0;
@@ -390,7 +475,7 @@ export class ModelInference {
    * Switches to a random different lobe when a significant color change is detected.
    */
   private detectSectionChange(currentHue: number): void {
-    if (!this.orbitState) return;
+    if (!this.orbitSynthesizer) return;
     
     // Add current hue to history
     this.colorHistory.push(currentHue);
@@ -429,11 +514,11 @@ export class ModelInference {
     
     if (hueDiff > this.colorChangeThreshold) {
       // Section change detected! Switch to a random different lobe
-      const currentLobe = this.orbitState.lobe;
+      const currentLobe = this.orbitSynthesizer.lobe;
       const availableLobes = [1, 2, 3].filter(l => l !== currentLobe);
       const newLobe = availableLobes[Math.floor(Math.random() * availableLobes.length)];
       
-      this.orbitState.lobe = newLobe;
+      this.orbitSynthesizer.setLobe(newLobe);
       this.lastLobeSwitch = this.colorHistory.length;
       
       console.log(`🎨 Section change detected (Δhue=${hueDiff.toFixed(3)})! Switching: Lobe ${currentLobe} → ${newLobe}`);

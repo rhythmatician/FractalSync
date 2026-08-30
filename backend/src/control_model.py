@@ -3,6 +3,14 @@ Control signal model for orbit-based Julia parameter synthesis.
 
 Predicts control signals (s, alpha, ω, band_gates) instead of raw c(t).
 The orbit synthesizer uses these signals to generate deterministic c(t).
+
+Supports two encoder modes:
+- ``feedforward`` (default, legacy): MLP over a flattened feature window.
+  Fully backward compatible with existing checkpoints and ONNX export.
+- ``recurrent``: per-frame features pass through a shared frame encoder,
+  then a GRU integrates temporal context across the window. This gives the
+  model real state so it can react to feature *dynamics* (rising vs falling
+  flux), not just window averages.
 """
 
 import torch
@@ -31,6 +39,8 @@ class AudioToControlModel(nn.Module):
         dropout: float = 0.2,
         include_delta: bool = False,
         include_delta_delta: bool = False,
+        recurrent: bool = False,
+        gru_hidden_dim: int = 128,
     ):
         """
         Initialize control signal model.
@@ -43,6 +53,8 @@ class AudioToControlModel(nn.Module):
             dropout: Dropout rate
             include_delta: Include delta (velocity) features
             include_delta_delta: Include delta-delta (acceleration) features
+            recurrent: Use a GRU over per-frame features instead of a flat MLP
+            gru_hidden_dim: Hidden size of the GRU when ``recurrent`` is True
         """
         super().__init__()
 
@@ -51,6 +63,7 @@ class AudioToControlModel(nn.Module):
         self.k_bands = k_bands
         self.include_delta = include_delta
         self.include_delta_delta = include_delta_delta
+        self.recurrent = recurrent
 
         # Calculate input dimension based on feature configuration
         features_multiplier = 1
@@ -59,50 +72,75 @@ class AudioToControlModel(nn.Module):
         if include_delta_delta:
             features_multiplier += 1
 
-        self.input_dim = n_features_per_frame * features_multiplier * window_frames
+        self.features_per_frame = n_features_per_frame * features_multiplier
+        self.input_dim = self.features_per_frame * window_frames
 
         # Output dimension: s_target(1) + alpha(1) + omega_scale(1) + band_gates(k_bands)
         self.output_dim = 3 + k_bands
 
-        # Build encoder layers
-        encoder_layers = []
-        prev_dim = self.input_dim
-
-        for hidden_dim in hidden_dims:
-            encoder_layers.extend(
-                [
-                    nn.Linear(prev_dim, hidden_dim),
-                    nn.LayerNorm(hidden_dim),
-                    nn.ReLU(),
-                    nn.Dropout(dropout),
-                ]
+        if recurrent:
+            # Shared per-frame encoder → GRU → heads.
+            frame_encoder_layers = []
+            prev_frame_dim = self.features_per_frame
+            for hidden_dim in hidden_dims[:2]:
+                frame_encoder_layers.extend(
+                    [
+                        nn.Linear(prev_frame_dim, hidden_dim),
+                        nn.LayerNorm(hidden_dim),
+                        nn.ReLU(),
+                        nn.Dropout(dropout),
+                    ]
+                )
+                prev_frame_dim = hidden_dim
+            self.frame_encoder = nn.Sequential(*frame_encoder_layers)
+            self.gru = nn.GRU(
+                input_size=prev_frame_dim,
+                hidden_size=gru_hidden_dim,
+                num_layers=1,
+                batch_first=True,
             )
-            prev_dim = hidden_dim
+            head_input_dim = gru_hidden_dim
+        else:
+            # Build encoder layers (legacy flat MLP)
+            encoder_layers = []
+            prev_dim = self.input_dim
 
-        self.encoder = nn.Sequential(*encoder_layers)
+            for hidden_dim in hidden_dims:
+                encoder_layers.extend(
+                    [
+                        nn.Linear(prev_dim, hidden_dim),
+                        nn.LayerNorm(hidden_dim),
+                        nn.ReLU(),
+                        nn.Dropout(dropout),
+                    ]
+                )
+                prev_dim = hidden_dim
+
+            self.encoder = nn.Sequential(*encoder_layers)
+            head_input_dim = prev_dim
 
         # Control signal heads
         self.s_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
+            nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
         )
 
         self.alpha_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
+            nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
-            nn.Sigmoid(),  # Alpha in [0, 1]
+            nn.Sigmoid(),  # Alpha in [0, 1], rescaled below
         )
 
         self.omega_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
+            nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
         )
 
         self.band_gates_head = nn.Sequential(
-            nn.Linear(prev_dim, 32),
+            nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, k_bands),
             nn.Sigmoid(),  # Gates in [0, 1]
@@ -122,6 +160,20 @@ class AudioToControlModel(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
+    def _encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Run the encoder appropriate for this model's mode.
+
+        Returns an encoding of shape (batch_size, head_input_dim).
+        """
+        if not self.recurrent:
+            return self.encoder(x)
+
+        batch_size = x.shape[0]
+        frames = x.view(batch_size, self.window_frames, self.features_per_frame)
+        encoded_frames = self.frame_encoder(frames)  # (B, T, F_enc)
+        _, hidden = self.gru(encoded_frames)  # hidden: (1, B, H)
+        return hidden.squeeze(0)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass predicting control signals.
@@ -140,11 +192,12 @@ class AudioToControlModel(nn.Module):
                 f"Config: window_frames={self.window_frames}, "
                 f"n_features_per_frame={self.n_features_per_frame}, "
                 f"include_delta={self.include_delta}, "
-                f"include_delta_delta={self.include_delta_delta}"
+                f"include_delta_delta={self.include_delta_delta}, "
+                f"recurrent={self.recurrent}"
             )
 
         # Encode features
-        encoded = self.encoder(x)
+        encoded = self._encode(x)
 
         # Predict control signals
         s_raw = self.s_head(encoded)  # (batch_size, 1)
@@ -155,6 +208,13 @@ class AudioToControlModel(nn.Module):
         # Apply activation functions to constrain outputs
         # s_target: map to [0.2, 3.0] using sigmoid + scaling
         s_target = 0.2 + 2.8 * torch.sigmoid(s_raw)  # [0.2, 3.0]
+
+        # Alpha: map to [0.05, 0.95]. The May boundary formula
+        # r = 0.25*(1-cos(2*pi*alpha)) has ZERO radius AND ZERO gradient at
+        # alpha=0 and alpha=1 — a sigmoid saturated there can never escape
+        # (observed live as c pinned to (0,0)). Keeping alpha strictly inside
+        # (0, 1) makes both r and dr/dalpha nonzero everywhere.
+        alpha = 0.05 + 0.90 * alpha  # [0.05, 0.95]
 
         # omega_scale: map to [0.1, 5.0] using softplus
         omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
@@ -174,7 +234,7 @@ class AudioToControlModel(nn.Module):
         """
         ranges = {
             "s_target": (0.2, 3.0),
-            "alpha": (0.0, 1.0),
+            "alpha": (0.05, 0.95),  # kept off the formula's null points
             "omega_scale": (0.1, 5.0),
         }
         for k in range(self.k_bands):

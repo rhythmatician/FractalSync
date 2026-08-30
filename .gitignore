@@ -20,6 +20,9 @@ data/cache/
 
 # Logs
 *.log
+.coverage
+.coverage.*
+logs/
 
 # Copilot's verbose markdown files
 /docs/copilot/*.md
@@ -50,3 +53,44 @@ __pycache__/
 # SongFormer outputs
 outputs_songformer/
 batch_all.scp
+
+debug_*.py
+tmp*
+
+# Local/generated artifacts
+.githooks/
+backend/backend/
+frontend/frontend/
+frontend/test-results/
+runtime_core.disabled_by_tests/
+glfw/
+data/
+demix/
+out_png/
+out_png_Slog/
+conversation.md
+telemetry.csv
+
+# Generated distance-map artifacts
+Slog_mips_f32.bin
+Slog_mips_meta.json
+# Mip pyramid artifacts are committed (the Map's minimaps, issue #88)
+backend/data/mandelbrot_distance_1024.json
+backend/data/mandelbrot_distance_1024.npy
+runtime-core/data.bin
+runtime-core/data.json
+runtime-core/data.npy
+runtime-core/data.png
+runtime-core/data/mandelbrot_distance_1024.npy
+runtime-core/data/mandelbrot_distance_1024_1024.bin
+runtime-core/data/mandelbrot_distance_1024_1024.json
+runtime-core/data/mandelbrot_distance_4096.bin
+runtime-core/data/mandelbrot_distance_4096.json
+runtime-core/data/mandelbrot_distance_4096.npy
+runtime-core/data/mandelbrot_distance_8192.bin
+runtime-core/data/mandelbrot_distance_8192.json
+runtime-core/data/mandelbrot_distance_8192.npy
+
+# Audits
+feedback-loop-health.json
+architecture-lens-report.json

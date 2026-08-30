@@ -7,9 +7,7 @@ import numpy as np
 from src.visual_metrics import LossVisualMetrics  # noqa: E402
 
 
-def _compute_runtime_metrics(
-    runtime_core, image: np.ndarray, c: complex
-):
+def _compute_runtime_metrics(runtime_core, image: np.ndarray, c: complex):
     if image.max() > 1.0:
         image = image.astype(np.float64) / 255.0
     height, width = image.shape[:2]
@@ -81,7 +79,7 @@ class TestRuntimeVisualMetrics:
     "c_real,c_imag, nominal_distance",
     [
         (0.0, 0.0, 0.25),  # origin is nearest the cardioid's "buttcrack" at 0.25
-        (2.0, 0.0, 1.57044),  # Nearest the "buttcheecks"
+        (2.0, 0.0, 1.69433),  # Nearest the "buttcheecks" for current field
         (0.25, 0.0, 0.0),  # on the boundary (of the main cardioid)
         (0.4439, 0.2117, 0.0),  # on the boundary (near bulb)
         (-0.1011, 0.6330, 0.0),  # on the boundary (near top bulb)

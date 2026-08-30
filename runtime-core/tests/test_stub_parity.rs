@@ -33,8 +33,14 @@ fn stub_functions_exported_in_pybindings() {
     for f in funcs {
         let wrap_pat = format!("wrap_pyfunction!({},", f); // sometimes there are extra args
         let wrap_pat2 = format!("wrap_pyfunction!({} ", f);
+        // Alias exports: m.add("name", wrap_pyfunction!(impl_fn, m)?)
+        let alias_pat = format!("m.add(\"{f}\", wrap_pyfunction!");
         let pyfunc_pat = format!("#[pyfunction]\nfn {}(", f);
-        if !bindings_src.contains(&wrap_pat) && !bindings_src.contains(&wrap_pat2) && !bindings_src.contains(&pyfunc_pat) {
+        if !bindings_src.contains(&wrap_pat)
+            && !bindings_src.contains(&wrap_pat2)
+            && !bindings_src.contains(&alias_pat)
+            && !bindings_src.contains(&pyfunc_pat)
+        {
             missing.push(f);
         }
     }

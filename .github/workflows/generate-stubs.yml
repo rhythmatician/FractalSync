@@ -1,0 +1,52 @@
+name: Generate and verify runtime_core stubs
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    generate-stubs:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Python
+              uses: astral-sh/setup-uv@v5
+              with:
+                  python-version: "3.13"
+
+            - name: Setup Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+
+            - name: Create virtualenv (uv)
+              # maturin develop requires an active virtualenv. setup-uv
+              # already created/activated .venv; just export it so the stub
+              # script's `maturin develop --release` and `python` calls use
+              # it — the same environment shape as local generation.
+              run: |
+                  echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+                  echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+                  uv pip install --python .venv/bin/python maturin pyo3-stubgen
+
+            - name: Generate runtime_core stubs
+              # Invoke via `bash` instead of chmod +x: the executable bit is
+              # not committed, so chmod would dirty the tree and fail the
+              # verification step below.
+              run: |
+                  bash scripts/generate_runtime_core_stubs.sh
+
+            - name: Check for changes
+              run: |
+                  git --no-pager status --porcelain
+                  if [ -n "$(git --no-pager status --porcelain)" ]; then
+                    echo "Generated stubs differ from committed stubs. Please run 'bash scripts/generate_runtime_core_stubs.sh' locally and commit the updates.";
+                    git --no-pager diff --patch -- runtime-core/runtime_core.pyi backend/stubs/runtime_core scripts/generate_runtime_core_stubs.sh || true
+                    exit 1
+                  fi

@@ -86,6 +86,38 @@ async def get_shared_shader(name: str):
     )
 
 
+# --- Mip pyramid artifacts (issue #88) ---
+# The baked minimap pyramid lives at the repo root (written by
+# scripts/bake_mandel_maps_gl.py). Serve it so the browser Player can load
+# the minimaps and use contour_biased_step.
+_MIP_PYRAMID_ROOT = Path(__file__).parent.parent.parent  # repo root
+
+
+@app.get("/api/minimap/meta")
+async def get_minimap_meta():
+    """Return the mip pyramid metadata JSON."""
+    meta = _MIP_PYRAMID_ROOT / "mandel_mips_meta.json"
+    if not meta.exists():
+        raise HTTPException(status_code=404, detail="Mip pyramid metadata not found")
+    return FileResponse(str(meta), media_type="application/json")
+
+
+@app.get("/api/minimap/field/{field}")
+async def get_minimap_field(field: str):
+    """Return a mip pyramid field binary (F = escape, S = shore proximity)."""
+    if field not in ("F", "S"):
+        raise HTTPException(status_code=404, detail="Unknown field")
+    name = f"mandel_{field}_mips_f32.bin"
+    path = _MIP_PYRAMID_ROOT / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Mip pyramid field not found: {name}")
+    return FileResponse(
+        str(path),
+        media_type="application/octet-stream",
+        filename=name,
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 

@@ -198,6 +198,87 @@ fn test_residual_params_effect() {
     assert!(diff > 1e-6, "Residual params should affect output");
 }
 
+use runtime_core::controller::PlayerState;
+
+#[test]
+fn test_player_state_starts_on_boundary() {
+    // PlayerState::new should place c on the boundary point for (s, alpha).
+    let p = PlayerState::new(1, 0, 1.0, 0.25);
+    let expected = runtime_core::geometry::lobe_point_at_angle(
+        1,
+        0,
+        0.25 * 2.0 * std::f64::consts::PI,
+        1.0,
+    );
+    assert!((p.c.re - expected.re).abs() < 1e-9);
+    assert!((p.c.im - expected.im).abs() < 1e-9);
+}
+
+#[test]
+fn test_player_state_moves_toward_target() {
+    // Without a pyramid, PlayerState falls back to clamped motion toward the
+    // model-driven target. Changing alpha should pull c toward the new point.
+    runtime_core::minimap::clear_pyramid();
+    let mut p = PlayerState::new(1, 0, 1.0, 0.0);
+    let start = p.c;
+    // Move the target to alpha=0.5 (opposite side of the cardioid).
+    p.apply_controls(1.0, 0.5, 1.0);
+    let c = p.step(1.0 / 60.0, 0.0, None);
+    let moved = ((c.re - start.re).powi(2) + (c.im - start.im).powi(2)).sqrt();
+    assert!(
+        moved > 1e-6,
+        "PlayerState should move toward the model-driven target, moved={}",
+        moved
+    );
+}
+
+#[test]
+fn test_player_state_does_not_trace_closed_loop() {
+    // With a fixed target and no gates, the momentum integrator still
+    // converges: friction bleeds velocity, c settles near the target.
+    runtime_core::minimap::clear_pyramid();
+    let mut p = PlayerState::new(1, 0, 1.0, 0.5);
+    for _ in 0..600 {
+        p.step(1.0 / 60.0, 0.0, None);
+    }
+    // After settling, stepping more should not move it much (no loop).
+    let before = p.c;
+    for _ in 0..60 {
+        p.step(1.0 / 60.0, 0.0, None);
+    }
+    let drift = ((p.c.re - before.re).powi(2) + (p.c.im - before.im).powi(2)).sqrt();
+    assert!(
+        drift < 1e-3,
+        "PlayerState should settle at the target, not loop (drift={})",
+        drift
+    );
+}
+
+#[test]
+fn test_player_state_has_momentum() {
+    // The frozen-c regression: with a barely-moving target, a pure servo
+    // parks at its fixed point. The momentum integrator must keep moving
+    // when the model's controls vary frame-to-frame (as real output does).
+    runtime_core::minimap::clear_pyramid();
+    let mut p = PlayerState::new(1, 0, 2.7, 0.95);
+    let mut total_travel = 0.0f64;
+    let mut prev = p.c;
+    for i in 0..600 {
+        let t = i as f64;
+        let s_t = 2.7 + 0.03 * (t * 0.05).sin();
+        let a_t = (0.95 + 0.002 * (t * 0.03).cos()).clamp(0.0, 1.0);
+        p.apply_controls(s_t, a_t, 4.0);
+        let c = p.step(1.0 / 60.0, 0.0, Some(&[0.95; 6]));
+        total_travel += ((c.re - prev.re).powi(2) + (c.im - prev.im).powi(2)).sqrt();
+        prev = c;
+    }
+    assert!(
+        total_travel > 0.05,
+        "PlayerState must keep wandering when controls vary (path={})",
+        total_travel
+    );
+}
+
 #[test]
 fn test_synthesize_returns_finite_values() {
     let params = ResidualParams::default();

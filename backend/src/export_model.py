@@ -41,8 +41,21 @@ def export_to_onnx(
     else:
         dummy_input = torch.zeros(*input_shape)
 
+    # Recurrent models (GRU/LSTM/RNN modules) must use the legacy exporter:
+    # the dynamo exporter emits malformed Slice nodes on RNN flat weights
+    # ("Starts must be a 1-D array" at runtime in onnxruntime-web).
+    is_recurrent = any(
+        isinstance(m, (torch.nn.GRU, torch.nn.LSTM, torch.nn.RNN))
+        for m in model.modules()
+    )
+
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
+        if is_recurrent:
+            raise RuntimeError(
+                "Recurrent model detected; using legacy exporter directly."
+            )
+
         # Dynamo expects dynamic_shapes to be keyed by forward *argument* names
         # (e.g., 'x' in `def forward(self, x):`) rather than ONNX input/output names.
         import inspect

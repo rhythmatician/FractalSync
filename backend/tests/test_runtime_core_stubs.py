@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import types
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -180,7 +181,6 @@ def test_compile_classes_returns_nonempty_dict():
 
 
 def test_class_members_have_expected_types():
-
     classes_with_types = gather_expected_member_types()
     assert classes_with_types is not None, "Could not gather expected member types"
     assert classes_with_types != {}, "No classes with expected member types found"
@@ -197,18 +197,34 @@ def test_class_members_have_expected_types():
                     inst = cls(0.0, 0.0)
                 elif cls_name == "FeatureExtractor":
                     inst = cls()
+                elif cls_name == "PlayerState":
+                    inst = cls(1, 0, 0.0, 0.1)
+                elif cls_name == "OrbitState":
+                    inst = cls.new_default_seeded(42)
+                elif cls_name == "OrbitController":
+                    inst = cls(1.0, 0.3, 1)
             except Exception:
                 inst = None
 
         type_mismatches = {}
         for member_name, expected_type in member_types.items():
             actual_member = None
-            # Check class-level member
-            if hasattr(cls, member_name):
-                actual_member = getattr(cls, member_name)
-            # Check instance-level member
-            elif inst is not None and hasattr(inst, member_name):
+            # Prefer the instance value for property/data members. PyO3
+            # exposes `#[pyo3(get)]` fields and `#[getter]` methods as
+            # getset_descriptors at class level, so the class attribute is
+            # a descriptor object, not the declared runtime type. Reading
+            # from an instance (when available) yields the real value and
+            # is the meaningful check. When no instance can be built we
+            # skip the check rather than misreading the descriptor.
+            if inst is not None and hasattr(inst, member_name):
                 actual_member = getattr(inst, member_name)
+            elif hasattr(cls, member_name):
+                class_member = getattr(cls, member_name)
+                if not isinstance(
+                    class_member,
+                    (types.GetSetDescriptorType, types.MemberDescriptorType),
+                ):
+                    actual_member = class_member
 
             if actual_member is not None:
                 # If the member is a callable (likely a method) and we have an
@@ -251,6 +267,67 @@ def test_gather_expected_member_types_returns_nonempty_dict():
         for member_name, expected_type in member_types.items():
             assert isinstance(member_name, str)
             assert isinstance(expected_type, type)
+
+
+def test_orbit_state_python_properties_preserve_instance_state():
+    """Binding semantics: property reads reflect per-instance Rust state.
+
+    Type-level stub checks cannot catch a class-attribute shadowing
+    regression (shadowed values are still valid int/float). This test
+    encodes the actual invariant: constructor values survive reads,
+    writable controller inputs mutate per-instance state, and
+    state-machine-owned quantities (theta, omega) stay read-only.
+    """
+    state = rc.OrbitState(
+        2,  # lobe
+        1,  # sub_lobe
+        0.5,  # theta
+        2.0,  # omega
+        1.5,  # s
+        0.6,  # alpha
+        6,
+        1.0,
+    )
+
+    assert state.lobe == 2
+    assert state.sub_lobe == 1
+    assert state.theta == pytest.approx(0.5)
+    assert state.omega == pytest.approx(2.0)
+    assert state.s == pytest.approx(1.5)
+    assert state.alpha == pytest.approx(0.6)
+
+    state.lobe = 3
+    state.sub_lobe = 2
+    state.s = 0.8
+    state.alpha = 0.25
+
+    assert state.lobe == 3
+    assert state.sub_lobe == 2
+    assert state.s == pytest.approx(0.8)
+    assert state.alpha == pytest.approx(0.25)
+
+    with pytest.raises(AttributeError):
+        state.theta = 1.0
+
+    with pytest.raises(AttributeError):
+        state.omega = 1.0
+
+
+def test_residual_params_python_properties_preserve_instance_state():
+    """Binding semantics for ResidualParams (same shadowing mechanism)."""
+    params = rc.ResidualParams(k_residuals=6, residual_cap=4.0, radius_scale=0.75)
+
+    assert params.k_residuals == 6
+    assert params.residual_cap == pytest.approx(4.0)
+    assert params.radius_scale == pytest.approx(0.75)
+
+    params.k_residuals = 8
+    params.residual_cap = 2.5
+    params.radius_scale = 1.25
+
+    assert params.k_residuals == 8
+    assert params.residual_cap == pytest.approx(2.5)
+    assert params.radius_scale == pytest.approx(1.25)
 
 
 def gather_expected_member_types() -> dict[str, dict[str, type]] | None:

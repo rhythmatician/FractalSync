@@ -35,6 +35,68 @@ except ImportError:
     GPU_AVAILABLE = False
 
 
+def _run_preflight_parity() -> None:
+    """Run scripts/preflight_parity.py as a subprocess; abort on failure.
+
+    Runs before any long-running work so a diverged training mirror can never
+    waste a training session. Subprocess isolation means a broken mirror fails
+    cleanly instead of crashing weirdly inside the trainer.
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script = os.path.join(repo_root, "scripts", "preflight_parity.py")
+    if not os.path.exists(script):
+        print(
+            f"ERROR: preflight parity script not found: {script}\n"
+            "Refusing to train without parity verification. "
+            "Use --skip-parity-check to bypass (emergency only)."
+        )
+        sys.exit(1)
+    result = subprocess.run([sys.executable, script], cwd=repo_root)
+    if result.returncode != 0:
+        print(
+            "\nAborting training: preflight parity check FAILED "
+            f"(exit code {result.returncode}). The training-time mirror and "
+            "runtime_core have likely diverged. Fix the mismatch or use "
+            "--skip-parity-check (emergency only)."
+        )
+        sys.exit(result.returncode)
+
+
+def _runtime_controller_version() -> str:
+    """Read CONTROLLER_VERSION from the installed runtime_core.
+
+    The stamp comes from the same Rust source the preflight verifies against,
+    so the model records exactly the contract the mirror was checked against.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "CONTROLLER_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
+def _runtime_feature_version() -> str:
+    """Read FEATURE_VERSION from the installed runtime_core.
+
+    Same contract mechanism as controller_version: the model records the
+    feature-extraction semantics the mirror was verified against, and the
+    browser refuses mismatched models.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "FEATURE_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def main():
     """Main training function."""
     # Configure logging so ControlTrainer messages are visible
@@ -130,8 +192,192 @@ def main():
         default=None,
         help="Maximum number of audio files to load (for quick runs)",
     )
+    parser.add_argument(
+        "--temporal-smoothness-weight",
+        type=float,
+        default=0.0,
+        help="Weight for off-hit control smoothness (speed + jerk)",
+    )
+    parser.add_argument(
+        "--sequence-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight for sequence-level motion correlation with music hits",
+    )
+    parser.add_argument(
+        "--hit-alignment-weight",
+        type=float,
+        default=0.0,
+        help="Weight for direct hit-to-transition intensity alignment",
+    )
+    parser.add_argument(
+        "--rollout-batch-fraction",
+        type=float,
+        default=0.0,
+        help="Fraction of batches that use runtime-like rollout training",
+    )
+    parser.add_argument(
+        "--rollout-horizon",
+        type=int,
+        default=64,
+        help="Max contiguous frames to include in rollout windows",
+    )
+    parser.add_argument(
+        "--rollout-teacher-forcing",
+        type=float,
+        default=0.2,
+        help="Teacher forcing factor for rollout carryover dynamics",
+    )
+    parser.add_argument(
+        "--rollout-loss-weight",
+        type=float,
+        default=0.0,
+        help="Weight for rollout-mode sequence loss",
+    )
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=str,
+        default=None,
+        help="Path to checkpoint (.pt) to resume model/optimizer state from",
+    )
+    parser.add_argument(
+        "--resume-reset-optimizer",
+        action="store_true",
+        help="When resuming, load model weights but reset optimizer state",
+    )
+    parser.add_argument(
+        "--no-cspace-proxies",
+        action="store_true",
+        help="Disable differentiable c-space proxy supervision (falls back to slow rendered-image losses)",
+    )
+    parser.add_argument(
+        "--coverage-weight",
+        type=float,
+        default=0.1,
+        help="Weight for c-space coverage/diversity regularizer (0 disables)",
+    )
+    parser.add_argument(
+        "--scheduled-sampling-max",
+        type=float,
+        default=0.3,
+        help="Max scheduled-sampling probability reached after ramping (0 disables)",
+    )
+    parser.add_argument(
+        "--scheduled-sampling-ramp-epochs",
+        type=int,
+        default=20,
+        help="Epochs over which scheduled sampling ramps from 0 to max",
+    )
+    parser.add_argument(
+        "--clip-length",
+        type=int,
+        default=1,
+        help="Contiguous windows per training clip (1 = legacy window batching; 32-128 recommended for sequence training)",
+    )
+    parser.add_argument(
+        "--anti-dwell-weight",
+        type=float,
+        default=1.0,
+        help="Weight for scale-aware anti-dwell penalty keeping c(t) moving (0 disables)",
+    )
+    parser.add_argument(
+        "--anti-dwell-target",
+        type=float,
+        default=0.15,
+        help="Required per-frame c displacement as fraction of local feature scale",
+    )
+    parser.add_argument(
+        "--zone-weight",
+        type=float,
+        default=2.0,
+        help="Weight for visibility-band constraint keeping c near the Mandelbrot boundary (0 disables)",
+    )
+    parser.add_argument(
+        "--zone-min",
+        type=float,
+        default=0.01,
+        help="Minimum cardioid proximity (interior dead-zone edge)",
+    )
+    parser.add_argument(
+        "--zone-max",
+        type=float,
+        default=0.45,
+        help="Maximum cardioid proximity (exterior dust dead-zone edge)",
+    )
+    parser.add_argument(
+        "--julia-stability-weight",
+        type=float,
+        default=0.0,
+        help="Weight for J(c) frame-to-frame stability loss (0 disables). "
+        "Penalizes perceptual c displacement in quiet parts; transients exempt.",
+    )
+    parser.add_argument(
+        "--julia-stability-base",
+        type=float,
+        default=0.02,
+        help="Perceptual displacement allowed in silence (local-scale units)",
+    )
+    parser.add_argument(
+        "--julia-stability-loud-gain",
+        type=float,
+        default=0.08,
+        help="Extra allowed displacement per unit audio energy (loud parts drift more)",
+    )
+    parser.add_argument(
+        "--song-identity-weight",
+        type=float,
+        default=0.0,
+        help="Weight for song-identity region loss (0 disables). Pushes each "
+        "song's c(t) centroid at least --song-identity-margin from every other "
+        "song's, and keeps each song's path coherent around its own centroid.",
+    )
+    parser.add_argument(
+        "--song-identity-margin",
+        type=float,
+        default=0.35,
+        help="Minimum c-space distance between song home regions",
+    )
+    parser.add_argument(
+        "--region-dwell-weight",
+        type=float,
+        default=0.0,
+        help="Weight for region-dwell loss (0 disables). Penalizes c occupying "
+        "the same J(c)-region (perceptual neighborhood) for the whole dwell window.",
+    )
+    parser.add_argument(
+        "--region-dwell-window",
+        type=int,
+        default=240,
+        help="Look-back window in frames (240 = 4s at 60fps) for continuous occupation",
+    )
+    parser.add_argument(
+        "--region-dwell-p",
+        type=float,
+        default=0.08,
+        help="Region radius in proximity units (J-space perceptual axis)",
+    )
+    parser.add_argument(
+        "--region-dwell-phi",
+        type=float,
+        default=0.5,
+        help="Region radius in boundary-angle units (radians)",
+    )
+    parser.add_argument(
+        "--recurrent",
+        action="store_true",
+        help="Use GRU-based temporal encoder instead of flat MLP",
+    )
+    parser.add_argument(
+        "--skip-parity-check",
+        action="store_true",
+        help="Skip the preflight parity check (emergency use only: allows "
+        "training even if the training mirror and runtime_core have diverged)",
+    )
 
     args = parser.parse_args()
+
+    if not args.skip_parity_check:
+        _run_preflight_parity()
 
     execute_training_workflow(args)
 
@@ -156,6 +402,26 @@ def execute_training_workflow(args):
     print(f"  Julia resolution: {args.julia_resolution}x{args.julia_resolution}")
     print(f"  Julia max iterations: {args.julia_max_iter}")
     print(f"  DataLoader workers: {args.num_workers}")
+    print(f"  Temporal smoothness weight: {args.temporal_smoothness_weight}")
+    print(f"  Sequence loss weight: {args.sequence_loss_weight}")
+    print(f"  Hit alignment weight: {args.hit_alignment_weight}")
+    print(f"  Rollout batch fraction: {args.rollout_batch_fraction}")
+    print(f"  Rollout horizon: {args.rollout_horizon}")
+    print(f"  Rollout teacher forcing: {args.rollout_teacher_forcing}")
+    print(f"  Rollout loss weight: {args.rollout_loss_weight}")
+    print(f"  C-space proxies: {not args.no_cspace_proxies}")
+    print(f"  Coverage weight: {args.coverage_weight}")
+    print(f"  Scheduled sampling max: {args.scheduled_sampling_max}")
+    print(f"  Clip length: {args.clip_length}")
+    print(
+        f"  Anti-dwell weight: {args.anti_dwell_weight} (target {args.anti_dwell_target})"
+    )
+    print(
+        f"  Zone band: [{args.zone_min}, {args.zone_max}] (weight {args.zone_weight})"
+    )
+    print(f"  Recurrent encoder: {args.recurrent}")
+    print(f"  Resume checkpoint: {args.resume_checkpoint}")
+    print(f"  Resume reset optimizer: {args.resume_reset_optimizer}")
     print("=" * 60)
 
     # Ensure a consistent multiprocessing start method on Windows to avoid
@@ -215,6 +481,7 @@ def execute_training_workflow(args):
         hidden_dims=[128, 256, 128],
         k_bands=args.k_bands,
         dropout=0.2,
+        recurrent=args.recurrent,
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -235,7 +502,66 @@ def execute_training_workflow(args):
         julia_max_iter=args.julia_max_iter,
         num_workers=args.num_workers,
         k_residuals=args.k_bands,
+        temporal_smoothness_weight=args.temporal_smoothness_weight,
+        sequence_loss_weight=args.sequence_loss_weight,
+        hit_alignment_weight=args.hit_alignment_weight,
+        rollout_batch_fraction=args.rollout_batch_fraction,
+        rollout_horizon=args.rollout_horizon,
+        rollout_teacher_forcing=args.rollout_teacher_forcing,
+        rollout_loss_weight=args.rollout_loss_weight,
+        use_cspace_proxies=not args.no_cspace_proxies,
+        coverage_weight=args.coverage_weight,
+        scheduled_sampling_max=args.scheduled_sampling_max,
+        scheduled_sampling_ramp_epochs=args.scheduled_sampling_ramp_epochs,
+        clip_length=args.clip_length,
+        anti_dwell_weight=args.anti_dwell_weight,
+        anti_dwell_target=args.anti_dwell_target,
+        zone_weight=args.zone_weight,
+        zone_min=args.zone_min,
+        zone_max=args.zone_max,
+        julia_stability_weight=args.julia_stability_weight,
+        julia_stability_base=args.julia_stability_base,
+        julia_stability_loud_gain=args.julia_stability_loud_gain,
+        song_identity_weight=args.song_identity_weight,
+        song_identity_margin=args.song_identity_margin,
+        region_dwell_weight=args.region_dwell_weight,
+        region_dwell_window=args.region_dwell_window,
+        region_dwell_p=args.region_dwell_p,
+        region_dwell_phi=args.region_dwell_phi,
     )
+
+    if args.resume_checkpoint:
+        ckpt_path = os.path.abspath(args.resume_checkpoint)
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"Resume checkpoint not found: {ckpt_path}")
+
+        print(f"  Loading checkpoint: {ckpt_path}")
+        checkpoint = torch.load(ckpt_path, map_location=args.device)
+
+        model_state = checkpoint.get("model_state_dict")
+        if model_state is None:
+            raise ValueError(
+                "Resume checkpoint missing model_state_dict; cannot resume."
+            )
+        trainer.model.load_state_dict(model_state)
+
+        if not args.resume_reset_optimizer:
+            opt_state = checkpoint.get("optimizer_state_dict")
+            if opt_state is not None:
+                trainer.optimizer.load_state_dict(opt_state)
+
+        ckpt_history = checkpoint.get("history")
+        if isinstance(ckpt_history, dict):
+            for key, values in ckpt_history.items():
+                if key in trainer.history and isinstance(values, list):
+                    trainer.history[key] = [float(v) for v in values]
+
+        # Feature normalization stats are recomputed in trainer.train() from the
+        # current dataset. runtime_core FeatureExtractor binding properties are
+        # read-only in this environment, so we intentionally do not assign them
+        # here when resuming.
+
+        print("  Resume load complete")
 
     print("[7/7] Starting training...")
     print("=" * 60)
@@ -307,6 +633,13 @@ def execute_training_workflow(args):
                 "input_dim": model.input_dim,
                 "timestamp": iso_timestamp,
                 "git_hash": git_hash,
+                # Controller contract stamp (ADR 0001): the browser refuses
+                # to load an orbit_control model whose controller_version
+                # differs from its own runtime's version.
+                "controller_version": _runtime_controller_version(),
+                # Feature-extraction contract stamp (ADR 0001): same
+                # mechanism for the audio feature pipeline.
+                "feature_version": _runtime_feature_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")
