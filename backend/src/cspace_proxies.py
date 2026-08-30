@@ -35,7 +35,7 @@ def canonical_hop_dt() -> float:
     """The canonical physics timestep, derived from the deployed contract.
 
     NEVER restate this as a literal (e.g. ``1.0 / 60.0``). The browser
-    supplies ``AnalysisTick.dt_seconds`` = HOP_LENGTH / SAMPLE_RATE from
+    supplies ``AnalysisTick.dtSeconds`` = HOP_LENGTH / SAMPLE_RATE from
     the Rust timebase; the trainer must advance its mirrors with the same
     value or it supervises physics the runtime does not run (the #93
     incident: parity tests advanced both paths at 1/60 while the browser
@@ -210,7 +210,7 @@ def player_step_sequence(
 
     ``dt`` is REQUIRED (no default): callers must derive it from the
     canonical tick contract (``canonical_hop_dt()`` or
-    ``AnalysisTick.dt_seconds``), never restate a literal. A defaulted
+    ``AnalysisTick.dtSeconds``), never restate a literal. A defaulted
     ``1/60`` here is what let the trainer and browser drift apart while
     parity stayed green (#93).
 

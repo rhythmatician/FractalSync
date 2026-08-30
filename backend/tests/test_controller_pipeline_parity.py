@@ -3,7 +3,7 @@
 The #93 incident, physics side: the preflight controller parity check
 advanced both Rust and the PyTorch mirror at a hardcoded ``1.0 / 60.0`` —
 proving they agree at an obsolete timestep while the browser (post-#91)
-supplies ``AnalysisTick.dt_seconds = 1024/48000``. Green test, divergent
+supplies ``AnalysisTick.dtSeconds = 1024/48000``. Green test, divergent
 production paths.
 
 This test enforces the stronger invariant:
@@ -47,7 +47,7 @@ class TestControllerPipelineParity:
 
     def test_canonical_dt_is_hop_duration(self):
         """The contract-derived dt must be the canonical hop duration —
-        this is the value the browser supplies via AnalysisTick.dt_seconds."""
+        this is the value the browser supplies via AnalysisTick.dtSeconds."""
         assert DT == pytest.approx(HOP_LENGTH / SAMPLE_RATE, abs=1e-15)
         assert DT == pytest.approx(1024 / 48000, abs=1e-15)
 

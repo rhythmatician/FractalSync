@@ -151,8 +151,30 @@ def test_guardrail_defines_capability_rules() -> None:
     spec.loader.exec_module(guardrail)
 
     rule_names = {r.name for r in guardrail.RULES}
-    assert "domain-type-redeclaration" in rule_names, (
-        "domain-type-redeclaration rule missing — capability check unenforced"
+    # Per-type domain-type rules (issue #93 strict-version review):
+    # each canonical Rust-owned struct gets its own evidence-keyed rule so
+    # a re-declaration of any one of them is caught — the old
+    # generic rule with a hard-coded ["phase","c","mu"] evidence list
+    # silently passed for AnalysisTick, TimebaseDiagnostics, etc.
+    expected_domain_type_rules = {
+        "domain-type-redeclaration-OrbitState",
+        "domain-type-redeclaration-PlayerState",
+        "domain-type-redeclaration-PlayerObservation",
+        "domain-type-redeclaration-CycleHypothesis",
+        "domain-type-redeclaration-CycleBank",
+        "domain-type-redeclaration-AnalysisTick",
+        "domain-type-redeclaration-TimebaseDiagnostics",
+        "domain-type-redeclaration-ResidualParams",
+        "domain-type-redeclaration-OrbitController",
+        "domain-type-redeclaration-OrbitSynthesizer",
+        "domain-type-redeclaration-PhaseTracker",
+        "domain-type-redeclaration-FeatureExtractor",
+        "domain-type-redeclaration-AnalysisTimebase",
+    }
+    missing = expected_domain_type_rules - rule_names
+    assert not missing, (
+        f"domain-type-redeclaration rules missing: {sorted(missing)} — "
+        "capability check unenforced for these canonical types"
     )
     assert "hardcoded-shared-constant" in rule_names, (
         "hardcoded-shared-constant rule missing — capability check unenforced"

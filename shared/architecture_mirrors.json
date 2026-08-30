@@ -125,6 +125,7 @@
     "adapters": [
         "frontend/src/lib/orbitSynthesizer.ts",
         "frontend/src/lib/canonicalFeatures.ts",
+        "frontend/src/lib/analysisTimebase.ts",
         "backend/src/distance_utils.py",
         "backend/src/runtime_core_bridge.py"
     ]

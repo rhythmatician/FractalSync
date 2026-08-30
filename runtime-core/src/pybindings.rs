@@ -825,14 +825,19 @@ pub struct AnalysisTimebase {
 }
 
 /// A single emitted analysis tick, materialized as a Python dict.
+///
+/// Wire format keys are **camelCase** so a tick read by the trainer
+/// (via this binding) is keyed identically to a tick received by the
+/// browser (via the wasm binding's ``AnalysisTick`` interface).
+/// Cross-surface parity contract, issue #93 strict-version review.
 fn tick_to_pydict(py: Python, t: crate::timebase::AnalysisTick) -> PyResult<PyObject> {
     use pyo3::types::PyDict;
     let dict = PyDict::new_bound(py);
     dict.set_item("features", t.features)?;
-    dict.set_item("sample_index", t.sample_index)?;
-    dict.set_item("time_seconds", t.time_seconds)?;
-    dict.set_item("dt_seconds", t.dt_seconds)?;
-    dict.set_item("stream_epoch", t.stream_epoch)?;
+    dict.set_item("sampleIndex", t.sample_index)?;
+    dict.set_item("timeSeconds", t.time_seconds)?;
+    dict.set_item("dtSeconds", t.dt_seconds)?;
+    dict.set_item("streamEpoch", t.stream_epoch)?;
     Ok(dict.into())
 }
 
@@ -891,16 +896,18 @@ impl AnalysisTimebase {
         use pyo3::types::PyDict;
         let d = self.inner.diagnostics();
         let dict = PyDict::new_bound(py);
-        dict.set_item("source_sample_rate", d.source_sample_rate)?;
-        dict.set_item("source_frames_ingested", d.source_frames_ingested)?;
-        dict.set_item("canonical_sample_index", d.canonical_sample_index)?;
-        dict.set_item("analysis_hop_count", d.analysis_hop_count)?;
-        dict.set_item("time_seconds", d.time_seconds)?;
-        dict.set_item("stream_epoch", d.stream_epoch)?;
-        dict.set_item("detected_gaps", d.detected_gaps)?;
-        dict.set_item("detected_overlaps", d.detected_overlaps)?;
-        dict.set_item("last_source_start_frame", d.last_source_start_frame)?;
-        dict.set_item("last_source_end_frame", d.last_source_end_frame)?;
+        // camelCase to match the wasm binding's ``TimebaseDiagnostics``
+        // interface (issue #93 strict-version review).
+        dict.set_item("sourceSampleRate", d.source_sample_rate)?;
+        dict.set_item("sourceFramesIngested", d.source_frames_ingested)?;
+        dict.set_item("canonicalSampleIndex", d.canonical_sample_index)?;
+        dict.set_item("analysisHopCount", d.analysis_hop_count)?;
+        dict.set_item("timeSeconds", d.time_seconds)?;
+        dict.set_item("streamEpoch", d.stream_epoch)?;
+        dict.set_item("detectedGaps", d.detected_gaps)?;
+        dict.set_item("detectedOverlaps", d.detected_overlaps)?;
+        dict.set_item("lastSourceStartFrame", d.last_source_start_frame)?;
+        dict.set_item("lastSourceEndFrame", d.last_source_end_frame)?;
         Ok(dict.into())
     }
 }

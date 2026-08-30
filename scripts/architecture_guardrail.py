@@ -61,6 +61,9 @@ class Rule:
     the pattern match, or in the same file when ``file_level`` is set.
     ``skip_comments`` ignores matches on comment-only lines (prose may
     legitimately reference a Rust API; code may not re-implement it).
+    ``skip_imports`` ignores matches on import lines (consuming a binding
+    type via ``import`` or Python ``from … import …`` is not a
+    re-declaration).
     """
 
     name: str
@@ -68,6 +71,7 @@ class Rule:
     evidence: list[str] = field(default_factory=list)
     file_level: bool = False
     skip_comments: bool = False
+    skip_imports: bool = False
     description: str = ""
 
 
@@ -187,26 +191,172 @@ RULES: list[Rule] = [
         ),
     ),
     # 9. Domain-state type re-declaration (capability-constrained amendment,
-    #    2026-08-29): TypeScript/Python files outside runtime-core/ that
-    #    declare a class/interface/type whose name matches a Rust-exported
-    #    domain-state type, AND that contains a structural-field token,
-    #    are re-declaring canonical structure instead of consuming the
-    #    binding. Evidence: type name AND a field token (phase/c/mu/freq/
-    #    band/etc) in the same file. Binding declarations (*.d.ts) are
-    #    exempt — they're the legitimate surface for type re-export.
+    #    2026-08-29, refined issue #93 strict review): TypeScript/Python
+    #    files outside runtime-core/ that declare a class/interface/type
+    #    whose name matches a Rust-exported domain-state type, AND that
+    #    contains a structural-field token, are re-declaring canonical
+    #    structure instead of consuming the binding. Evidence: the
+    #    Rust-original snake_case field name AND the camelCase wire form
+    #    BOTH appearing in the file (i.e. the file is hand-maintaining the
+    #    shape rather than importing it from the generated .d.ts or the
+    #    PyO3 binding). Per-type rules below — see ``DOMAIN_TYPE_EVIDENCE``
+    #    for the field-token table. Binding declarations (*.d.ts) and
+    #    approved adapters are exempt (they're the legitimate surface for
+    #    type re-export / consumption).
     Rule(
-        name="domain-type-redeclaration",
-        pattern=r"\b(class|interface|type)\s+\w*(OrbitState|PlayerState|PlayerObservation|CycleHypothesis|CycleBank|AnalysisTick|ResidualParams|OrbitController|OrbitSynthesizer|PhaseTracker|FeatureExtractor|AnalysisTimebase)\w*",
-        evidence=["phase", "c", "mu"],
+        name="domain-type-redeclaration-OrbitState",
+        pattern=r"\b(class|interface|type)\s+(OrbitState)\b",
+        evidence=["theta", "omega", "lobe"],
+        skip_imports=True,
         file_level=True,
         description=(
-            "Re-declaration of a Rust-exported domain-state type outside "
-            "runtime-core/ — declare the binding consumer (type alias or "
-            "interface re-export) instead of restating the fields. Names "
-            "covered: OrbitState, PlayerState, PlayerObservation, "
-            "CycleHypothesis, CycleBank, AnalysisTick, ResidualParams, "
-            "OrbitController, OrbitSynthesizer, PhaseTracker, "
-            "FeatureExtractor, AnalysisTimebase."
+            "Re-declaration of Rust ``OrbitState`` outside runtime-core/ "
+            "— import the wasm-orbit binding type or the PyO3 stub "
+            "instead of restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-PlayerState",
+        pattern=r"\b(class|interface|type)\s+(PlayerState)\b",
+        evidence=["c_re", "v_re", "theta"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``PlayerState`` outside runtime-core/ "
+            "— import the binding type instead of restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-PlayerObservation",
+        pattern=r"\b(class|interface|type)\s+(PlayerObservation)\b",
+        evidence=["c_re", "c_im", "alpha"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``PlayerObservation`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-CycleHypothesis",
+        pattern=r"\b(class|interface|type)\s+(CycleHypothesis)\b",
+        evidence=["phase", "period", "confidence"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``CycleHypothesis`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-CycleBank",
+        pattern=r"\b(class|interface|type)\s+(CycleBank)\b",
+        evidence=["cycle", "bank", "phase"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``CycleBank`` outside runtime-core/ "
+            "— import the binding type instead of restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-AnalysisTick",
+        pattern=r"\b(class|interface|type)\s+(AnalysisTick)\b",
+        evidence=["sampleIndex", "dtSeconds", "streamEpoch"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``AnalysisTick`` outside runtime-core/ "
+            "— import the binding type from the wasm-orbit generated "
+            "``.d.ts`` (via ``typescript_custom_section``) instead of "
+            "hand-maintaining the camelCase interface."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-TimebaseDiagnostics",
+        pattern=r"\b(class|interface|type)\s+(TimebaseDiagnostics)\b",
+        evidence=["canonicalSampleIndex", "detectedGaps", "streamEpoch"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``TimebaseDiagnostics`` outside "
+            "runtime-core/ — import the binding type from the wasm-orbit "
+            "generated ``.d.ts`` instead of hand-maintaining the "
+            "camelCase interface."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-ResidualParams",
+        pattern=r"\b(class|interface|type)\s+(ResidualParams)\b",
+        evidence=["k_residuals", "residual_cap", "radius_scale"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``ResidualParams`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-OrbitController",
+        pattern=r"\b(class|interface|type)\s+(OrbitController)\b",
+        evidence=["band_gates", "step(", "apply_controls"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``OrbitController`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields/methods."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-OrbitSynthesizer",
+        pattern=r"\b(class|interface|type)\s+(OrbitSynthesizer)\b",
+        evidence=["synthesize", "k_residuals", "residual_cap"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``OrbitSynthesizer`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-PhaseTracker",
+        pattern=r"\b(class|interface|type)\s+(PhaseTracker)\b",
+        evidence=["phase", "period", "tracker"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``PhaseTracker`` (planned) outside "
+            "runtime-core/ — declare a binding consumer, not a fresh "
+            "structural definition."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-FeatureExtractor",
+        pattern=r"\b(class|interface|type)\s+(FeatureExtractor)\b",
+        evidence=["n_fft", "hop_length", "feature_mean"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``FeatureExtractor`` outside "
+            "runtime-core/ — import the binding type instead of "
+            "restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-AnalysisTimebase",
+        pattern=r"\b(class|interface|type)\s+(AnalysisTimebase)\b",
+        evidence=["ingest", "flush", "diagnostics"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``AnalysisTimebase`` outside "
+            "runtime-core/ — import the binding type from the wasm-orbit "
+            "generated ``.d.ts`` instead of hand-maintaining the class."
         ),
     ),
     # 10. Hard-coded shared constants (capability-constrained amendment,
@@ -307,6 +457,28 @@ def _is_comment_line(line: str, suffix: str) -> bool:
     )
 
 
+def _is_import_line(line: str, suffix: str) -> bool:
+    """True when the line is an import (Python or TS) for the given suffix.
+
+    Used by ``Rule.skip_imports`` to ignore ``import type { Foo } from '...'``
+    and ``from … import Foo`` — those consume a binding type, they don't
+    re-declare it. A multi-line ``from … import (\\n  Foo,\\n  Bar,\\n)`` is
+    not fully handled here, but the pattern syntax check is per-line so
+    each item is its own line and would still be matched — keep imports
+    to single lines for canonical types if they need to be exempt.
+    """
+    stripped = line.strip()
+    if suffix in {".py"}:
+        return stripped.startswith("import ") or stripped.startswith("from ")
+    return (
+        stripped.startswith("import ")
+        or stripped.startswith("import type ")
+        or stripped.startswith("import {")
+        or stripped.startswith("import type {")
+        or stripped.startswith("export type ")
+    )
+
+
 def _load_manifest() -> dict:
     if not MANIFEST_PATH.exists():
         raise SystemExit(f"manifest missing: {MANIFEST_PATH}")
@@ -339,6 +511,8 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
                 continue
             if rule.skip_comments and _is_comment_line(line, path.suffix):
                 continue
+            if rule.skip_imports and _is_import_line(line, path.suffix):
+                continue
             if rule.file_level and rule.evidence:
                 # Evidence must appear elsewhere in the file (same construct
                 # family). If not present, the pattern alone is too generic —
@@ -357,7 +531,19 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
             if is_adapter and rule.name in {
                 "controller-class",
                 "phase-tracker-concept",
-                "domain-type-redeclaration",
+                "domain-type-redeclaration-OrbitState",
+                "domain-type-redeclaration-PlayerState",
+                "domain-type-redeclaration-PlayerObservation",
+                "domain-type-redeclaration-CycleHypothesis",
+                "domain-type-redeclaration-CycleBank",
+                "domain-type-redeclaration-AnalysisTick",
+                "domain-type-redeclaration-TimebaseDiagnostics",
+                "domain-type-redeclaration-ResidualParams",
+                "domain-type-redeclaration-OrbitController",
+                "domain-type-redeclaration-OrbitSynthesizer",
+                "domain-type-redeclaration-PhaseTracker",
+                "domain-type-redeclaration-FeatureExtractor",
+                "domain-type-redeclaration-AnalysisTimebase",
             }:
                 # Adapters may wrap the Rust controller class or declare
                 # binding-consumer types for planned Rust concepts — that is

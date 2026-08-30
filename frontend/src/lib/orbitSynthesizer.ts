@@ -86,13 +86,7 @@ interface WasmModule {
     window_frames?: number;
   };
   /** Canonical sample-clock timebase (issue #91), constructed per stream. */
-  AnalysisTimebase?: new () => {
-    ingest(samples: Float32Array, sourceSampleRate: number, sourceStartFrame: bigint): unknown;
-    flush(): unknown;
-    reset(): void;
-    diagnostics(): unknown;
-    free(): void;
-  };
+  AnalysisTimebase?: new () => import('./analysisTimebase').WasmAnalysisTimebase;
   OrbitState: new (
     lobe: number,
     subLobe: number,

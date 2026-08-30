@@ -105,7 +105,7 @@ class TestAudioPipelineParity:
 
         # Tick sample indices identical and on exact hop boundaries.
         for i, tick in enumerate(runtime_ticks):
-            assert tick["sample_index"] == (i + 1) * HOP_LENGTH
+            assert tick["sampleIndex"] == (i + 1) * HOP_LENGTH
 
         # Feature vectors identical (same Rust extractor, same history).
         max_err = 0.0
@@ -128,7 +128,7 @@ class TestAudioPipelineParity:
             other = self._runtime_ticks(audio, block=block)
             assert len(other) == len(reference)
             for a, b in zip(reference, other):
-                assert a["sample_index"] == b["sample_index"]
+                assert a["sampleIndex"] == b["sampleIndex"]
                 assert (
                     np.max(np.abs(np.array(a["features"]) - np.array(b["features"])))
                     < 1e-9
@@ -141,9 +141,9 @@ class TestAudioPipelineParity:
         ticks = self._runtime_ticks(audio, block=2048)
         assert ticks
         for tick in ticks:
-            assert tick["dt_seconds"] == pytest.approx(CANONICAL_DT, abs=1e-12)
-            assert tick["time_seconds"] == pytest.approx(
-                tick["sample_index"] / SAMPLE_RATE, abs=1e-12
+            assert tick["dtSeconds"] == pytest.approx(CANONICAL_DT, abs=1e-12)
+            assert tick["timeSeconds"] == pytest.approx(
+                tick["sampleIndex"] / SAMPLE_RATE, abs=1e-12
             )
 
     def test_resampled_source_matches_canonical_rate_pipeline(self) -> None:
@@ -163,9 +163,9 @@ class TestAudioPipelineParity:
 
         assert ticks, "resampled stream produced no ticks"
         for w in zip(ticks, ticks[1:]):
-            assert w[1]["sample_index"] - w[0]["sample_index"] == HOP_LENGTH
+            assert w[1]["sampleIndex"] - w[0]["sampleIndex"] == HOP_LENGTH
         d = tb.diagnostics()
-        assert abs(d["canonical_sample_index"] - SAMPLE_RATE) <= 1
+        assert abs(d["canonicalSampleIndex"] - SAMPLE_RATE) <= 1
 
     def test_pipeline_version_invalidates_cache(self):
         """The cache key must include the pipeline version so features

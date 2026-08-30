@@ -3,9 +3,11 @@
  *
  * The deterministic transport/timing/scheduling math lives in Rust and is
  * proven by runtime-core/tests/test_timebase.rs. These tests only verify the
- * thin binding wrapper: correct argument marshalling to the wasm instance,
- * snake_case→camelCase tick mapping, and diagnostics mapping. The wasm
- * instance is mocked so no browser or wasm binary is needed.
+ * thin binding wrapper: correct argument marshalling to the wasm instance
+ * and the wire format matches the generated `AnalysisTick` /
+ * `TimebaseDiagnostics` interfaces (which the wasm binding now returns
+ * directly — no TS-side mapping). The wasm instance is mocked so no
+ * browser or wasm binary is needed.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -23,10 +25,10 @@ function makeMockWasm(overrides: Partial<WasmAnalysisTimebase> = {}): {
   const ingest = vi.fn().mockReturnValue([
     {
       features: [1, 2, 3],
-      sample_index: 1024,
-      time_seconds: 1024 / 48000,
-      dt_seconds: 1024 / 48000,
-      stream_epoch: 0,
+      sampleIndex: 1024,
+      timeSeconds: 1024 / 48000,
+      dtSeconds: 1024 / 48000,
+      streamEpoch: 0,
     },
   ]);
   const wasm: WasmAnalysisTimebase = {
@@ -34,16 +36,16 @@ function makeMockWasm(overrides: Partial<WasmAnalysisTimebase> = {}): {
     flush: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
     diagnostics: vi.fn().mockReturnValue({
-      source_sample_rate: 48000,
-      source_frames_ingested: 2048,
-      canonical_sample_index: 2048,
-      analysis_hop_count: 2,
-      time_seconds: 2048 / 48000,
-      stream_epoch: 1,
-      detected_gaps: 0,
-      detected_overlaps: 0,
-      last_source_start_frame: 1024,
-      last_source_end_frame: 2048,
+      sourceSampleRate: 48000,
+      sourceFramesIngested: 2048,
+      canonicalSampleIndex: 2048,
+      analysisHopCount: 2,
+      timeSeconds: 2048 / 48000,
+      streamEpoch: 1,
+      detectedGaps: 0,
+      detectedOverlaps: 0,
+      lastSourceStartFrame: 1024,
+      lastSourceEndFrame: 2048,
     }),
     free: vi.fn(),
     ...overrides,
@@ -82,7 +84,11 @@ describe('AnalysisTimebase wrapper', () => {
     expect(argFrame).toBe(512n);
   });
 
-  it('maps snake_case wasm ticks to camelCase AnalysisTicks', () => {
+  it('forwards camelCase AnalysisTicks unchanged from the wasm instance', () => {
+    // The wasm-orbit binding serializes `AnalysisTick` with camelCase
+    // fields directly (Rust-derived wire format, see
+    // `wasm-orbit/src/lib.rs` `typescript_custom_section`). The TS
+    // adapter must not re-shape the record; it just forwards it.
     const { wasm } = makeMockWasm();
     const tb = new AnalysisTimebase(wasm);
     const ticks = tb.ingest({
@@ -112,7 +118,7 @@ describe('AnalysisTimebase wrapper', () => {
     expect(ticks).toEqual([]);
   });
 
-  it('maps diagnostics to camelCase', () => {
+  it('forwards camelCase TimebaseDiagnostics unchanged', () => {
     const { wasm } = makeMockWasm();
     const tb = new AnalysisTimebase(wasm);
     const d = tb.diagnostics;

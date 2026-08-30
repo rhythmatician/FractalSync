@@ -132,8 +132,55 @@ pub struct AnalysisTimebase {
     inner: RustAnalysisTimebase,
 }
 
+// ---------------------------------------------------------------------------
+// TypeScript shape of the canonical analysis-tick and timebase-diagnostics
+// records. Emitted as a custom section so wasm-pack includes them verbatim
+// in the generated ``orbit_synth_wasm.d.ts``. Frontend consumers import
+// ``AnalysisTick`` and ``TimebaseDiagnostics`` from ``orbit-synth-wasm`` and
+// do NOT redeclare them — Rust is the single source of truth for the wire
+// format (ADR 0001, issue #93 strict-version review).
+//
+// Field names match the camelCase wire format produced by
+// ``#[serde(rename_all = "camelCase")]` on the Rust structs that
+// ``ingest``/``flush``/``diagnostics`` serialize. Python mirrors the same
+// keys (see ``runtime_core::pybindings::tick_to_pydict``) so the trainer
+// and the browser see an identical record shape — cross-surface parity.
+// ---------------------------------------------------------------------------
+#[wasm_bindgen(typescript_custom_section)]
+const TS_TYPES: &'static str = r#"
+/** Canonical analysis tick — the seam CycleBank will consume (issue #91). */
+export interface AnalysisTick {
+    features: number[];
+    sampleIndex: number;
+    timeSeconds: number;
+    dtSeconds: number;
+    streamEpoch: number;
+}
+
+/** Diagnostic snapshot for manual verification of the canonical clock. */
+export interface TimebaseDiagnostics {
+    sourceSampleRate: number;
+    sourceFramesIngested: number;
+    canonicalSampleIndex: number;
+    analysisHopCount: number;
+    timeSeconds: number;
+    streamEpoch: number;
+    detectedGaps: number;
+    detectedOverlaps: number;
+    lastSourceStartFrame: number;
+    lastSourceEndFrame: number;
+}
+"#;
+
 /// A single emitted analysis tick, serialized to JS.
+///
+/// Wire format is **camelCase** to match the generated TypeScript shape
+/// emitted by the ``ts_types`` custom section below. The matching
+/// Python serializer (see ``runtime_core::pybindings::tick_to_pydict``)
+/// uses the same keys so a tick arriving via either binding is keyed
+/// identically across surfaces (cross-surface parity, issue #93).
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AnalysisTickJs {
     features: Vec<f64>,
     sample_index: u64,
@@ -153,6 +200,14 @@ impl AnalysisTimebase {
 
     /// Ingest one non-overlapping PCM block. Returns a JS array of ticks
     /// (possibly empty). Throws on overlap / mid-stream rate change.
+    ///
+    /// Type note: the generated .d.ts types this as `any` because the
+    /// function returns a `JsValue` (it serializes via
+    /// ``serde_wasm_bindgen``). The TS adapter in
+    /// ``frontend/src/lib/analysisTimebase.ts`` re-types this signature
+    /// as ``AnalysisTick[]`` and the ``AnalysisTick`` interface itself
+    /// is provided by the ``TS_TYPES`` custom section above — so the
+    /// Rust source remains the single authority for the wire shape.
     #[wasm_bindgen]
     pub fn ingest(
         &mut self,
@@ -178,6 +233,7 @@ impl AnalysisTimebase {
     }
 
     /// Flush end-of-stream (recovers the deferred final sample/tick).
+    /// See ``ingest`` for the typing note about the .d.ts return type.
     #[wasm_bindgen]
     pub fn flush(&mut self) -> JsValue {
         let js: Vec<AnalysisTickJs> = self
@@ -203,10 +259,12 @@ impl AnalysisTimebase {
     }
 
     /// Diagnostic snapshot for verifying the clock manually.
+    /// See ``ingest`` for the typing note about the .d.ts return type.
     #[wasm_bindgen]
     pub fn diagnostics(&self) -> JsValue {
         let d = self.inner.diagnostics();
         #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
         struct Diag {
             source_sample_rate: usize,
             source_frames_ingested: u64,

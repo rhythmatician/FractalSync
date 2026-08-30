@@ -24,17 +24,17 @@ function makeMockWasm(): WasmAnalysisTimebase & { ingest: ReturnType<typeof vi.f
   const ingest = vi.fn().mockReturnValue([
     {
       features: [0.5],
-      sample_index: 1024,
-      time_seconds: 1024 / 48000,
-      dt_seconds: 1024 / 48000,
-      stream_epoch: 0,
+      sampleIndex: 1024,
+      timeSeconds: 1024 / 48000,
+      dtSeconds: 1024 / 48000,
+      streamEpoch: 0,
     },
   ]);
   return {
     ingest,
     flush: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
-    diagnostics: vi.fn().mockReturnValue({ canonical_sample_index: 1024 }),
+    diagnostics: vi.fn().mockReturnValue({ canonicalSampleIndex: 1024 }),
     free: vi.fn(),
   };
 }

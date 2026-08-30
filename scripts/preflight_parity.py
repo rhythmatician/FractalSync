@@ -77,7 +77,7 @@ def _canonical_dt() -> float:
 
     PARITY RULE: parity tests must derive constants from the deployed
     contract, never restate them. The browser supplies
-    AnalysisTick.dt_seconds = HOP_LENGTH / SAMPLE_RATE from the Rust
+    AnalysisTick.dtSeconds = HOP_LENGTH / SAMPLE_RATE from the Rust
     timebase; advancing parity paths at any other value (e.g. 1/60) proves
     agreement at a timestep production never uses (#93 incident).
     """
@@ -206,7 +206,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
 
     # PARITY RULE: the timestep must come from the deployed contract
     # (HOP_LENGTH / SAMPLE_RATE via the installed runtime_core), never be
-    # restated as a literal. The browser supplies AnalysisTick.dt_seconds
+    # restated as a literal. The browser supplies AnalysisTick.dtSeconds
     # from the Rust timebase; testing 1/60 here would prove Rust and the
     # mirror agree at an obsolete timestep while the real paths diverge
     # (the #93 incident).

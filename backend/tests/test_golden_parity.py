@@ -108,7 +108,7 @@ class TestOrbitControllerMirrorGolden:
 
         # PARITY RULE: derive the timestep from the deployed contract
         # (HOP_LENGTH / SAMPLE_RATE), never restate a literal. The browser
-        # supplies AnalysisTick.dt_seconds from the Rust timebase.
+        # supplies AnalysisTick.dtSeconds from the Rust timebase.
         dt = canonical_hop_dt()
 
         rng = np.random.RandomState(0)
