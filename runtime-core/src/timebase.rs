@@ -19,13 +19,21 @@
 //! hops occur: the same source PCM produces the same canonical stream and
 //! the same tick sample indices regardless of how it is chunked.
 
-use crate::controller::{HOP_LENGTH, SAMPLE_RATE, WINDOW_FRAMES};
+use crate::controller::{HOP_LENGTH, N_FFT, SAMPLE_RATE, WINDOW_FRAMES};
 use crate::features::FeatureExtractor;
 
 /// Canonical analysis timeline sample rate (runtime-core authority).
 pub const CANONICAL_SAMPLE_RATE: usize = SAMPLE_RATE;
 /// Canonical hop length in canonical samples (runtime-core authority).
 pub const CANONICAL_HOP_LENGTH: usize = HOP_LENGTH;
+
+/// Canonical samples feeding one tick's feature window: exactly enough to
+/// cover n_fft + (WINDOW_FRAMES - 1) hops. Tick windows are anchored to the
+/// hop boundary (their END is fixed at the hop sample and their length is a
+/// multiple of the hop), so any slice of this length or longer yields the
+/// SAME last window — this is what makes tick features invariant to block
+/// cadence (chunk invariance, issue #93 production-path parity).
+pub const TICK_WINDOW_SAMPLES: usize = N_FFT + (WINDOW_FRAMES - 1) * HOP_LENGTH;
 
 /// Reason a stream reset occurred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -272,7 +280,10 @@ pub struct AnalysisTimebase {
 
     /// Rolling PCM history for the extractor (chronological, append-only).
     history: Vec<f32>,
-    /// Cap on retained history (≈1 s at 48 kHz); older samples are dropped.
+    /// Cap on retained history. Must exceed TICK_WINDOW_SAMPLES plus the
+    /// largest ingest block so a tick's anchored window is never truncated
+    /// by draining (truncation would make features cadence-dependent).
+    /// 2 s at 48 kHz supports ingest blocks up to ~82.7 k samples.
     history_cap: usize,
 }
 
@@ -297,7 +308,7 @@ impl AnalysisTimebase {
             detected_gaps: 0,
             detected_overlaps: 0,
             history: Vec::new(),
-            history_cap: CANONICAL_SAMPLE_RATE,
+            history_cap: 2 * CANONICAL_SAMPLE_RATE,
         }
     }
 
@@ -412,9 +423,20 @@ impl AnalysisTimebase {
     }
 
     fn emit_tick(&self, hop_sample: u64) -> AnalysisTick {
-        let windows = self
-            .extractor
-            .extract_windowed_features(&self.history, WINDOW_FRAMES);
+        // Anchor the feature window to the ABSOLUTE hop boundary: the
+        // window ENDS at the hop sample and is TICK_WINDOW_SAMPLES long
+        // (a multiple of the hop). The extractor's last window over any
+        // slice of this length is then identical regardless of how much
+        // extra history precedes it — so tick features are invariant to
+        // ingest block cadence (production-path parity, issue #93).
+        let window_len = TICK_WINDOW_SAMPLES;
+        // Samples ingested past this tick's hop boundary (a later hop in
+        // the same block): the slice must exclude them.
+        let overshoot = (self.canonical_pos - hop_sample) as usize;
+        let end = self.history.len() - overshoot;
+        let start = end.saturating_sub(window_len);
+        let slice = &self.history[start..end];
+        let windows = self.extractor.extract_windowed_features(slice, WINDOW_FRAMES);
         let features = windows.into_iter().last().unwrap_or_default();
         AnalysisTick {
             features,

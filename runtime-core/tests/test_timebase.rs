@@ -255,3 +255,58 @@ fn resampled_stream_emits_ticks_on_canonical_boundaries() {
     }
     assert_eq!(ticks.len() as u64, d.analysis_hop_count);
 }
+
+#[test]
+fn tick_features_are_chunk_invariant() {
+    // PRODUCTION-PATH PARITY (issue #93): the same source stream fed in
+    // different block cadences must produce identical tick FEATURES, not
+    // just identical tick positions. The original emit_tick extracted from
+    // the whole rolling history, so a large ingest block shifted the
+    // extractor's window alignment relative to a small-block stream — a
+    // divergence component tests could not see because they never fed the
+    // same stream through two cadences and compared features.
+    let total = 48_000usize;
+    let source: Vec<f32> = (0..total)
+        .map(|i| {
+            let t = i as f32 / 48_000.0;
+            0.4 * (2.0 * std::f32::consts::PI * 220.0 * t).sin()
+        })
+        .collect();
+
+    let collect = |chunks: &[usize]| -> Vec<Vec<f64>> {
+        let mut tb = AnalysisTimebase::new();
+        let mut feats = Vec::new();
+        let mut pos = 0usize;
+        for &c in chunks {
+            let end = (pos + c).min(total);
+            for t in tb.ingest(&source[pos..end], 48_000, pos as u64).unwrap() {
+                feats.push(t.features);
+            }
+            pos = end;
+            if pos >= total {
+                break;
+            }
+        }
+        if pos < total {
+            for t in tb.ingest(&source[pos..], 48_000, pos as u64).unwrap() {
+                feats.push(t.features);
+            }
+        }
+        feats
+    };
+
+    let steady = collect(&[4096; 12]);
+    let bursty = collect(&[1, 8192, 13, 2048, 999, 128, 16384, 4096]);
+    assert_eq!(steady.len(), bursty.len(), "cadence changed tick count");
+    for (i, (a, b)) in steady.iter().zip(bursty.iter()).enumerate() {
+        let max_err = a
+            .iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_err < 1e-6,
+            "tick {i} features diverged across cadences: max_err={max_err}"
+        );
+    }
+}

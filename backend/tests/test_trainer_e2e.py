@@ -5,8 +5,15 @@ import os
 import shutil
 from argparse import Namespace
 from pathlib import Path
+
+import runtime_core
+
 from train import execute_training_workflow
 from scripts.remove_epoch1_models import main as clean_up
+
+# The canonical timebase emits WINDOW_FRAMES-frame windows; training must
+# consume the same tick contract as the runtime (production-path parity).
+WINDOW_FRAMES = runtime_core.WINDOW_FRAMES
 
 
 def test_trainer_e2e():
@@ -80,7 +87,7 @@ def test_execute_training_workflow(monkeypatch, tmp_path, capsys):
         epochs=1,
         batch_size=1,
         learning_rate=1e-3,
-        window_frames=1,
+        window_frames=WINDOW_FRAMES,
         k_bands=1,
         use_curriculum=False,
         curriculum_weight=1.0,

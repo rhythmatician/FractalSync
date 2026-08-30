@@ -813,6 +813,98 @@ impl FeatureExtractor {
     }
 }
 
+/// Python wrapper for the canonical sample-clock timebase (issue #91).
+///
+/// This is the TRAINING surface of the AnalysisTimebase: the backend must
+/// ingest audio through the same Rust timebase the browser uses (via wasm),
+/// so training and runtime execute the same resampling / hop-scheduling /
+/// epoch pipeline rather than merely containing equivalent components.
+#[pyclass]
+pub struct AnalysisTimebase {
+    inner: crate::timebase::AnalysisTimebase,
+}
+
+/// A single emitted analysis tick, materialized as a Python dict.
+fn tick_to_pydict(py: Python, t: crate::timebase::AnalysisTick) -> PyResult<PyObject> {
+    use pyo3::types::PyDict;
+    let dict = PyDict::new_bound(py);
+    dict.set_item("features", t.features)?;
+    dict.set_item("sample_index", t.sample_index)?;
+    dict.set_item("time_seconds", t.time_seconds)?;
+    dict.set_item("dt_seconds", t.dt_seconds)?;
+    dict.set_item("stream_epoch", t.stream_epoch)?;
+    Ok(dict.into())
+}
+
+#[pymethods]
+impl AnalysisTimebase {
+    #[new]
+    fn py_new() -> Self {
+        Self {
+            inner: crate::timebase::AnalysisTimebase::new(),
+        }
+    }
+
+    /// Ingest one non-overlapping PCM block. Returns a list of tick dicts
+    /// (possibly empty). Raises ValueError on overlap / mid-stream rate
+    /// change (transport bugs, not discontinuities).
+    fn ingest<'py>(
+        &mut self,
+        py: Python<'py>,
+        samples: Vec<f32>,
+        source_sample_rate: usize,
+        source_start_frame: u64,
+    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        let ticks = self
+            .inner
+            .ingest(&samples, source_sample_rate, source_start_frame)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        ticks
+            .into_iter()
+            .map(|t| {
+                tick_to_pydict(py, t)
+                    .map(|obj| obj.into_bound(py))
+            })
+            .collect()
+    }
+
+    /// Flush end-of-stream (recovers the deferred final sample/tick).
+    fn flush<'py>(&mut self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.inner
+            .flush()
+            .into_iter()
+            .map(|t| {
+                tick_to_pydict(py, t)
+                    .map(|obj| obj.into_bound(py))
+            })
+            .collect()
+    }
+
+    /// Declare a stream discontinuity (start/stop/source replacement).
+    /// Bumps the epoch and resets the hop schedule.
+    fn reset(&mut self) {
+        self.inner.reset(crate::timebase::ResetReason::SourceReplacement);
+    }
+
+    /// Diagnostic snapshot as a Python dict.
+    fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+        use pyo3::types::PyDict;
+        let d = self.inner.diagnostics();
+        let dict = PyDict::new_bound(py);
+        dict.set_item("source_sample_rate", d.source_sample_rate)?;
+        dict.set_item("source_frames_ingested", d.source_frames_ingested)?;
+        dict.set_item("canonical_sample_index", d.canonical_sample_index)?;
+        dict.set_item("analysis_hop_count", d.analysis_hop_count)?;
+        dict.set_item("time_seconds", d.time_seconds)?;
+        dict.set_item("stream_epoch", d.stream_epoch)?;
+        dict.set_item("detected_gaps", d.detected_gaps)?;
+        dict.set_item("detected_overlaps", d.detected_overlaps)?;
+        dict.set_item("last_source_start_frame", d.last_source_start_frame)?;
+        dict.set_item("last_source_end_frame", d.last_source_end_frame)?;
+        Ok(dict.into())
+    }
+}
+
 /// Free function: compute a point on the Mandelbrot lobe in Python.
 #[pyfunction]
 #[pyo3(signature = (lobe, sub_lobe, theta, s))]
@@ -939,6 +1031,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<OrbitController>()?;
 
     m.add_class::<FeatureExtractor>()?;
+
+    m.add_class::<AnalysisTimebase>()?;
 
     m.add_class::<RuntimeVisualMetrics>()?;
 

@@ -101,6 +101,10 @@ jobs:
         run: |
           python scripts/architecture_guardrail.py
 
+      - name: Canonical surfaces gate (cross-surface reachability)
+        run: |
+          python scripts/canonical_surfaces_gate.py
+
   runtime-core-build:
     name: Runtime-Core Build (maturin)
     runs-on: ubuntu-latest

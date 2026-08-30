@@ -1,0 +1,43 @@
+{
+    "$schema": "Cross-surface contract manifest (parity-of-production-paths, post-#93 incident)",
+    "rule": "Every canonical shared subsystem listed here must be REACHABLE from each declared required surface through its real public seam. A subsystem that exists on one required surface but not another is an INVALID repository state: CI fails. Reachability is verified by the named required_tests, which must enter through the production entry points (not bypass helpers).",
+    "subsystems": {
+        "audio_analysis": {
+            "authority": "runtime-core/src/timebase.rs (AnalysisTimebase, StreamingResampler)",
+            "description": "Canonical 48 kHz sample-clock timebase: exactly-once PCM ingestion, stateful resampling, 1024-sample hop scheduling, epoch semantics, feature extraction.",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/timebase.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs (AnalysisTimebase wasm_bindgen) consumed by frontend/src/lib/analysisTimebase.ts",
+                "training_surface": "runtime-core/src/pybindings.rs (AnalysisTimebase PyO3) consumed by backend/src/data_loader.py"
+            },
+            "required_tests": [
+                "backend/tests/test_audio_pipeline_parity.py",
+                "runtime-core/tests/test_timebase.rs"
+            ]
+        },
+        "physics_step": {
+            "authority": "runtime-core/src/controller.rs (OrbitController::step, PlayerState::step)",
+            "description": "c-space physics integration. The timestep must come from the canonical tick contract (AnalysisTick.dt_seconds = HOP_LENGTH / SAMPLE_RATE), never restated as a literal.",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/controller.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs (OrbitController) consuming AnalysisTick.dt_seconds from frontend/src/lib/modelInference.ts",
+                "training_surface": "backend/src/cspace_proxies.py (differentiable mirrors) consuming dt from the canonical tick contract"
+            },
+            "required_tests": [
+                "backend/tests/test_controller_pipeline_parity.py",
+                "backend/tests/test_golden_parity.py"
+            ]
+        }
+    },
+    "binding_symmetry": {
+        "rule": "Every pyclass exported through runtime-core/src/pybindings.rs must have a wasm_bindgen export in wasm-orbit/src/lib.rs, and vice versa, unless exempted below. A canonical subsystem exported to only one consumer surface is the #93 failure mode.",
+        "exemptions": [
+            "RuntimeVisualMetrics",
+            "Complex"
+        ],
+        "exemption_reasons": {
+            "RuntimeVisualMetrics": "Training-only diagnostic; the browser computes visual metrics in TypeScript.",
+            "Complex": "wasm-only serialization helper, not a canonical subsystem."
+        }
+    }
+}

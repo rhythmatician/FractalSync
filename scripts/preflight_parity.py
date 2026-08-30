@@ -72,6 +72,19 @@ def _carrier_reference(theta: float, s: float) -> complex:
     return mu / 2 - mu**2 / 4
 
 
+def _canonical_dt() -> float:
+    """The canonical physics timestep, derived from the deployed contract.
+
+    PARITY RULE: parity tests must derive constants from the deployed
+    contract, never restate them. The browser supplies
+    AnalysisTick.dt_seconds = HOP_LENGTH / SAMPLE_RATE from the Rust
+    timebase; advancing parity paths at any other value (e.g. 1/60) proves
+    agreement at a timestep production never uses (#93 incident).
+    """
+    rc = _import_runtime_core()
+    return rc.HOP_LENGTH / rc.SAMPLE_RATE
+
+
 def check_carrier_parity(rc) -> tuple[bool, float]:
     """(a) Rust carrier synthesis vs closed form over an 8x8 grid."""
     rp = rc.ResidualParams(
@@ -186,9 +199,18 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         ) from exc
 
     from src.cspace_proxies import (
+        canonical_hop_dt,
         orbit_controller_sequence,
         orbit_controller_momentum_sequence,
     )
+
+    # PARITY RULE: the timestep must come from the deployed contract
+    # (HOP_LENGTH / SAMPLE_RATE via the installed runtime_core), never be
+    # restated as a literal. The browser supplies AnalysisTick.dt_seconds
+    # from the Rust timebase; testing 1/60 here would prove Rust and the
+    # mirror agree at an obsolete timestep while the real paths diverge
+    # (the #93 incident).
+    dt = canonical_hop_dt()
 
     rng = torch.Generator().manual_seed(0)
     n_steps = 60
@@ -204,7 +226,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         rust_re = rust_im = 0.0
         for i in range(n_steps):
             c.apply_controls(float(s_vals[i]), float(a_vals[i]))
-            rust_re, rust_im = c.step(1.0 / 60.0, [float(g) for g in gates[i]])
+            rust_re, rust_im = c.step(dt, [float(g) for g in gates[i]])
 
         pt_c = orbit_controller_sequence(
             s_target=s_vals,
@@ -212,6 +234,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
             omega=1.0,
             band_gates=gates,
             segment_ids=seg,
+            dt=dt,
         )
         err = max(
             abs(rust_re - pt_c[-1].real.item()),
@@ -226,7 +249,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         rust_mre = rust_mim = 0.0
         for i in range(n_steps):
             cm.apply_controls(float(s_vals[i]), float(a_vals[i]))
-            rust_mre, rust_mim = cm.step(1.0 / 60.0, [float(g) for g in gates[i]])
+            rust_mre, rust_mim = cm.step(dt, [float(g) for g in gates[i]])
 
         pt_cm = orbit_controller_momentum_sequence(
             s_target=s_vals,
@@ -234,6 +257,7 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
             omega=1.0,
             band_gates=gates,
             segment_ids=seg,
+            dt=dt,
             drag=0.90,
         )
         err_m = max(
@@ -527,7 +551,7 @@ def _rust_orbit_run(
         ctrl.apply_controls(s, alpha)
         ctrl.set_energy(energy_seq[i] if i < len(energy_seq) else 0.0)
         h_val = h_seq[i] if i < len(h_seq) else 0.0
-        re, im = ctrl.step(1.0 / 60.0, [0.5, 0.5, 0.5, 0.5, 0.5, 0.5], h_val)
+        re, im = ctrl.step(_canonical_dt(), [0.5, 0.5, 0.5, 0.5, 0.5, 0.5], h_val)
         traj_re.append(re)
         traj_im.append(im)
     return traj_re, traj_im
@@ -562,7 +586,8 @@ def _oracle_run(
     v_re = 0.0
     v_im = 0.0
     theta = 0.0  # mimic the wobble phase the Rust controller advances
-    dt = 1.0 / 60.0
+    # Contract-derived timestep — never restate a literal here.
+    dt = _canonical_dt()
     k_residuals = 6
     orr = 0.05
     max_step_sq = max_step * max_step
@@ -784,7 +809,10 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
             "rebuild the wheel."
         )
 
-    from src.cspace_proxies import orbit_controller_oracle_sequence
+    from src.cspace_proxies import canonical_hop_dt, orbit_controller_oracle_sequence
+
+    # Contract-derived timestep (never restate a literal).
+    dt = canonical_hop_dt()
 
     n_frames = 60
     rng = torch.Generator().manual_seed(1234)
@@ -816,6 +844,7 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
                 omega=1.0,
                 band_gates=gates,
                 segment_ids=seg,
+                dt=dt,
                 drag=0.90,
                 thrust=0.0,
                 initial_c=init_c,
@@ -850,7 +879,7 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
             ctrl.apply_controls(float(s_vals[i]), float(a_vals[i]))
             ctrl.set_energy(float(energy[i]))
             rre, rim = ctrl.step(
-                1.0 / 60.0,
+                _canonical_dt(),
                 [float(g) for g in gates[i]],
                 float(h_vals[i]),
             )

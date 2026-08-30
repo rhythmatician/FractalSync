@@ -42,7 +42,8 @@
                 "scripts/preflight_parity.py check (e3) shore-biased dynamics parity",
                 "scripts/preflight_parity.py check (e4) trainer-oracle consistency",
                 "backend/tests/test_golden_parity.py",
-                "backend/tests/test_synthesis_parity.py"
+                "backend/tests/test_synthesis_parity.py",
+                "backend/tests/test_controller_pipeline_parity.py (production-path: canonical dt, dt required)"
             ]
         },
         {
@@ -50,10 +51,11 @@
             "kind": "behavioral_mirror",
             "rust_authority": "runtime-core/src/features.rs (FeatureExtractor, FEATURE_VERSION features/2)",
             "why_outside_rust": "python:experiment_orchestration",
-            "reason": "Fallback extractor used when the Rust extractor fails its subprocess sanity check, and for computing dataset normalization stats. Literal numpy port of the Rust formulas. Fallback is required because dataset-wide normalization stats depend on iterating the entire training corpus, which the Rust per-window binding does not expose.",
+            "reason": "Fallback extractor used when the Rust extractor fails its subprocess sanity check, and for computing dataset normalization stats. Literal numpy port of the Rust formulas. Fallback is required because dataset-wide normalization stats depend on iterating the entire training corpus, which the Rust per-window binding does not expose. NOTE: primary training ingestion now routes through the canonical AnalysisTimebase (see shared/canonical_surfaces.json audio_analysis), not this mirror.",
             "parity": [
                 "scripts/preflight_parity.py check (g) feature golden parity",
-                "scripts/preflight_parity.py check (h) feature golden version"
+                "scripts/preflight_parity.py check (h) feature golden version",
+                "backend/tests/test_audio_pipeline_parity.py (production-path: timebase ingestion parity)"
             ]
         },
         {

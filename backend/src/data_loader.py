@@ -15,8 +15,18 @@ from runtime_core import (
     HOP_LENGTH,
     N_FFT,
     FEATURE_VERSION,
+    WINDOW_FRAMES,
     FeatureExtractor,
+    AnalysisTimebase,
 )
+
+import librosa
+
+# Bump when the training ingestion pipeline changes shape (e.g. switching
+# from direct extractor calls to the canonical AnalysisTimebase). Old caches
+# computed by a different pipeline MUST NOT be reused — they were produced
+# by a path the runtime does not execute (the #93 failure mode).
+PIPELINE_VERSION = "timebase/1"
 
 import librosa
 
@@ -43,6 +53,16 @@ class AudioDataset:
             cache_dir: Directory to persist extracted features (None to disable cache)
         """
         self.data_dir = Path(data_dir)
+        # The canonical timebase emits WINDOW_FRAMES-frame windows (the
+        # browser consumes exactly this contract via AnalysisTick.features).
+        # A trainer-configurable window size would produce model inputs the
+        # runtime never sees — a production-path divergence (#93 class).
+        if window_frames != WINDOW_FRAMES:
+            raise ValueError(
+                f"window_frames={window_frames} but the canonical timebase "
+                f"emits WINDOW_FRAMES={WINDOW_FRAMES} windows; training must "
+                "consume the same tick contract as the runtime"
+            )
         self.window_frames = window_frames
         self.max_files = max_files
         self.cache_dir = Path(cache_dir) if cache_dir else None
@@ -104,6 +124,12 @@ class AudioDataset:
             # the old contract (observed: features/1 cache survived the
             # features/2 change and the model learned the wrong distribution).
             "feature_version": FEATURE_VERSION,
+            # Ingestion-pipeline identity: features extracted through the
+            # canonical AnalysisTimebase (resampling + hop scheduling +
+            # epoch semantics) are NOT interchangeable with features
+            # extracted by calling the extractor directly on the whole
+            # file. Invalidate caches when the pipeline changes.
+            "pipeline_version": PIPELINE_VERSION,
         }
         cache_key = hashlib.sha1(
             json.dumps(cache_payload, sort_keys=True).encode()
@@ -134,32 +160,7 @@ class AudioDataset:
             str(audio_file), sr=SAMPLE_RATE, mono=True, duration=5 * 60
         )
 
-        # Chunk very long audio to prevent large allocations
-        max_total_seconds = 5 * 60  # 5 minutes threshold
-        chunk_seconds = 60  # process in 60s chunks
-        if len(audio) > SAMPLE_RATE * max_total_seconds:
-            chunk_size = SAMPLE_RATE * chunk_seconds
-            all_chunks: List[NDArray[np.float64]] = []
-            for start in range(0, len(audio), chunk_size):
-                end = min(start + chunk_size, len(audio))
-                chunk = audio[start:end].astype(np.float32)
-                chunk_features = self.feature_extractor.extract_windowed_features(
-                    chunk, window_frames=self.window_frames
-                )
-                # Ensure numpy arrays for downstream consumers
-                chunk_features = np.asarray(chunk_features, dtype=np.float64)
-                all_chunks.append(chunk_features)
-                logging.info(f"  chunk {start//chunk_size + 1}: {chunk_features.shape}")
-            features = (
-                np.vstack(all_chunks)
-                if all_chunks
-                else np.empty((0, 6 * self.window_frames), dtype=np.float64)
-            )
-        else:
-            features = self.feature_extractor.extract_windowed_features(
-                audio.astype(np.float64), window_frames=self.window_frames
-            )
-            features = np.asarray(features, dtype=np.float64)
+        features = self._extract_via_timebase(audio)
 
         if cache_file:
             try:
@@ -168,6 +169,46 @@ class AudioDataset:
                 pass
 
         return features
+
+    def _extract_via_timebase(self, audio: NDArray[np.floating]) -> NDArray[np.float64]:
+        """Extract features through the canonical AnalysisTimebase.
+
+        Training must execute the SAME ingestion pipeline the browser
+        executes (ADR 0001, issue #93): PCM → AnalysisTimebase (stateful
+        resampling, exactly-once validation, 1024-sample hop scheduling,
+        epoch semantics) → Rust FeatureExtractor → ticks. Calling the
+        extractor directly on the whole file bypasses the timebase and
+        produces features the runtime path cannot reproduce (different
+        window alignment, no streaming history semantics).
+
+        The file is fed as one contiguous PCM block at the canonical rate
+        (librosa already resampled to SAMPLE_RATE); the timebase schedules
+        the hops and runs the extractor exactly as the browser's wasm
+        timebase does. Ticks are collected in order; each tick's feature
+        vector is one training window.
+        """
+        timebase = AnalysisTimebase()
+        all_windows: List[List[float]] = []
+
+        # Feed in bounded blocks (mirrors the worklet's block cadence and
+        # avoids large PyO3 boundary payloads on Windows).
+        block_size = SAMPLE_RATE  # 1 s blocks
+        n = len(audio)
+        for start in range(0, n, block_size):
+            end = min(start + block_size, n)
+            block = np.ascontiguousarray(audio[start:end], dtype=np.float32)
+            ticks = timebase.ingest(
+                block.tolist(), SAMPLE_RATE, start
+            )
+            for tick in ticks:
+                all_windows.append(tick["features"])
+        # End-of-stream: recover the deferred final sample/tick.
+        for tick in timebase.flush():
+            all_windows.append(tick["features"])
+
+        if not all_windows:
+            return np.empty((0, 6 * self.window_frames), dtype=np.float64)
+        return np.asarray(all_windows, dtype=np.float64)
 
     def load_all_features(self) -> List[NDArray[np.float64]]:
         """
