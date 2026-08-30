@@ -18,7 +18,7 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "orbit-synth-wasm": ["../wasm-orbit/pkg/orbit_synth_wasm.d.ts"]
+      "orbit-synth-wasm": ["src/wasm/orbit_synth_wasm.d.ts"]
     }
   },
   "include": ["src"],
