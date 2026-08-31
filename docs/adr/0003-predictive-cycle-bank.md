@@ -1,6 +1,11 @@
 # 0003 — Predictive musical timing as causal multiscale ridge tracking
 
 Status: Accepted (2026-08-30)
+Supersedes: docs/adr/0002-musical-cycle-prediction.md
+
+This ADR records the architecture implemented by `runtime-core/src/cycle_bank.rs`
+(issue #92). It supersedes ADR 0002, whose hypothesis-bank / PLL framing was
+directionally correct but chose a discrete tracking formulation too early.
 
 ## Context
 

@@ -1,11 +1,21 @@
 # 0002 — Musical timing as a bank of predictive cycle hypotheses
 
-Status: Accepted (2026-08-29, authorized by repository owner)
+Status: Superseded by ADR 0003 (2026-08-30, authorized by repository owner)
 Revision: 2026-08-29 — "tempo" is no longer an independently estimated
 musical-state concept. Frequency is intrinsic state of every `CycleHypothesis`;
 "tempo" is a human-readable interpretation of the frequency of whichever
 hypothesis has been chosen to be called the beat. No code or binding change
 is implied for already-implemented types; this clarifies the architecture.
+
+Superseded by: docs/adr/0003-predictive-cycle-bank.md
+
+The causal multiscale ridge-tracking architecture in ADR 0003 supersedes the
+adaptive-oscillator / PLL-hypothesis framing recorded here. The hypothesis-bank
+formulation in this ADR remains historically useful as the design rationale
+that motivated ADR 0003, but it is **not** the architecture implemented by the
+runtime CycleBank. New code, code comments, PR descriptions, and canonical-
+surfaces metadata must cite ADR 0003 for the cycle-bank architecture, not
+this ADR.
 
 ## Context
 

@@ -1,6 +1,6 @@
 # CycleBank scale-resolution convergence (issue #92)
 
-ADR 0002 requires the numerical scale density to be chosen by **convergence
+ADR 0003 requires the numerical scale density to be chosen by **convergence
 measurement**, not treated as "musical buckets per octave". This document
 records that measurement for the v1 causal constant-Q analytic filter bank.
 

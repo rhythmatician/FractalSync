@@ -831,7 +831,7 @@ pub struct AnalysisTimebase {
 // only orchestrates: it feeds canonical ticks in and reads observed modes /
 // relations / predictions out. ALL transform, ridge, tracking, frequency,
 // phase, confidence, relation, and prediction math stays in Rust (ADR 0001,
-// ADR 0002); nothing here recomputes any of it.
+// ADR 0003); nothing here recomputes any of it.
 // ---------------------------------------------------------------------------
 
 /// Python wrapper for the canonical observed-ridge `CycleBank`.

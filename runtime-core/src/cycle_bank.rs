@@ -1,7 +1,7 @@
 //! Canonical predictive musical-timing primitive (issue #92).
 //!
 //! `CycleBank` is the Rust authority for directly observed predictive temporal
-//! modes.  It implements the architecture from ADR 0002:
+//! modes.  It implements the architecture from ADR 0003:
 //!
 //! causal scalar evidence at the authoritative hop clock
 //!     -> causal constant-Q analytic field

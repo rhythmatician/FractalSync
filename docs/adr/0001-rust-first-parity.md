@@ -168,7 +168,8 @@ broadened rule:
 - how an `AnalysisTick` is constructed;
 - the canonical audio timebase / sample clock (see PR #91);
 - how a `CycleBank` hypothesis is updated and which of its values become
-  Player inputs (see ADR 0002);
+  Player inputs (see ADR 0002 for the superseded hypothesis-bank framing; the
+  currently implemented cycle-bank architecture is in ADR 0003);
 - how `PlayerObservation` is packed, normalized, and ordered;
 - model input / output schema, control ranges, and control interpretation;
 - how Controls affect Physics, Map observations, realm and Shore

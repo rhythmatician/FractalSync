@@ -775,7 +775,7 @@ impl OrbitController {
 // This is the SAME Rust CycleBank the trainer uses via PyO3. TypeScript only
 // passes canonical ticks in and reads observed modes / relations out. ALL
 // transform, ridge, tracking, frequency, phase, confidence, relation, and
-// prediction math stays in Rust (ADR 0001, ADR 0002); there is no TypeScript
+// prediction math stays in Rust (ADR 0001, ADR 0003); there is no TypeScript
 // mirror. The TS wire shapes below are emitted into the generated .d.ts via
 // the custom section so the frontend imports them rather than redeclaring.
 // ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@
         },
         "cycle_bank": {
             "authority": "runtime-core/src/cycle_bank.rs (CycleBank, CycleMode, CycleObservation, CycleRelation) with the canonical seam runtime-core/src/timebase.rs::cycle_observation_from_tick",
-            "description": "Causal multiscale observed-ridge timing (issue #92, ADR 0002): one scalar per evidence channel per authoritative hop -> causal constant-Q analytic field -> continuous off-grid frequency/phase -> persistent observed CycleModes + rational-relation diagnostics. The newest-frame extraction from the overlapping feature window lives in Rust only. No global tempo, no beat/bar/phrase trackers, no latent undertones (#97).",
+            "description": "Causal multiscale observed-ridge timing (issue #92, ADR 0003; supersedes ADR 0002): one scalar per evidence channel per authoritative hop -> causal constant-Q analytic field -> continuous off-grid frequency/phase -> persistent observed CycleModes + rational-relation diagnostics. The newest-frame extraction from the overlapping feature window lives in Rust only. No global tempo, no beat/bar/phrase trackers, no latent undertones (#97).",
             "surfaces": {
                 "rust_authority": "runtime-core/src/cycle_bank.rs",
                 "runtime_surface": "wasm-orbit/src/lib.rs (CycleBank wasm_bindgen, observe_tick) consumed via the generated CycleMode/CycleRelation TypeScript interfaces",
