@@ -25,10 +25,16 @@ use runtime_core::controller::{
 use runtime_core::features::{FEATURE_VERSION, NORM_EPS};
 use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
 use runtime_core::timebase::{
-    AnalysisTimebase as RustAnalysisTimebase,
-    ResetReason as RustResetReason,
+    cycle_observation_from_tick, AnalysisTimebase as RustAnalysisTimebase,
+    AnalysisTick as RustAnalysisTick, ResetReason as RustResetReason,
     ANALYSIS_PIPELINE_VERSION,
 };
+use runtime_core::cycle_bank::{
+    CycleBank as RustCycleBank, CycleBankConfig as RustCycleBankConfig,
+    CycleEvidenceChannel as RustCycleEvidenceChannel,
+    CycleObservation as RustCycleObservation, CYCLE_BANK_VERSION,
+};
+use serde::Deserialize;
 
 /// Shared constants exposed to JavaScript
 #[wasm_bindgen]
@@ -47,6 +53,7 @@ pub fn constants() -> JsValue {
         controller_version: String,
         feature_version: String,
         analysis_pipeline_version: String,
+        cycle_bank_version: String,
         norm_eps: f64,
     }
 
@@ -62,6 +69,7 @@ pub fn constants() -> JsValue {
         controller_version: CONTROLLER_VERSION.to_string(),
         feature_version: FEATURE_VERSION.to_string(),
         analysis_pipeline_version: ANALYSIS_PIPELINE_VERSION.to_string(),
+        cycle_bank_version: CYCLE_BANK_VERSION.to_string(),
         norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };
@@ -529,8 +537,9 @@ impl PlayerState {
     pub fn step(&mut self, dt: f64, h: f64, band_gates: Option<Vec<f64>>) -> Complex {
         let c = self
             .inner
-            .step(dt, h, band_gates.as_deref());
-        c.into()
+            .step(dt, h, band_gates.as_deref())
+            .into();
+        c
     }
 }
 
@@ -757,5 +766,185 @@ impl OrbitController {
     /// in [0, 1] — near 1 opens the Shore wall for boundary crossing.
     pub fn step(&mut self, dt: f64, h: f64, band_gates: Option<Vec<f64>>) -> Complex {
         self.inner.step(dt, band_gates.as_deref(), h).into()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CycleBank (issue #92) — BROWSER surface.
+//
+// This is the SAME Rust CycleBank the trainer uses via PyO3. TypeScript only
+// passes canonical ticks in and reads observed modes / relations out. ALL
+// transform, ridge, tracking, frequency, phase, confidence, relation, and
+// prediction math stays in Rust (ADR 0001, ADR 0002); there is no TypeScript
+// mirror. The TS wire shapes below are emitted into the generated .d.ts via
+// the custom section so the frontend imports them rather than redeclaring.
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_CYCLE_TYPES: &'static str = r#"
+/** One directly observed temporal ridge (issue #92). All math is Rust-owned. */
+export interface CycleMode {
+    id: number;
+    frequencyHz: number;
+    phase: number;
+    strength: number;
+    confidence: number;
+    channelSupport: number;
+    age: number;
+    missingObservations: number;
+    frequencySlope: number;
+    frequencyUncertainty: number;
+}
+
+/** Diagnostic rational relationship between two observed modes. */
+export interface CycleRelation {
+    iId: number;
+    jId: number;
+    m: number;
+    n: number;
+    freqResidual: number;
+    generalizedPhase: number;
+    phaseStability: number;
+}
+
+/** One named scalar evidence channel value for an explicit observation. */
+export interface CycleEvidenceChannelInput {
+    name: string;
+    value: number;
+}
+"#;
+
+/// Deserialization mirror of the canonical camelCase tick wire format. The
+/// newest-frame -> observation mapping is NOT done here; the tick is passed
+/// straight to the canonical Rust seam (`cycle_observation_from_tick`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalysisTickJsIn {
+    features: Vec<f64>,
+    sample_index: u64,
+    time_seconds: f64,
+    dt_seconds: f64,
+    stream_epoch: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CycleEvidenceChannelJsIn {
+    name: String,
+    value: f64,
+}
+
+/// Canonical observed-ridge CycleBank (issue #92), browser surface.
+///
+/// The browser feeds one canonical `AnalysisTick` per authoritative hop and
+/// reads the currently observed modes / relations. It never interprets the
+/// rolling feature window's offsets itself.
+#[wasm_bindgen]
+pub struct CycleBank {
+    inner: RustCycleBank,
+}
+
+#[wasm_bindgen]
+impl CycleBank {
+    /// Construct with the canonical defaults (no config). Config overrides
+    /// are a Rust-side concern; the browser runs the canonical pipeline.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Result<CycleBank, JsValue> {
+        let inner = RustCycleBank::try_new(RustCycleBankConfig::default())
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(CycleBank { inner })
+    }
+
+    /// The Rust-owned contract version (`CYCLE_BANK_VERSION`).
+    #[wasm_bindgen(getter)]
+    pub fn version(&self) -> String {
+        CYCLE_BANK_VERSION.to_string()
+    }
+
+    /// Feed one canonical analysis tick (the `AnalysisTick` produced by the
+    /// wasm `AnalysisTimebase.ingest`/`flush`). Returns the current observed
+    /// `CycleMode[]`. The newest-frame extraction is done in Rust.
+    #[wasm_bindgen]
+    pub fn observe_tick(&mut self, tick: JsValue) -> Result<JsValue, JsValue> {
+        let js_in: AnalysisTickJsIn = serde_wasm_bindgen::from_value(tick)
+            .map_err(|e| JsValue::from_str(&format!("invalid AnalysisTick: {e}")))?;
+        let tick = RustAnalysisTick {
+            features: js_in.features,
+            sample_index: js_in.sample_index,
+            time_seconds: js_in.time_seconds,
+            dt_seconds: js_in.dt_seconds,
+            stream_epoch: js_in.stream_epoch,
+        };
+        let obs = cycle_observation_from_tick(&tick).ok_or_else(|| {
+            JsValue::from_str("tick feature window is not the expected frame-major shape")
+        })?;
+        self.inner
+            .observe(&obs)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        self.modes_js()
+    }
+
+    /// Feed one explicit observation of named scalar evidence channels
+    /// (diagnostic entry point; the production path is `observe_tick`).
+    #[wasm_bindgen]
+    pub fn observe(
+        &mut self,
+        sample_index: u64,
+        dt_seconds: f64,
+        stream_epoch: u64,
+        channels: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let channels: Vec<CycleEvidenceChannelJsIn> =
+            serde_wasm_bindgen::from_value(channels)
+                .map_err(|e| JsValue::from_str(&format!("invalid channels: {e}")))?;
+        let obs = RustCycleObservation {
+            sample_index,
+            dt_seconds,
+            stream_epoch,
+            channels: channels
+                .into_iter()
+                .map(|c| RustCycleEvidenceChannel::new(c.name, c.value))
+                .collect(),
+        };
+        self.inner
+            .observe(&obs)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        self.modes_js()
+    }
+
+    /// Current confirmed observed modes (`CycleMode[]`).
+    #[wasm_bindgen]
+    pub fn modes(&self) -> JsValue {
+        self.modes_js().unwrap_or(JsValue::NULL)
+    }
+
+    /// Rational relations among the currently observed modes (latest batch).
+    #[wasm_bindgen]
+    pub fn latest_relations(&self) -> JsValue {
+        let relations = self.inner.latest_relations();
+        serde_wasm_bindgen::to_value(&relations).unwrap_or(JsValue::NULL)
+    }
+
+    /// Number of currently confirmed modes.
+    #[wasm_bindgen]
+    pub fn num_modes(&self) -> usize {
+        self.inner.num_modes()
+    }
+
+    /// Deterministic discontinuity reset.
+    #[wasm_bindgen]
+    pub fn reset(&mut self) {
+        self.inner.reset();
+    }
+
+    fn modes_js(&self) -> Result<JsValue, JsValue> {
+        let modes = self.inner.modes();
+        serde_wasm_bindgen::to_value(&modes).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+}
+
+impl Default for CycleBank {
+    fn default() -> Self {
+        Self::new().expect("canonical CycleBankConfig is valid")
     }
 }
