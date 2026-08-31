@@ -143,59 +143,159 @@ ThirdEye.mp3  |        20 |     0.01 |         16.05 | 168.00 |   0.80 |        
    pre-horizon snapshot. Mode persistence is the dominant bottleneck
    here.
 
+## Three conclusions from #99
+
+The Tool-corpus evidence supports three distinct findings. They are
+different failure modes, with different downstream implications, and
+issue #99 should not collapse them into one.
+
+### 1. Observed-ridge frequency / phase estimation still looks viable
+
+Nothing in these results overturns the core wavelet + ridge
+architecture. The synthetic clean-oscillator test
+(`test_exact_clean_oscillator_predicts_correctly_across_horizons`)
+shows v1 `phase_at` / `time_to_next` close to sub-hop accuracy for
+the unambiguous window. On the Tool corpus, where predictions
+*do* exist, they are off by one hop or so at short horizons and
+degrade gradually — not catastrophically — with horizon. The math is
+in the right neighborhood; the question is what is feeding it.
+
+### 2. Mode-identity persistence is the immediate engineering defect
+
+For Eulogy, RightInTwo, Stinkfist, and TheGrudge, #99 barely tests
+long-horizon phase extrapolation at all. The frozen candidate is
+usually *not present* in the selected horizon snapshot:
+
+| song | dominant skip class | fraction of eval opportunities |
+|------|---------------------|--------------------------------|
+| Eulogy | candidate_missing | ≈ 95% |
+| RightInTwo | candidate_missing | ≈ 91% |
+| Stinkfist | candidate_missing | ≈ 96% |
+| TheGrudge | calibration never succeeded | n/a |
+| ThirdEye | cycle_ambiguous at H ≥ 500 ms; otherwise candidate_missing | varies |
+
+A physical musical ridge should not repeatedly become unrelated
+short-lived IDs merely because local evidence waxes and wanes. The
+accept test for the next ticket in this area should be:
+
+> same physical ridge ⇒ same mode ID
+
+across amplitude modulation, brief dropouts, nearby-ridge
+competition, gradual frequency drift, and real Tool passages.
+
+Until that property holds, headline conditional-error curves have
+sample sizes too small to draw extrapolation conclusions from.
+
+### 3. Recurrence identity is a real representational limit, not an estimator bug
+
+This is the cycle-ambiguity finding, and it is the architectural
+insight of this experiment — not a test inconvenience.
+
+CycleBank currently emits:
+
+```text
+φ(t + Δ) = φ(t) + 2π f Δ    (mod 2π)
+```
+
+That representation throws away the integer winding number by
+construction. Once Δ ≥ T = 1 / f, the snapshot cannot tell whether
+the oracle event is the **first**, **second**, or **third**
+recurrence after it. The Rust `time_to_next()` semantics — "next
+crossing after now" — are coherent; the ambiguity is a property of
+the question, not the answer. Skipping such events under
+`n_skipped_cycle_ambiguous` is the only honest response.
+
+Mathematically, this is the hierarchy #99 surfaced:
+
+```text
+observed fast ridge
+    phase tells us WHERE inside its cycle
+                  +
+stable identity
+    tells us it is the SAME clock over time
+                  +
+latent slower structure
+    tells us WHICH occurrence of that cycle matters
+```
+
+That is remarkably close to ordinary musical hierarchy without
+hard-coding "beat → measure → phrase": phase gives within-cycle
+position, stable identity gives clock continuity, and a slower
+implied structure (#97 latent undertones) gives which occurrence
+matters. Each layer addresses a different failure mode; collapsing
+them is what produces a misleading "v1 phase prediction is bad"
+summary.
+
+We are **not** adding a frequency-slope term yet. Until persistence
+gives #99 a populated 100/200 ms sample, the long-horizon error
+curves cannot distinguish drift from estimator noise. After
+persistence stabilizes, if conditional error still grows
+systematically with horizon under no-click tempo drift, that is the
+right evidence for f-dot.
+
 ## Per-issue #99 questions
 
 > At what horizon does conditional timing accuracy materially degrade?
 
 For Eulogy/RightInTwo the median stays in the hundreds of ms across
-all tested horizons; what changes is **p90** which climbs as horizon
-grows. There is no clean "knee" in the curve on these songs; the
-evidence so far is that accuracy degrades **gradually** with horizon,
-not abruptly.
+all tested horizons; what changes is **p90**, which climbs as
+horizon grows. There is no clean "knee" in the curve on these
+songs; the evidence so far is that accuracy degrades **gradually**
+with horizon, not abruptly. The sample sizes are small, so this is
+provisional.
 
 > At what horizon does prediction coverage materially degrade?
 
 Coverage is dominated by **candidate_missing** (mode not in the
-selected snapshot) on Eulogy and Stinkfist, and **insufficient_data**
-on TheGrudge. The horizon itself does not appear to cause coverage
-collapse; mode persistence does.
+selected snapshot) on Eulogy, RightInTwo, Stinkfist, and by
+**insufficient_data** on TheGrudge. The horizon itself does not
+appear to cause coverage collapse; mode persistence does.
 
 > Is v1 first-order `phase_at` adequate for 50/100/200 ms anticipation?
 
-**No.** Even at 100 ms, the median abs error is ~80–290 ms across the
-Tool corpus, and p90 exceeds 700 ms. The 40 ms "hit" rate is below
-~30% on every song. v1 first-order phase prediction is the dominant
-source of conditional inaccuracy at 100 ms and beyond.
+This question cannot be answered yet from this corpus. The 50/100/200
+ms columns are dominated by `candidate_missing`, not by phase
+extrapolation. Until conclusion 2 (mode persistence) is addressed,
+the conditional-error curves reflect both effects at once and we
+cannot separate them. The synthetic chirp test
+(`test_chirp_sensitivity_grows_with_horizon`) shows v1 error does
+grow monotonically with horizon under a known linear chirp, which is
+the expected failure mode; this is **diagnostic** evidence, not a
+verdict on adequacy.
 
 > Does tempo drift create a clear need for the currently diagnostic
 > `frequency_slope` term in prediction?
 
-The chirp synthetic test
-(`test_chirp_sensitivity_grows_with_horizon`) shows v1 error grows
-monotonically with horizon when the true frequency differs from the
-snapshot's measurement. On real songs, the RightInTwo / Eulogy
-mid-horizon results are consistent with drift; the
-`frequency_slope` field is already exposed in `CycleMode` and a
-slope-aware second-order prediction should be straightforward to
-evaluate later.
+Premature to decide. The synthetic chirp test exercises the
+mechanism, but on real Tool songs drift is confounded with the
+candidate-missing rate. Stabilize identity first; revisit this with
+populated samples.
 
-> Is tracked-mode identity persistence, rather than phase extrapolation,
-> still the dominant bottleneck?
+> Is tracked-mode identity persistence, rather than phase
+> extrapolation, still the dominant bottleneck?
 
-**Yes**, on this corpus. The per-song skip counters say so directly:
+**Yes.** Per-song skip counters say so directly (table above). This
+is the immediately actionable conclusion.
 
-| song | dominant skip class |
-|------|---------------------|
-| Eulogy | candidate_missing (≈ 95% of eval opportunities) |
-| RightInTwo | candidate_missing (≈ 91%) |
-| Stinkfist | candidate_missing (≈ 96%) |
-| TheGrudge | calibration never succeeded |
-| ThirdEye | cycle_ambiguous at H ≥ 500 ms; otherwise candidate_missing |
+## Recommended next step
 
-Mode identity persistence, not phase extrapolation, is what gates
-anticipation at the horizons issue #99 asked about. Improving the
-prediction math (frequency_slope, second-order) will help where
-predictions exist; it will not help where the candidate is missing.
+A focused implementation / research ticket along the lines of:
+
+> **Stabilize CycleBank ridge identity across weak evidence and
+> continuous ridge evolution.**
+
+Acceptance test:
+
+```text
+same physical ridge ⇒ same mode ID
+```
+
+through amplitude modulation, brief dropouts, nearby-ridge
+competition, gradual frequency drift, and real Tool passages.
+
+Then rerun #99. If coverage rises dramatically but long-horizon
+errors remain, we have isolated the extrapolation problem and #97
+latent undertones becomes a meaningful next move.
 
 ## Non-goals
 
@@ -211,5 +311,5 @@ As required by issue #99, this issue does **not**:
 - silently switch candidates after calibration;
 - introduce a higher-order frequency-slope predictor.
 
-These results may motivate a later implementation issue, but issue #99
-itself does not pre-decide the fix.
+These results may motivate a later implementation issue, but issue
+#99 itself does not pre-decide the fix.
