@@ -54,9 +54,10 @@ import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
@@ -77,6 +78,10 @@ DEFAULT_CALIBRATION_EVENTS = 24
 DEFAULT_MIN_CANDIDATE_HITS = 6
 SHORT_TIMESCALE_MIN_HZ = 0.5
 SHORT_TIMESCALE_MAX_HZ = 6.0
+
+# Any iterable of onset times in seconds. Accepts both Python sequences and
+# numpy arrays, since callers may have either (np.diff output vs. Python list).
+OnsetTimes = Union[Sequence[float], NDArray[np.float64]]
 
 
 @dataclass
@@ -222,14 +227,14 @@ def _run_cycle_bank(
             trace.confidence.append(float(mode.confidence))
 
         for relation in bank.latest_relations():
-            key = (
+            rel_key = (
                 epoch,
                 int(relation["iId"]),
                 int(relation["jId"]),
                 int(relation["m"]),
                 int(relation["n"]),
             )
-            relation_stability.setdefault(key, []).append(
+            relation_stability.setdefault(rel_key, []).append(
                 float(relation["phaseStability"])
             )
 
@@ -270,7 +275,7 @@ def _mode_in_snapshot(snapshot: TickSnapshot, mode_id: int) -> Any | None:
 
 
 def _calibrate_observed_mode(
-    onsets: Sequence[float],
+    onsets: OnsetTimes,
     snapshots: Sequence[TickSnapshot],
     *,
     calibration_events: int = DEFAULT_CALIBRATION_EVENTS,
@@ -323,9 +328,7 @@ def _calibrate_observed_mode(
 
     for event_index, raw_event_time in enumerate(onsets):
         event_time = float(raw_event_time)
-        snapshot = _strictly_previous_snapshot(
-            snapshots, snapshot_times, event_time
-        )
+        snapshot = _strictly_previous_snapshot(snapshots, snapshot_times, event_time)
         if snapshot is None:
             skipped_pre_acquisition += 1
             continue
@@ -475,7 +478,7 @@ def _predict_one_event(
 
 
 def _score_frozen_candidate(
-    onsets: Sequence[float],
+    onsets: OnsetTimes,
     snapshots: Sequence[TickSnapshot],
     calibration: dict[str, Any],
 ) -> dict[str, Any]:
@@ -504,9 +507,7 @@ def _score_frozen_candidate(
 
     for raw_event_time in evaluation_events:
         event_time = float(raw_event_time)
-        snapshot = _strictly_previous_snapshot(
-            snapshots, snapshot_times, event_time
-        )
+        snapshot = _strictly_previous_snapshot(snapshots, snapshot_times, event_time)
         if snapshot is None:
             skipped_no_snapshot += 1
             continue
@@ -546,26 +547,20 @@ def _score_frozen_candidate(
         "abs_timing_error_s": _distribution(abs_errors),
         "fraction_within": {
             "within_20_ms": (
-                float(np.mean(np.asarray(abs_errors) <= 0.020))
-                if abs_errors
-                else None
+                float(np.mean(np.asarray(abs_errors) <= 0.020)) if abs_errors else None
             ),
             "within_30_ms": (
-                float(np.mean(np.asarray(abs_errors) <= 0.030))
-                if abs_errors
-                else None
+                float(np.mean(np.asarray(abs_errors) <= 0.030)) if abs_errors else None
             ),
             "within_40_ms": (
-                float(np.mean(np.asarray(abs_errors) <= 0.040))
-                if abs_errors
-                else None
+                float(np.mean(np.asarray(abs_errors) <= 0.040)) if abs_errors else None
             ),
         },
     }
 
 
 def _causal_timing_evaluation(
-    onsets: Sequence[float],
+    onsets: OnsetTimes,
     snapshots: Sequence[TickSnapshot],
     *,
     calibration_events: int = DEFAULT_CALIBRATION_EVENTS,

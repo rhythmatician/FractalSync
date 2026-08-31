@@ -1026,7 +1026,7 @@ fn cycle_relation_to_pydict(
 fn cycle_bank_config_from_dict(
     overrides: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
 ) -> PyResult<crate::cycle_bank::CycleBankConfig> {
-    let mut cfg = crate::cycle_bank::CycleBankConfig::default();
+    let cfg = crate::cycle_bank::CycleBankConfig::default();
     let Some(dict) = overrides else {
         return Ok(cfg);
     };

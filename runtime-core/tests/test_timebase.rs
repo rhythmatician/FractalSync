@@ -3,10 +3,10 @@
 //! without any browser, AudioWorklet, or wall clock.
 
 use runtime_core::controller::{HOP_LENGTH, SAMPLE_RATE, WINDOW_FRAMES};
+use runtime_core::features::BASE_FEATURES_PER_FRAME;
 use runtime_core::timebase::{
     cycle_observation_from_tick, AnalysisTick, AnalysisTimebase, ResetReason, StreamingResampler,
-    TimebaseError, BASE_FEATURES_PER_FRAME, CANONICAL_HOP_LENGTH, CANONICAL_SAMPLE_RATE,
-    CYCLE_OBSERVATION_CHANNELS,
+    TimebaseError, CANONICAL_HOP_LENGTH, CANONICAL_SAMPLE_RATE, CYCLE_OBSERVATION_CHANNELS,
 };
 
 /// A deterministic test signal (ramp) so resampling output is predictable.
@@ -318,15 +318,17 @@ fn seam_uses_only_the_newest_frame_not_the_whole_window() {
         *v = 999.0;
     }
     let obs = cycle_observation_from_tick(&tick).expect("well-formed window");
-    for (name, idx) in CYCLE_OBSERVATION_CHANNELS {
+    for bf in CYCLE_OBSERVATION_CHANNELS {
         let ch = obs
             .channels
             .iter()
-            .find(|c| c.name == name)
+            .find(|c| c.name == bf.name())
             .expect("channel present");
         assert_eq!(
-            ch.value, newest[idx],
-            "channel {name} must come from the newest frame slot {idx}"
+            ch.value, newest[bf.index()],
+            "channel {} must come from the newest frame slot {}",
+            bf.name(),
+            bf.index()
         );
     }
 }
@@ -343,7 +345,10 @@ fn seam_carries_sample_clock_identity_and_channel_schema() {
 
     // Exactly one scalar per named channel, in the declared schema order.
     let names: Vec<&str> = obs.channels.iter().map(|c| c.name.as_str()).collect();
-    let expected: Vec<&str> = CYCLE_OBSERVATION_CHANNELS.iter().map(|(n, _)| *n).collect();
+    let expected: Vec<&str> = CYCLE_OBSERVATION_CHANNELS
+        .iter()
+        .map(|bf| bf.name())
+        .collect();
     assert_eq!(names, expected);
 }
 
