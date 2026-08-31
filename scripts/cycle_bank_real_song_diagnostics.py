@@ -657,6 +657,33 @@ def analyze_song(
 ]:
     """Run the production CycleBank path and the causal offline evaluation."""
 
+    bundle = analyze_song_bundle(
+        path,
+        calibration_events=calibration_events,
+        min_candidate_hits=min_candidate_hits,
+    )
+    result = bundle["result"]
+    series = bundle["series"]
+    return (
+        result,
+        series,
+        (bundle["times"], bundle["onset_envelope"], bundle["onsets"]),
+    )
+
+
+def analyze_song_bundle(
+    path: Path,
+    *,
+    calibration_events: int = DEFAULT_CALIBRATION_EVENTS,
+    min_candidate_hits: int = DEFAULT_MIN_CANDIDATE_HITS,
+) -> dict[str, Any]:
+    """Canonical CycleBank run packaged for issue #99's fixed-horizon reuse.
+
+    Returns a dict with every artifact issue #99 needs (snapshots, onsets,
+    timing evaluation, calibration) without paying for a second decode +
+    CycleBank replay. PR #98's `analyze_song` is layered on top of this.
+    """
+
     ticks = _ticks_for(path)
     times, onset = _onset_series(ticks)
     onsets = _measure_onsets(times, onset)
@@ -684,7 +711,16 @@ def analyze_song(
         "candidate_mode": _candidate_summary(series, timing, len(ticks)),
         "timing_evaluation": timing,
     }
-    return result, series, (times, onset, onsets)
+
+    return {
+        "result": result,
+        "series": series,
+        "times": times,
+        "onset_envelope": onset,
+        "onsets": onsets,
+        "snapshots": snapshots,
+        "first_mode_time": first_mode_time,
+    }
 
 
 def _plot(
