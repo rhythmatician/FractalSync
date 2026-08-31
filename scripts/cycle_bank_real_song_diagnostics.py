@@ -798,7 +798,9 @@ def main() -> int:
             f"onsets={result['n_onset_events']} "
             f"candidate={calibration.get('candidate_mode_id')} "
             f"R={calibration.get('phase_concentration')} "
-            f"coverage={evaluation.get('prediction_coverage')} "
+            f"cal_cov={calibration.get('calibration_coverage')} "
+            f"hits={calibration.get('candidate_hits')} "
+            f"pred_cov={evaluation.get('prediction_coverage')} "
             f"median_abs={evaluation.get('abs_timing_error_s', {}).get('median')}"
         )
 

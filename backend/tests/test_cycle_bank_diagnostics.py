@@ -149,7 +149,7 @@ def test_calibration_recovers_clean_event_phase_and_high_concentration() -> None
 def test_clean_tracker_predicts_post_calibration_events_at_zero_error() -> None:
     f_hz = 2.0
     phi_event = 0.42
-    onsets = np.array([(k + 1) / f_hz for k in range(30)], dtype=float)
+    onsets = [(k + 1) / f_hz for k in range(30)]
 
     # Onsets land exactly on the 25 ms tick grid. The evaluator must still use
     # the *preceding* 25 ms snapshot, not the snapshot that already ingested
@@ -268,7 +268,7 @@ def test_candidate_selection_is_frozen_before_future_mode_dominates() -> None:
     """Whole-song persistence must not influence calibration selection."""
 
     phi_event = -0.2
-    onsets = np.array([float(k) for k in range(1, 13)], dtype=float)
+    onsets = [float(k) for k in range(1, 13)]
 
     def mode_one(t: float):
         # Strong, coherent mode throughout the first four calibration events;
@@ -373,7 +373,7 @@ def test_missing_candidate_reduces_coverage_without_hindsight_switching() -> Non
 
 
 def test_insufficient_data_is_explicit_and_well_formed() -> None:
-    onsets = np.array([0.5, 1.0, 1.5], dtype=float)
+    onsets = [0.5, 1.0, 1.5]
     snapshots = [
         diag.TickSnapshot(
             time_seconds=0.1 * i,
