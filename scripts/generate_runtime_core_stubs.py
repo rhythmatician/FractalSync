@@ -145,6 +145,10 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "s": "float",
         RET: "complex",
     },
+    "cycle_observation_channels_from_tick": {
+        "tick": "dict",
+        RET: "list[tuple[str, float]]",
+    },
 }
 
 # Per-class member annotations. "__init__" uses the constructor's
@@ -408,6 +412,7 @@ FUNCTION_ORDER = [
     "orbit_path_metrics_py",
     "compute_runtime_visual_metrics",
     "lobe_point_at_angle",
+    "cycle_observation_channels_from_tick",
 ]
 
 HEADER = '''"""Type stubs for the ``runtime_core`` native extension.

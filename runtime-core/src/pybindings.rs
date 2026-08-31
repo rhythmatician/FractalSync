@@ -1169,6 +1169,32 @@ impl CycleBank {
     }
 }
 
+/// Read the per-channel scalar evidence the canonical Rust seam extracts from
+/// one analysis tick, WITHOUT advancing any bank state.
+///
+/// This is the ONLY supported way for Python to see the newest-frame evidence
+/// values (e.g. to measure onset events for diagnostics): the frame-major
+/// offset arithmetic lives in Rust (`cycle_observation_from_tick`), never in
+/// Python. Returns a list of `(name, value)` pairs in the canonical channel
+/// schema order.
+#[pyfunction]
+#[pyo3(signature = (tick))]
+fn cycle_observation_channels_from_tick(
+    tick: &pyo3::Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<Vec<(String, f64)>> {
+    let tick = tick_from_pydict(tick)?;
+    let obs = crate::timebase::cycle_observation_from_tick(&tick).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(
+            "tick feature window is not the expected frame-major shape",
+        )
+    })?;
+    Ok(obs
+        .channels
+        .into_iter()
+        .map(|c| (c.name, c.value))
+        .collect())
+}
+
 /// A single emitted analysis tick, materialized as a Python dict.
 ///
 /// Wire format keys are **camelCase** so a tick read by the trainer
@@ -1404,6 +1430,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
+    // CycleBank tick-seam evidence accessor (issue #92): newest-frame channel
+    // values from a canonical tick, computed in Rust.
+    m.add_function(wrap_pyfunction!(cycle_observation_channels_from_tick, m)?)?;
     // Controller phase generation (shared with training for parity)
     m.add_function(wrap_pyfunction!(residual_phases_for_seed_py, m)?)?;
     // Distance-field helpers
