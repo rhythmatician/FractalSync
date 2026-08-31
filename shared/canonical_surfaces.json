@@ -32,17 +32,40 @@
                 "backend/tests/test_controller_pipeline_parity.py",
                 "backend/tests/test_golden_parity.py"
             ]
+        },
+        "cycle_bank": {
+            "authority": "runtime-core/src/cycle_bank.rs (CycleBank, CycleMode, CycleObservation, CycleRelation) with the canonical seam runtime-core/src/timebase.rs::cycle_observation_from_tick",
+            "description": "Causal multiscale observed-ridge timing (issue #92, ADR 0003; supersedes ADR 0002): one scalar per evidence channel per authoritative hop -> causal constant-Q analytic field -> continuous off-grid frequency/phase -> persistent observed CycleModes + rational-relation diagnostics. The newest-frame extraction from the overlapping feature window lives in Rust only. No global tempo, no beat/bar/phrase trackers, no latent undertones (#97).",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/cycle_bank.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs (CycleBank wasm_bindgen, observe_tick) consumed via the generated CycleMode/CycleRelation TypeScript interfaces",
+                "training_surface": "runtime-core/src/pybindings.rs (CycleBank/CycleMode PyO3) consumed by backend/tests/test_cycle_bank_binding.py"
+            },
+            "required_tests": [
+                "runtime-core/tests/test_cycle_bank.rs",
+                "backend/tests/test_cycle_bank_binding.py"
+            ]
         }
     },
     "binding_symmetry": {
         "rule": "Every pyclass exported through runtime-core/src/pybindings.rs must have a wasm_bindgen export in wasm-orbit/src/lib.rs, and vice versa, unless exempted below. A canonical subsystem exported to only one consumer surface is the #93 failure mode.",
         "exemptions": [
             "RuntimeVisualMetrics",
-            "Complex"
+            "Complex",
+            "CycleMode",
+            "CycleRelation",
+            "CycleObservation",
+            "CycleEvidenceChannel",
+            "CycleBankConfig"
         ],
         "exemption_reasons": {
             "RuntimeVisualMetrics": "Training-only diagnostic; the browser computes visual metrics in TypeScript.",
-            "Complex": "wasm-only serialization helper, not a canonical subsystem."
+            "Complex": "wasm-only serialization helper, not a canonical subsystem.",
+            "CycleMode": "PyO3 read-only view object; the browser consumes the equivalent record via the Rust-authored `CycleMode` TypeScript interface emitted by the wasm custom section. One logical domain type, two surface-idiomatic projections — not a redeclared structural copy.",
+            "CycleRelation": "Read-only record reached as data from CycleBank on both surfaces (PyO3 dict / wasm-generated TS interface), not an independent #[wasm_bindgen] struct.",
+            "CycleObservation": "Binding-layer input DTO; constructed on each surface and passed into the Rust authority, not a tracked domain state type.",
+            "CycleEvidenceChannel": "Binding-layer input DTO, same rationale as CycleObservation.",
+            "CycleBankConfig": "Construction-time configuration DTO; the browser runs canonical defaults and does not need a config object."
         }
     }
 }

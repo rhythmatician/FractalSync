@@ -7,7 +7,7 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
-use pyo3::types::PyComplex;
+use pyo3::types::{PyComplex, PyDict};
 
 use crate::controller::{
     OrbitState as RustOrbitState,
@@ -824,6 +824,486 @@ pub struct AnalysisTimebase {
     inner: crate::timebase::AnalysisTimebase,
 }
 
+// ---------------------------------------------------------------------------
+// CycleBank (issue #92) — TRAINING / offline-diagnostics surface.
+//
+// This is the SAME Rust CycleBank the browser runs via wasm-orbit. Python
+// only orchestrates: it feeds canonical ticks in and reads observed modes /
+// relations / predictions out. ALL transform, ridge, tracking, frequency,
+// phase, confidence, relation, and prediction math stays in Rust (ADR 0001,
+// ADR 0003); nothing here recomputes any of it.
+// ---------------------------------------------------------------------------
+
+/// Python wrapper for the canonical observed-ridge `CycleBank`.
+///
+/// Construct with no arguments for the canonical defaults, or pass a config
+/// dict to override selected `CycleBankConfig` fields. Then drive it either
+/// from canonical ticks (`observe_tick`) or from explicit observations
+/// (`observe`). Predictive queries (`phase_at`, `time_to_next`) are read off
+/// the returned mode dicts.
+#[pyclass]
+pub struct CycleBank {
+    inner: crate::cycle_bank::CycleBank,
+}
+
+/// One directly observed temporal ridge (issue #92), Python surface.
+///
+/// Read-only view of the Rust `CycleMode` state. Causal predictive queries
+/// (`phase_at`, `time_to_next`) are methods on the mode so the trainer reads
+/// predictions from the same Rust state the browser sees via the wasm
+/// `CycleMode` interface. `to_dict()` produces the camelCase wire shape that
+/// matches the browser's `CycleMode` interface (cross-surface parity).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct CycleMode {
+    inner: crate::cycle_bank::CycleMode,
+}
+
+impl From<crate::cycle_bank::CycleMode> for CycleMode {
+    fn from(inner: crate::cycle_bank::CycleMode) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl CycleMode {
+    /// Canonical attribute schema for the `CycleMode` pyclass.
+    ///
+    /// Single Rust-owned source of truth that the Python stub generator
+    /// (`scripts/generate_runtime_core_stubs.py`) reads instead of a
+    /// hand-maintained `ATTR_TYPES["CycleMode"]` dict. Adding a new field to
+    /// the Rust struct now updates the .pyi in lockstep — no scattered
+    /// maintenance across the seven sites the issue #92 review flagged.
+    ///
+    /// Returns a dict `{attr_name: python_type_annotation}`.
+    #[staticmethod]
+    fn __fields__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new_bound(py);
+        d.set_item("id", "int")?;
+        d.set_item("frequency_hz", "float")?;
+        d.set_item("phase", "float")?;
+        d.set_item("strength", "float")?;
+        d.set_item("confidence", "float")?;
+        d.set_item("channel_support", "float")?;
+        d.set_item("age", "int")?;
+        d.set_item("missing_observations", "int")?;
+        d.set_item("frequency_slope", "float")?;
+        d.set_item("frequency_uncertainty", "float")?;
+        Ok(d)
+    }
+
+    /// Canonical method/function schema for the `CycleMode` pyclass.
+    /// Mirrors `__fields__` but for callable members; returns
+    /// `{method_name: {param_name: annotation, "__return__": annotation}}`.
+    #[staticmethod]
+    fn __methods__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new_bound(py);
+        let phase_at = PyDict::new_bound(py);
+        phase_at.set_item("delta_seconds", "float")?;
+        phase_at.set_item("__return__", "float")?;
+        d.set_item("phase_at", phase_at)?;
+
+        let time_to_next = PyDict::new_bound(py);
+        time_to_next.set_item("reference_phase", "float")?;
+        time_to_next.set_item("__return__", "Optional[float]")?;
+        d.set_item("time_to_next", time_to_next)?;
+
+        let to_dict = PyDict::new_bound(py);
+        to_dict.set_item("__return__", "dict")?;
+        d.set_item("to_dict", to_dict)?;
+        Ok(d)
+    }
+
+    #[getter]
+    fn id(&self) -> u64 {
+        self.inner.id
+    }
+    #[getter]
+    fn frequency_hz(&self) -> f64 {
+        self.inner.frequency_hz
+    }
+    #[getter]
+    fn phase(&self) -> f64 {
+        self.inner.phase
+    }
+    #[getter]
+    fn strength(&self) -> f64 {
+        self.inner.strength
+    }
+    #[getter]
+    fn confidence(&self) -> f64 {
+        self.inner.confidence
+    }
+    #[getter]
+    fn channel_support(&self) -> f64 {
+        self.inner.channel_support
+    }
+    #[getter]
+    fn age(&self) -> u64 {
+        self.inner.age
+    }
+    #[getter]
+    fn missing_observations(&self) -> u64 {
+        self.inner.missing_observations
+    }
+    #[getter]
+    fn frequency_slope(&self) -> f64 {
+        self.inner.frequency_slope
+    }
+    #[getter]
+    fn frequency_uncertainty(&self) -> f64 {
+        self.inner.frequency_uncertainty
+    }
+
+    /// Causal free-running phase prediction `delta_seconds` into the future.
+    fn phase_at(&self, delta_seconds: f64) -> f64 {
+        self.inner.phase_at(delta_seconds)
+    }
+
+    /// Time until the mode next reaches `reference_phase`, assuming constant
+    /// current frequency. `None` if the frequency is not positive/finite.
+    fn time_to_next(&self, reference_phase: f64) -> Option<f64> {
+        self.inner.time_to_next(reference_phase)
+    }
+
+    /// CamelCase dict matching the wasm `CycleMode` interface, so the
+    /// trainer and the browser see the same wire shape (issue #93 parity).
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let m = &self.inner;
+        use pyo3::types::PyDict;
+        let d = PyDict::new_bound(py);
+        d.set_item("id", m.id)?;
+        d.set_item("frequencyHz", m.frequency_hz)?;
+        d.set_item("phase", m.phase)?;
+        d.set_item("strength", m.strength)?;
+        d.set_item("confidence", m.confidence)?;
+        d.set_item("channelSupport", m.channel_support)?;
+        d.set_item("age", m.age)?;
+        d.set_item("missingObservations", m.missing_observations)?;
+        d.set_item("frequencySlope", m.frequency_slope)?;
+        d.set_item("frequencyUncertainty", m.frequency_uncertainty)?;
+        Ok(d.into_any())
+    }
+}
+
+/// Serialize one observed `CycleMode` as a Python dict (camelCase wire shape).
+///
+/// Keys are **camelCase** to match the wasm binding's `CycleMode` interface,
+/// so a mode read by the trainer and by the browser has the same shape
+/// (cross-surface parity, issue #93).
+fn cycle_mode_to_pydict(
+    py: Python,
+    m: &crate::cycle_bank::CycleMode,
+) -> PyResult<PyObject> {
+    CycleMode::from(m.clone()).to_dict(py).map(|b| b.unbind())
+}
+
+/// Serialize one observed-mode rational `CycleRelation` as a Python dict.
+fn cycle_relation_to_pydict(
+    py: Python,
+    r: &crate::cycle_bank::CycleRelation,
+) -> PyResult<PyObject> {
+    use pyo3::types::PyDict;
+    let d = PyDict::new_bound(py);
+    d.set_item("iId", r.i_id)?;
+    d.set_item("jId", r.j_id)?;
+    d.set_item("m", r.m)?;
+    d.set_item("n", r.n)?;
+    d.set_item("freqResidual", r.freq_residual)?;
+    d.set_item("generalizedPhase", r.generalized_phase)?;
+    d.set_item("phaseStability", r.phase_stability)?;
+    Ok(d.into())
+}
+
+/// Rebuild the canonical `CycleBankConfig`, applying any overrides from a
+/// Python dict. Unknown keys are rejected loudly so a typo cannot silently
+/// fall back to a default (the same strictness the ONNX metadata uses).
+///
+/// The conversion goes through `serde_json::Value` so the rules live in
+/// exactly one place: `CycleBankConfig`'s `#[serde(deny_unknown_fields)]`
+/// derive. Adding a new field to the struct now updates the wire shape for
+/// every binding layer automatically — no per-key maintenance here.
+fn cycle_bank_config_from_dict(
+    overrides: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+) -> PyResult<crate::cycle_bank::CycleBankConfig> {
+    let cfg = crate::cycle_bank::CycleBankConfig::default();
+    let Some(dict) = overrides else {
+        return Ok(cfg);
+    };
+    let value: serde_json::Value = python_dict_to_json_value(dict)?;
+    // Start from the serde default (matches `Default::default()` because
+    // `Default` is implemented and `serde_json::from_value` accepts a
+    // partial by default). Apply the user overrides on top.
+    let mut merged = serde_json::to_value(&cfg).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "could not serialize CycleBankConfig defaults: {e}"
+        ))
+    })?;
+    if let serde_json::Value::Object(ref mut map) = merged {
+        if let serde_json::Value::Object(overrides_map) = value {
+            for (k, v) in overrides_map {
+                map.insert(k, v);
+            }
+        }
+    } else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "CycleBankConfig did not serialize to a JSON object",
+        ));
+    }
+    serde_json::from_value(merged).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "invalid CycleBankConfig: {e}"
+        ))
+    })
+}
+
+/// Convert a flat Python dict whose values are JSON-compatible scalars
+/// (`int` / `float` / `str` / `bool` / nested `dict` / nested `list`) into a
+/// `serde_json::Value`. This is a deliberately small helper: the cycle-bank
+/// config only contains primitives.
+fn python_dict_to_json_value(
+    dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<serde_json::Value> {
+    use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
+    let mut map = serde_json::Map::new();
+    for (key, value) in dict.iter() {
+        let key_str: String = key.extract()?;
+        let v = if value.is_instance_of::<PyBool>() {
+            serde_json::Value::Bool(value.extract::<bool>()?)
+        } else if value.is_instance_of::<PyInt>() {
+            // PyO3 extracts the int directly; serde_json will accept it as u64/i64.
+            let n: i64 = value.extract()?;
+            serde_json::Value::Number(serde_json::Number::from(n))
+        } else if value.is_instance_of::<PyFloat>() {
+            let n: f64 = value.extract()?;
+            serde_json::Value::Number(
+                serde_json::Number::from_f64(n).ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "CycleBankConfig key {key_str}: non-finite float"
+                    ))
+                })?,
+            )
+        } else if value.is_instance_of::<PyString>() {
+            serde_json::Value::String(value.extract()?)
+        } else if value.is_instance_of::<PyDict>() {
+            let bound = value.downcast::<PyDict>()?;
+            python_dict_to_json_value(bound)?
+        } else if value.is_instance_of::<PyList>() {
+            let list = value.downcast::<PyList>()?;
+            let mut out = Vec::with_capacity(list.len());
+            for item in list.iter() {
+                if item.is_instance_of::<PyDict>() {
+                    let bound = item.downcast::<PyDict>()?;
+                    out.push(python_dict_to_json_value(bound)?);
+                } else if item.is_instance_of::<PyInt>() {
+                    let n: i64 = item.extract()?;
+                    out.push(serde_json::Value::Number(serde_json::Number::from(n)));
+                } else if item.is_instance_of::<PyFloat>() {
+                    let n: f64 = item.extract()?;
+                    out.push(serde_json::Value::Number(
+                        serde_json::Number::from_f64(n).ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err(
+                                "non-finite float in list",
+                            )
+                        })?,
+                    ));
+                } else if item.is_instance_of::<PyBool>() {
+                    out.push(serde_json::Value::Bool(item.extract::<bool>()?));
+                } else if item.is_instance_of::<PyString>() {
+                    out.push(serde_json::Value::String(item.extract()?));
+                } else {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                        "unsupported CycleBankConfig value type for key {key_str}"
+                    )));
+                }
+            }
+            serde_json::Value::Array(out)
+        } else if value.is_none() {
+            serde_json::Value::Null
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "unsupported CycleBankConfig value type for key {key_str}"
+            )));
+        };
+        map.insert(key_str, v);
+    }
+    Ok(serde_json::Value::Object(map))
+}
+
+/// Reconstruct a `crate::timebase::AnalysisTick` from the camelCase dict the
+/// `AnalysisTimebase` binding emits, then route it through the canonical
+/// Rust seam (`cycle_observation_from_tick`).  Python never computes the
+/// newest-frame offset itself.
+fn tick_from_pydict(
+    dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<crate::timebase::AnalysisTick> {
+    let features: Vec<f64> = dict
+        .get_item("features")?
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("features"))?
+        .extract()?;
+    let sample_index: u64 = dict
+        .get_item("sampleIndex")?
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("sampleIndex"))?
+        .extract()?;
+    let time_seconds: f64 = dict
+        .get_item("timeSeconds")?
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("timeSeconds"))?
+        .extract()?;
+    let dt_seconds: f64 = dict
+        .get_item("dtSeconds")?
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("dtSeconds"))?
+        .extract()?;
+    let stream_epoch: u64 = dict
+        .get_item("streamEpoch")?
+        .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("streamEpoch"))?
+        .extract()?;
+    Ok(crate::timebase::AnalysisTick {
+        features,
+        sample_index,
+        time_seconds,
+        dt_seconds,
+        stream_epoch,
+    })
+}
+
+#[pymethods]
+impl CycleBank {
+    #[new]
+    #[pyo3(signature = (config=None))]
+    fn py_new(
+        config: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+    ) -> PyResult<Self> {
+        let cfg = cycle_bank_config_from_dict(config)?;
+        let inner = crate::cycle_bank::CycleBank::try_new(cfg)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// The Rust-owned contract version (`CYCLE_BANK_VERSION`). Python reads
+    /// it; it never restates it.
+    #[getter]
+    fn version(&self) -> &'static str {
+        self.inner.version()
+    }
+
+    /// Feed one canonical analysis tick (the dict shape returned by
+    /// `AnalysisTimebase.ingest` / `flush`). The newest-frame -> observation
+    /// mapping is done in Rust by the canonical seam; Python passes the tick
+    /// through unchanged. Returns the current observed `CycleMode` objects.
+    fn observe_tick(
+        &mut self,
+        tick: &pyo3::Bound<'_, pyo3::types::PyDict>,
+    ) -> PyResult<Vec<CycleMode>> {
+        let tick = tick_from_pydict(tick)?;
+        let obs = crate::timebase::cycle_observation_from_tick(&tick).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(
+                "tick feature window is not the expected frame-major shape",
+            )
+        })?;
+        self.inner
+            .observe(&obs)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(self.modes())
+    }
+
+    /// Feed one explicit observation of named scalar evidence channels.
+    ///
+    /// `sample_index` / `dt_seconds` / `stream_epoch` carry the #91 sample
+    /// clock; `channels` is a sequence of `(name, value)` pairs. This entry
+    /// point exists for synthetic diagnostics; the production path is
+    /// `observe_tick`. Returns the current observed `CycleMode` objects.
+    fn observe(
+        &mut self,
+        sample_index: u64,
+        dt_seconds: f64,
+        stream_epoch: u64,
+        channels: Vec<(String, f64)>,
+    ) -> PyResult<Vec<CycleMode>> {
+        let obs = crate::cycle_bank::CycleObservation {
+            sample_index,
+            dt_seconds,
+            stream_epoch,
+            channels: channels
+                .into_iter()
+                .map(|(name, value)| crate::cycle_bank::CycleEvidenceChannel::new(name, value))
+                .collect(),
+        };
+        self.inner
+            .observe(&obs)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(self.modes())
+    }
+
+    /// Current confirmed observed modes as `CycleMode` objects.
+    fn modes(&self) -> Vec<CycleMode> {
+        self.inner
+            .modes()
+            .into_iter()
+            .map(CycleMode::from)
+            .collect()
+    }
+
+    /// Current observed modes as camelCase dicts (the same wire shape the
+    /// browser's wasm `CycleMode` interface uses). Convenience for code that
+    /// wants plain records instead of objects.
+    fn modes_as_dicts<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.inner
+            .modes()
+            .iter()
+            .map(|m| cycle_mode_to_pydict(py, m).map(|o| o.into_bound(py)))
+            .collect()
+    }
+
+    /// Rational relations among the currently observed modes (latest batch).
+    fn latest_relations<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.inner
+            .latest_relations()
+            .iter()
+            .map(|r| cycle_relation_to_pydict(py, r).map(|o| o.into_bound(py)))
+            .collect()
+    }
+
+    /// Number of currently confirmed modes.
+    fn num_modes(&self) -> usize {
+        self.inner.num_modes()
+    }
+
+    /// Deterministic discontinuity reset (also triggered automatically by a
+    /// `streamEpoch` change in the incoming tick).
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+/// Read the per-channel scalar evidence the canonical Rust seam extracts from
+/// one analysis tick, WITHOUT advancing any bank state.
+///
+/// This is the ONLY supported way for Python to see the newest-frame evidence
+/// values (e.g. to measure onset events for diagnostics): the frame-major
+/// offset arithmetic lives in Rust (`cycle_observation_from_tick`), never in
+/// Python. Returns a list of `(name, value)` pairs in the canonical channel
+/// schema order.
+#[pyfunction]
+#[pyo3(signature = (tick))]
+fn cycle_observation_channels_from_tick(
+    tick: &pyo3::Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<Vec<(String, f64)>> {
+    let tick = tick_from_pydict(tick)?;
+    let obs = crate::timebase::cycle_observation_from_tick(&tick).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(
+            "tick feature window is not the expected frame-major shape",
+        )
+    })?;
+    Ok(obs
+        .channels
+        .into_iter()
+        .map(|c| (c.name, c.value))
+        .collect())
+}
+
 /// A single emitted analysis tick, materialized as a Python dict.
 ///
 /// Wire format keys are **camelCase** so a tick read by the trainer
@@ -1039,6 +1519,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
         "ANALYSIS_PIPELINE_VERSION",
         crate::timebase::ANALYSIS_PIPELINE_VERSION,
     )?;
+    // Observed-ridge CycleBank contract (issue #92). Rust-owned; Python and
+    // the browser read it and never restate it.
+    m.add("CYCLE_BANK_VERSION", crate::cycle_bank::CYCLE_BANK_VERSION)?;
 
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
@@ -1049,10 +1532,16 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<AnalysisTimebase>()?;
 
+    m.add_class::<CycleMode>()?;
+    m.add_class::<CycleBank>()?;
+
     m.add_class::<RuntimeVisualMetrics>()?;
 
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
+    // CycleBank tick-seam evidence accessor (issue #92): newest-frame channel
+    // values from a canonical tick, computed in Rust.
+    m.add_function(wrap_pyfunction!(cycle_observation_channels_from_tick, m)?)?;
     // Controller phase generation (shared with training for parity)
     m.add_function(wrap_pyfunction!(residual_phases_for_seed_py, m)?)?;
     // Distance-field helpers

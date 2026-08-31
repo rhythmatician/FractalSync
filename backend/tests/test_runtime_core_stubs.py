@@ -224,6 +224,15 @@ def test_class_members_have_expected_types():
                     class_member,
                     (types.GetSetDescriptorType, types.MemberDescriptorType),
                 ):
+                    # A bound method/function whose return annotation the stub
+                    # records is not a data attribute: without an instance to
+                    # call it through we cannot observe the declared return
+                    # type, and reading the descriptor object itself would
+                    # misreport it (e.g. ``phase_at`` on a view object like
+                    # ``CycleMode`` that cannot be default-constructed). Skip
+                    # method members when no instance is available.
+                    if callable(class_member):
+                        continue
                     actual_member = class_member
 
             if actual_member is not None:

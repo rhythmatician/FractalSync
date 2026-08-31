@@ -2,10 +2,11 @@
 //! (issue #91). These prove the transport/timing/scheduling invariants
 //! without any browser, AudioWorklet, or wall clock.
 
-use runtime_core::controller::{HOP_LENGTH, SAMPLE_RATE};
+use runtime_core::controller::{HOP_LENGTH, SAMPLE_RATE, WINDOW_FRAMES};
+use runtime_core::features::BASE_FEATURES_PER_FRAME;
 use runtime_core::timebase::{
-    AnalysisTimebase, ResetReason, StreamingResampler, TimebaseError, CANONICAL_HOP_LENGTH,
-    CANONICAL_SAMPLE_RATE,
+    cycle_observation_from_tick, AnalysisTick, AnalysisTimebase, ResetReason, StreamingResampler,
+    TimebaseError, CANONICAL_HOP_LENGTH, CANONICAL_SAMPLE_RATE, CYCLE_OBSERVATION_CHANNELS,
 };
 
 /// A deterministic test signal (ramp) so resampling output is predictable.
@@ -285,6 +286,77 @@ fn rate_change_mid_stream_is_rejected() {
     tb.ingest(&vec![0.0f32; 1024], 48_000, 0).unwrap();
     let err = tb.ingest(&vec![0.0f32; 1024], 44_100, 1024);
     assert!(matches!(err, Err(TimebaseError::RateChanged { .. })));
+}
+
+// ---------------------------------------------------------------------------
+// Issue #92 canonical seam: AnalysisTick -> CycleObservation
+// ---------------------------------------------------------------------------
+
+/// Build a tick whose frame-major window has a known newest frame so the
+/// seam's offset arithmetic can be checked exactly.
+fn synthetic_tick(newest_frame: [f64; BASE_FEATURES_PER_FRAME]) -> AnalysisTick {
+    let mut features = vec![0.0f64; WINDOW_FRAMES * BASE_FEATURES_PER_FRAME];
+    let base = (WINDOW_FRAMES - 1) * BASE_FEATURES_PER_FRAME;
+    features[base..base + BASE_FEATURES_PER_FRAME].copy_from_slice(&newest_frame);
+    AnalysisTick {
+        features,
+        sample_index: 1024,
+        time_seconds: 1024.0 / 48_000.0,
+        dt_seconds: 1024.0 / 48_000.0,
+        stream_epoch: 7,
+    }
+}
+
+#[test]
+fn seam_uses_only_the_newest_frame_not_the_whole_window() {
+    // Fill every frame except the newest with large sentinel values. If the
+    // seam wrongly read the overlapping history as new evidence, the channel
+    // values would reflect the sentinels rather than the newest frame.
+    let newest = [0.11, 0.22, 0.33, 0.44, 0.55, 0.66];
+    let mut tick = synthetic_tick(newest);
+    for v in tick.features.iter_mut().take((WINDOW_FRAMES - 1) * BASE_FEATURES_PER_FRAME) {
+        *v = 999.0;
+    }
+    let obs = cycle_observation_from_tick(&tick).expect("well-formed window");
+    for bf in CYCLE_OBSERVATION_CHANNELS {
+        let ch = obs
+            .channels
+            .iter()
+            .find(|c| c.name == bf.name())
+            .expect("channel present");
+        assert_eq!(
+            ch.value, newest[bf.index()],
+            "channel {} must come from the newest frame slot {}",
+            bf.name(),
+            bf.index()
+        );
+    }
+}
+
+#[test]
+fn seam_carries_sample_clock_identity_and_channel_schema() {
+    let newest = [0.11, 0.22, 0.33, 0.44, 0.55, 0.66];
+    let tick = synthetic_tick(newest);
+    let obs = cycle_observation_from_tick(&tick).expect("well-formed window");
+
+    assert_eq!(obs.sample_index, tick.sample_index);
+    assert_eq!(obs.dt_seconds, tick.dt_seconds);
+    assert_eq!(obs.stream_epoch, tick.stream_epoch);
+
+    // Exactly one scalar per named channel, in the declared schema order.
+    let names: Vec<&str> = obs.channels.iter().map(|c| c.name.as_str()).collect();
+    let expected: Vec<&str> = CYCLE_OBSERVATION_CHANNELS
+        .iter()
+        .map(|bf| bf.name())
+        .collect();
+    assert_eq!(names, expected);
+}
+
+#[test]
+fn seam_rejects_malformed_window_instead_of_misreading_offsets() {
+    let mut tick = synthetic_tick([0.0; BASE_FEATURES_PER_FRAME]);
+    tick.features.truncate(5); // not a multiple of BASE_FEATURES_PER_FRAME
+    assert!(cycle_observation_from_tick(&tick).is_none());
 }
 
 #[test]

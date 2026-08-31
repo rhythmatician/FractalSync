@@ -145,6 +145,10 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "s": "float",
         RET: "complex",
     },
+    "cycle_observation_channels_from_tick": {
+        "tick": "dict",
+        RET: "list[tuple[str, float]]",
+    },
 }
 
 # Per-class member annotations. "__init__" uses the constructor's
@@ -288,6 +292,27 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
         "reset": {RET: "None"},
         "diagnostics": {RET: "dict"},
     },
+    "CycleMode": {
+        "phase_at": {"delta_seconds": "float", RET: "float"},
+        "time_to_next": {"reference_phase": "float", RET: "Optional[float]"},
+        "to_dict": {RET: "dict"},
+    },
+    "CycleBank": {
+        "__init__": {"config": "Optional[dict]", RET: "None"},
+        "observe_tick": {"tick": "dict", RET: "list[CycleMode]"},
+        "observe": {
+            "sample_index": "int",
+            "dt_seconds": "float",
+            "stream_epoch": "int",
+            "channels": "Sequence[tuple[str, float]]",
+            RET: "list[CycleMode]",
+        },
+        "modes": {RET: "list[CycleMode]"},
+        "modes_as_dicts": {RET: "list[dict]"},
+        "latest_relations": {RET: "list[dict]"},
+        "num_modes": {RET: "int"},
+        "reset": {RET: "None"},
+    },
 }
 
 # Attribute annotations for getset_descriptor members (rendered as
@@ -312,6 +337,19 @@ ATTR_TYPES: dict[str, dict[str, str]] = {
     "FeatureExtractor": {
         "feature_mean": "Optional[list[float]]",
         "feature_std": "Optional[list[float]]",
+    },
+    "CycleBank": {"version": "str"},
+    "CycleMode": {
+        "id": "int",
+        "frequency_hz": "float",
+        "phase": "float",
+        "strength": "float",
+        "confidence": "float",
+        "channel_support": "float",
+        "age": "int",
+        "missing_observations": "int",
+        "frequency_slope": "float",
+        "frequency_uncertainty": "float",
     },
     "RuntimeVisualMetrics": {
         "edge_density": "float",
@@ -338,6 +376,7 @@ CONSTANT_TYPES: dict[str, str] = {
     "CONTROLLER_VERSION": "str",
     "FEATURE_VERSION": "str",
     "ANALYSIS_PIPELINE_VERSION": "str",
+    "CYCLE_BANK_VERSION": "str",
     "NORM_EPS": "float",
 }
 
@@ -345,6 +384,8 @@ CONSTANT_TYPES: dict[str, str] = {
 CLASS_ORDER = [
     "FeatureExtractor",
     "AnalysisTimebase",
+    "CycleMode",
+    "CycleBank",
     "ResidualParams",
     "OrbitState",
     "PlayerState",
@@ -371,6 +412,7 @@ FUNCTION_ORDER = [
     "orbit_path_metrics_py",
     "compute_runtime_visual_metrics",
     "lobe_point_at_angle",
+    "cycle_observation_channels_from_tick",
 ]
 
 HEADER = '''"""Type stubs for the ``runtime_core`` native extension.
@@ -498,8 +540,19 @@ def _descriptor_is_settable(cls: type, name: str, descriptor: Any) -> bool:
 
 def _render_class(cls_name: str, cls: type) -> str:
     lines = [f"class {cls_name}:", ""]
-    method_types = CLASS_METHOD_TYPES.get(cls_name, {})
-    attr_types = ATTR_TYPES.get(cls_name, {})
+    # Prefer Rust-authored schema if the pyclass exposes `__fields__` /
+    # `__methods__` (the single-source-of-truth contract that prevents
+    # adding a CycleMode field from silently desyncing seven files).
+    # The hand-maintained tables remain a fallback for older classes that
+    # have not yet been migrated.
+    rust_attr_types: dict | None = getattr(cls, "__fields__", None)
+    if callable(rust_attr_types):
+        rust_attr_types = rust_attr_types()
+    rust_method_types: dict | None = getattr(cls, "__methods__", None)
+    if callable(rust_method_types):
+        rust_method_types = rust_method_types()
+    method_types: dict = rust_method_types or CLASS_METHOD_TYPES.get(cls_name, {})
+    attr_types: dict = rust_attr_types or ATTR_TYPES.get(cls_name, {})
 
     # Constructor from __text_signature__ (PyO3 exposes it on the class).
     init_ann = method_types.get("__init__")

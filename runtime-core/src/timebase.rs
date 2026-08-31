@@ -122,6 +122,70 @@ impl std::fmt::Display for TimebaseError {
 
 impl std::error::Error for TimebaseError {}
 
+// ---------------------------------------------------------------------------
+// Canonical seam: AnalysisTick -> CycleObservation (issue #92)
+//
+// The transitional Player model consumes a rolling, heavily-overlapping
+// frame-major feature WINDOW (WINDOW_FRAMES consecutive STFT frames of 6
+// features each).  A CycleBank, by contrast, must consume exactly ONE new
+// causal observation per authoritative hop — the overlapping history is NOT
+// 60 new temporal samples.  The newest frame is the LAST frame of the
+// frame-major window.  That fact ("the newest frame is the last frame, and
+// which of the six feature slots are rhythmic evidence") must be known in
+// exactly one place: here, in Rust.  Python and TypeScript call the binding
+// and never compute window offsets themselves.
+// ---------------------------------------------------------------------------
+
+/// The causal per-hop rhythmic evidence channels the CycleBank consumes,
+/// expressed as indices into one feature frame, newest frame last.
+///
+/// These are existing canonical Rust features — no new feature extractor is
+/// introduced.  The selection is semantic and owned here, and the per-frame
+/// indices come from `crate::features::BaseFeature` so this list cannot
+/// silently drift if the feature-extractor layout is reordered:
+///
+///   - `BaseFeature::OnsetEnvelope`  — primary attack clock;
+///   - `BaseFeature::Flux`           — broadband spectral change;
+///   - `BaseFeature::RmsEnergy`      — slower loudness cycle support.
+pub const CYCLE_OBSERVATION_CHANNELS: [crate::features::BaseFeature; 3] = [
+    crate::features::BaseFeature::OnsetEnvelope,
+    crate::features::BaseFeature::Flux,
+    crate::features::BaseFeature::RmsEnergy,
+];
+
+/// Build the single canonical `CycleObservation` for one `AnalysisTick`.
+///
+/// Returns `None` if the tick's feature window is not the expected
+/// frame-major shape (a configuration / version mismatch the caller should
+/// surface rather than silently misreading).  This is the ONLY place the
+/// frame-major offset arithmetic lives; both bindings call through to it.
+pub fn cycle_observation_from_tick(
+    tick: &AnalysisTick,
+) -> Option<crate::cycle_bank::CycleObservation> {
+    use crate::cycle_bank::{CycleEvidenceChannel, CycleObservation};
+    use crate::features::BASE_FEATURES_PER_FRAME;
+
+    let frames = tick.features.len() / BASE_FEATURES_PER_FRAME;
+    if frames == 0 || tick.features.len() % BASE_FEATURES_PER_FRAME != 0 {
+        return None;
+    }
+    // Newest frame = last frame of the frame-major window.
+    let base = (frames - 1) * BASE_FEATURES_PER_FRAME;
+    let frame = &tick.features[base..base + BASE_FEATURES_PER_FRAME];
+
+    let channels = CYCLE_OBSERVATION_CHANNELS
+        .iter()
+        .map(|bf| CycleEvidenceChannel::new(bf.name(), frame[bf.index()]))
+        .collect();
+
+    Some(CycleObservation {
+        sample_index: tick.sample_index,
+        dt_seconds: tick.dt_seconds,
+        stream_epoch: tick.stream_epoch,
+        channels,
+    })
+}
+
 /// Stateful streaming linear resampler from an arbitrary source rate to the
 /// canonical 48 kHz timeline.
 ///

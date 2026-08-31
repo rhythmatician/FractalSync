@@ -324,7 +324,11 @@ jobs:
           python -m pip install --upgrade pip maturin
 
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
+        # Pinned to match the wasm-pack installed by ci-type-checks/verify-wasm-dts
+        # and pytest/wasm-orbit-build jobs above; do not reintroduce
+        # jetli/wasm-pack-action (it ships an ancient wasm-opt that fails on
+        # the wasm32 target produced by this repo's current toolchain).
+        run: cargo install wasm-pack --locked
 
       - name: Build runtime-core (maturin)
         run: |
