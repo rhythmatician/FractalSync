@@ -7,7 +7,7 @@
 //! `runtime_core` module and call the shared logic directly.
 
 use pyo3::prelude::*;
-use pyo3::types::PyComplex;
+use pyo3::types::{PyComplex, PyDict};
 
 use crate::controller::{
     OrbitState as RustOrbitState,
@@ -878,7 +878,6 @@ impl CycleMode {
     /// Returns a dict `{attr_name: python_type_annotation}`.
     #[staticmethod]
     fn __fields__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        use pyo3::types::PyDict;
         let d = PyDict::new_bound(py);
         d.set_item("id", "int")?;
         d.set_item("frequency_hz", "float")?;
@@ -898,7 +897,6 @@ impl CycleMode {
     /// `{method_name: {param_name: annotation, "__return__": annotation}}`.
     #[staticmethod]
     fn __methods__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        use pyo3::types::PyDict;
         let d = PyDict::new_bound(py);
         let phase_at = PyDict::new_bound(py);
         phase_at.set_item("delta_seconds", "float")?;
@@ -1049,7 +1047,7 @@ fn cycle_bank_config_from_dict(
         }
     } else {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "CycleBankConfig did not serialize to a JSON object".into(),
+            "CycleBankConfig did not serialize to a JSON object",
         ));
     }
     serde_json::from_value(merged).map_err(|e| {
@@ -1105,7 +1103,7 @@ fn python_dict_to_json_value(
                     out.push(serde_json::Value::Number(
                         serde_json::Number::from_f64(n).ok_or_else(|| {
                             pyo3::exceptions::PyValueError::new_err(
-                                "non-finite float in list".into(),
+                                "non-finite float in list",
                             )
                         })?,
                     ));
