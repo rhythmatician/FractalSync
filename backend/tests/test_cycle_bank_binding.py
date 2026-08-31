@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import math
 
-import pytest
-
-runtime_core = pytest.importorskip("runtime_core")
+# Direct import (not pytest.importorskip): the module is required for these
+# to be meaningful, and a direct import lets mypy resolve concrete attribute
+# types rather than a generic ModuleType.
+import runtime_core
 
 TWO_PI = 2.0 * math.pi
 DT = runtime_core.HOP_LENGTH / runtime_core.SAMPLE_RATE

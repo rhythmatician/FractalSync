@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
@@ -115,7 +116,9 @@ def _measure_onsets(times: np.ndarray, onset: np.ndarray) -> np.ndarray:
     return np.array(events)
 
 
-def analyze_song(path: Path) -> dict:
+def analyze_song(
+    path: Path,
+) -> tuple[dict[str, Any], dict[int, "ModeSeries"], tuple[Any, Any, Any]]:
     ticks = _ticks_for(path)
     bank = runtime_core.CycleBank(
         {
