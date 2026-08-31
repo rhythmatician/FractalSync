@@ -846,7 +846,100 @@ pub struct CycleBank {
     inner: crate::cycle_bank::CycleBank,
 }
 
-/// Serialize one observed `CycleMode` as a Python dict.
+/// One directly observed temporal ridge (issue #92), Python surface.
+///
+/// Read-only view of the Rust `CycleMode` state. Causal predictive queries
+/// (`phase_at`, `time_to_next`) are methods on the mode so the trainer reads
+/// predictions from the same Rust state the browser sees via the wasm
+/// `CycleMode` interface. `to_dict()` produces the camelCase wire shape that
+/// matches the browser's `CycleMode` interface (cross-surface parity).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct CycleMode {
+    inner: crate::cycle_bank::CycleMode,
+}
+
+impl From<crate::cycle_bank::CycleMode> for CycleMode {
+    fn from(inner: crate::cycle_bank::CycleMode) -> Self {
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl CycleMode {
+    #[getter]
+    fn id(&self) -> u64 {
+        self.inner.id
+    }
+    #[getter]
+    fn frequency_hz(&self) -> f64 {
+        self.inner.frequency_hz
+    }
+    #[getter]
+    fn phase(&self) -> f64 {
+        self.inner.phase
+    }
+    #[getter]
+    fn strength(&self) -> f64 {
+        self.inner.strength
+    }
+    #[getter]
+    fn confidence(&self) -> f64 {
+        self.inner.confidence
+    }
+    #[getter]
+    fn channel_support(&self) -> f64 {
+        self.inner.channel_support
+    }
+    #[getter]
+    fn age(&self) -> u64 {
+        self.inner.age
+    }
+    #[getter]
+    fn missing_observations(&self) -> u64 {
+        self.inner.missing_observations
+    }
+    #[getter]
+    fn frequency_slope(&self) -> f64 {
+        self.inner.frequency_slope
+    }
+    #[getter]
+    fn frequency_uncertainty(&self) -> f64 {
+        self.inner.frequency_uncertainty
+    }
+
+    /// Causal free-running phase prediction `delta_seconds` into the future.
+    fn phase_at(&self, delta_seconds: f64) -> f64 {
+        self.inner.phase_at(delta_seconds)
+    }
+
+    /// Time until the mode next reaches `reference_phase`, assuming constant
+    /// current frequency. `None` if the frequency is not positive/finite.
+    fn time_to_next(&self, reference_phase: f64) -> Option<f64> {
+        self.inner.time_to_next(reference_phase)
+    }
+
+    /// CamelCase dict matching the wasm `CycleMode` interface, so the
+    /// trainer and the browser see the same wire shape (issue #93 parity).
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let m = &self.inner;
+        use pyo3::types::PyDict;
+        let d = PyDict::new_bound(py);
+        d.set_item("id", m.id)?;
+        d.set_item("frequencyHz", m.frequency_hz)?;
+        d.set_item("phase", m.phase)?;
+        d.set_item("strength", m.strength)?;
+        d.set_item("confidence", m.confidence)?;
+        d.set_item("channelSupport", m.channel_support)?;
+        d.set_item("age", m.age)?;
+        d.set_item("missingObservations", m.missing_observations)?;
+        d.set_item("frequencySlope", m.frequency_slope)?;
+        d.set_item("frequencyUncertainty", m.frequency_uncertainty)?;
+        Ok(d.into_any())
+    }
+}
+
+/// Serialize one observed `CycleMode` as a Python dict (camelCase wire shape).
 ///
 /// Keys are **camelCase** to match the wasm binding's `CycleMode` interface,
 /// so a mode read by the trainer and by the browser has the same shape
@@ -855,19 +948,7 @@ fn cycle_mode_to_pydict(
     py: Python,
     m: &crate::cycle_bank::CycleMode,
 ) -> PyResult<PyObject> {
-    use pyo3::types::PyDict;
-    let d = PyDict::new_bound(py);
-    d.set_item("id", m.id)?;
-    d.set_item("frequencyHz", m.frequency_hz)?;
-    d.set_item("phase", m.phase)?;
-    d.set_item("strength", m.strength)?;
-    d.set_item("confidence", m.confidence)?;
-    d.set_item("channelSupport", m.channel_support)?;
-    d.set_item("age", m.age)?;
-    d.set_item("missingObservations", m.missing_observations)?;
-    d.set_item("frequencySlope", m.frequency_slope)?;
-    d.set_item("frequencyUncertainty", m.frequency_uncertainty)?;
-    Ok(d.into())
+    CycleMode::from(m.clone()).to_dict(py).map(|b| b.unbind())
 }
 
 /// Serialize one observed-mode rational `CycleRelation` as a Python dict.
@@ -999,12 +1080,11 @@ impl CycleBank {
     /// Feed one canonical analysis tick (the dict shape returned by
     /// `AnalysisTimebase.ingest` / `flush`). The newest-frame -> observation
     /// mapping is done in Rust by the canonical seam; Python passes the tick
-    /// through unchanged. Returns the current observed modes (list of dicts).
-    fn observe_tick<'py>(
+    /// through unchanged. Returns the current observed `CycleMode` objects.
+    fn observe_tick(
         &mut self,
-        py: Python<'py>,
         tick: &pyo3::Bound<'_, pyo3::types::PyDict>,
-    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    ) -> PyResult<Vec<CycleMode>> {
         let tick = tick_from_pydict(tick)?;
         let obs = crate::timebase::cycle_observation_from_tick(&tick).ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err(
@@ -1014,7 +1094,7 @@ impl CycleBank {
         self.inner
             .observe(&obs)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        self.modes(py)
+        Ok(self.modes())
     }
 
     /// Feed one explicit observation of named scalar evidence channels.
@@ -1022,15 +1102,14 @@ impl CycleBank {
     /// `sample_index` / `dt_seconds` / `stream_epoch` carry the #91 sample
     /// clock; `channels` is a sequence of `(name, value)` pairs. This entry
     /// point exists for synthetic diagnostics; the production path is
-    /// `observe_tick`. Returns the current observed modes.
-    fn observe<'py>(
+    /// `observe_tick`. Returns the current observed `CycleMode` objects.
+    fn observe(
         &mut self,
-        py: Python<'py>,
         sample_index: u64,
         dt_seconds: f64,
         stream_epoch: u64,
         channels: Vec<(String, f64)>,
-    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    ) -> PyResult<Vec<CycleMode>> {
         let obs = crate::cycle_bank::CycleObservation {
             sample_index,
             dt_seconds,
@@ -1043,11 +1122,22 @@ impl CycleBank {
         self.inner
             .observe(&obs)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-        self.modes(py)
+        Ok(self.modes())
     }
 
-    /// Current confirmed observed modes (list of camelCase dicts).
-    fn modes<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    /// Current confirmed observed modes as `CycleMode` objects.
+    fn modes(&self) -> Vec<CycleMode> {
+        self.inner
+            .modes()
+            .into_iter()
+            .map(CycleMode::from)
+            .collect()
+    }
+
+    /// Current observed modes as camelCase dicts (the same wire shape the
+    /// browser's wasm `CycleMode` interface uses). Convenience for code that
+    /// wants plain records instead of objects.
+    fn modes_as_dicts<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
         self.inner
             .modes()
             .iter()
@@ -1076,26 +1166,6 @@ impl CycleBank {
     /// `streamEpoch` change in the incoming tick).
     fn reset(&mut self) {
         self.inner.reset();
-    }
-
-    /// Causal free-running phase prediction for one mode, `delta_seconds`
-    /// into the future, using that mode's continuous phase/frequency.
-    /// Pure Rust math on already-emitted state.
-    #[staticmethod]
-    fn phase_at(phase: f64, frequency_hz: f64, delta_seconds: f64) -> f64 {
-        let mode = crate::cycle_bank::CycleMode {
-            id: 0,
-            frequency_hz,
-            phase,
-            strength: 0.0,
-            confidence: 0.0,
-            channel_support: 0.0,
-            age: 0,
-            missing_observations: 0,
-            frequency_slope: 0.0,
-            frequency_uncertainty: 0.0,
-        };
-        mode.phase_at(delta_seconds)
     }
 }
 
@@ -1327,6 +1397,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<AnalysisTimebase>()?;
 
+    m.add_class::<CycleMode>()?;
     m.add_class::<CycleBank>()?;
 
     m.add_class::<RuntimeVisualMetrics>()?;

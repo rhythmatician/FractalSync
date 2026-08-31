@@ -288,6 +288,27 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
         "reset": {RET: "None"},
         "diagnostics": {RET: "dict"},
     },
+    "CycleMode": {
+        "phase_at": {"delta_seconds": "float", RET: "float"},
+        "time_to_next": {"reference_phase": "float", RET: "Optional[float]"},
+        "to_dict": {RET: "dict"},
+    },
+    "CycleBank": {
+        "__init__": {"config": "Optional[dict]", RET: "None"},
+        "observe_tick": {"tick": "dict", RET: "list[CycleMode]"},
+        "observe": {
+            "sample_index": "int",
+            "dt_seconds": "float",
+            "stream_epoch": "int",
+            "channels": "Sequence[tuple[str, float]]",
+            RET: "list[CycleMode]",
+        },
+        "modes": {RET: "list[CycleMode]"},
+        "modes_as_dicts": {RET: "list[dict]"},
+        "latest_relations": {RET: "list[dict]"},
+        "num_modes": {RET: "int"},
+        "reset": {RET: "None"},
+    },
 }
 
 # Attribute annotations for getset_descriptor members (rendered as
@@ -312,6 +333,19 @@ ATTR_TYPES: dict[str, dict[str, str]] = {
     "FeatureExtractor": {
         "feature_mean": "Optional[list[float]]",
         "feature_std": "Optional[list[float]]",
+    },
+    "CycleBank": {"version": "str"},
+    "CycleMode": {
+        "id": "int",
+        "frequency_hz": "float",
+        "phase": "float",
+        "strength": "float",
+        "confidence": "float",
+        "channel_support": "float",
+        "age": "int",
+        "missing_observations": "int",
+        "frequency_slope": "float",
+        "frequency_uncertainty": "float",
     },
     "RuntimeVisualMetrics": {
         "edge_density": "float",
@@ -338,6 +372,7 @@ CONSTANT_TYPES: dict[str, str] = {
     "CONTROLLER_VERSION": "str",
     "FEATURE_VERSION": "str",
     "ANALYSIS_PIPELINE_VERSION": "str",
+    "CYCLE_BANK_VERSION": "str",
     "NORM_EPS": "float",
 }
 
@@ -345,6 +380,8 @@ CONSTANT_TYPES: dict[str, str] = {
 CLASS_ORDER = [
     "FeatureExtractor",
     "AnalysisTimebase",
+    "CycleMode",
+    "CycleBank",
     "ResidualParams",
     "OrbitState",
     "PlayerState",

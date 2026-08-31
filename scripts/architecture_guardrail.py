@@ -262,6 +262,41 @@ RULES: list[Rule] = [
         ),
     ),
     Rule(
+        name="domain-type-redeclaration-CycleMode",
+        pattern=r"\b(class|interface|type)\s+(CycleMode)\b",
+        evidence=["frequencyHz", "phase", "confidence"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``CycleMode`` outside runtime-core/ "
+            "— import the wasm-generated ``CycleMode`` interface or the "
+            "PyO3 stub instead of restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-CycleRelation",
+        pattern=r"\b(class|interface|type)\s+(CycleRelation)\b",
+        evidence=["generalizedPhase", "phaseStability", "freqResidual"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``CycleRelation`` outside runtime-core/ "
+            "— import the binding type instead of restating its fields."
+        ),
+    ),
+    Rule(
+        name="domain-type-redeclaration-CycleObservation",
+        pattern=r"\b(class|interface|type)\s+(CycleObservation)\b",
+        evidence=["sampleIndex", "dtSeconds", "streamEpoch"],
+        skip_imports=True,
+        file_level=True,
+        description=(
+            "Re-declaration of Rust ``CycleObservation`` outside "
+            "runtime-core/ — build it via the canonical seam binding "
+            "instead of restating its fields."
+        ),
+    ),
+    Rule(
         name="domain-type-redeclaration-AnalysisTick",
         pattern=r"\b(class|interface|type)\s+(AnalysisTick)\b",
         evidence=["sampleIndex", "dtSeconds", "streamEpoch"],
@@ -536,6 +571,9 @@ def _check_file(path: Path, text: str, manifest: dict) -> list[str]:
                 "domain-type-redeclaration-PlayerObservation",
                 "domain-type-redeclaration-CycleHypothesis",
                 "domain-type-redeclaration-CycleBank",
+                "domain-type-redeclaration-CycleMode",
+                "domain-type-redeclaration-CycleRelation",
+                "domain-type-redeclaration-CycleObservation",
                 "domain-type-redeclaration-AnalysisTick",
                 "domain-type-redeclaration-TimebaseDiagnostics",
                 "domain-type-redeclaration-ResidualParams",
