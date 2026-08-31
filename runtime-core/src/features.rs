@@ -36,6 +36,60 @@ pub const FEATURE_VERSION: &str = "features/2";
 /// Pinned here so trainer mirror and browser cannot drift apart.
 pub const NORM_EPS: f64 = 1e-8;
 
+/// Canonical identity of the six low-level features emitted per STFT frame
+/// by `FeatureExtractor::extract_features`, in the order they are flattened
+/// into the frame-major `features` vector of every `AnalysisTick`.
+///
+/// This enum is the **single Rust-owned source of truth** for the
+/// per-frame slot layout. Cycle-bank consumers (notably the
+/// `cycle_observation_from_tick` canonical seam in `timebase.rs`) MUST
+/// reference these constants — never raw integer literals — so that a
+/// future reorder or addition of base features that still totals six (or
+/// however many) cannot silently mis-feed the cycle bank.
+///
+/// Ordering matches the `Vec<Vec<f64>>` returned by
+/// `extract_features` (line ~290):
+///   `[spectral_centroid, spectral_flux, rms_energy,
+///     zero_crossing_rate, onset_env, spectral_rolloff]`
+#[repr(usize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BaseFeature {
+    Centroid = 0,
+    Flux = 1,
+    RmsEnergy = 2,
+    ZeroCrossingRate = 3,
+    OnsetEnvelope = 4,
+    SpectralRolloff = 5,
+}
+
+impl BaseFeature {
+    /// Index into one feature frame.
+    #[inline]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+
+    /// Canonical string name used by the cycle-bank observation channels
+    /// (also used by the Python / wasm binding layers, so it must match
+    /// exactly).
+    #[inline]
+    pub const fn name(self) -> &'static str {
+        match self {
+            BaseFeature::Centroid => "centroid",
+            BaseFeature::Flux => "flux",
+            BaseFeature::RmsEnergy => "energy",
+            BaseFeature::ZeroCrossingRate => "zcr",
+            BaseFeature::OnsetEnvelope => "onset",
+            BaseFeature::SpectralRolloff => "rolloff",
+        }
+    }
+}
+
+/// Total base features per frame for the default (no-delta) configuration.
+/// `FeatureExtractor::num_features_per_frame` doubles this when delta /
+/// delta-delta are enabled; cycle-bank consumers rely on the base count.
+pub const BASE_FEATURES_PER_FRAME: usize = 6;
+
 /// Extractor configuration.  Mirrors the Python `AudioFeatureExtractor`
 /// parameters and defaults to a 48 kHz sample rate with an FFT size
 /// of 4096 and a hop length of 1024 samples (≈46.9 Hz frame rate).

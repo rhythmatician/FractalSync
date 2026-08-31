@@ -54,6 +54,14 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::f64::consts::{PI, TAU};
 
 /// Rust-owned public contract version for observed-ridge temporal state.
+///
+/// Cross-surface parity contract (mirrors `FEATURE_VERSION` / `CONTROLLER_VERSION`
+/// in `features.rs` / the ONNX metadata block): bump this constant whenever a
+/// cycle-bank field, observed-ridge invariant, or causal-estimator semantics
+/// change. The trainer (PyO3) and browser (wasm-bindgen) surfaces must refuse
+/// to consume cycle-bank state whose version string does not match what their
+/// training or build expected; the same `golden_vectors.json`-style regeneration
+/// discipline applies when a bump is shipped.
 pub const CYCLE_BANK_VERSION: &str = "cycle-bank/2";
 
 /// Number of causal baseband low-pass sections per scale.
@@ -100,7 +108,13 @@ pub struct CycleObservation {
 }
 
 /// Configuration for the observed-ridge CycleBank.
+///
+/// `deny_unknown_fields` is the single source of truth for which keys this
+/// config accepts: every binding layer (PyO3, wasm-bindgen, ONNX metadata
+/// roundtrips, any future JSON surface) must reject unknown keys the same
+/// way, instead of silently ignoring typos that fall back to defaults.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CycleBankConfig {
     /// Inclusive analysis range in Hz.  These are numerical limits, not
     /// semantic beat/phrase limits.
@@ -1579,6 +1593,39 @@ mod tests {
         let expected = (-DT * grid[0].f_center / cfg.q_cycles).exp();
         step_grid(&mut grid, 1.0, DT, cfg.q_cycles);
         assert!((grid[0].rho - expected).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn serde_deny_unknown_fields_rejects_typo_keys() {
+        // The single source of truth for accepted CycleBankConfig keys lives
+        // in the serde derive on the struct. Every binding layer (PyO3,
+        // wasm-bindgen, ONNX metadata roundtrips) routes through this so a
+        // typo like `qcycle` cannot silently fall back to the default.
+
+        // Valid round-trip with all keys accepted.
+        let mut expected = CycleBankConfig::default();
+        expected.q_cycles = 7.5;
+        expected.max_modes = 5;
+        expected.scales_per_octave = 24;
+        let json = serde_json::to_string(&expected).unwrap();
+        let round: CycleBankConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(round, expected);
+
+        // Typo on a known key must fail.
+        let bad = r#"{"qcycle": 7.5}"#;
+        let err = serde_json::from_str::<CycleBankConfig>(bad).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown field"),
+            "expected serde deny-unknown-fields error, got: {err}"
+        );
+
+        // Typo on a name that happens to be similar to a different field.
+        let bad2 = r#"{"max_modes ": 5, "scalesPerOctave": 12}"#; // trailing space + camelCase
+        let err2 = serde_json::from_str::<CycleBankConfig>(bad2).unwrap_err();
+        assert!(
+            err2.to_string().contains("unknown field"),
+            "expected serde deny-unknown-fields error for misspelled/camelCase keys, got: {err2}"
+        );
     }
 
     #[test]

@@ -423,17 +423,22 @@ fn scale_resolution_converges_without_turning_scales_into_musical_buckets() {
     // close to the same answer.  We intentionally do NOT require strictly
     // monotone error: numerical ridge selection need not improve monotonically
     // at every intermediate grid density.
-    for &(spo, recovered, error) in estimates.iter().filter(|(spo, _, _)| *spo >= 12) {
+    for &(spo, recovered, error) in estimates.iter() {
         assert!(
             error / target_hz < 0.02,
             "{spo} scales/octave did not converge near the continuous target: recovered={recovered}"
         );
     }
 
+    let f06 = estimates.iter().find(|(s, _, _)| *s == 6).unwrap().1;
     let f12 = estimates.iter().find(|(s, _, _)| *s == 12).unwrap().1;
     let f24 = estimates.iter().find(|(s, _, _)| *s == 24).unwrap().1;
     let f48 = estimates.iter().find(|(s, _, _)| *s == 48).unwrap().1;
 
+    assert!(
+        (f06 - f48).abs() / target_hz < 0.02,
+        "6 scales/octave has not numerically converged to the dense reference: f06={f06}, f48={f48}"
+    );
     assert!(
         (f24 - f48).abs() / target_hz < 0.01,
         "24 and 48 scales/octave have not numerically converged: f24={f24}, f48={f48}"
@@ -451,6 +456,15 @@ fn scale_resolution_converges_without_turning_scales_into_musical_buckets() {
 #[test]
 fn calibrated_phase_matches_known_input_analytic_phase() {
     let phase0 = 0.73;
+
+    // Phase calibration is the property we actually care about (the Player
+    // must land on musical events within a small timing envelope). Express
+    // the threshold as a per-cycle timing error `e_t = |e_phi| / (2π f)`
+    // rather than a raw radian number, so the assertion stays meaningful
+    // across the whole frequency band — a 0.45 rad budget is ~36 ms at 2 Hz
+    // and ~90 ms at 0.8 Hz, but the convergence study reports phase errors
+    // of ~0.03–0.05 rad ≈ 2–4 ms, so 20 ms leaves generous margin.
+    const MAX_TIMING_ERROR_S: f64 = 20.0e-3;
 
     for target_hz in [0.8, 1.5, 2.1667, 2.7, 4.0] {
         let mut config = CycleBankConfig::default();
@@ -472,16 +486,18 @@ fn calibrated_phase_matches_known_input_analytic_phase() {
         let mode = closest_mode(&modes, target_hz).expect("calibrated ridge");
         let expected_phase =
             wrap_phase(TAU * target_hz * harness.current_time() + phase0);
-        let error = circular_distance(mode.phase, expected_phase);
+        let phase_error_rad = circular_distance(mode.phase, expected_phase);
+        let timing_error_s = phase_error_rad / (TAU * target_hz);
 
         println!(
-            "phase calibration: f={target_hz:.4} Hz, measured={:.5}, expected={expected_phase:.5}, err={error:.5} rad",
-            mode.phase
+            "phase calibration: f={target_hz:.4} Hz, phase_err={phase_error_rad:.5} rad, timing_err={timing_error_s:.6} s",
         );
 
         assert!(
-            error < 0.45,
-            "causal filter phase was not correctly calibrated at {target_hz} Hz: error={error} rad"
+            timing_error_s < MAX_TIMING_ERROR_S,
+            "causal filter phase was not correctly calibrated at {target_hz} Hz: \
+             phase_error={phase_error_rad} rad, timing_error={timing_error_s} s \
+             (max {MAX_TIMING_ERROR_S} s)",
         );
     }
 }

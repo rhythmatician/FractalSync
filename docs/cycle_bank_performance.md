@@ -4,7 +4,10 @@ The CycleBank runs once per authoritative analysis hop: 1024 canonical samples
 at 48 kHz, i.e. one observation every **21.33 ms** (~46.875 Hz). The v1 bank is
 a causal constant-Q analytic filter bank (`ANALYTIC_STAGES = 2` one-pole
 baseband sections per scale) plus ridge tracking — a cheap recursive streaming
-update with no per-tick heap churn in the hot path.
+update whose per-tick work is dominated by the constant-Q transform itself
+(see the table below; ridge collection, association, and relation diagnostics
+allocate small bounded scratch `Vec`s per hop, which is unmeasurable against
+the real-time budget and has not been pooled).
 
 ## Measured cost (release build, this machine)
 
@@ -32,8 +35,11 @@ hop interval for feature extraction, inference, rendering, and the OS.
 - The grid spans `f_min_hz..f_max_hz` (default 0.0625..8 Hz, 7 octaves), so
   scale count is `~7 × scales_per_octave + 1`.
 - State is O(scales × channels) complex coefficients plus O(max_modes)
-  trackers — a few KB; no per-tick allocation growth (histories are bounded
-  ring buffers).
+  trackers — a few KB. Per-hop histories are bounded ring buffers
+  (`MODE_HISTORY_LEN = 32`), so the long-lived state does not grow with
+  song length; small scratch `Vec`s are recreated each hop inside the
+  ridge/association/relation pipeline and were not measured as a
+  performance problem at ~40 µs/hop, so they are not pooled today.
 
 ## Note
 

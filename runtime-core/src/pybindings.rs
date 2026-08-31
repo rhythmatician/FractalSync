@@ -971,6 +971,11 @@ fn cycle_relation_to_pydict(
 /// Rebuild the canonical `CycleBankConfig`, applying any overrides from a
 /// Python dict. Unknown keys are rejected loudly so a typo cannot silently
 /// fall back to a default (the same strictness the ONNX metadata uses).
+///
+/// The conversion goes through `serde_json::Value` so the rules live in
+/// exactly one place: `CycleBankConfig`'s `#[serde(deny_unknown_fields)]`
+/// derive. Adding a new field to the struct now updates the wire shape for
+/// every binding layer automatically — no per-key maintenance here.
 fn cycle_bank_config_from_dict(
     overrides: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
 ) -> PyResult<crate::cycle_bank::CycleBankConfig> {
@@ -978,47 +983,104 @@ fn cycle_bank_config_from_dict(
     let Some(dict) = overrides else {
         return Ok(cfg);
     };
-    for (key, value) in dict.iter() {
-        let key: String = key.extract()?;
-        match key.as_str() {
-            "f_min_hz" => cfg.f_min_hz = value.extract()?,
-            "f_max_hz" => cfg.f_max_hz = value.extract()?,
-            "q_cycles" => cfg.q_cycles = value.extract()?,
-            "scales_per_octave" => cfg.scales_per_octave = value.extract()?,
-            "weak_threshold" => cfg.weak_threshold = value.extract()?,
-            "max_modes" => cfg.max_modes = value.extract()?,
-            "association_log_freq_tolerance" => {
-                cfg.association_log_freq_tolerance = value.extract()?
-            }
-            "association_phase_tolerance_rad" => {
-                cfg.association_phase_tolerance_rad = value.extract()?
-            }
-            "phase_correction_gain" => cfg.phase_correction_gain = value.extract()?,
-            "frequency_smoothing" => cfg.frequency_smoothing = value.extract()?,
-            "strength_smoothing" => cfg.strength_smoothing = value.extract()?,
-            "slope_smoothing" => cfg.slope_smoothing = value.extract()?,
-            "birth_persistence" => cfg.birth_persistence = value.extract()?,
-            "free_run_max_observations" => {
-                cfg.free_run_max_observations = value.extract()?
-            }
-            "death_persistence" => cfg.death_persistence = value.extract()?,
-            "missing_strength_decay" => cfg.missing_strength_decay = value.extract()?,
-            "merge_log_freq_tolerance" => cfg.merge_log_freq_tolerance = value.extract()?,
-            "merge_phase_tolerance_rad" => {
-                cfg.merge_phase_tolerance_rad = value.extract()?
-            }
-            "max_numer" => cfg.max_numer = value.extract()?,
-            "max_denom" => cfg.max_denom = value.extract()?,
-            "rational_ratio_tolerance" => cfg.rational_ratio_tolerance = value.extract()?,
-            "relation_history_len" => cfg.relation_history_len = value.extract()?,
-            other => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "unknown CycleBankConfig key: {other}"
-                )))
+    let value: serde_json::Value = python_dict_to_json_value(dict)?;
+    // Start from the serde default (matches `Default::default()` because
+    // `Default` is implemented and `serde_json::from_value` accepts a
+    // partial by default). Apply the user overrides on top.
+    let mut merged = serde_json::to_value(&cfg).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "could not serialize CycleBankConfig defaults: {e}"
+        ))
+    })?;
+    if let serde_json::Value::Object(ref mut map) = merged {
+        if let serde_json::Value::Object(overrides_map) = value {
+            for (k, v) in overrides_map {
+                map.insert(k, v);
             }
         }
+    } else {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "CycleBankConfig did not serialize to a JSON object".into(),
+        ));
     }
-    Ok(cfg)
+    serde_json::from_value(merged).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "invalid CycleBankConfig: {e}"
+        ))
+    })
+}
+
+/// Convert a flat Python dict whose values are JSON-compatible scalars
+/// (`int` / `float` / `str` / `bool` / nested `dict` / nested `list`) into a
+/// `serde_json::Value`. This is a deliberately small helper: the cycle-bank
+/// config only contains primitives.
+fn python_dict_to_json_value(
+    dict: &pyo3::Bound<'_, pyo3::types::PyDict>,
+) -> PyResult<serde_json::Value> {
+    use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString};
+    let mut map = serde_json::Map::new();
+    for (key, value) in dict.iter() {
+        let key_str: String = key.extract()?;
+        let v = if value.is_instance_of::<PyBool>() {
+            serde_json::Value::Bool(value.extract::<bool>()?)
+        } else if value.is_instance_of::<PyInt>() {
+            // PyO3 extracts the int directly; serde_json will accept it as u64/i64.
+            let n: i64 = value.extract()?;
+            serde_json::Value::Number(serde_json::Number::from(n))
+        } else if value.is_instance_of::<PyFloat>() {
+            let n: f64 = value.extract()?;
+            serde_json::Value::Number(
+                serde_json::Number::from_f64(n).ok_or_else(|| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "CycleBankConfig key {key_str}: non-finite float"
+                    ))
+                })?,
+            )
+        } else if value.is_instance_of::<PyString>() {
+            serde_json::Value::String(value.extract()?)
+        } else if value.is_instance_of::<PyDict>() {
+            let bound = value.downcast::<PyDict>()?;
+            python_dict_to_json_value(bound)?
+        } else if value.is_instance_of::<PyList>() {
+            let list = value.downcast::<PyList>()?;
+            let mut out = Vec::with_capacity(list.len());
+            for item in list.iter() {
+                if item.is_instance_of::<PyDict>() {
+                    let bound = item.downcast::<PyDict>()?;
+                    out.push(python_dict_to_json_value(bound)?);
+                } else if item.is_instance_of::<PyInt>() {
+                    let n: i64 = item.extract()?;
+                    out.push(serde_json::Value::Number(serde_json::Number::from(n)));
+                } else if item.is_instance_of::<PyFloat>() {
+                    let n: f64 = item.extract()?;
+                    out.push(serde_json::Value::Number(
+                        serde_json::Number::from_f64(n).ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err(
+                                "non-finite float in list".into(),
+                            )
+                        })?,
+                    ));
+                } else if item.is_instance_of::<PyBool>() {
+                    out.push(serde_json::Value::Bool(item.extract::<bool>()?));
+                } else if item.is_instance_of::<PyString>() {
+                    out.push(serde_json::Value::String(item.extract()?));
+                } else {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                        "unsupported CycleBankConfig value type for key {key_str}"
+                    )));
+                }
+            }
+            serde_json::Value::Array(out)
+        } else if value.is_none() {
+            serde_json::Value::Null
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(format!(
+                "unsupported CycleBankConfig value type for key {key_str}"
+            )));
+        };
+        map.insert(key_str, v);
+    }
+    Ok(serde_json::Value::Object(map))
 }
 
 /// Reconstruct a `crate::timebase::AnalysisTick` from the camelCase dict the

@@ -136,24 +136,21 @@ impl std::error::Error for TimebaseError {}
 // and never compute window offsets themselves.
 // ---------------------------------------------------------------------------
 
-/// Number of low-level features per STFT frame in the transitional
-/// `FeatureExtractor` window (centroid, flux, rms, zcr, onset, rolloff).
-/// Mirrors `FeatureExtractor::num_features_per_frame` for the default
-/// (no-delta) configuration used by the analysis timebase.
-pub const BASE_FEATURES_PER_FRAME: usize = 6;
-
 /// The causal per-hop rhythmic evidence channels the CycleBank consumes,
 /// expressed as indices into one feature frame, newest frame last.
 ///
 /// These are existing canonical Rust features — no new feature extractor is
-/// introduced.  The selection is semantic and owned here:
-///   - "onset":  onset envelope (spectral-flux proxy) — primary attack clock;
-///   - "flux":   spectral flux — broadband spectral change;
-///   - "energy": RMS energy — slower loudness cycle support.
-pub const CYCLE_OBSERVATION_CHANNELS: [(&str, usize); 3] = [
-    ("onset", 4),
-    ("flux", 1),
-    ("energy", 2),
+/// introduced.  The selection is semantic and owned here, and the per-frame
+/// indices come from `crate::features::BaseFeature` so this list cannot
+/// silently drift if the feature-extractor layout is reordered:
+///
+///   - `BaseFeature::OnsetEnvelope`  — primary attack clock;
+///   - `BaseFeature::Flux`           — broadband spectral change;
+///   - `BaseFeature::RmsEnergy`      — slower loudness cycle support.
+pub const CYCLE_OBSERVATION_CHANNELS: [crate::features::BaseFeature; 3] = [
+    crate::features::BaseFeature::OnsetEnvelope,
+    crate::features::BaseFeature::Flux,
+    crate::features::BaseFeature::RmsEnergy,
 ];
 
 /// Build the single canonical `CycleObservation` for one `AnalysisTick`.
@@ -166,6 +163,7 @@ pub fn cycle_observation_from_tick(
     tick: &AnalysisTick,
 ) -> Option<crate::cycle_bank::CycleObservation> {
     use crate::cycle_bank::{CycleEvidenceChannel, CycleObservation};
+    use crate::features::BASE_FEATURES_PER_FRAME;
 
     let frames = tick.features.len() / BASE_FEATURES_PER_FRAME;
     if frames == 0 || tick.features.len() % BASE_FEATURES_PER_FRAME != 0 {
@@ -177,7 +175,7 @@ pub fn cycle_observation_from_tick(
 
     let channels = CYCLE_OBSERVATION_CHANNELS
         .iter()
-        .map(|(name, idx)| CycleEvidenceChannel::new(*name, frame[*idx]))
+        .map(|bf| CycleEvidenceChannel::new(bf.name(), frame[bf.index()]))
         .collect();
 
     Some(CycleObservation {

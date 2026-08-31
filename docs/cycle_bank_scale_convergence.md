@@ -32,7 +32,8 @@ Max relative frequency error and max calibrated phase error across targets:
 ## Reading
 
 - **Frequency recovery converges by 6 scales/octave.** 6, 12, and 24
-  scales/octave recover the same continuous frequency to within 0.3% relative
+  scales/octave all recover the same continuous frequency to within the test's
+  2% relative envelope, and the table shows 6/12/24 to within 0.3% relative
   (and the 0.6231 Hz target to ~1.7e-3 Hz). The continuous instantaneous-
   frequency estimator, not the grid, carries the frequency resolution.
 
@@ -59,5 +60,7 @@ Max relative frequency error and max calibrated phase error across targets:
 
 The deterministic `scale_resolution_converges_without_turning_scales_into_
 musical_buckets` test in `runtime-core/tests/test_cycle_bank.rs` enforces the
-convergence property (relative-frequency convergence across 6/12/24/48) so the
-claim cannot silently regress.
+convergence property across **every** measured density in the {6, 12, 24, 48}
+sweep (each `spo` must recover within 2% relative of the target) and additionally
+asserts `f06 ≈ f48`, `f12 ≈ f48`, and `f24 ≈ f48` against the dense reference,
+so the "6 already converges" claim cannot silently regress.

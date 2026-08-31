@@ -43,7 +43,13 @@ import runtime_core  # noqa: E402
 TWO_PI = 2.0 * math.pi
 DT = runtime_core.HOP_LENGTH / runtime_core.SAMPLE_RATE
 AUDIO_DIR = REPO_ROOT / "backend" / "data" / "audio"
-SONGS = ["Eulogy.mp3", "RightInTwo.mp3", "Stinkfist.mp3", "TheGrudge.mp3", "ThirdEye.mp3"]
+SONGS = [
+    "Eulogy.mp3",
+    "RightInTwo.mp3",
+    "Stinkfist.mp3",
+    "TheGrudge.mp3",
+    "ThirdEye.mp3",
+]
 
 
 @dataclass
@@ -134,8 +140,24 @@ def analyze_song(
     relations_seen: set[tuple[int, int, int, int]] = set()
     relation_stable: dict[tuple[int, int, int, int], list[float]] = {}
     first_mode_time: float | None = None
+    # The CycleBank resets `next_id` on `streamEpoch` change (see
+    # `runtime_core::cycle_bank::CycleBank::reset_internal`). Stable mode
+    # identity is therefore **per epoch**: if the input ticks cross an epoch
+    # boundary, the same `id` would otherwise be reused for a different
+    # physical mode and our Python series dict would silently merge them.
+    last_epoch: int | None = None
 
     for tick in ticks:
+        epoch = int(tick.get("streamEpoch", 0))
+        if last_epoch is not None and epoch != last_epoch:
+            # New epoch: the bank has been reset by the Rust side; we must
+            # also drop the local per-id series and relation history because
+            # any id from this point on is a brand-new mode identity.
+            series = {}
+            relation_stable = {}
+            relations_seen = set()
+        last_epoch = epoch
+
         modes = bank.observe_tick(tick)
         t = tick["timeSeconds"]
         if modes and first_mode_time is None:
@@ -202,7 +224,9 @@ def analyze_song(
                     round(float(np.min(candidate.frequency)), 4),
                     round(float(np.max(candidate.frequency)), 4),
                 ],
-                "median_period_s": round(1.0 / float(np.median(candidate.frequency)), 4),
+                "median_period_s": round(
+                    1.0 / float(np.median(candidate.frequency)), 4
+                ),
                 "median_strength": round(float(np.median(candidate.strength)), 4),
                 "median_confidence": round(float(np.median(candidate.confidence)), 4),
                 "observation_fraction": round(
@@ -222,7 +246,9 @@ def main() -> int:
         "--out-dir",
         default=str(REPO_ROOT / "backend" / "logs" / "cycle_bank_diagnostics"),
     )
-    parser.add_argument("--songs", nargs="*", default=None, help="subset of song filenames")
+    parser.add_argument(
+        "--songs", nargs="*", default=None, help="subset of song filenames"
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)

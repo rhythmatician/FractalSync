@@ -129,7 +129,9 @@ def test_cycle_bank_tick_seam_round_trip():
 
 
 def test_cycle_bank_epoch_reset_clears_modes():
-    bank = runtime_core.CycleBank({"f_min_hz": 0.5, "f_max_hz": 4.0, "birth_persistence": 2})
+    bank = runtime_core.CycleBank(
+        {"f_min_hz": 0.5, "f_max_hz": 4.0, "birth_persistence": 2}
+    )
     _feed_sinusoid(bank, 2.0, seconds=10.0)
     assert bank.num_modes() > 0
 
