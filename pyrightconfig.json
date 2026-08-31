@@ -12,6 +12,13 @@
             ]
         },
         {
+            "root": "backend/tests",
+            "extraPaths": [
+                "scripts",
+                "backend"
+            ]
+        },
+        {
             "root": "scripts",
             "extraPaths": [
                 "backend"
