@@ -540,8 +540,19 @@ def _descriptor_is_settable(cls: type, name: str, descriptor: Any) -> bool:
 
 def _render_class(cls_name: str, cls: type) -> str:
     lines = [f"class {cls_name}:", ""]
-    method_types = CLASS_METHOD_TYPES.get(cls_name, {})
-    attr_types = ATTR_TYPES.get(cls_name, {})
+    # Prefer Rust-authored schema if the pyclass exposes `__fields__` /
+    # `__methods__` (the single-source-of-truth contract that prevents
+    # adding a CycleMode field from silently desyncing seven files).
+    # The hand-maintained tables remain a fallback for older classes that
+    # have not yet been migrated.
+    rust_attr_types: dict | None = getattr(cls, "__fields__", None)
+    if callable(rust_attr_types):
+        rust_attr_types = rust_attr_types()
+    rust_method_types: dict | None = getattr(cls, "__methods__", None)
+    if callable(rust_method_types):
+        rust_method_types = rust_method_types()
+    method_types: dict = rust_method_types or CLASS_METHOD_TYPES.get(cls_name, {})
+    attr_types: dict = rust_attr_types or ATTR_TYPES.get(cls_name, {})
 
     # Constructor from __text_signature__ (PyO3 exposes it on the class).
     init_ann = method_types.get("__init__")

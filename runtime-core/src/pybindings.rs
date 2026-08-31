@@ -867,6 +867,55 @@ impl From<crate::cycle_bank::CycleMode> for CycleMode {
 
 #[pymethods]
 impl CycleMode {
+    /// Canonical attribute schema for the `CycleMode` pyclass.
+    ///
+    /// Single Rust-owned source of truth that the Python stub generator
+    /// (`scripts/generate_runtime_core_stubs.py`) reads instead of a
+    /// hand-maintained `ATTR_TYPES["CycleMode"]` dict. Adding a new field to
+    /// the Rust struct now updates the .pyi in lockstep — no scattered
+    /// maintenance across the seven sites the issue #92 review flagged.
+    ///
+    /// Returns a dict `{attr_name: python_type_annotation}`.
+    #[staticmethod]
+    fn __fields__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        use pyo3::types::PyDict;
+        let d = PyDict::new_bound(py);
+        d.set_item("id", "int")?;
+        d.set_item("frequency_hz", "float")?;
+        d.set_item("phase", "float")?;
+        d.set_item("strength", "float")?;
+        d.set_item("confidence", "float")?;
+        d.set_item("channel_support", "float")?;
+        d.set_item("age", "int")?;
+        d.set_item("missing_observations", "int")?;
+        d.set_item("frequency_slope", "float")?;
+        d.set_item("frequency_uncertainty", "float")?;
+        Ok(d)
+    }
+
+    /// Canonical method/function schema for the `CycleMode` pyclass.
+    /// Mirrors `__fields__` but for callable members; returns
+    /// `{method_name: {param_name: annotation, "__return__": annotation}}`.
+    #[staticmethod]
+    fn __methods__<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        use pyo3::types::PyDict;
+        let d = PyDict::new_bound(py);
+        let phase_at = PyDict::new_bound(py);
+        phase_at.set_item("delta_seconds", "float")?;
+        phase_at.set_item("__return__", "float")?;
+        d.set_item("phase_at", phase_at)?;
+
+        let time_to_next = PyDict::new_bound(py);
+        time_to_next.set_item("reference_phase", "float")?;
+        time_to_next.set_item("__return__", "Optional[float]")?;
+        d.set_item("time_to_next", time_to_next)?;
+
+        let to_dict = PyDict::new_bound(py);
+        to_dict.set_item("__return__", "dict")?;
+        d.set_item("to_dict", to_dict)?;
+        Ok(d)
+    }
+
     #[getter]
     fn id(&self) -> u64 {
         self.inner.id
