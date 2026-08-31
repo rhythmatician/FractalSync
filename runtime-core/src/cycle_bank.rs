@@ -177,9 +177,11 @@ impl Default for CycleBankConfig {
             f_min_hz: 0.0625,
             f_max_hz: 8.0,
             q_cycles: 4.0,
-            // Provisional engineering default.  The repository's convergence
-            // tests, not this comment, are the authority for whether this is
-            // sufficient in the final #92 implementation.
+            // Numerical convergence choice, not a musical constant.  Measured
+            // (docs/cycle_bank_scale_convergence.md): continuous frequency
+            // recovery converges by 6 scales/octave (~0.3% rel err); 12 keeps
+            // comfortable margin at negligible cost.  Enforced by the
+            // scale-resolution convergence test.
             scales_per_octave: 12,
             weak_threshold: 1.0e-4,
             max_modes: 8,
