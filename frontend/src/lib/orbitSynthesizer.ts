@@ -79,7 +79,14 @@ interface WasmModule {
     default_orbit_seed: number;
     controller_version?: string;
     feature_version?: string;
+    analysis_pipeline_version?: string;
+    sample_rate?: number;
+    hop_length?: number;
+    n_fft?: number;
+    window_frames?: number;
   };
+  /** Canonical sample-clock timebase (issue #91), constructed per stream. */
+  AnalysisTimebase?: new () => import('./analysisTimebase').WasmAnalysisTimebase;
   OrbitState: new (
     lobe: number,
     subLobe: number,
@@ -198,6 +205,50 @@ export function getFeatureVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * The runtime's analysis-pipeline contract version (from the Rust constant
+ * via wasm constants). Versions HOW audio reaches the extractor (resampling
+ * ownership, hop scheduling, epoch semantics) — distinct from the feature
+ * FORMULA version. Returns 'unknown' if the wasm build predates the field.
+ */
+export function getAnalysisPipelineVersion(): string {
+  if (!wasm) return 'unknown';
+  try {
+    return wasm.constants().analysis_pipeline_version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * The wasm module's raw constants (runtime-core authority for SAMPLE_RATE,
+ * HOP_LENGTH, N_FFT, WINDOW_FRAMES). Returns null before initOrbitSynth().
+ * Consumers must handle null — there is no TypeScript fallback authority.
+ */
+export function getWasmConstants(): ReturnType<WasmModule['constants']> | null {
+  if (!wasm) return null;
+  try {
+    return wasm.constants();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Construct a fresh Rust `AnalysisTimebase` (issue #91) from the wasm
+ * module. Throws if the wasm build predates the timebase binding — there is
+ * no JS fallback, so the canonical clock cannot silently drift.
+ */
+export function createAnalysisTimebase(): import('./analysisTimebase').WasmAnalysisTimebase {
+  const m = requireWasm();
+  if (typeof m.AnalysisTimebase !== 'function') {
+    throw new Error(
+      '[orbitSynthesizer] wasm build has no AnalysisTimebase binding; rebuild wasm-orbit'
+    );
+  }
+  return new m.AnalysisTimebase();
 }
 
 /**

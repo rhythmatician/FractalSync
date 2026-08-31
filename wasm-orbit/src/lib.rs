@@ -24,6 +24,11 @@ use runtime_core::controller::{
 };
 use runtime_core::features::{FEATURE_VERSION, NORM_EPS};
 use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
+use runtime_core::timebase::{
+    AnalysisTimebase as RustAnalysisTimebase,
+    ResetReason as RustResetReason,
+    ANALYSIS_PIPELINE_VERSION,
+};
 
 /// Shared constants exposed to JavaScript
 #[wasm_bindgen]
@@ -41,6 +46,7 @@ pub fn constants() -> JsValue {
         default_orbit_seed: u64,
         controller_version: String,
         feature_version: String,
+        analysis_pipeline_version: String,
         norm_eps: f64,
     }
 
@@ -55,6 +61,7 @@ pub fn constants() -> JsValue {
         default_base_omega: DEFAULT_BASE_OMEGA,
         controller_version: CONTROLLER_VERSION.to_string(),
         feature_version: FEATURE_VERSION.to_string(),
+        analysis_pipeline_version: ANALYSIS_PIPELINE_VERSION.to_string(),
         norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };
@@ -108,6 +115,185 @@ impl FeatureExtractor {
 }
 
 impl Default for FeatureExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Authoritative sample-clock audio timebase (issue #91).
+///
+/// The browser's AudioWorklet transport feeds non-overlapping PCM blocks
+/// here; the Rust timebase validates monotonicity, resamples statefully to
+/// the canonical 48 kHz timeline, schedules exact 1024-sample hops, and runs
+/// the canonical FeatureExtractor — all in Rust, so there is no TypeScript
+/// mirror of the timing/scheduling math (ADR 0001).
+#[wasm_bindgen]
+pub struct AnalysisTimebase {
+    inner: RustAnalysisTimebase,
+}
+
+// ---------------------------------------------------------------------------
+// TypeScript shape of the canonical analysis-tick and timebase-diagnostics
+// records. Emitted as a custom section so wasm-pack includes them verbatim
+// in the generated ``orbit_synth_wasm.d.ts``. Frontend consumers import
+// ``AnalysisTick`` and ``TimebaseDiagnostics`` from ``orbit-synth-wasm`` and
+// do NOT redeclare them — Rust is the single source of truth for the wire
+// format (ADR 0001, issue #93 strict-version review).
+//
+// Field names match the camelCase wire format produced by
+// ``#[serde(rename_all = "camelCase")]` on the Rust structs that
+// ``ingest``/``flush``/``diagnostics`` serialize. Python mirrors the same
+// keys (see ``runtime_core::pybindings::tick_to_pydict``) so the trainer
+// and the browser see an identical record shape — cross-surface parity.
+// ---------------------------------------------------------------------------
+#[wasm_bindgen(typescript_custom_section)]
+const TS_TYPES: &'static str = r#"
+/** Canonical analysis tick — the seam CycleBank will consume (issue #91). */
+export interface AnalysisTick {
+    features: number[];
+    sampleIndex: number;
+    timeSeconds: number;
+    dtSeconds: number;
+    streamEpoch: number;
+}
+
+/** Diagnostic snapshot for manual verification of the canonical clock. */
+export interface TimebaseDiagnostics {
+    sourceSampleRate: number;
+    sourceFramesIngested: number;
+    canonicalSampleIndex: number;
+    analysisHopCount: number;
+    timeSeconds: number;
+    streamEpoch: number;
+    detectedGaps: number;
+    detectedOverlaps: number;
+    lastSourceStartFrame: number;
+    lastSourceEndFrame: number;
+}
+"#;
+
+/// A single emitted analysis tick, serialized to JS.
+///
+/// Wire format is **camelCase** to match the generated TypeScript shape
+/// emitted by the ``ts_types`` custom section below. The matching
+/// Python serializer (see ``runtime_core::pybindings::tick_to_pydict``)
+/// uses the same keys so a tick arriving via either binding is keyed
+/// identically across surfaces (cross-surface parity, issue #93).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalysisTickJs {
+    features: Vec<f64>,
+    sample_index: u64,
+    time_seconds: f64,
+    dt_seconds: f64,
+    stream_epoch: u64,
+}
+
+#[wasm_bindgen]
+impl AnalysisTimebase {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> AnalysisTimebase {
+        AnalysisTimebase {
+            inner: RustAnalysisTimebase::new(),
+        }
+    }
+
+    /// Ingest one non-overlapping PCM block. Returns a JS array of ticks
+    /// (possibly empty). Throws on overlap / mid-stream rate change.
+    ///
+    /// Type note: the generated .d.ts types this as `any` because the
+    /// function returns a `JsValue` (it serializes via
+    /// ``serde_wasm_bindgen``). The TS adapter in
+    /// ``frontend/src/lib/analysisTimebase.ts`` re-types this signature
+    /// as ``AnalysisTick[]`` and the ``AnalysisTick`` interface itself
+    /// is provided by the ``TS_TYPES`` custom section above — so the
+    /// Rust source remains the single authority for the wire shape.
+    #[wasm_bindgen]
+    pub fn ingest(
+        &mut self,
+        samples: Vec<f32>,
+        source_sample_rate: usize,
+        source_start_frame: u64,
+    ) -> Result<JsValue, JsValue> {
+        let ticks = self
+            .inner
+            .ingest(&samples, source_sample_rate, source_start_frame)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let js: Vec<AnalysisTickJs> = ticks
+            .into_iter()
+            .map(|t| AnalysisTickJs {
+                features: t.features,
+                sample_index: t.sample_index,
+                time_seconds: t.time_seconds,
+                dt_seconds: t.dt_seconds,
+                stream_epoch: t.stream_epoch,
+            })
+            .collect();
+        serde_wasm_bindgen::to_value(&js).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Flush end-of-stream (recovers the deferred final sample/tick).
+    /// See ``ingest`` for the typing note about the .d.ts return type.
+    #[wasm_bindgen]
+    pub fn flush(&mut self) -> JsValue {
+        let js: Vec<AnalysisTickJs> = self
+            .inner
+            .flush()
+            .into_iter()
+            .map(|t| AnalysisTickJs {
+                features: t.features,
+                sample_index: t.sample_index,
+                time_seconds: t.time_seconds,
+                dt_seconds: t.dt_seconds,
+                stream_epoch: t.stream_epoch,
+            })
+            .collect();
+        serde_wasm_bindgen::to_value(&js).unwrap_or(JsValue::NULL)
+    }
+
+    /// Declare a stream discontinuity. `reason` is informational; the epoch
+    /// always bumps and the schedule resets.
+    #[wasm_bindgen]
+    pub fn reset(&mut self) {
+        self.inner.reset(RustResetReason::SourceReplacement);
+    }
+
+    /// Diagnostic snapshot for verifying the clock manually.
+    /// See ``ingest`` for the typing note about the .d.ts return type.
+    #[wasm_bindgen]
+    pub fn diagnostics(&self) -> JsValue {
+        let d = self.inner.diagnostics();
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Diag {
+            source_sample_rate: usize,
+            source_frames_ingested: u64,
+            canonical_sample_index: u64,
+            analysis_hop_count: u64,
+            time_seconds: f64,
+            stream_epoch: u64,
+            detected_gaps: u64,
+            detected_overlaps: u64,
+            last_source_start_frame: u64,
+            last_source_end_frame: u64,
+        }
+        serde_wasm_bindgen::to_value(&Diag {
+            source_sample_rate: d.source_sample_rate,
+            source_frames_ingested: d.source_frames_ingested,
+            canonical_sample_index: d.canonical_sample_index,
+            analysis_hop_count: d.analysis_hop_count,
+            time_seconds: d.time_seconds,
+            stream_epoch: d.stream_epoch,
+            detected_gaps: d.detected_gaps,
+            detected_overlaps: d.detected_overlaps,
+            last_source_start_frame: d.last_source_start_frame,
+            last_source_end_frame: d.last_source_end_frame,
+        })
+        .unwrap_or(JsValue::NULL)
+    }
+}
+
+impl Default for AnalysisTimebase {
     fn default() -> Self {
         Self::new()
     }

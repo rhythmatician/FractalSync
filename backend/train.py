@@ -97,6 +97,25 @@ def _runtime_feature_version() -> str:
     return "unknown"
 
 
+def _runtime_analysis_pipeline_version() -> str:
+    """Read ANALYSIS_PIPELINE_VERSION from the installed runtime_core.
+
+    Versions HOW audio reaches the extractor (resampling ownership, hop
+    scheduling, epoch semantics) — distinct from FEATURE_VERSION (the
+    formulas). The browser refuses models stamped with a different
+    pipeline, and refuses pre-timebase models with no stamp at all.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "ANALYSIS_PIPELINE_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def main():
     """Main training function."""
     # Configure logging so ControlTrainer messages are visible
@@ -640,6 +659,11 @@ def execute_training_workflow(args):
                 # Feature-extraction contract stamp (ADR 0001): same
                 # mechanism for the audio feature pipeline.
                 "feature_version": _runtime_feature_version(),
+                # Analysis-pipeline contract stamp (issue #93): versions the
+                # ingestion pipeline (Rust resampling, hop scheduling, epoch
+                # semantics). The browser refuses mismatches AND pre-timebase
+                # models with no stamp.
+                "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")

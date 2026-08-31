@@ -378,6 +378,14 @@ pub fn feature_version() -> &'static str {
     crate::features::FEATURE_VERSION
 }
 
+/// Analysis-pipeline contract version (issue #93): versions HOW audio
+/// reaches the extractor (resampling ownership, hop scheduling, epoch
+/// semantics) — distinct from the feature FORMULA version.
+#[wasm_bindgen]
+pub fn analysis_pipeline_version() -> &'static str {
+    crate::timebase::ANALYSIS_PIPELINE_VERSION
+}
+
 /// Pinned normalization epsilon shared by trainer and browser.
 #[wasm_bindgen]
 pub fn norm_eps() -> f64 {

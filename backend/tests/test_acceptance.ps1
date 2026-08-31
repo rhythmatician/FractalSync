@@ -10,6 +10,20 @@ $ErrorActionPreference = "Stop"
 $script:passed = 0
 $script:failed = 0
 
+# Interpreter consistency (multi-interpreter pitfall): this repo may have a
+# base interpreter AND a project .venv, each with its own runtime_core
+# install. Bare `python` resolves from PATH and can pick the WRONG one with
+# a STALE wheel. Prefer the repo .venv explicitly; fall back to PATH python
+# only when no .venv exists.
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
+$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+if (Test-Path $venvPython) {
+    $Python = $venvPython
+} else {
+    $Python = "python"
+    Write-Host "NOTE: no .venv found at $venvPython; using PATH python." -ForegroundColor Yellow
+}
+
 function Test-Step {
     param(
         [string]$Description,
@@ -34,7 +48,7 @@ Write-Host "-" * 70
 Test-Step "Training script runs without hanging" {
     Push-Location backend
     try {
-        $output = & python train.py --epochs 1 --max-files 1 --no-gpu-rendering --num-workers 0 2>&1 | Out-String
+        $output = & $Python train.py --epochs 1 --max-files 1 --no-gpu-rendering --num-workers 0 2>&1 | Out-String
         if ($output -notmatch "Training complete!") {
             throw "Training did not complete successfully"
         }
@@ -77,7 +91,7 @@ Write-Host "-" * 70
 Test-Step "API server starts (testing for 5 seconds)" {
     $job = Start-Job -ScriptBlock {
         Set-Location $using:PWD
-        python backend/api/server.py 2>&1
+        & $using:Python backend/api/server.py 2>&1
     }
     
     Start-Sleep -Seconds 5
@@ -96,7 +110,7 @@ Test-Step "API server starts (testing for 5 seconds)" {
 Test-Step "API responds to status endpoint" {
     $job = Start-Job -ScriptBlock {
         Set-Location $using:PWD
-        python backend/api/server.py 2>&1
+        & $using:Python backend/api/server.py 2>&1
     }
     
     Start-Sleep -Seconds 3
@@ -152,7 +166,7 @@ if ($script:failed -eq 0) {
     Write-Host "✓ All acceptance criteria met!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "  1. Start backend API:  python backend/api/server.py"
+    Write-Host "  1. Start backend API:  & $Python backend/api/server.py"
     Write-Host "  2. Start frontend:     npm --prefix frontend run dev"
     Write-Host "  3. Open browser:       http://localhost:3001"
     Write-Host "  4. Load model from:    backend/checkpoints/model_orbit_control_*.onnx"

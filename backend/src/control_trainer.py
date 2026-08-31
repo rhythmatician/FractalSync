@@ -21,6 +21,7 @@ from .control_model import AudioToControlModel
 from .cspace_proxies import (
     cardioid_mu,
     cardioid_proximity,
+    canonical_hop_dt,
     orbit_controller_momentum_sequence,
     orbit_controller_oracle_sequence,
     shore_proximity,
@@ -1343,6 +1344,7 @@ class ControlTrainer:
                     omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
+                    dt=canonical_hop_dt(),
                     drag=0.90,
                     thrust=thrust_for_c,
                     initial_c=_initial_c,
@@ -1503,6 +1505,7 @@ class ControlTrainer:
                     omega=1.0,
                     band_gates=band_gates,
                     segment_ids=segment_ids,
+                    dt=canonical_hop_dt(),
                     drag=0.90,
                 )
 

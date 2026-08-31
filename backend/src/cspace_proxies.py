@@ -31,6 +31,24 @@ import torch
 GOLDEN_ANGLE = 2.399963229728653
 
 
+def canonical_hop_dt() -> float:
+    """The canonical physics timestep, derived from the deployed contract.
+
+    NEVER restate this as a literal (e.g. ``1.0 / 60.0``). The browser
+    supplies ``AnalysisTick.dtSeconds`` = HOP_LENGTH / SAMPLE_RATE from
+    the Rust timebase; the trainer must advance its mirrors with the same
+    value or it supervises physics the runtime does not run (the #93
+    incident: parity tests advanced both paths at 1/60 while the browser
+    supplied 1024/48000).
+
+    Derived from the installed runtime_core wheel so a constant change in
+    Rust automatically changes the trainer's timestep.
+    """
+    import runtime_core
+
+    return runtime_core.HOP_LENGTH / runtime_core.SAMPLE_RATE
+
+
 def synthesize_c(
     s_target: torch.Tensor,
     alpha: torch.Tensor,
@@ -185,10 +203,16 @@ def player_step_sequence(
     omega_scale: torch.Tensor,
     band_gates: torch.Tensor,
     segment_ids: torch.Tensor,
-    dt: float = 1.0 / 60.0,
+    dt: float,
     c0: tuple[float, float] | None = None,
 ) -> torch.Tensor:
     """Differentiable replay of PlayerState momentum integration.
+
+    ``dt`` is REQUIRED (no default): callers must derive it from the
+    canonical tick contract (``canonical_hop_dt()`` or
+    ``AnalysisTick.dtSeconds``), never restate a literal. A defaulted
+    ``1/60`` here is what let the trainer and browser drift apart while
+    parity stayed green (#93).
 
     Mirrors ``PlayerState::step`` per frame: target = lobe_point_at_angle(
     lobe=1, 0, alpha*2π, s); a = (target − c)·ω·2·dt + gate jitter;
@@ -280,9 +304,12 @@ def orbit_controller_sequence(
     omega: float,
     band_gates: torch.Tensor,
     segment_ids: torch.Tensor,
-    dt: float = 1.0 / 60.0,
+    dt: float,
 ) -> torch.Tensor:
     """Differentiable replay of OrbitController::step (May baseline).
+
+    ``dt`` is REQUIRED (no default): derive it from the canonical tick
+    contract (``canonical_hop_dt()``), never restate a literal.
 
     This is THE training-time mirror of the controller the browser executes.
     Per frame: theta += omega*dt; c = mandelbrot_boundary(s, alpha) +
@@ -338,7 +365,7 @@ def orbit_controller_momentum_sequence(
     omega: float,
     band_gates: torch.Tensor,
     segment_ids: torch.Tensor,
-    dt: float = 1.0 / 60.0,
+    dt: float,
     drag: float = 0.90,
     thrust: float | torch.Tensor = 0.0,
     initial_c: torch.Tensor | None = None,
@@ -523,7 +550,7 @@ def orbit_controller_oracle_sequence(
     omega: float,
     band_gates: torch.Tensor,
     segment_ids: torch.Tensor,
-    dt: float = 1.0 / 60.0,
+    dt: float,
     drag: float = 0.90,
     thrust: float | torch.Tensor = 0.0,
     initial_c: torch.Tensor | None = None,
@@ -551,8 +578,10 @@ def orbit_controller_oracle_sequence(
     ``level`` (mip level for the contour step), and ``d_star`` (target
     shore-proximity for the servo).
     """
-    import runtime_core
-
+    # Note: ``runtime_core`` is imported lazily inside
+    # ``_ContourStep.forward`` (line ~746) where the actual binding is
+    # used. Importing here would be a no-op binding lookup that ruff
+    # flags as F401.
     n = s_target.shape[0]
     device = s_target.device
 
@@ -753,7 +782,9 @@ class _ContourStep(torch.autograd.Function):
         )
 
     @staticmethod
-    def backward(ctx, grad_delta_re: torch.Tensor, grad_delta_im: torch.Tensor):
+    def backward(  # type: ignore[override]
+        ctx, grad_delta_re: torch.Tensor, grad_delta_im: torch.Tensor
+    ):
         # Identity surrogate: gradient of the loss with respect to
         # the new c equals the gradient of the loss with respect to
         # the old c (the contour step is treated as a small constant

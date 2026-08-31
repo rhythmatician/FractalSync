@@ -7,11 +7,15 @@
     "executionEnvironments": [
         {
             "root": "backend",
-            "stubPath": "stubs"
+            "extraPaths": [
+                "backend"
+            ]
         },
         {
             "root": "scripts",
-            "extraPaths": ["backend"]
+            "extraPaths": [
+                "backend"
+            ]
         }
     ]
 }

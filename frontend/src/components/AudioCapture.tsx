@@ -1,29 +1,39 @@
 /**
- * Audio capture component using Web Audio API.
+ * Audio capture component (issue #91).
+ *
+ * Lifecycle/source wiring around the canonical sample-clock timebase. This
+ * component owns no timing math: an analysis-only AudioWorkletNode taps PCM
+ * off the Web Audio sample clock and feeds the Rust `AnalysisTimebase`,
+ * which emits timestamped `AnalysisTick`s on exact 1024-sample canonical
+ * boundaries. Both file playback and microphone input converge on the same
+ * ingestion abstraction.
+ *
+ * The render loop is independent — it only ever reads the latest state.
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { initOrbitSynth } from '../lib/orbitSynthesizer';
-import {
-  WasmAudioFeatureSource,
-  setWasmFeatureExtractor,
-} from '../lib/canonicalFeatures';
+import { initOrbitSynth, createAnalysisTimebase } from '../lib/orbitSynthesizer';
+import { createPcmTap, type PcmTapHandle } from '../lib/audioWorkletTransport';
+import type { AnalysisTick } from '../lib/analysisTimebase';
 
 interface AudioCaptureProps {
-  onFeatures: (features: number[]) => void;
+  onTick: (tick: AnalysisTick) => void;
   enabled: boolean;
   audioFile?: File | null;
 }
 
-export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCaptureProps) {
+export function AudioCapture({ onTick, enabled, audioFile }: AudioCaptureProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const featureSourceRef = useRef<WasmAudioFeatureSource | null>(null);
+  const tapRef = useRef<PcmTapHandle | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const sourceNodeRef = useRef<AudioNode | null>(null);
+  // Keep the latest onTick in a ref so the worklet message handler (bound
+  // once) always calls the current consumer without re-wiring the graph.
+  const onTickRef = useRef(onTick);
+  onTickRef.current = onTick;
 
   useEffect(() => {
     if (enabled && !isCapturing) {
@@ -39,78 +49,54 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
     return () => {
       stopCapture();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, audioFile]);
+
+  /** Shared setup: create context, wasm timebase, and the analysis tap. */
+  const setupTap = async (audioContext: AudioContext): Promise<void> => {
+    await initOrbitSynth();
+    const wasmTimebase = createAnalysisTimebase();
+    const handle = await createPcmTap(audioContext, wasmTimebase, (tick) =>
+      onTickRef.current(tick)
+    );
+    tapRef.current = handle;
+  };
 
   const startFilePlayback = async () => {
     if (!audioFile) return;
 
     try {
-      // Create audio context
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioContextRef.current = audioContext;
 
-      // Create analyser node with proper settings
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.8;
-      analyserRef.current = analyser;
+      await setupTap(audioContext);
+      const tap = tapRef.current!;
 
-      // Create audio element
+      // Audio element for file playback.
       const audio = new Audio();
       audio.loop = true; // Loop for continuous testing
-      audio.crossOrigin = "anonymous"; // Enable CORS for file access
+      audio.crossOrigin = 'anonymous';
       audioElementRef.current = audio;
-      
-      // Load file
+
       const url = URL.createObjectURL(audioFile);
       audio.src = url;
 
-      // Wait for audio to be ready
       await new Promise<void>((resolve, reject) => {
         audio.addEventListener('canplaythrough', () => resolve(), { once: true });
         audio.addEventListener('error', reject, { once: true });
       });
 
-      // Connect audio element to analyser
       const source = audioContext.createMediaElementSource(audio);
-      source.connect(analyser);
-      analyser.connect(audioContext.destination); // Connect to speakers
+      sourceNodeRef.current = source;
+      // Analysis path: source → tap (sample clock). Monitoring path: source →
+      // speakers. The tap does not need to reach destination to observe PCM.
+      source.connect(tap.node);
+      source.connect(audioContext.destination);
 
-      // Create canonical feature source (wasm extractor + PCM history).
-      // Features come from raw PCM fed through the same Rust extractor the
-      // trainer uses — not from AnalyserNode's own FFT pipeline.
-      //
-      // NOTE: import the SAME wasm module instance initOrbitSynth() uses
-      // (/wasm/... from public/, served by wasm-pack). The src/wasm copy is
-      // a stale January build without FeatureExtractor.
-      await initOrbitSynth();
-      const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', window.location.origin).href;
-      const wasmMod = await import(/* @vite-ignore */ wasmUrl);
-      setWasmFeatureExtractor((wasmMod as any).FeatureExtractor ?? null);
-      featureSourceRef.current = new WasmAudioFeatureSource();
-
-      // Start playback
       await audio.play();
 
       setIsCapturing(true);
       setError(null);
-
-      // Start feature extraction loop
-      const extractLoop = () => {
-        if (!featureSourceRef.current) return;
-
-        // Pull raw PCM for this frame and feed the rolling buffer.
-        const pcm = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(pcm);
-        featureSourceRef.current.push(pcm, audioContext.sampleRate);
-
-        const features = featureSourceRef.current.extractWindow(10);
-        onFeatures(features);
-
-        animationFrameRef.current = requestAnimationFrame(extractLoop);
-      };
-
-      extractLoop();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load audio file';
       setError(errorMessage);
@@ -120,51 +106,22 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
 
   const startCapture = async () => {
     try {
-      // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Create audio context
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioContextRef.current = audioContext;
 
-      // Create analyser node
-      const analyser = audioContext.createAnalyser();
-      analyserRef.current = analyser;
+      await setupTap(audioContext);
+      const tap = tapRef.current!;
 
-      // Connect microphone to analyser
       const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      // Create canonical feature source (wasm extractor + PCM history).
-      // Features come from raw PCM fed through the same Rust extractor the
-      // trainer uses — not from AnalyserNode's own FFT pipeline.
-      // Same wasm instance as initOrbitSynth() — see note in startFilePlayback.
-      await initOrbitSynth();
-      const wasmUrl = new URL('/wasm/orbit_synth_wasm.js', window.location.origin).href;
-      const wasmMod = await import(/* @vite-ignore */ wasmUrl);
-      setWasmFeatureExtractor((wasmMod as any).FeatureExtractor ?? null);
-      featureSourceRef.current = new WasmAudioFeatureSource();
+      sourceNodeRef.current = source;
+      // Microphone analysis must NOT route to the speakers (no feedback).
+      source.connect(tap.node);
 
       setIsCapturing(true);
       setError(null);
-
-      // Start feature extraction loop
-      const extractLoop = () => {
-        if (!featureSourceRef.current) return;
-
-        // Pull raw PCM for this frame and feed the rolling buffer.
-        const pcm = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(pcm);
-        featureSourceRef.current.push(pcm, audioContext.sampleRate);
-
-        const features = featureSourceRef.current.extractWindow(10);
-        onFeatures(features);
-
-        animationFrameRef.current = requestAnimationFrame(extractLoop);
-      };
-
-      extractLoop();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to access microphone';
       setError(errorMessage);
@@ -173,33 +130,43 @@ export function AudioCapture({ onFeatures, enabled, audioFile }: AudioCapturePro
   };
 
   const stopCapture = () => {
-    // Stop animation frame
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+    // Declare the discontinuity so the next start is a new stream epoch.
+    if (tapRef.current) {
+      try {
+        tapRef.current.timebase.reset();
+        tapRef.current.timebase.dispose();
+      } catch {
+        /* already freed */
+      }
+      tapRef.current.node.disconnect();
+      tapRef.current = null;
     }
 
-    // Stop audio element
+    if (sourceNodeRef.current) {
+      try {
+        sourceNodeRef.current.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      sourceNodeRef.current = null;
+    }
+
     if (audioElementRef.current) {
       audioElementRef.current.pause();
       audioElementRef.current.src = '';
       audioElementRef.current = null;
     }
 
-    // Stop audio stream
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
 
-    // Close audio context
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
 
-    analyserRef.current = null;
-    featureSourceRef.current = null;
     setIsCapturing(false);
   };
 

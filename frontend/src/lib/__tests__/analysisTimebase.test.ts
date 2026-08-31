@@ -1,0 +1,140 @@
+/**
+ * Tests for the AnalysisTimebase TypeScript seam (issue #91).
+ *
+ * The deterministic transport/timing/scheduling math lives in Rust and is
+ * proven by runtime-core/tests/test_timebase.rs. These tests only verify the
+ * thin binding wrapper: correct argument marshalling to the wasm instance
+ * and the wire format matches the generated `AnalysisTick` /
+ * `TimebaseDiagnostics` interfaces (which the wasm binding now returns
+ * directly — no TS-side mapping). The wasm instance is mocked so no
+ * browser or wasm binary is needed.
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import {
+  AnalysisTimebase,
+  type WasmAnalysisTimebase,
+} from '../analysisTimebase';
+import { getRuntimeConstants } from '../canonicalFeatures';
+
+/** A mock wasm AnalysisTimebase that records calls and returns canned ticks. */
+function makeMockWasm(overrides: Partial<WasmAnalysisTimebase> = {}): {
+  wasm: WasmAnalysisTimebase;
+  ingest: ReturnType<typeof vi.fn>;
+} {
+  const ingest = vi.fn().mockReturnValue([
+    {
+      features: [1, 2, 3],
+      sampleIndex: 1024,
+      timeSeconds: 1024 / 48000,
+      dtSeconds: 1024 / 48000,
+      streamEpoch: 0,
+    },
+  ]);
+  const wasm: WasmAnalysisTimebase = {
+    ingest,
+    flush: vi.fn().mockReturnValue([]),
+    reset: vi.fn(),
+    diagnostics: vi.fn().mockReturnValue({
+      sourceSampleRate: 48000,
+      sourceFramesIngested: 2048,
+      canonicalSampleIndex: 2048,
+      analysisHopCount: 2,
+      timeSeconds: 2048 / 48000,
+      streamEpoch: 1,
+      detectedGaps: 0,
+      detectedOverlaps: 0,
+      lastSourceStartFrame: 1024,
+      lastSourceEndFrame: 2048,
+    }),
+    free: vi.fn(),
+    ...overrides,
+  };
+  return { wasm, ingest };
+}
+
+describe('constants', () => {
+  it('runtime constants come from the injected wasm binding, not TS literals', () => {
+    // The binding constants are injected (mocked here, live from wasm in
+    // production). There is no TypeScript fallback authority: a missing
+    // binding must throw, not silently fall back to a restated literal.
+    const constants = getRuntimeConstants({ sample_rate: 48000, hop_length: 1024 });
+    expect(constants.sampleRate).toBe(48000);
+    expect(constants.hopLength).toBe(1024);
+  });
+
+  it('throws when the wasm binding has not supplied constants', () => {
+    expect(() => getRuntimeConstants({})).toThrow(/no TypeScript fallback/);
+    expect(() => getRuntimeConstants(undefined as never)).toThrow();
+  });
+});
+
+describe('AnalysisTimebase wrapper', () => {
+  it('marshals PCM blocks to the wasm instance with a bigint frame', () => {
+    const { wasm, ingest } = makeMockWasm();
+    const tb = new AnalysisTimebase(wasm);
+    const samples = new Float32Array([0.1, 0.2, 0.3]);
+    tb.ingest({ samples, sourceSampleRate: 44100, sourceStartFrame: 512 });
+
+    expect(ingest).toHaveBeenCalledTimes(1);
+    const [argSamples, argRate, argFrame] = ingest.mock.calls[0];
+    expect(argSamples).toBe(samples);
+    expect(argRate).toBe(44100);
+    expect(typeof argFrame).toBe('bigint');
+    expect(argFrame).toBe(512n);
+  });
+
+  it('forwards camelCase AnalysisTicks unchanged from the wasm instance', () => {
+    // The wasm-orbit binding serializes `AnalysisTick` with camelCase
+    // fields directly (Rust-derived wire format, see
+    // `wasm-orbit/src/lib.rs` `typescript_custom_section`). The TS
+    // adapter must not re-shape the record; it just forwards it.
+    const { wasm } = makeMockWasm();
+    const tb = new AnalysisTimebase(wasm);
+    const ticks = tb.ingest({
+      samples: new Float32Array(1024),
+      sourceSampleRate: 48000,
+      sourceStartFrame: 0,
+    });
+
+    expect(ticks).toHaveLength(1);
+    const t = ticks[0];
+    expect(t.features).toEqual([1, 2, 3]);
+    expect(t.sampleIndex).toBe(1024);
+    expect(t.timeSeconds).toBeCloseTo(1024 / 48000, 12);
+    expect(t.dtSeconds).toBeCloseTo(1024 / 48000, 12);
+    expect(t.streamEpoch).toBe(0);
+  });
+
+  it('returns an empty tick list when the wasm instance emits none', () => {
+    const { wasm, ingest } = makeMockWasm();
+    ingest.mockReturnValue([]);
+    const tb = new AnalysisTimebase(wasm);
+    const ticks = tb.ingest({
+      samples: new Float32Array(128),
+      sourceSampleRate: 48000,
+      sourceStartFrame: 0,
+    });
+    expect(ticks).toEqual([]);
+  });
+
+  it('forwards camelCase TimebaseDiagnostics unchanged', () => {
+    const { wasm } = makeMockWasm();
+    const tb = new AnalysisTimebase(wasm);
+    const d = tb.diagnostics;
+    expect(d.sourceSampleRate).toBe(48000);
+    expect(d.canonicalSampleIndex).toBe(2048);
+    expect(d.analysisHopCount).toBe(2);
+    expect(d.streamEpoch).toBe(1);
+    expect(d.lastSourceEndFrame).toBe(2048);
+  });
+
+  it('delegates reset and dispose to the wasm instance', () => {
+    const { wasm } = makeMockWasm();
+    const tb = new AnalysisTimebase(wasm);
+    tb.reset();
+    tb.dispose();
+    expect(wasm.reset).toHaveBeenCalledTimes(1);
+    expect(wasm.free).toHaveBeenCalledTimes(1);
+  });
+});

@@ -813,6 +813,105 @@ impl FeatureExtractor {
     }
 }
 
+/// Python wrapper for the canonical sample-clock timebase (issue #91).
+///
+/// This is the TRAINING surface of the AnalysisTimebase: the backend must
+/// ingest audio through the same Rust timebase the browser uses (via wasm),
+/// so training and runtime execute the same resampling / hop-scheduling /
+/// epoch pipeline rather than merely containing equivalent components.
+#[pyclass]
+pub struct AnalysisTimebase {
+    inner: crate::timebase::AnalysisTimebase,
+}
+
+/// A single emitted analysis tick, materialized as a Python dict.
+///
+/// Wire format keys are **camelCase** so a tick read by the trainer
+/// (via this binding) is keyed identically to a tick received by the
+/// browser (via the wasm binding's ``AnalysisTick`` interface).
+/// Cross-surface parity contract, issue #93 strict-version review.
+fn tick_to_pydict(py: Python, t: crate::timebase::AnalysisTick) -> PyResult<PyObject> {
+    use pyo3::types::PyDict;
+    let dict = PyDict::new_bound(py);
+    dict.set_item("features", t.features)?;
+    dict.set_item("sampleIndex", t.sample_index)?;
+    dict.set_item("timeSeconds", t.time_seconds)?;
+    dict.set_item("dtSeconds", t.dt_seconds)?;
+    dict.set_item("streamEpoch", t.stream_epoch)?;
+    Ok(dict.into())
+}
+
+#[pymethods]
+impl AnalysisTimebase {
+    #[new]
+    fn py_new() -> Self {
+        Self {
+            inner: crate::timebase::AnalysisTimebase::new(),
+        }
+    }
+
+    /// Ingest one non-overlapping PCM block. Returns a list of tick dicts
+    /// (possibly empty). Raises ValueError on overlap / mid-stream rate
+    /// change (transport bugs, not discontinuities).
+    fn ingest<'py>(
+        &mut self,
+        py: Python<'py>,
+        samples: Vec<f32>,
+        source_sample_rate: usize,
+        source_start_frame: u64,
+    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        let ticks = self
+            .inner
+            .ingest(&samples, source_sample_rate, source_start_frame)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        ticks
+            .into_iter()
+            .map(|t| {
+                tick_to_pydict(py, t)
+                    .map(|obj| obj.into_bound(py))
+            })
+            .collect()
+    }
+
+    /// Flush end-of-stream (recovers the deferred final sample/tick).
+    fn flush<'py>(&mut self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.inner
+            .flush()
+            .into_iter()
+            .map(|t| {
+                tick_to_pydict(py, t)
+                    .map(|obj| obj.into_bound(py))
+            })
+            .collect()
+    }
+
+    /// Declare a stream discontinuity (start/stop/source replacement).
+    /// Bumps the epoch and resets the hop schedule.
+    fn reset(&mut self) {
+        self.inner.reset(crate::timebase::ResetReason::SourceReplacement);
+    }
+
+    /// Diagnostic snapshot as a Python dict.
+    fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+        use pyo3::types::PyDict;
+        let d = self.inner.diagnostics();
+        let dict = PyDict::new_bound(py);
+        // camelCase to match the wasm binding's ``TimebaseDiagnostics``
+        // interface (issue #93 strict-version review).
+        dict.set_item("sourceSampleRate", d.source_sample_rate)?;
+        dict.set_item("sourceFramesIngested", d.source_frames_ingested)?;
+        dict.set_item("canonicalSampleIndex", d.canonical_sample_index)?;
+        dict.set_item("analysisHopCount", d.analysis_hop_count)?;
+        dict.set_item("timeSeconds", d.time_seconds)?;
+        dict.set_item("streamEpoch", d.stream_epoch)?;
+        dict.set_item("detectedGaps", d.detected_gaps)?;
+        dict.set_item("detectedOverlaps", d.detected_overlaps)?;
+        dict.set_item("lastSourceStartFrame", d.last_source_start_frame)?;
+        dict.set_item("lastSourceEndFrame", d.last_source_end_frame)?;
+        Ok(dict.into())
+    }
+}
+
 /// Free function: compute a point on the Mandelbrot lobe in Python.
 #[pyfunction]
 #[pyo3(signature = (lobe, sub_lobe, theta, s))]
@@ -932,6 +1031,14 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Feature-extraction contract (ADR 0001): version + pinned epsilon.
     m.add("FEATURE_VERSION", crate::features::FEATURE_VERSION)?;
     m.add("NORM_EPS", crate::features::NORM_EPS)?;
+    // Analysis-pipeline contract (issue #93): how audio reaches the
+    // extractor (resampling ownership, hop scheduling, epoch semantics).
+    // Distinct from FEATURE_VERSION (the formulas). Stamped into ONNX
+    // metadata; the browser refuses mismatches.
+    m.add(
+        "ANALYSIS_PIPELINE_VERSION",
+        crate::timebase::ANALYSIS_PIPELINE_VERSION,
+    )?;
 
     m.add_class::<ResidualParams>()?;
     m.add_class::<OrbitState>()?;
@@ -939,6 +1046,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<OrbitController>()?;
 
     m.add_class::<FeatureExtractor>()?;
+
+    m.add_class::<AnalysisTimebase>()?;
 
     m.add_class::<RuntimeVisualMetrics>()?;
 

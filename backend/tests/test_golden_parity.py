@@ -72,7 +72,9 @@ class TestMirrorGolden:
             # the phases the Rust generator used — recover them via runtime_core.
             import runtime_core
 
-            phases = runtime_core.residual_phases_for_seed_py(case["seed"], len(case["band_gates"]))
+            phases = runtime_core.residual_phases_for_seed_py(
+                case["seed"], len(case["band_gates"])
+            )
             pt_c = synthesize_c(
                 s_target=torch.tensor([case["s"]]),
                 alpha=torch.tensor([case["alpha"]]),
@@ -102,7 +104,12 @@ class TestOrbitControllerMirrorGolden:
         import runtime_core
         import torch
 
-        from src.cspace_proxies import orbit_controller_sequence
+        from src.cspace_proxies import canonical_hop_dt, orbit_controller_sequence
+
+        # PARITY RULE: derive the timestep from the deployed contract
+        # (HOP_LENGTH / SAMPLE_RATE), never restate a literal. The browser
+        # supplies AnalysisTick.dtSeconds from the Rust timebase.
+        dt = canonical_hop_dt()
 
         rng = np.random.RandomState(0)
         n_steps = 120
@@ -117,7 +124,7 @@ class TestOrbitControllerMirrorGolden:
         rust_re = rust_im = 0.0
         for i in range(n_steps):
             c.apply_controls(float(s_vals[i]), float(a_vals[i]))
-            rust_re, rust_im = c.step(1.0 / 60.0, gates[i].tolist())
+            rust_re, rust_im = c.step(dt, gates[i].tolist())
 
         pt_c = orbit_controller_sequence(
             s_target=s_vals,
@@ -125,6 +132,7 @@ class TestOrbitControllerMirrorGolden:
             omega=1.0,
             band_gates=gates,
             segment_ids=seg,
+            dt=dt,
         )
         err = max(
             abs(rust_re - pt_c[-1].real.item()),
