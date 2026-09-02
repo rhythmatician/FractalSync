@@ -266,6 +266,26 @@ class MockPlayerState {
 export default {
   OrbitController: MockOrbitController,
   PlayerState: MockPlayerState,
+  MotionControls: class MockMotionControls {
+    direction_x: number; direction_y: number; throttle: number; brake: number; grip: number; impulse: number;
+    constructor(dx: number, dy: number, throttle: number, brake: number, grip: number, impulse: number) {
+      this.direction_x = dx; this.direction_y = dy; this.throttle = throttle; this.brake = brake; this.grip = grip; this.impulse = impulse;
+    }
+  },
+  JuliaViewControls: class MockJuliaViewControls {
+    zoom_delta: number; rotation_delta: number; hue_delta: number; chroma_delta: number; lightness_delta: number; accent_delta: number; harmony_shift: number;
+    constructor(z: number, r: number, h: number, c: number, l: number, a: number, hs: number) {
+      this.zoom_delta = z; this.rotation_delta = r; this.hue_delta = h; this.chroma_delta = c; this.lightness_delta = l; this.accent_delta = a; this.harmony_shift = hs;
+    }
+  },
+  JuliaViewState: class MockJuliaViewState {
+    zoom = 1.0; rotation = 0.0; harmony_cooldown = 0; harmony_armed = true;
+    color = { anchor_hue: 0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 };
+    apply_controls(_c: unknown) {}
+  },
+  ControlsV2: class MockControlsV2 {
+    constructor(public motion: unknown, public view: unknown) {}
+  },
   constants() {
     return {
       sample_rate: 48000,
@@ -277,6 +297,10 @@ export default {
       default_residual_omega_scale: 2.0,
       default_base_omega: 1.0,
       default_orbit_seed: 1337,
+      controller_version: 'orbit-controller/4',
+      feature_version: 'features/2',
+      analysis_pipeline_version: 'analysis-pipeline/1',
+      controls_version: 'controls/2',
     };
   },
 };
