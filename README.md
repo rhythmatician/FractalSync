@@ -50,28 +50,13 @@ npm run dev
 
 ## Training
 
-### Standard Model Training
-
-To train a new model:
-
-1. Place audio files in `backend/data/audio/` (or specify path)
-2. Start training via the UI or command line:
-```bash
-cd backend
-python train.py --data-dir data/audio --epochs 100
-```
-
-The trained model will be exported to ONNX format and can be used by the frontend.
-
-**Note:** Training automatically uses velocity-based smoothing for natural, physics-inspired parameter transitions.
-
-### Physics-Based Model Training (NEW)
+### Physics-Based Model Training
 
 To train with physics-based velocity prediction and curriculum learning:
 
 ```bash
 cd backend
-python train_physics.py --data-dir data/audio --epochs 100 --use-curriculum
+python train.py --data-dir data/audio --epochs 100 --use-curriculum
 ```
 
 **Physics Model Features:**
