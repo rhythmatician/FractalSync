@@ -487,11 +487,15 @@ CLASS_ORDER = [
     "CycleBank",
     "ResidualParams",
     "OrbitState",
-    "PlayerState",
     "OrbitController",
     "RuntimeVisualMetrics",
     "ManifoldConfig",
     "EnergyInfo",
+    "MotionControls",
+    "JuliaViewControls",
+    "ControlsV2",
+    "ColorIntent",
+    "JuliaViewState",
 ]
 
 # Functions to document, in stable order.
@@ -504,6 +508,8 @@ FUNCTION_ORDER = [
     "install_pyramid_py",
     "clear_pyramid_py",
     "player_observation_py",
+    "controls_integrate_step",
+    "motion_drive_covector",
     "minimap_slope_py",
     "minimap_shore_proximity_batch_py",
     "contour_biased_step_py",

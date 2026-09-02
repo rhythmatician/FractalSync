@@ -159,7 +159,38 @@ def export_to_onnx(
         pass
 
     # Determine parameter names and ranges based on metadata
-    if metadata and metadata.get("model_type") == "orbit_control":
+    if metadata and metadata.get("controls_version") == "controls/2":
+        # Unified Controls v2 (issue #107): Rust is single authority per ADR 0001.
+        # Fail closed if Rust contract is unavailable — no Python fallback copy.
+        import runtime_core  # type: ignore[import-not-found]
+
+        try:
+            parameter_names = list(runtime_core.ControlsV2.model_output_order())  # type: ignore[attr-defined]
+        except AttributeError as exc:
+            raise RuntimeError(
+                "ControlsV2::model_output_order() not available from Rust; "
+                f"failing closed for controls/2: {exc}"
+            ) from exc
+        try:
+            raw_ranges = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
+            parameter_ranges = {k: [float(v[0]), float(v[1])] for k, v in raw_ranges.items()}
+        except AttributeError as exc:
+            raise RuntimeError(
+                "ControlsV2::parameter_ranges() not available from Rust; "
+                f"failing closed for controls/2: {exc}"
+            ) from exc
+        output_dim = len(parameter_names)
+        if metadata and "output_dim" in metadata:
+            # Enforce boxed invariant: model output tensor length must exactly match Rust authority
+            expected = len(parameter_names)
+            actual = int(metadata["output_dim"])
+            if actual != expected:
+                raise ValueError(
+                    f"controls/2 output_dim {actual} != ControlsV2.model_output_order() length {expected} ({parameter_names}); "
+                    "model head and Rust schema must share the frozen 13-channel contract"
+                )
+            output_dim = actual
+    elif metadata and metadata.get("model_type") == "orbit_control":
         # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
         k_bands = metadata.get("k_bands", 6)
         output_dim = metadata.get("output_dim", 3 + k_bands)

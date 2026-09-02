@@ -27,6 +27,15 @@ use crate::controller::{
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
+use crate::controls::{
+    ControlsV2 as RustControlsV2,
+    MotionControls as RustMotionControls,
+    JuliaViewControls as RustJuliaViewControls,
+    JuliaViewState as RustJuliaViewState,
+    ColorIntent as RustColorIntent,
+    Harmony as RustHarmony,
+    CONTROLS_VERSION,
+};
 use crate::manifold::{
     ManifoldConfig as RustManifoldConfig,
     EnergyInfo as RustEnergyInfo,

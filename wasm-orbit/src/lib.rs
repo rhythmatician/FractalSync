@@ -35,6 +35,11 @@ use runtime_core::cycle_bank::{
     CycleEvidenceChannel as RustCycleEvidenceChannel,
     CycleObservation as RustCycleObservation, CYCLE_BANK_VERSION,
 };
+use runtime_core::controls::{
+    ControlsV2 as RustControlsV2, MotionControls as RustMotionControls,
+    JuliaViewControls as RustJuliaViewControls, JuliaViewState as RustJuliaViewState,
+    ColorIntent as RustColorIntent, Harmony as RustHarmony, CONTROLS_VERSION,
+};
 use runtime_core::manifold::{
     ManifoldConfig as RustManifoldConfig,
     signed_distance as rust_signed_distance,
@@ -73,6 +78,7 @@ pub fn constants() -> JsValue {
         feature_version: String,
         analysis_pipeline_version: String,
         cycle_bank_version: String,
+        controls_version: String,
         norm_eps: f64,
     }
 
@@ -89,6 +95,7 @@ pub fn constants() -> JsValue {
         feature_version: FEATURE_VERSION.to_string(),
         analysis_pipeline_version: ANALYSIS_PIPELINE_VERSION.to_string(),
         cycle_bank_version: CYCLE_BANK_VERSION.to_string(),
+        controls_version: CONTROLS_VERSION.to_string(),
         norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };
@@ -1279,4 +1286,364 @@ pub fn manifold_integrate_step(
         info.delta_total,
         info.delta_kinetic,
     ])
+}
+
+// ---------------------------------------------------------------------------
+// Controls v2 (issue #107) — BROWSER surface.
+//
+// The same Rust ControlsV2 the trainer uses via PyO3. This fulfills the
+// binding-symmetry gate (see shared/canonical_surfaces.json) and makes the
+// 13-channel contract reachable from both surfaces via their real public
+// seams (ADR 0001).
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct MotionControls {
+    direction_x: f64,
+    direction_y: f64,
+    throttle: f64,
+    brake: f64,
+    grip: f64,
+    impulse: f64,
+}
+
+#[wasm_bindgen]
+impl MotionControls {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        direction_x: f64,
+        direction_y: f64,
+        throttle: f64,
+        brake: f64,
+        grip: f64,
+        impulse: f64,
+    ) -> MotionControls {
+        MotionControls { direction_x, direction_y, throttle, brake, grip, impulse }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn direction_x(&self) -> f64 { self.direction_x }
+    #[wasm_bindgen(setter)]
+    pub fn set_direction_x(&mut self, v: f64) { self.direction_x = v; }
+    #[wasm_bindgen(getter)]
+    pub fn direction_y(&self) -> f64 { self.direction_y }
+    #[wasm_bindgen(setter)]
+    pub fn set_direction_y(&mut self, v: f64) { self.direction_y = v; }
+    #[wasm_bindgen(getter)]
+    pub fn throttle(&self) -> f64 { self.throttle }
+    #[wasm_bindgen(setter)]
+    pub fn set_throttle(&mut self, v: f64) { self.throttle = v; }
+    #[wasm_bindgen(getter)]
+    pub fn brake(&self) -> f64 { self.brake }
+    #[wasm_bindgen(setter)]
+    pub fn set_brake(&mut self, v: f64) { self.brake = v; }
+    #[wasm_bindgen(getter)]
+    pub fn grip(&self) -> f64 { self.grip }
+    #[wasm_bindgen(setter)]
+    pub fn set_grip(&mut self, v: f64) { self.grip = v; }
+    #[wasm_bindgen(getter)]
+    pub fn impulse(&self) -> f64 { self.impulse }
+    #[wasm_bindgen(setter)]
+    pub fn set_impulse(&mut self, v: f64) { self.impulse = v; }
+
+    pub fn clamped(&self) -> MotionControls {
+        let inner: RustMotionControls = self.clone().into();
+        inner.clamped().into()
+    }
+
+    pub fn drive_magnitude(&self) -> f64 {
+        let inner: RustMotionControls = self.clone().into();
+        inner.drive_magnitude()
+    }
+
+    pub fn friction_beta(&self) -> f64 {
+        let inner: RustMotionControls = self.clone().into();
+        inner.friction_beta()
+    }
+}
+
+impl From<RustMotionControls> for MotionControls {
+    fn from(m: RustMotionControls) -> Self {
+        Self { direction_x: m.direction[0], direction_y: m.direction[1], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }
+    }
+}
+impl From<MotionControls> for RustMotionControls {
+    fn from(m: MotionControls) -> RustMotionControls {
+        RustMotionControls { direction: [m.direction_x, m.direction_y], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }.clamped()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct JuliaViewControls {
+    zoom_delta: f64,
+    rotation_delta: f64,
+    hue_delta: f64,
+    chroma_delta: f64,
+    lightness_delta: f64,
+    accent_delta: f64,
+    harmony_shift: f64,
+}
+
+#[wasm_bindgen]
+impl JuliaViewControls {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        zoom_delta: f64,
+        rotation_delta: f64,
+        hue_delta: f64,
+        chroma_delta: f64,
+        lightness_delta: f64,
+        accent_delta: f64,
+        harmony_shift: f64,
+    ) -> JuliaViewControls {
+        JuliaViewControls { zoom_delta, rotation_delta, hue_delta, chroma_delta, lightness_delta, accent_delta, harmony_shift }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn zoom_delta(&self) -> f64 { self.zoom_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_zoom_delta(&mut self, v: f64) { self.zoom_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn rotation_delta(&self) -> f64 { self.rotation_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_rotation_delta(&mut self, v: f64) { self.rotation_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn hue_delta(&self) -> f64 { self.hue_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_hue_delta(&mut self, v: f64) { self.hue_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn chroma_delta(&self) -> f64 { self.chroma_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_chroma_delta(&mut self, v: f64) { self.chroma_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn lightness_delta(&self) -> f64 { self.lightness_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_lightness_delta(&mut self, v: f64) { self.lightness_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn accent_delta(&self) -> f64 { self.accent_delta }
+    #[wasm_bindgen(setter)]
+    pub fn set_accent_delta(&mut self, v: f64) { self.accent_delta = v; }
+    #[wasm_bindgen(getter)]
+    pub fn harmony_shift(&self) -> f64 { self.harmony_shift }
+    #[wasm_bindgen(setter)]
+    pub fn set_harmony_shift(&mut self, v: f64) { self.harmony_shift = v; }
+
+    pub fn clamped(&self) -> JuliaViewControls {
+        let inner: RustJuliaViewControls = self.clone().into();
+        inner.clamped().into()
+    }
+}
+
+impl From<RustJuliaViewControls> for JuliaViewControls {
+    fn from(v: RustJuliaViewControls) -> Self {
+        Self { zoom_delta: v.zoom_delta, rotation_delta: v.rotation_delta, hue_delta: v.hue_delta, chroma_delta: v.chroma_delta, lightness_delta: v.lightness_delta, accent_delta: v.accent_delta, harmony_shift: v.harmony_shift }
+    }
+}
+impl From<JuliaViewControls> for RustJuliaViewControls {
+    fn from(v: JuliaViewControls) -> RustJuliaViewControls {
+        RustJuliaViewControls { zoom_delta: v.zoom_delta, rotation_delta: v.rotation_delta, hue_delta: v.hue_delta, chroma_delta: v.chroma_delta, lightness_delta: v.lightness_delta, accent_delta: v.accent_delta, harmony_shift: v.harmony_shift }.clamped()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct ControlsV2 {
+    motion: MotionControls,
+    view: JuliaViewControls,
+}
+
+#[wasm_bindgen]
+impl ControlsV2 {
+    #[wasm_bindgen(constructor)]
+    pub fn new(motion: MotionControls, view: JuliaViewControls) -> ControlsV2 {
+        ControlsV2 { motion, view }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn motion(&self) -> MotionControls { self.motion.clone() }
+    #[wasm_bindgen(setter)]
+    pub fn set_motion(&mut self, v: MotionControls) { self.motion = v; }
+    #[wasm_bindgen(getter)]
+    pub fn view(&self) -> JuliaViewControls { self.view.clone() }
+    #[wasm_bindgen(setter)]
+    pub fn set_view(&mut self, v: JuliaViewControls) { self.view = v; }
+
+    pub fn clamped(&self) -> ControlsV2 {
+        let inner: RustControlsV2 = self.clone().into();
+        inner.clamped().into()
+    }
+
+    pub fn to_model_output(&self) -> Vec<f64> {
+        let inner: RustControlsV2 = self.clone().into();
+        inner.to_model_output()
+    }
+
+    #[wasm_bindgen(js_name = "fromModelOutput")]
+    pub fn from_model_output(output: Vec<f64>) -> Result<ControlsV2, JsValue> {
+        RustControlsV2::from_model_output(&output).map(|c| c.into()).map_err(|e| JsValue::from_str(&e))
+    }
+
+    #[wasm_bindgen(js_name = "modelOutputOrder")]
+    pub fn model_output_order() -> Vec<JsValue> {
+        RustControlsV2::model_output_order().into_iter().map(|s| JsValue::from_str(s)).collect()
+    }
+}
+
+impl From<RustControlsV2> for ControlsV2 {
+    fn from(c: RustControlsV2) -> Self {
+        Self { motion: c.motion.into(), view: c.view.into() }
+    }
+}
+impl From<ControlsV2> for RustControlsV2 {
+    fn from(c: ControlsV2) -> RustControlsV2 {
+        RustControlsV2 { motion: c.motion.into(), view: c.view.into() }.clamped()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct ColorIntent {
+    anchor_hue: f64,
+    chroma: f64,
+    lightness: f64,
+    harmony: String,
+    accent_weight: f64,
+}
+
+#[wasm_bindgen]
+impl ColorIntent {
+    #[wasm_bindgen(constructor)]
+    pub fn new(anchor_hue: f64, chroma: f64, lightness: f64, harmony: String, accent_weight: f64) -> ColorIntent {
+        ColorIntent { anchor_hue, chroma, lightness, harmony, accent_weight }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn anchor_hue(&self) -> f64 { self.anchor_hue }
+    #[wasm_bindgen(setter)]
+    pub fn set_anchor_hue(&mut self, v: f64) { self.anchor_hue = v; }
+    #[wasm_bindgen(getter)]
+    pub fn chroma(&self) -> f64 { self.chroma }
+    #[wasm_bindgen(setter)]
+    pub fn set_chroma(&mut self, v: f64) { self.chroma = v; }
+    #[wasm_bindgen(getter)]
+    pub fn lightness(&self) -> f64 { self.lightness }
+    #[wasm_bindgen(setter)]
+    pub fn set_lightness(&mut self, v: f64) { self.lightness = v; }
+    #[wasm_bindgen(getter)]
+    pub fn harmony(&self) -> String { self.harmony.clone() }
+    #[wasm_bindgen(setter)]
+    pub fn set_harmony(&mut self, v: String) { self.harmony = v; }
+    #[wasm_bindgen(getter)]
+    pub fn accent_weight(&self) -> f64 { self.accent_weight }
+    #[wasm_bindgen(setter)]
+    pub fn set_accent_weight(&mut self, v: f64) { self.accent_weight = v; }
+}
+
+impl From<RustColorIntent> for ColorIntent {
+    fn from(c: RustColorIntent) -> Self {
+        Self { anchor_hue: c.anchor_hue, chroma: c.chroma, lightness: c.lightness, harmony: c.harmony.name().to_string(), accent_weight: c.accent_weight }
+    }
+}
+impl From<ColorIntent> for RustColorIntent {
+    fn from(c: ColorIntent) -> RustColorIntent {
+        let harmony = match c.harmony.as_str() {
+            "monochrome" => RustHarmony::Monochrome,
+            "opponent" => RustHarmony::Opponent,
+            _ => RustHarmony::Analogous,
+        };
+        RustColorIntent { anchor_hue: c.anchor_hue, chroma: c.chroma, lightness: c.lightness, harmony, accent_weight: c.accent_weight }.clamped()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct JuliaViewState {
+    zoom: f64,
+    rotation: f64,
+    color: ColorIntent,
+    harmony_cooldown: u32,
+    harmony_armed: bool,
+}
+
+#[wasm_bindgen]
+impl JuliaViewState {
+    #[wasm_bindgen(constructor)]
+    pub fn new(zoom: f64, rotation: f64, color: Option<ColorIntent>, harmony_cooldown: u32, harmony_armed: bool) -> JuliaViewState {
+        JuliaViewState { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()), harmony_cooldown, harmony_armed }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn zoom(&self) -> f64 { self.zoom }
+    #[wasm_bindgen(setter)]
+    pub fn set_zoom(&mut self, v: f64) { self.zoom = v; }
+    #[wasm_bindgen(getter)]
+    pub fn rotation(&self) -> f64 { self.rotation }
+    #[wasm_bindgen(setter)]
+    pub fn set_rotation(&mut self, v: f64) { self.rotation = v; }
+    #[wasm_bindgen(getter)]
+    pub fn color(&self) -> ColorIntent { self.color.clone() }
+    #[wasm_bindgen(setter)]
+    pub fn set_color(&mut self, v: ColorIntent) { self.color = v; }
+    #[wasm_bindgen(getter)]
+    pub fn harmony_cooldown(&self) -> u32 { self.harmony_cooldown }
+    #[wasm_bindgen(setter)]
+    pub fn set_harmony_cooldown(&mut self, v: u32) { self.harmony_cooldown = v; }
+    #[wasm_bindgen(getter)]
+    pub fn harmony_armed(&self) -> bool { self.harmony_armed }
+    #[wasm_bindgen(setter)]
+    pub fn set_harmony_armed(&mut self, v: bool) { self.harmony_armed = v; }
+
+    #[wasm_bindgen(js_name = "applyControls")]
+    pub fn apply_controls(&mut self, controls: &JuliaViewControls) {
+        let mut inner: RustJuliaViewState = self.clone().into();
+        inner.apply_controls(controls.clone().into());
+        *self = inner.into();
+    }
+
+    pub fn clamped(&self) -> JuliaViewState {
+        let inner: RustJuliaViewState = self.clone().into();
+        inner.clamped().into()
+    }
+}
+
+impl From<RustJuliaViewState> for JuliaViewState {
+    fn from(s: RustJuliaViewState) -> Self {
+        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }
+    }
+}
+impl From<JuliaViewState> for RustJuliaViewState {
+    fn from(s: JuliaViewState) -> RustJuliaViewState {
+        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }.clamped()
+    }
+}
+
+// Controls-driven manifold step (destination physics seam for #107) exposed to JS for parity and
+// visualization. Returns [new_re, new_im, new_vx, new_vy, kinetic, potential, total, delta_total, delta_kinetic].
+#[wasm_bindgen(js_name = "controlsIntegrateStep")]
+pub fn controls_integrate_step(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    motion: &MotionControls,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(c_re, c_im);
+    let (c_new, v_new, info) = runtime_core::controls::integrate_motion_controls(c, (vx, vy), &motion.clone().into(), dt, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![c_new.re, c_new.im, v_new.0, v_new.1, info.kinetic, info.potential, info.total, info.delta_total, info.delta_kinetic])
+}
+
+#[wasm_bindgen(js_name = "motionDriveCovector")]
+pub fn motion_drive_covector(
+    c_re: f64,
+    c_im: f64,
+    motion: &MotionControls,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(c_re, c_im);
+    let cov = RustMotionControls::from(motion.clone()).drive_covector(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![cov.0, cov.1])
 }

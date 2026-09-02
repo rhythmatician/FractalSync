@@ -12,7 +12,6 @@ use pyo3::types::{PyComplex, PyDict};
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
-    PlayerState as RustPlayerState,
     OrbitController as RustOrbitController,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -51,6 +50,15 @@ use crate::manifold::{
     apply_generalized_force as rust_apply_generalized_force,
     drag_force as rust_drag_force,
     integrate_step as rust_integrate_step,
+};
+use crate::controls::{
+    ControlsV2 as RustControlsV2,
+    MotionControls as RustMotionControls,
+    JuliaViewControls as RustJuliaViewControls,
+    JuliaViewState as RustJuliaViewState,
+    ColorIntent as RustColorIntent,
+    Harmony as RustHarmony,
+    CONTROLS_VERSION,
 };
 
 
@@ -182,86 +190,6 @@ impl From<RustEnergyInfo> for EnergyInfo {
             delta_total: e.delta_total,
             delta_kinetic: e.delta_kinetic,
         }
-    }
-}
-
-/// Python wrapper for the Player c-space integrator (momentum + drag).
-#[pyclass]
-#[derive(Clone, Debug)]
-pub struct PlayerState {
-    inner: RustPlayerState,
-}
-
-#[pymethods]
-impl PlayerState {
-    #[new]
-    fn py_new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> Self {
-        Self {
-            inner: RustPlayerState::new(lobe, sub_lobe, s, alpha),
-        }
-    }
-
-    /// Current c (real part).
-    #[getter]
-    fn c_re(&self) -> f64 {
-        self.inner.c.re
-    }
-
-    /// Current c (imaginary part).
-    #[getter]
-    fn c_im(&self) -> f64 {
-        self.inner.c.im
-    }
-
-    /// Current c-space speed (Momentum diagnostic).
-    #[getter]
-    fn speed(&self) -> f64 {
-        self.inner.velocity.norm()
-    }
-
-    /// Apply model-predicted control signals.
-    fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
-        self.inner.apply_controls(s, alpha, omega_scale);
-    }
-
-    /// Switch the active Mandelbrot lobe.
-    fn set_lobe(&mut self, lobe: u32, sub_lobe: u32) {
-        self.inner.lobe = lobe;
-        self.inner.sub_lobe = sub_lobe;
-    }
-
-    /// Set the mip level for the contour step.
-    fn set_level(&mut self, level: usize) {
-        self.inner.level = level;
-    }
-
-    /// Set the target shore-proximity distance.
-    fn set_d_star(&mut self, d_star: f64) {
-        self.inner.d_star = d_star;
-    }
-
-    /// Set the maximum world-space step per frame.
-    fn set_max_step(&mut self, max_step: f64) {
-        self.inner.max_step = max_step;
-    }
-
-    /// Set the audio energy in [0, 1] (loudness). Raises the servo's
-    /// target shore-proximity: loud audio pulls c toward the Shore.
-    fn set_energy(&mut self, energy: f64) {
-        self.inner.energy = energy.clamp(0.0, 1.0);
-    }
-
-    /// Advance by dt; returns (re, im). `h` in [0,1] allows contour crossing
-    /// during transients. Band gates optional.
-    #[pyo3(signature = (dt, h, band_gates=None))]
-    fn step(
-        &mut self,
-        dt: f64,
-        h: f64,
-        band_gates: Option<Vec<f64>>,
-    ) -> (f64, f64) {
-        let c = self.inner.step(dt, h, band_gates.as_deref());
-        (c.re, c.im)
     }
 }
 
@@ -1055,7 +983,270 @@ fn manifold_integrate_step(
     ))
 }
 
-/// Module-level __getattr__ to dynamically provide fallback callables for
+// ---------------------------------------------------------------------------
+// Controls v2 (issue #107) — Python surface.
+// ---------------------------------------------------------------------------
+
+/// Python wrapper for MotionControls (2D drive + brake/grip + impulse).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct MotionControls {
+    #[pyo3(get, set)]
+    pub direction_x: f64,
+    #[pyo3(get, set)]
+    pub direction_y: f64,
+    #[pyo3(get, set)]
+    pub throttle: f64,
+    #[pyo3(get, set)]
+    pub brake: f64,
+    #[pyo3(get, set)]
+    pub grip: f64,
+    #[pyo3(get, set)]
+    pub impulse: f64,
+}
+
+#[pymethods]
+impl MotionControls {
+    #[new]
+    #[pyo3(signature = (direction_x=0.0, direction_y=0.0, throttle=0.0, brake=0.0, grip=0.5, impulse=0.0))]
+    fn py_new(direction_x: f64, direction_y: f64, throttle: f64, brake: f64, grip: f64, impulse: f64) -> Self {
+        Self { direction_x, direction_y, throttle, brake, grip, impulse }
+    }
+    fn drive_magnitude(&self) -> f64 {
+        let inner: RustMotionControls = self.clone().into();
+        inner.drive_magnitude()
+    }
+    fn friction_beta(&self) -> f64 {
+        let inner: RustMotionControls = self.clone().into();
+        inner.friction_beta()
+    }
+    fn clamped(&self) -> Self {
+        let inner: RustMotionControls = self.clone().into();
+        inner.clamped().into()
+    }
+}
+
+impl From<RustMotionControls> for MotionControls {
+    fn from(m: RustMotionControls) -> Self {
+        Self { direction_x: m.direction[0], direction_y: m.direction[1], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }
+    }
+}
+impl From<MotionControls> for RustMotionControls {
+    fn from(m: MotionControls) -> RustMotionControls {
+        RustMotionControls { direction: [m.direction_x, m.direction_y], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }.clamped()
+    }
+}
+
+/// Python wrapper for JuliaViewControls (bounded deltas).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct JuliaViewControls {
+    #[pyo3(get, set)]
+    pub zoom_delta: f64,
+    #[pyo3(get, set)]
+    pub rotation_delta: f64,
+    #[pyo3(get, set)]
+    pub hue_delta: f64,
+    #[pyo3(get, set)]
+    pub chroma_delta: f64,
+    #[pyo3(get, set)]
+    pub lightness_delta: f64,
+    #[pyo3(get, set)]
+    pub accent_delta: f64,
+    #[pyo3(get, set)]
+    pub harmony_shift: f64,
+}
+
+#[pymethods]
+impl JuliaViewControls {
+    #[new]
+    #[pyo3(signature = (zoom_delta=0.0, rotation_delta=0.0, hue_delta=0.0, chroma_delta=0.0, lightness_delta=0.0, accent_delta=0.0, harmony_shift=0.0))]
+    fn py_new(zoom_delta: f64, rotation_delta: f64, hue_delta: f64, chroma_delta: f64, lightness_delta: f64, accent_delta: f64, harmony_shift: f64) -> Self {
+        Self { zoom_delta, rotation_delta, hue_delta, chroma_delta, lightness_delta, accent_delta, harmony_shift }
+    }
+    fn clamped(&self) -> Self {
+        let inner: RustJuliaViewControls = self.clone().into();
+        inner.clamped().into()
+    }
+}
+
+impl From<RustJuliaViewControls> for JuliaViewControls {
+    fn from(v: RustJuliaViewControls) -> Self {
+        Self { zoom_delta: v.zoom_delta, rotation_delta: v.rotation_delta, hue_delta: v.hue_delta, chroma_delta: v.chroma_delta, lightness_delta: v.lightness_delta, accent_delta: v.accent_delta, harmony_shift: v.harmony_shift }
+    }
+}
+impl From<JuliaViewControls> for RustJuliaViewControls {
+    fn from(v: JuliaViewControls) -> RustJuliaViewControls {
+        RustJuliaViewControls { zoom_delta: v.zoom_delta, rotation_delta: v.rotation_delta, hue_delta: v.hue_delta, chroma_delta: v.chroma_delta, lightness_delta: v.lightness_delta, accent_delta: v.accent_delta, harmony_shift: v.harmony_shift }.clamped()
+    }
+}
+
+/// Python wrapper for ControlsV2 (unified action surface).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ControlsV2 {
+    #[pyo3(get, set)]
+    pub motion: MotionControls,
+    #[pyo3(get, set)]
+    pub view: JuliaViewControls,
+}
+
+#[pymethods]
+impl ControlsV2 {
+    #[new]
+    fn py_new(motion: MotionControls, view: JuliaViewControls) -> Self {
+        Self { motion, view }
+    }
+    #[staticmethod]
+    fn from_model_output(output: Vec<f64>) -> PyResult<Self> {
+        RustControlsV2::from_model_output(&output).map(|c| c.into()).map_err(|e| pyo3::exceptions::PyValueError::new_err(e))
+    }
+    fn to_model_output(&self) -> Vec<f64> {
+        let inner: RustControlsV2 = self.clone().into();
+        inner.to_model_output()
+    }
+    fn clamped(&self) -> Self {
+        let inner: RustControlsV2 = self.clone().into();
+        inner.clamped().into()
+    }
+    #[staticmethod]
+    fn model_output_order() -> Vec<String> {
+        RustControlsV2::model_output_order().into_iter().map(|s| s.to_string()).collect()
+    }
+    #[staticmethod]
+    fn parameter_ranges() -> std::collections::HashMap<String, Vec<f64>> {
+        RustControlsV2::parameter_ranges()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), vec![v[0], v[1]]))
+            .collect()
+    }
+}
+
+impl From<RustControlsV2> for ControlsV2 {
+    fn from(c: RustControlsV2) -> Self {
+        Self { motion: c.motion.into(), view: c.view.into() }
+    }
+}
+impl From<ControlsV2> for RustControlsV2 {
+    fn from(c: ControlsV2) -> RustControlsV2 {
+        RustControlsV2 { motion: c.motion.into(), view: c.view.into() }.clamped()
+    }
+}
+
+/// Python wrapper for ColorIntent.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ColorIntent {
+    #[pyo3(get, set)]
+    pub anchor_hue: f64,
+    #[pyo3(get, set)]
+    pub chroma: f64,
+    #[pyo3(get, set)]
+    pub lightness: f64,
+    #[pyo3(get, set)]
+    pub harmony: String,
+    #[pyo3(get, set)]
+    pub accent_weight: f64,
+}
+
+#[pymethods]
+impl ColorIntent {
+    #[new]
+    #[pyo3(signature = (anchor_hue=0.0, chroma=0.18, lightness=0.55, harmony="analogous".to_string(), accent_weight=0.35))]
+    fn py_new(anchor_hue: f64, chroma: f64, lightness: f64, harmony: String, accent_weight: f64) -> Self {
+        Self { anchor_hue, chroma, lightness, harmony, accent_weight }
+    }
+}
+
+impl From<RustColorIntent> for ColorIntent {
+    fn from(c: RustColorIntent) -> Self {
+        Self { anchor_hue: c.anchor_hue, chroma: c.chroma, lightness: c.lightness, harmony: c.harmony.name().to_string(), accent_weight: c.accent_weight }
+    }
+}
+impl From<ColorIntent> for RustColorIntent {
+    fn from(c: ColorIntent) -> RustColorIntent {
+        let harmony = match c.harmony.as_str() {
+            "monochrome" => RustHarmony::Monochrome,
+            "opponent" => RustHarmony::Opponent,
+            _ => RustHarmony::Analogous,
+        };
+        RustColorIntent { anchor_hue: c.anchor_hue, chroma: c.chroma, lightness: c.lightness, harmony, accent_weight: c.accent_weight }.clamped()
+    }
+}
+
+/// Python wrapper for JuliaViewState (persistent view state).
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct JuliaViewState {
+    #[pyo3(get, set)]
+    pub zoom: f64,
+    #[pyo3(get, set)]
+    pub rotation: f64,
+    #[pyo3(get, set)]
+    pub color: ColorIntent,
+    #[pyo3(get, set)]
+    pub harmony_cooldown: u32,
+    #[pyo3(get, set)]
+    pub harmony_armed: bool,
+}
+
+#[pymethods]
+impl JuliaViewState {
+    #[new]
+    #[pyo3(signature = (zoom=1.0, rotation=0.0, color=None, harmony_cooldown=0, harmony_armed=true))]
+    fn py_new(zoom: f64, rotation: f64, color: Option<ColorIntent>, harmony_cooldown: u32, harmony_armed: bool) -> Self {
+        Self { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()), harmony_cooldown, harmony_armed }
+    }
+    fn apply_controls(&mut self, controls: JuliaViewControls) {
+        let mut inner: RustJuliaViewState = self.clone().into();
+        inner.apply_controls(controls.into());
+        *self = inner.into();
+    }
+    fn clamped(&self) -> Self {
+        let inner: RustJuliaViewState = self.clone().into();
+        inner.clamped().into()
+    }
+}
+
+impl From<RustJuliaViewState> for JuliaViewState {
+    fn from(s: RustJuliaViewState) -> Self {
+        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }
+    }
+}
+impl From<JuliaViewState> for RustJuliaViewState {
+    fn from(s: JuliaViewState) -> RustJuliaViewState {
+        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }.clamped()
+    }
+}
+
+/// Integrate one manifold step driven by MotionControls (destination physics seam).
+/// Returns (new_re, new_im, new_vx, new_vy, energy_info).
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, vx, vy, motion, dt, config))]
+fn controls_integrate_step(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    motion: MotionControls,
+    dt: f64,
+    config: ManifoldConfig,
+) -> PyResult<(f64, f64, f64, f64, EnergyInfo)> {
+    let c = num_complex::Complex64::new(c_re, c_im);
+    let (c_new, v_new, info) = crate::controls::integrate_motion_controls(c, (vx, vy), &motion.into(), dt, &config.into()).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+    Ok((c_new.re, c_new.im, v_new.0, v_new.1, info.into()))
+}
+
+/// Compute drive covector for inspection/diagnostics.
+#[pyfunction]
+#[pyo3(signature = (c, motion, config))]
+fn motion_drive_covector(c: &Bound<'_, PyComplex>, motion: MotionControls, config: ManifoldConfig) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    crate::controls::MotionControls::from(motion).drive_covector(cc, &config.into()).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
+}
+
+ /// Module-level __getattr__ to dynamically provide fallback callables for
+
 /// missing top-level functions. This helps tests that delete attributes via
 /// monkeypatch and provides a safety net when the compiled extension is
 /// imported but certain helpers are unavailable.
@@ -1862,12 +2053,16 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Observed-ridge CycleBank contract (issue #92). Rust-owned; Python and
     // the browser read it and never restate it.
     m.add("CYCLE_BANK_VERSION", crate::cycle_bank::CYCLE_BANK_VERSION)?;
+    // Controls v2 contract (issue #107)
+    m.add("CONTROLS_VERSION", CONTROLS_VERSION)?;
+    m.add("CONTROLS_MAX_DRIVE_FORCE", crate::controls::MAX_DRIVE_FORCE)?;
+    m.add("CONTROLS_MAX_IMPULSE", crate::controls::MAX_IMPULSE)?;
+    m.add("CONTROLS_BRAKE_COEFF", crate::controls::BRAKE_COEFF)?;
 
     m.add_class::<ResidualParams>()?;
     m.add_class::<ManifoldConfig>()?;
     m.add_class::<EnergyInfo>()?;
     m.add_class::<OrbitState>()?;
-    m.add_class::<PlayerState>()?;
     m.add_class::<OrbitController>()?;
 
     m.add_class::<FeatureExtractor>()?;
@@ -1876,6 +2071,11 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<CycleMode>()?;
     m.add_class::<CycleBank>()?;
+    m.add_class::<MotionControls>()?;
+    m.add_class::<JuliaViewControls>()?;
+    m.add_class::<ControlsV2>()?;
+    m.add_class::<ColorIntent>()?;
+    m.add_class::<JuliaViewState>()?;
 
     m.add_class::<RuntimeVisualMetrics>()?;
 
@@ -1920,6 +2120,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_apply_generalized_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_drag_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
+    m.add_function(wrap_pyfunction!(controls_integrate_step, m)?)?;
+    m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())

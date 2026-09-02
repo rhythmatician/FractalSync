@@ -1,7 +1,16 @@
 use ndarray::Array2;
 use once_cell::sync::Lazy;
 use std::path::Path;
-use std::sync::RwLock;
+use std::sync::{Mutex, OnceLock, RwLock};
+
+static GLOBAL_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+/// Global mutex to serialize tests that mutate or depend on the distance field.
+/// Controls and distance-field integration tests acquire this for the duration
+/// of their sensitive sections so a parallel `clear_distance_field` cannot
+/// interleave between two reads that must see the same field (e.g. Q and G).
+pub fn global_test_mutex() -> &'static Mutex<()> {
+    GLOBAL_TEST_MUTEX.get_or_init(|| Mutex::new(()))
+}
 
 #[derive(Clone, Debug)]
 struct DistanceField {

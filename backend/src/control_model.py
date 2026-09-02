@@ -16,7 +16,6 @@ Supports two encoder modes:
 import torch
 import torch.nn as nn
 
-
 class AudioToControlModel(nn.Module):
     """
     Neural network that predicts orbit control signals from audio features.
@@ -41,6 +40,7 @@ class AudioToControlModel(nn.Module):
         include_delta_delta: bool = False,
         recurrent: bool = False,
         gru_hidden_dim: int = 128,
+        controls_version: str = "orbit_control",
     ):
         """
         Initialize control signal model.
@@ -75,8 +75,17 @@ class AudioToControlModel(nn.Module):
         self.features_per_frame = n_features_per_frame * features_multiplier
         self.input_dim = self.features_per_frame * window_frames
 
-        # Output dimension: s_target(1) + alpha(1) + omega_scale(1) + band_gates(k_bands)
-        self.output_dim = 3 + k_bands
+        self.controls_version = controls_version
+        # Output dimension: Controls v2 (13) vs legacy orbit_control (3 + k_bands)
+        if controls_version == "controls/2":
+            # Canonical 13-channel: directionX,Y,throttle,brake,grip,impulse + 7 Julia deltas; Rust owns order/ranges
+            try:
+                import runtime_core
+                self.output_dim = len(runtime_core.ControlsV2.model_output_order())
+            except Exception:
+                self.output_dim = 13
+        else:
+            self.output_dim = 3 + k_bands
 
         if recurrent:
             # Shared per-frame encoder → GRU → heads.
@@ -120,7 +129,46 @@ class AudioToControlModel(nn.Module):
             head_input_dim = prev_dim
 
         # Control signal heads
-        self.s_head = nn.Sequential(
+        if self.controls_version == "controls/2":
+            # 13-channel ControlsV2: motion 6 + view 7. Activations match Rust parameter_ranges:
+            # directionX,Y, zoom/rotation/hue/chroma/lightness/accent/harmonyShift are tanh [-1,1];
+            # throttle, brake, grip, impulse are sigmoid [0,1].
+            self.direction_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 2),
+            )
+            self.throttle_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
+                nn.Sigmoid(),
+            )
+            self.brake_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
+                nn.Sigmoid(),
+            )
+            self.grip_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
+                nn.Sigmoid(),
+            )
+            self.impulse_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
+                nn.Sigmoid(),
+            )
+            self.view_head = nn.Sequential(
+                nn.Linear(head_input_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 7),
+            )
+        else:
+            self.s_head = nn.Sequential(
             nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
@@ -131,6 +179,7 @@ class AudioToControlModel(nn.Module):
             nn.ReLU(),
             nn.Linear(32, 1),
             nn.Sigmoid(),  # Alpha in [0, 1], rescaled below
+
         )
 
         self.omega_head = nn.Sequential(
@@ -144,6 +193,7 @@ class AudioToControlModel(nn.Module):
             nn.ReLU(),
             nn.Linear(32, k_bands),
             nn.Sigmoid(),  # Gates in [0, 1]
+
         )
 
         # Initialize weights
@@ -199,30 +249,29 @@ class AudioToControlModel(nn.Module):
         # Encode features
         encoded = self._encode(x)
 
-        # Predict control signals
+        if self.controls_version == "controls/2":
+            # 13-channel ControlsV2: directionX,Y (tanh), throttle/brake/grip/impulse (sigmoid), 7 view deltas (tanh)
+            direction = torch.tanh(self.direction_head(encoded))  # (B,2) in [-1,1]
+            throttle = self.throttle_head(encoded)  # (B,1) sigmoid already
+            brake = self.brake_head(encoded)
+            grip = self.grip_head(encoded)
+            impulse = self.impulse_head(encoded)
+            view_deltas = torch.tanh(self.view_head(encoded))  # (B,7) in [-1,1]
+            output = torch.cat([direction, throttle, brake, grip, impulse, view_deltas], dim=1)
+            return output
+
+        # Legacy orbit_control: s_target, alpha, omega_scale, band_gates
         s_raw = self.s_head(encoded)  # (batch_size, 1)
         alpha = self.alpha_head(encoded)  # (batch_size, 1)
         omega_raw = self.omega_head(encoded)  # (batch_size, 1)
         band_gates = self.band_gates_head(encoded)  # (batch_size, k_bands)
 
         # Apply activation functions to constrain outputs
-        # s_target: map to [0.2, 3.0] using sigmoid + scaling
         s_target = 0.2 + 2.8 * torch.sigmoid(s_raw)  # [0.2, 3.0]
-
-        # Alpha: map to [0.05, 0.95]. The May boundary formula
-        # r = 0.25*(1-cos(2*pi*alpha)) has ZERO radius AND ZERO gradient at
-        # alpha=0 and alpha=1 — a sigmoid saturated there can never escape
-        # (observed live as c pinned to (0,0)). Keeping alpha strictly inside
-        # (0, 1) makes both r and dr/dalpha nonzero everywhere.
         alpha = 0.05 + 0.90 * alpha  # [0.05, 0.95]
-
-        # omega_scale: map to [0.1, 5.0] using softplus
         omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
         omega_scale = torch.clamp(omega_scale, 0.1, 5.0)
-
-        # Concatenate all control signals
         output = torch.cat([s_target, alpha, omega_scale, band_gates], dim=1)
-
         return output
 
     def get_parameter_ranges(self) -> dict:
@@ -232,9 +281,23 @@ class AudioToControlModel(nn.Module):
         Returns:
             Dictionary mapping parameter names to (min, max) tuples
         """
+        if self.controls_version == "controls/2":
+            # Canonical ControlsV2 ranges from Rust — single authority per ADR 0001.
+            # Fail closed if Rust contract is unavailable; do not maintain a fallback copy.
+            import runtime_core  # type: ignore[import-not-found]
+
+            try:
+                raw = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
+            except AttributeError as exc:
+                raise RuntimeError(
+                    "ControlsV2::parameter_ranges() not available from Rust; "
+                    f"failing closed for controls/2: {exc}"
+                ) from exc
+            # Rust returns {name: [min, max]}; normalize to {name: (min, max)}
+            return {k: (float(v[0]), float(v[1])) for k, v in raw.items()}
         ranges = {
             "s_target": (0.2, 3.0),
-            "alpha": (0.05, 0.95),  # kept off the formula's null points
+            "alpha": (0.05, 0.95),
             "omega_scale": (0.1, 5.0),
         }
         for k in range(self.k_bands):
@@ -249,8 +312,26 @@ class AudioToControlModel(nn.Module):
             output: Model output tensor (batch_size, output_dim)
 
         Returns:
-            Dictionary with keys: s_target, alpha, omega_scale, band_gates
+            Dictionary with keys depending on controls_version:
+              controls/2 -> directionX,Y,throttle,brake,grip,impulse,view deltas
+              orbit_control -> s_target, alpha, omega_scale, band_gates
         """
+        if self.controls_version == "controls/2":
+            return {
+                "directionX": output[:, 0],
+                "directionY": output[:, 1],
+                "throttle": output[:, 2],
+                "brake": output[:, 3],
+                "grip": output[:, 4],
+                "impulse": output[:, 5],
+                "zoomDelta": output[:, 6],
+                "rotationDelta": output[:, 7],
+                "hueDelta": output[:, 8],
+                "chromaDelta": output[:, 9],
+                "lightnessDelta": output[:, 10],
+                "accentDelta": output[:, 11],
+                "harmonyShift": output[:, 12],
+            }
         return {
             "s_target": output[:, 0],
             "alpha": output[:, 1],

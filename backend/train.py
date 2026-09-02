@@ -97,6 +97,24 @@ def _runtime_feature_version() -> str:
     return "unknown"
 
 
+def _runtime_controls_version() -> str:
+    """Read CONTROLS_VERSION from the installed runtime_core.
+
+    Versions the unified Controls v2 contract (issue #107): names,
+    grouping, ranges, units, normalization. The browser refuses models
+    stamped with a different controls contract.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "CONTROLS_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def _runtime_analysis_pipeline_version() -> str:
     """Read ANALYSIS_PIPELINE_VERSION from the installed runtime_core.
 
@@ -387,6 +405,13 @@ def main():
         help="Use GRU-based temporal encoder instead of flat MLP",
     )
     parser.add_argument(
+        "--controls-version",
+        type=str,
+        default="orbit_control",
+        choices=["controls/2", "orbit_control"],
+        help="Controls contract version: controls/2 (13-channel unified) or orbit_control (legacy 3+k)",
+    )
+    parser.add_argument(
         "--skip-parity-check",
         action="store_true",
         help="Skip the preflight parity check (emergency use only: allows "
@@ -494,6 +519,8 @@ def execute_training_workflow(args):
         print("  GPU rendering disabled, using CPU")
 
     print("[5/7] Creating orbit-based control model...")
+    # Controls v2 (issue #107): unified 13-channel action surface; Rust is single authority.
+    controls_version = getattr(args, "controls_version", "orbit_control")
     model = AudioToControlModel(
         window_frames=args.window_frames,
         n_features_per_frame=6,
@@ -501,6 +528,7 @@ def execute_training_workflow(args):
         k_bands=args.k_bands,
         dropout=0.2,
         recurrent=args.recurrent,
+        controls_version=controls_version,
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -643,7 +671,8 @@ def execute_training_workflow(args):
                 else None
             ),
             metadata={
-                "model_type": "orbit_control",
+                "model_type": "controls_v2",
+                "controls_version": _runtime_controls_version(),
                 "output_dim": model.output_dim,
                 "k_bands": args.k_bands,
                 "epoch": args.epochs,

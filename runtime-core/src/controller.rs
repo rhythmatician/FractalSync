@@ -343,7 +343,14 @@ impl PlayerState {
         }
     }
 
-    /// Apply model-predicted control signals.
+    /// Apply model-predicted control signals (LEGACY Controls v1 — RETIRED from destination path, issue #107).
+    ///
+    /// This `(s, alpha, omega_scale) -> target c` servo is the pre-#107 control surface that
+    /// indirectly specified a target Mandelbrot location. The destination physics path (`manifold`
+    /// + `controls::MotionControls` generalized forces) does NOT use this method. It is retained
+    /// only for backward compatibility with `golden_vectors.json` player_step_cases and the
+    /// `orbit_controller` legacy adapter. New code must use `crate::controls::ControlsV2` and
+    /// `crate::controls::integrate_motion_controls`.
     pub fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
         self.s = s;
         self.alpha = alpha;
@@ -545,7 +552,9 @@ impl OrbitController {
         }
     }
 
-    /// Apply model-predicted control signals.
+    /// Apply model-predicted control signals (LEGACY Controls v1 — RETIRED from destination path, issue #107).
+    ///
+    /// See `PlayerState::apply_controls` — same retirement. Destination uses `ControlsV2`.
     pub fn apply_controls(&mut self, s: f64, alpha: f64) {
         self.s = s.clamp(0.01, 3.0);
         self.alpha = alpha.clamp(0.0, 1.0);

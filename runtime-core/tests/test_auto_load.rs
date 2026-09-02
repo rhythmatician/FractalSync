@@ -1,7 +1,8 @@
-use runtime_core::distance_field::{clear_distance_field, sample_distance_field};
+use runtime_core::distance_field::{clear_distance_field, global_test_mutex, sample_distance_field};
 
 #[test]
 fn sample_triggers_builtin_load() {
+    let _lock = global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     // Ensure we start from cleared state
     clear_distance_field();
     let points = [num_complex::Complex64::new(0.0, 0.0)];
