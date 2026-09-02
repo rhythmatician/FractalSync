@@ -16,7 +16,6 @@ Supports two encoder modes:
 import torch
 import torch.nn as nn
 
-
 class AudioToControlModel(nn.Module):
     """
     Neural network that predicts orbit control signals from audio features.
@@ -180,6 +179,7 @@ class AudioToControlModel(nn.Module):
             nn.ReLU(),
             nn.Linear(32, 1),
             nn.Sigmoid(),  # Alpha in [0, 1], rescaled below
+
         )
 
         self.omega_head = nn.Sequential(
@@ -193,6 +193,7 @@ class AudioToControlModel(nn.Module):
             nn.ReLU(),
             nn.Linear(32, k_bands),
             nn.Sigmoid(),  # Gates in [0, 1]
+
         )
 
         # Initialize weights
