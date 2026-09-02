@@ -85,7 +85,7 @@ class AudioToControlModel(nn.Module):
             except Exception:
                 self.output_dim = 13
         else:
-        self.output_dim = 3 + k_bands
+            self.output_dim = 3 + k_bands
 
         if recurrent:
             # Shared per-frame encoder → GRU → heads.
@@ -168,7 +168,7 @@ class AudioToControlModel(nn.Module):
                 nn.Linear(32, 7),
             )
         else:
-        self.s_head = nn.Sequential(
+            self.s_head = nn.Sequential(
             nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
