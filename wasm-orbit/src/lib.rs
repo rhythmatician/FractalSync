@@ -35,15 +35,7 @@ use runtime_core::cycle_bank::{
     CycleEvidenceChannel as RustCycleEvidenceChannel,
     CycleObservation as RustCycleObservation, CYCLE_BANK_VERSION,
 };
-use runtime_core::controls::{
-    ControlsV2 as RustControlsV2,
-    MotionControls as RustMotionControls,
-    JuliaViewControls as RustJuliaViewControls,
-    JuliaViewState as RustJuliaViewState,
-    ColorIntent as RustColorIntent,
-    Harmony as RustHarmony,
-    CONTROLS_VERSION,
-};
+use runtime_core::controls::CONTROLS_VERSION;
 use runtime_core::manifold::{
     ManifoldConfig as RustManifoldConfig,
     signed_distance as rust_signed_distance,
