@@ -272,16 +272,39 @@ export function getControlsVersion(): string {
   }
 }
 
-export function getWasmModule(): WasmModule {
-  return requireWasm();
+export interface JuliaViewStateHandle {
+  readonly zoom: number;
+  readonly rotation: number;
+  readonly color: { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number };
+  readonly harmony_cooldown: number;
+  readonly harmony_armed: boolean;
+  apply_controls(controls: JuliaViewControlsHandle): void;
 }
 
-export function createJuliaViewState(): any {
-  const m = getWasmModule() as any;
+export interface JuliaViewControlsHandle {
+  readonly zoom_delta: number;
+  readonly rotation_delta: number;
+  readonly hue_delta: number;
+  readonly chroma_delta: number;
+  readonly lightness_delta: number;
+  readonly accent_delta: number;
+  readonly harmony_shift: number;
+}
+
+type JuliaWasmExtension = {
+  JuliaViewState: new (zoom: number, rotation: number, color: unknown, harmony_cooldown: number, harmony_armed: boolean) => JuliaViewStateHandle;
+  JuliaViewControls: new (zoom_delta: number, rotation_delta: number, hue_delta: number, chroma_delta: number, lightness_delta: number, accent_delta: number, harmony_shift: number) => JuliaViewControlsHandle;
+};
+
+export function getWasmModule(): WasmModule & Partial<JuliaWasmExtension> {
+  return requireWasm() as WasmModule & Partial<JuliaWasmExtension>;
+}
+
+export function createJuliaViewState(): JuliaViewStateHandle {
+  const m = getWasmModule();
   if (typeof m.JuliaViewState !== 'function') {
     throw new Error('[orbitSynthesizer] wasm build has no JuliaViewState binding; rebuild wasm-orbit');
   }
-  // Default JuliaViewState matches Rust JuliaViewState::default()
   return new m.JuliaViewState(1.0, 0.0, null, 0, true);
 }
 
@@ -293,8 +316,8 @@ export function createJuliaViewControls(view: {
   lightness_delta: number;
   accent_delta: number;
   harmony_shift: number;
-}): any {
-  const m = getWasmModule() as any;
+}): JuliaViewControlsHandle {
+  const m = getWasmModule();
   if (typeof m.JuliaViewControls !== 'function') {
     throw new Error('[orbitSynthesizer] wasm build has no JuliaViewControls binding; rebuild wasm-orbit');
   }

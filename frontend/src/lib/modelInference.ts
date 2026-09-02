@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
 export interface VisualParameters {
@@ -57,7 +57,7 @@ export class ModelInference {
   private isOrbitModel: boolean = false;
   // Controls v2 synthesis (destination manifold seam, issue #107)
   private isControlsV2: boolean = false;
-  private juliaViewState: unknown | null = null;
+  private juliaViewState: JuliaViewStateHandle | null = null;
   
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
@@ -422,13 +422,12 @@ export class ModelInference {
       // The JS mirror is deleted; the canonical semantics live in runtime-core/src/controls.rs
       // (JuliaViewState::apply_controls) and are consumed via WASM. This satisfies the #107
       // requirement that deterministic shared action-to-view-state semantics belong in Rust.
-      const jvs: any = this.juliaViewState;
+      const jvs: JuliaViewStateHandle | null = this.juliaViewState;
       if (jvs) {
         const viewControls = createJuliaViewControls(view);
         jvs.apply_controls(viewControls);
-        // Read back through WASM getters (zoom/rotation/color are Rust-owned, clamped/wrapped)
-        const color = jvs.color as { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number };
-        const zoom = typeof jvs.zoom === 'number' ? jvs.zoom : (jvs as any).zoom;
+        const color = jvs.color;
+        const zoom = jvs.zoom;
         visualParams = {
           juliaSeed: { ...c },
           colorHue: (color?.anchor_hue ?? 0) % 1.0,
