@@ -1269,10 +1269,10 @@ class ControlTrainer:
                 # Set a flag to bypass the legacy supervision branches.
                 _is_controls2 = True
             else:
-            s_target = parsed["s_target"]
-            alpha = parsed["alpha"]
-            omega_scale = parsed["omega_scale"]
-            band_gates = parsed["band_gates"]
+                s_target = parsed["s_target"]
+                alpha = parsed["alpha"]
+                omega_scale = parsed["omega_scale"]
+                band_gates = parsed["band_gates"]
                 _is_controls2 = False
 
             if _is_controls2:
