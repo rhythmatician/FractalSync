@@ -12,7 +12,6 @@ use pyo3::types::{PyComplex, PyDict};
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
-    PlayerState as RustPlayerState,
     OrbitController as RustOrbitController,
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -191,86 +190,6 @@ impl From<RustEnergyInfo> for EnergyInfo {
             delta_total: e.delta_total,
             delta_kinetic: e.delta_kinetic,
         }
-    }
-}
-
-/// Python wrapper for the Player c-space integrator (momentum + drag).
-#[pyclass]
-#[derive(Clone, Debug)]
-pub struct PlayerState {
-    inner: RustPlayerState,
-}
-
-#[pymethods]
-impl PlayerState {
-    #[new]
-    fn py_new(lobe: u32, sub_lobe: u32, s: f64, alpha: f64) -> Self {
-        Self {
-            inner: RustPlayerState::new(lobe, sub_lobe, s, alpha),
-        }
-    }
-
-    /// Current c (real part).
-    #[getter]
-    fn c_re(&self) -> f64 {
-        self.inner.c.re
-    }
-
-    /// Current c (imaginary part).
-    #[getter]
-    fn c_im(&self) -> f64 {
-        self.inner.c.im
-    }
-
-    /// Current c-space speed (Momentum diagnostic).
-    #[getter]
-    fn speed(&self) -> f64 {
-        self.inner.velocity.norm()
-    }
-
-    /// Apply model-predicted control signals.
-    fn apply_controls(&mut self, s: f64, alpha: f64, omega_scale: f64) {
-        self.inner.apply_controls(s, alpha, omega_scale);
-    }
-
-    /// Switch the active Mandelbrot lobe.
-    fn set_lobe(&mut self, lobe: u32, sub_lobe: u32) {
-        self.inner.lobe = lobe;
-        self.inner.sub_lobe = sub_lobe;
-    }
-
-    /// Set the mip level for the contour step.
-    fn set_level(&mut self, level: usize) {
-        self.inner.level = level;
-    }
-
-    /// Set the target shore-proximity distance.
-    fn set_d_star(&mut self, d_star: f64) {
-        self.inner.d_star = d_star;
-    }
-
-    /// Set the maximum world-space step per frame.
-    fn set_max_step(&mut self, max_step: f64) {
-        self.inner.max_step = max_step;
-    }
-
-    /// Set the audio energy in [0, 1] (loudness). Raises the servo's
-    /// target shore-proximity: loud audio pulls c toward the Shore.
-    fn set_energy(&mut self, energy: f64) {
-        self.inner.energy = energy.clamp(0.0, 1.0);
-    }
-
-    /// Advance by dt; returns (re, im). `h` in [0,1] allows contour crossing
-    /// during transients. Band gates optional.
-    #[pyo3(signature = (dt, h, band_gates=None))]
-    fn step(
-        &mut self,
-        dt: f64,
-        h: f64,
-        band_gates: Option<Vec<f64>>,
-    ) -> (f64, f64) {
-        let c = self.inner.step(dt, h, band_gates.as_deref());
-        (c.re, c.im)
     }
 }
 
@@ -1081,17 +1000,15 @@ pub struct MotionControls {
     #[pyo3(get, set)]
     pub grip: f64,
     #[pyo3(get, set)]
-    pub impulse_x: f64,
-    #[pyo3(get, set)]
-    pub impulse_y: f64,
+    pub impulse: f64,
 }
 
 #[pymethods]
 impl MotionControls {
     #[new]
-    #[pyo3(signature = (drive_x=0.0, drive_y=0.0, brake=0.0, grip=0.5, impulse_x=0.0, impulse_y=0.0))]
-    fn py_new(drive_x: f64, drive_y: f64, brake: f64, grip: f64, impulse_x: f64, impulse_y: f64) -> Self {
-        Self { drive_x, drive_y, brake, grip, impulse_x, impulse_y }
+    #[pyo3(signature = (drive_x=0.0, drive_y=0.0, brake=0.0, grip=0.5, impulse=0.0))]
+    fn py_new(drive_x: f64, drive_y: f64, brake: f64, grip: f64, impulse: f64) -> Self {
+        Self { drive_x, drive_y, brake, grip, impulse }
     }
     fn drive_magnitude(&self) -> f64 {
         let inner: RustMotionControls = self.clone().into();
@@ -1109,12 +1026,12 @@ impl MotionControls {
 
 impl From<RustMotionControls> for MotionControls {
     fn from(m: RustMotionControls) -> Self {
-        Self { drive_x: m.drive[0], drive_y: m.drive[1], brake: m.brake, grip: m.grip, impulse_x: m.impulse[0], impulse_y: m.impulse[1] }
+        Self { drive_x: m.drive[0], drive_y: m.drive[1], brake: m.brake, grip: m.grip, impulse: m.impulse }
     }
 }
 impl From<MotionControls> for RustMotionControls {
     fn from(m: MotionControls) -> RustMotionControls {
-        RustMotionControls { drive: [m.drive_x, m.drive_y], brake: m.brake, grip: m.grip, impulse: [m.impulse_x, m.impulse_y] }.clamped()
+        RustMotionControls { drive: [m.drive_x, m.drive_y], brake: m.brake, grip: m.grip, impulse: m.impulse }.clamped()
     }
 }
 
@@ -1258,6 +1175,8 @@ pub struct JuliaViewState {
     pub rotation: f64,
     #[pyo3(get, set)]
     pub color: ColorIntent,
+    #[pyo3(get, set)]
+    pub harmony_cooldown: u32,
 }
 
 #[pymethods]
@@ -1265,7 +1184,7 @@ impl JuliaViewState {
     #[new]
     #[pyo3(signature = (zoom=1.0, rotation=0.0, color=None))]
     fn py_new(zoom: f64, rotation: f64, color: Option<ColorIntent>) -> Self {
-        Self { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()) }
+        Self { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()), harmony_cooldown: 0 }
     }
     fn apply_controls(&mut self, controls: JuliaViewControls) {
         let mut inner: RustJuliaViewState = self.clone().into();
@@ -1280,12 +1199,12 @@ impl JuliaViewState {
 
 impl From<RustJuliaViewState> for JuliaViewState {
     fn from(s: RustJuliaViewState) -> Self {
-        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into() }
+        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown }
     }
 }
 impl From<JuliaViewState> for RustJuliaViewState {
     fn from(s: JuliaViewState) -> RustJuliaViewState {
-        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into() }.clamped()
+        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown }.clamped()
     }
 }
 
@@ -2133,7 +2052,6 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ManifoldConfig>()?;
     m.add_class::<EnergyInfo>()?;
     m.add_class::<OrbitState>()?;
-    m.add_class::<PlayerState>()?;
     m.add_class::<OrbitController>()?;
 
     m.add_class::<FeatureExtractor>()?;

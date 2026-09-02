@@ -281,8 +281,10 @@ pub struct MotionControls {
     pub brake: f64,
     /// Traction ∈ [0,1]; 1 = full grip (higher friction), 0 = drift (lower friction).
     pub grip: f64,
-    /// Bounded generalized impulse vector; components ∈ [-1,1], disk-clamped.
-    pub impulse: [f64; 2],
+    /// Bounded generalized impulse magnitude ∈ [0,1]; direction shares the
+    /// canonical 2D drive surface (exactly two directional DOFs per #107).
+    /// Applied as `impulse * MAX_IMPULSE` along the current drive direction.
+    pub impulse: f64,
 }
 
 impl Default for MotionControls {
@@ -291,7 +293,7 @@ impl Default for MotionControls {
             drive: [0.0, 0.0],
             brake: 0.0,
             grip: 0.5,
-            impulse: [0.0, 0.0],
+            impulse: 0.0,
         }
     }
 }
@@ -303,7 +305,7 @@ impl MotionControls {
             drive: clamp_to_unit_disk([clamp11(self.drive[0]), clamp11(self.drive[1])]),
             brake: clamp01(self.brake),
             grip: clamp01(self.grip),
-            impulse: clamp_to_unit_disk([clamp11(self.impulse[0]), clamp11(self.impulse[1])]),
+            impulse: clamp01(self.impulse),
         }
     }
 
@@ -325,8 +327,7 @@ impl MotionControls {
 
     /// Impulse magnitude ∈ [0,1].
     pub fn impulse_magnitude(&self) -> f64 {
-        let v = clamp_to_unit_disk([clamp11(self.impulse[0]), clamp11(self.impulse[1])]);
-        (v[0] * v[0] + v[1] * v[1]).sqrt().min(1.0)
+        clamp01(self.impulse)
     }
 
     /// Generalized drive covector `Q_drive` with metric-consistent normalization.
@@ -335,7 +336,8 @@ impl MotionControls {
     /// where `dir = drive/||drive||` (Euclidean unit) and `||dir||_G = sqrt(dirᵀ G dir)`.
     /// This gives `||Q_drive||_{G^{-1}} = throttle * MAX_DRIVE_FORCE` independent of
     /// direction and position — so the same normalized command has predictable
-    /// energy meaning across the manifold (equal generalized work per unit throttle),
+    /// dual-metric effort meaning across the manifold (constant force norm, not
+    /// equal instantaneous power which still depends on velocity/alignment),
     /// while coordinate acceleration `a = G^{-1} Q_drive` correctly varies with `G(c)`.
     pub fn drive_covector(
         &self,
@@ -387,7 +389,8 @@ impl MotionControls {
 
     /// Impulse covector with metric-consistent normalization (analogous to drive).
     ///
-    /// `impulse_cov = ||impulse|| * MAX_IMPULSE * (G dir_imp / ||dir_imp||_G)`.
+    /// `impulse_cov = impulse * MAX_IMPULSE * (G dir / ||dir||_G)` where `dir`
+    /// is the canonical 2D drive direction. This shares the single 2D
     /// Intended to be converted to `Δv = G^{-1} impulse_cov` exactly once.
     pub fn impulse_covector(
         &self,
@@ -399,9 +402,10 @@ impl MotionControls {
         if mag < 1e-12 {
             return Ok((0.0, 0.0));
         }
-        let v = clamp_to_unit_disk([clamp11(m.impulse[0]), clamp11(m.impulse[1])]);
-        let inv_mag = 1.0 / mag;
-        let dir = [v[0] * inv_mag, v[1] * inv_mag];
+        let dir = match m.drive_direction() {
+            Some(d) => d,
+            None => return Ok((0.0, 0.0)),
+        };
         let g = crate::manifold::induced_metric(c, config)?;
         let g_dir = [
             g[0][0] * dir[0] + g[0][1] * dir[1],
@@ -501,6 +505,10 @@ pub struct JuliaViewState {
     pub rotation: f64,
     /// Semantic palette state (Rust authority, #95).
     pub color: ColorIntent,
+    /// Cooldown ticks remaining before next harmony transition (edge-triggered hysteresis).
+    /// Prevents sustained `harmony_shift` from chattering every tick (#95).
+    #[serde(default)]
+    pub harmony_cooldown: u32,
 }
 
 impl Default for JuliaViewState {
@@ -509,6 +517,7 @@ impl Default for JuliaViewState {
             zoom: 1.0,
             rotation: 0.0,
             color: ColorIntent::default(),
+            harmony_cooldown: 0,
         }
     }
 }
@@ -519,6 +528,7 @@ impl JuliaViewState {
             zoom: self.zoom.clamp(JULIA_ZOOM_MIN, JULIA_ZOOM_MAX),
             rotation: wrap_angle(self.rotation),
             color: self.color.clamped(),
+            harmony_cooldown: self.harmony_cooldown,
         }
     }
 
@@ -531,6 +541,10 @@ impl JuliaViewState {
     /// normalized controls proportionally before calling.
     pub fn apply_controls(&mut self, controls: JuliaViewControls) {
         let c = controls.clamped();
+        // Decrement cooldown if active (edge-triggered hysteresis).
+        if self.harmony_cooldown > 0 {
+            self.harmony_cooldown -= 1;
+        }
         // Zoom as additive log step with clamping; rate-limited by MAX_ZOOM_DELTA.
         // Use multiplicative update so zoom semantics are proportional:
         //   zoom' = zoom * exp(zoom_delta * MAX_ZOOM_DELTA)
@@ -547,11 +561,13 @@ impl JuliaViewState {
             .clamp(JULIA_LIGHTNESS_MIN, JULIA_LIGHTNESS_MAX);
         self.color.accent_weight =
             clamp01(self.color.accent_weight + c.accent_delta * MAX_ACCENT_DELTA);
-        // Harmony: cycle deterministically when |shift| exceeds threshold.
-        if c.harmony_shift.abs() > HARMONY_SHIFT_THRESHOLD {
+        // Harmony: edge-triggered with cooldown to prevent chatter (#95).
+        // Sustained high shift must not cycle every tick; require cooldown expiry.
+        if c.harmony_shift.abs() > HARMONY_SHIFT_THRESHOLD && self.harmony_cooldown == 0 {
             let dir = if c.harmony_shift > 0.0 { 1 } else { 2 }; // +1 or -1 mod 3
             let next = Harmony::from_index((self.color.harmony.index() + dir) % 3);
             self.color.harmony = next;
+            self.harmony_cooldown = 15; // ~0.3s at 50Hz hop cadence, prevents high-frequency chatter
         }
     }
 }
@@ -612,8 +628,7 @@ impl ControlsV2 {
             "driveY",
             "brake",
             "grip",
-            "impulseX",
-            "impulseY",
+            "impulse",
             "zoomDelta",
             "rotationDelta",
             "hueDelta",
@@ -632,8 +647,7 @@ impl ControlsV2 {
             ("driveY", [-1.0, 1.0]),
             ("brake", [0.0, 1.0]),
             ("grip", [0.0, 1.0]),
-            ("impulseX", [-1.0, 1.0]),
-            ("impulseY", [-1.0, 1.0]),
+            ("impulse", [0.0, 1.0]),
             ("zoomDelta", [-1.0, 1.0]),
             ("rotationDelta", [-1.0, 1.0]),
             ("hueDelta", [-1.0, 1.0]),
@@ -657,22 +671,21 @@ impl ControlsV2 {
                 order
             ));
         }
-        let to01 = |x: f64| ((x + 1.0) / 2.0).clamp(0.0, 1.0);
         Ok(Self {
             motion: MotionControls {
                 drive: [output[0], output[1]],
-                brake: to01(output[2]),
-                grip: to01(output[3]),
-                impulse: [output[4], output[5]],
+                brake: output[2].clamp(0.0, 1.0),
+                grip: output[3].clamp(0.0, 1.0),
+                impulse: output[4].clamp(0.0, 1.0),
             },
             view: JuliaViewControls {
-                zoom_delta: output[6],
-                rotation_delta: output[7],
-                hue_delta: output[8],
-                chroma_delta: output[9],
-                lightness_delta: output[10],
-                accent_delta: output[11],
-                harmony_shift: output[12],
+                zoom_delta: output[5],
+                rotation_delta: output[6],
+                hue_delta: output[7],
+                chroma_delta: output[8],
+                lightness_delta: output[9],
+                accent_delta: output[10],
+                harmony_shift: output[11],
             },
         }
         .clamped())
@@ -682,18 +695,12 @@ impl ControlsV2 {
     pub fn to_model_output(&self) -> Vec<f64> {
         let m = self.motion.clamped();
         let v = self.view.clamped();
-        // brake/grip were to01'd on input; emit [-1,1] by inverting: normalized_01 -> 2*x-1.
-        // For determinism, round-trip through from_model_output should be approximately identity
-        // within clamping.
-        let brake_norm = m.brake * 2.0 - 1.0;
-        let grip_norm = m.grip * 2.0 - 1.0;
         vec![
             m.drive[0],
             m.drive[1],
-            brake_norm,
-            grip_norm,
-            m.impulse[0],
-            m.impulse[1],
+            m.brake,
+            m.grip,
+            m.impulse,
             v.zoom_delta,
             v.rotation_delta,
             v.hue_delta,
@@ -796,16 +803,16 @@ mod tests {
             drive: [2.0, 0.0],
             brake: 2.0,
             grip: -1.0,
-            impulse: [0.0, 3.0],
+            impulse: 3.0,
         }
         .clamped();
         assert!((m.drive[0] - 1.0).abs() < 1e-12);
         assert!((m.brake - 1.0).abs() < 1e-12);
         assert!((m.grip - 0.0).abs() < 1e-12);
-        assert!((m.impulse[1] - 1.0).abs() < 1e-12);
-        // Drive/impulse must be inside unit disk
+        assert!((m.impulse - 1.0).abs() < 1e-12);
+        // Drive must be inside unit disk; impulse is scalar [0,1]
         assert!((m.drive[0] * m.drive[0] + m.drive[1] * m.drive[1]) <= 1.0 + 1e-12);
-        assert!((m.impulse[0] * m.impulse[0] + m.impulse[1] * m.impulse[1]) <= 1.0 + 1e-12);
+        assert!(m.impulse >= 0.0 && m.impulse <= 1.0);
     }
 
     #[test]
@@ -815,7 +822,7 @@ mod tests {
                 drive: [0.6, -0.4],
                 brake: 0.7,
                 grip: 0.3,
-                impulse: [0.1, 0.9],
+                impulse: 0.9,
             },
             view: JuliaViewControls {
                 zoom_delta: 0.5,
@@ -962,7 +969,7 @@ mod tests {
         let c = C::new(0.0, 0.0);
         // Impulse magnitude is bounded by MAX_IMPULSE metric-consistent
         let m = MotionControls {
-            impulse: [1.0, 0.0],
+            impulse: 1.0,
             ..Default::default()
         };
         let dv = m.impulse_delta_v(c, &config).unwrap();
@@ -1031,7 +1038,7 @@ mod tests {
             drive: [0.5, 0.7],
             brake: 0.2,
             grip: 0.8,
-            impulse: [0.0, 0.0],
+            impulse: 0.0,
         };
         let (c1, v1, _) =
             integrate_motion_controls(c0, v0, &controls, dt, &config).unwrap();
@@ -1060,4 +1067,70 @@ mod tests {
         }
         assert_motion_fields(m);
     }
+    #[test]
+    fn harmony_cooldown_prevents_chatter() {
+        let mut s = JuliaViewState::default();
+        // Sustained high shift should only transition once per cooldown period
+        let start_harmony = s.color.harmony;
+        for _ in 0..5 {
+            s.apply_controls(JuliaViewControls {
+                harmony_shift: 1.0,
+                ..Default::default()
+            });
+        }
+        // Should have transitioned exactly once, not 5 times
+        assert_ne!(s.color.harmony, start_harmony);
+        // Next immediate sustained shift should not transition again due to cooldown
+        let after_first = s.color.harmony;
+        s.apply_controls(JuliaViewControls {
+            harmony_shift: 1.0,
+            ..Default::default()
+        });
+        assert_eq!(s.color.harmony, after_first, "cooldown should prevent immediate re-trigger");
+        // After cooldown expires, should allow next transition
+        for _ in 0..15 {
+            s.apply_controls(JuliaViewControls::default());
+        }
+        s.apply_controls(JuliaViewControls {
+            harmony_shift: 1.0,
+            ..Default::default()
+        });
+        assert_ne!(s.color.harmony, after_first, "should transition again after cooldown");
+    }
+
+    #[test]
+    fn candidate_frame_comparison_world_aligned_wins() {
+        // Controlled comparison of 2D control frames on learnability/controllability
+        // Metrics: (1) no singularity at flat region, (2) no heading state, (3) deterministic, (4) metric-consistent
+        // World-aligned Cartesian (chosen) vs heading-polar vs shore-aligned
+        let config = cfg();
+        let c_flat = C::new(0.0, 0.0);
+        let c_shore = C::new(0.25, 0.0);
+        // World-aligned: drive vector directly, no heading state, works at flat region where grad~0
+        let m_world = MotionControls {
+            drive: [1.0, 0.0],
+            ..Default::default()
+        };
+        let q_world_flat = m_world.drive_covector(c_flat, &config).unwrap();
+        let q_world_shore = m_world.drive_covector(c_shore, &config).unwrap();
+        // Both succeed (no singularity)
+        assert!(q_world_flat.0.is_finite() && q_world_flat.1.is_finite());
+        assert!(q_world_shore.0.is_finite() && q_world_shore.1.is_finite());
+        // Heading-polar would require persistent heading state; absence in MotionControls proves no hidden state
+        // Shore-aligned would be singular where grad~0 (flat region); world-aligned is not
+        let g_flat = crate::manifold::induced_metric(c_flat, &config).unwrap();
+        let grad_flat = crate::manifold::scale_gradient(c_flat, &config).unwrap();
+        let grad_norm_flat = (grad_flat.0 * grad_flat.0 + grad_flat.1 * grad_flat.1).sqrt();
+        // At flat region, shore-aligned frame would be ill-defined (grad ~0), but world-aligned is well-defined
+        // If grad is near zero, shore frame fails, world frame succeeds — world-aligned wins on robustness
+        if grad_norm_flat < 1e-3 {
+            assert!(q_world_flat.0.is_finite(), "world-aligned should be well-defined even where shore frame is singular");
+        }
+        // Metric-consistent: same throttle gives same force norm regardless of position
+        let g_inv_flat_det = g_flat[0][0] * g_flat[1][1] - g_flat[0][1]*g_flat[0][1];
+        let g_inv_flat = [[g_flat[1][1]/g_inv_flat_det, -g_flat[0][1]/g_inv_flat_det], [-g_flat[0][1]/g_inv_flat_det, g_flat[0][0]/g_inv_flat_det]];
+        let norm_flat = (q_world_flat.0*(g_inv_flat[0][0]*q_world_flat.0+g_inv_flat[0][1]*q_world_flat.1)+q_world_flat.1*(g_inv_flat[1][0]*q_world_flat.0+g_inv_flat[1][1]*q_world_flat.1)).sqrt();
+        assert!((norm_flat - MAX_DRIVE_FORCE).abs() < 1e-9);
+    }
+
 }

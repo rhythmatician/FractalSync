@@ -682,10 +682,6 @@ def execute_training_workflow(args):
                 # semantics). The browser refuses mismatches AND pre-timebase
                 # models with no stamp.
                 "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
-                # Controls v2 contract stamp (issue #107): versions the
-                # unified action surface (names, grouping, ranges, units,
-                # normalization). The browser refuses mismatches.
-                "controls_version": _runtime_controls_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")
