@@ -3,6 +3,18 @@
 Short, opinionated contract for any AI agent working in this repo. Read this,
 then read `CONTEXT.md` and the ADRs you need.
 
+## Token safety
+
+Use rtk prefix to save tokens and budget context (see the rtk SKILL.md)
+
+## Type safety
+
+Make everything reachable by static code analysis (Avoid getattr in python, etc)
+
+## Exploration/Recon
+
+Use /graphify before `rtk rg` or `rtk grep`.
+
 ## Core principle
 
 Apply YAGNI and DRY, and respect the seam defined by ADR 0001: anything the
