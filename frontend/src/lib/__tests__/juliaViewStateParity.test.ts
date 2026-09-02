@@ -122,7 +122,8 @@ describe('JuliaViewState parity (WASM vs Rust)', () => {
     expect(state.harmony_armed).toBe(expected.harmony_armed);
 
     // Determinism: repeating yields same
-    const state2: any = new State(1.0, 0.0, new mod.ColorIntent(0.0, 0.18, 0.55, 'analogous', 0.35), 0, true);
+    const color2: any = (mod as any).ColorIntent ? new (mod as any).ColorIntent(0.0, 0.18, 0.55, 'analogous', 0.35) : { anchor_hue: 0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 };
+    const state2: any = new State(1.0, 0.0, color2, 0, true);
     for (const d of deltas) {
       state2.apply_controls(new Controls(...d));
     }
