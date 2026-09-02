@@ -667,4 +667,14 @@ export class OrbitSynthesizer {
     this._lastC = { real: c.real, imag: c.imag };
     return { real: c.real, imag: c.imag };
   }
+
+  /**
+   * Typed accessor for the underlying wasm controller's read-only
+   * DebugSnapshot seam (issue #111). Returns the controller object exposing
+   * `debugSnapshot()`, or undefined when the wasm build predates the seam.
+   * Diagnostic-only: the snapshot is a pure function of controller state.
+   */
+  debugSnapshotController(): { debugSnapshot?: () => unknown } | undefined {
+    return this.state as unknown as { debugSnapshot?: () => unknown } | undefined;
+  }
 }

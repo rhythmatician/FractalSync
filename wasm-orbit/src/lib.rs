@@ -59,6 +59,10 @@ use runtime_core::manifold::{
     drag_force as rust_drag_force,
     integrate_step as rust_integrate_step, unsigned_distance as rust_unsigned_distance,
 };
+use runtime_core::debug::{
+    TerrainPatch as RustTerrainPatch,
+    DEBUG_SNAPSHOT_VERSION, CANONICAL_DT as DEBUG_CANONICAL_DT,
+};
 use serde::Deserialize;
 
 /// Shared constants exposed to JavaScript
@@ -1702,4 +1706,121 @@ pub fn motion_drive_covector(
     let c = RustComplex::new(c_re, c_im);
     let cov = RustMotionControls::from(motion.clone()).drive_covector(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
     Ok(vec![cov.0, cov.1])
+}
+
+// ---------------------------------------------------------------------------
+// DebugSnapshot (issue #111 Phase A) — BROWSER surface.
+//
+// Read-only diagnostic seam: Rust owns all semantics; the browser only
+// renders. Snapshot creation never mutates runtime state. Wire format is
+// camelCase serde, matching the PyO3 surface and the AnalysisTick parity
+// convention.
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(typescript_custom_section)]
+const TS_DEBUG_TYPES: &'static str = r#"
+/** Version of the read-only DebugSnapshot contract (issue #111). */
+export interface DebugSnapshotMeta {
+    version: string;
+    canonicalDt: number;
+}
+"#;
+
+/// The DebugSnapshot contract version and canonical step cadence.
+#[wasm_bindgen(js_name = "debugSnapshotMeta")]
+pub fn debug_snapshot_meta() -> JsValue {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Meta {
+        version: &'static str,
+        canonical_dt: f64,
+    }
+    serde_wasm_bindgen::to_value(&Meta {
+        version: DEBUG_SNAPSHOT_VERSION,
+        canonical_dt: DEBUG_CANONICAL_DT,
+    })
+    .unwrap_or(JsValue::NULL)
+}
+
+/// Build a read-only DebugSnapshot from explicit authoritative state.
+///
+/// `motion_raw` is the last raw (pre-clamp) MotionControls, or null before
+/// the first step. `last_delta_total` is the last step's total-energy change
+/// (NaN = none). Never mutates runtime state.
+#[wasm_bindgen(js_name = "debugSnapshotFromState")]
+#[allow(clippy::too_many_arguments)]
+pub fn debug_snapshot_from_state(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    motion_raw: Option<MotionControls>,
+    friction_beta: f64,
+    friction_power: f64,
+    manifold_drag: f64,
+    config: &ManifoldConfig,
+    last_delta_total: f64,
+    time_seconds: f64,
+) -> Result<JsValue, JsValue> {
+    let last_action = motion_raw.map(|m| {
+        // Build the RAW struct directly: the From impl clamps, which would
+        // destroy the raw-vs-effective provenance this seam exists to expose
+        // (same discipline as the PyO3 surface).
+        let raw = RustMotionControls {
+            direction: [m.direction_x, m.direction_y],
+            throttle: m.throttle,
+            brake: m.brake,
+            grip: m.grip,
+            impulse: m.impulse,
+        };
+        runtime_core::debug::LastAction {
+            raw,
+            friction_beta,
+            friction_power,
+        }
+    });
+    let delta = if last_delta_total.is_nan() {
+        None
+    } else {
+        Some(last_delta_total)
+    };
+    let mut snap = runtime_core::debug::snapshot_from_state(
+        RustComplex::new(c_re, c_im),
+        (vx, vy),
+        last_action,
+        Some(manifold_drag),
+        &config.into(),
+        delta,
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    snap.time_seconds = time_seconds;
+    serde_wasm_bindgen::to_value(&snap).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Sample an n x n terrain patch of the canonical embedding
+/// Q(c) = (x, y, lambda*sigma(c)) centered at (cx, cy) with half-extent
+/// `half` in c-space. Returns a camelCase JSON object:
+/// { n, center, half, positions, signed, realm }.
+#[wasm_bindgen(js_name = "debugTerrainPatch")]
+pub fn debug_terrain_patch(
+    cx: f64,
+    cy: f64,
+    half: f64,
+    n: usize,
+    config: &ManifoldConfig,
+) -> Result<JsValue, JsValue> {
+    let patch: RustTerrainPatch = runtime_core::debug::terrain_patch(cx, cy, half, n, &config.into())
+        .map_err(|e| JsValue::from_str(&e))?;
+    serde_wasm_bindgen::to_value(&patch).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Convenience: DebugSnapshot for an OrbitController's current state.
+#[wasm_bindgen]
+impl OrbitController {
+    /// Read-only DebugSnapshot of the current authoritative state.
+    #[wasm_bindgen(js_name = "debugSnapshot")]
+    pub fn debug_snapshot(&self) -> Result<JsValue, JsValue> {
+        let snap = self.inner.debug_snapshot().map_err(|e| JsValue::from_str(&e))?;
+        serde_wasm_bindgen::to_value(&snap).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 }

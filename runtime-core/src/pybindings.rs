@@ -331,6 +331,29 @@ impl OrbitController {
         (c.re, c.im)
     }
 
+    /// Current c real part (destination state, diagnostic).
+    #[getter]
+    fn c_re(&self) -> f64 {
+        self.inner.c.re
+    }
+
+    /// Current c imaginary part (destination state, diagnostic).
+    #[getter]
+    fn c_im(&self) -> f64 {
+        self.inner.c.im
+    }
+
+    /// Read-only DebugSnapshot of the current authoritative state (issue #111).
+    /// Pure function of state; never mutates the controller.
+    fn debug_snapshot<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+        let snap = self.inner.debug_snapshot().map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+        let value = serde_json::to_value(&snap)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let obj: PyObject = pythonize::pythonize(py, &value)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")))?;
+        Ok(obj)
+    }
+
     /// Planar velocity for manifold integration (diagnostic).
     #[getter]
     fn planar_velocity(&self) -> (f64, f64) {
@@ -1298,6 +1321,96 @@ fn controls_integrate_step(
     Ok((c_new.re, c_new.im, v_new.0, v_new.1, info.into()))
 }
 
+// ---------------------------------------------------------------------------
+// DebugSnapshot (issue #111 Phase A) — Python surface.
+//
+// Read-only diagnostic seam for the trainer: Rust owns all semantics; the
+// wire format is camelCase serde JSON-compatible dicts, matching the wasm
+// surface and the AnalysisTick parity convention (issue #93).
+// ---------------------------------------------------------------------------
+
+/// Build a read-only DebugSnapshot from explicit authoritative state.
+///
+/// `motion_raw` is the last raw (pre-clamp) MotionControls or None before the
+/// first step. `last_delta_total` is the last step's total-energy change
+/// (None = no step yet). Snapshot creation never mutates runtime state.
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, vx, vy, motion_raw=None, friction_beta=0.0, friction_power=0.0, manifold_drag=0.0, config=None, last_delta_total=None, time_seconds=0.0))]
+#[allow(clippy::too_many_arguments)]
+fn debug_snapshot_from_state(
+    py: Python,
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    motion_raw: Option<MotionControls>,
+    friction_beta: f64,
+    friction_power: f64,
+    manifold_drag: f64,
+    config: Option<ManifoldConfig>,
+    last_delta_total: Option<f64>,
+    time_seconds: f64,
+) -> PyResult<PyObject> {
+    let last_action = motion_raw.map(|m| {
+        // Build the RAW struct directly: the From impl clamps, which would
+        // destroy the raw-vs-effective provenance this seam exists to expose.
+        let raw = crate::controls::MotionControls {
+            direction: [m.direction_x, m.direction_y],
+            throttle: m.throttle,
+            brake: m.brake,
+            grip: m.grip,
+            impulse: m.impulse,
+        };
+        crate::debug::LastAction {
+            raw,
+            friction_beta,
+            friction_power,
+        }
+    });
+    let cfg = config
+        .map(|c| crate::manifold::ManifoldConfig::from(c))
+        .unwrap_or_default();
+    let mut snap = crate::debug::snapshot_from_state(
+        num_complex::Complex64::new(c_re, c_im),
+        (vx, vy),
+        last_action,
+        Some(manifold_drag),
+        &cfg,
+        last_delta_total,
+    )
+    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+    snap.time_seconds = time_seconds;
+    let value = serde_json::to_value(&snap)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    Ok(pythonize::pythonize(py, &value)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")))?)
+}
+
+/// Sample an n x n terrain patch of the canonical embedding
+/// Q(c) = (x, y, lambda*sigma(c)) centered at (cx, cy) with half-extent
+/// `half` in c-space. Returns a dict:
+/// { n, center, half, positions, signed, realm }.
+#[pyfunction]
+#[pyo3(signature = (cx, cy, half, n, config=None))]
+fn debug_terrain_patch(
+    py: Python,
+    cx: f64,
+    cy: f64,
+    half: f64,
+    n: usize,
+    config: Option<ManifoldConfig>,
+) -> PyResult<PyObject> {
+    let cfg = config
+        .map(|c| crate::manifold::ManifoldConfig::from(c))
+        .unwrap_or_default();
+    let patch = crate::debug::terrain_patch(cx, cy, half, n, &cfg)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+    let value = serde_json::to_value(&patch)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    Ok(pythonize::pythonize(py, &value)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")))?)
+}
+
 /// Compute drive covector for inspection/diagnostics.
 #[pyfunction]
 #[pyo3(signature = (c, motion, config))]
@@ -2188,6 +2301,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(controls_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
+    m.add_function(wrap_pyfunction!(debug_snapshot_from_state, m)?)?;
+    m.add_function(wrap_pyfunction!(debug_terrain_patch, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())

@@ -50,6 +50,12 @@ class MockOrbitController {
   manifold_drag = 0.1;
   manifold_error: string | null = null;
   planar_velocity: [number, number] = [0, 0];
+  // DebugSnapshot bookkeeping (issue #111).
+  last_controls: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number } | null = null;
+  last_friction_beta = 0.0;
+  last_friction_power = 0.0;
+  last_delta_total: number | null = null;
+  step_time_seconds = 0.0;
   // Momentum state (used when momentum is on).
   v_re = 0;
   v_im = 0;
@@ -125,7 +131,86 @@ class MockOrbitController {
     this.c_re += this.planar_velocity[0] * dt;
     this.c_im += this.planar_velocity[1] * dt;
     this.theta = (this.theta + this.omega * dt) % TWO_PI;
+    // DebugSnapshot bookkeeping (issue #111): raw controls, friction, clock.
+    this.last_controls = m
+      ? {
+          direction: [dirX, dirY] as [number, number],
+          throttle,
+          brake,
+          grip,
+          impulse,
+        }
+      : null;
+    this.last_friction_beta = beta;
+    this.last_friction_power = -beta * (this.planar_velocity[0] ** 2 + this.planar_velocity[1] ** 2);
+    this.last_delta_total = 0.0;
+    this.step_time_seconds += dt;
     return { real: this.c_re, imag: this.c_im };
+  }
+
+  /**
+   * Read-only DebugSnapshot mock (issue #111). Mirrors the wasm seam's wire
+   * shape with mock-physics values so the cockpit adapter is testable in
+   * vitest. NOT a math mirror: the real values come from Rust.
+   */
+  debugSnapshot() {
+    const c = [this.c_re, this.c_im] as [number, number];
+    const v = [this.planar_velocity[0], this.planar_velocity[1]] as [number, number];
+    // Mock signed distance: distance from the unit-ish Shore at x=0.25.
+    const signedDistance = 0.25 - this.c_re;
+    const sigma = Math.log2(0.1 / Math.sqrt(signedDistance * signedDistance + 1e-8));
+    const kinetic = 0.5 * (v[0] * v[0] + v[1] * v[1]);
+    const potential = sigma;
+    const action = this.last_controls
+      ? {
+          raw: { ...this.last_controls },
+          effective: {
+            direction: [
+              Math.max(-1, Math.min(1, this.last_controls.direction[0])),
+              Math.max(-1, Math.min(1, this.last_controls.direction[1])),
+            ] as [number, number],
+            throttle: Math.max(0, Math.min(1, this.last_controls.throttle)),
+            brake: Math.max(0, Math.min(1, this.last_controls.brake)),
+            grip: Math.max(0, Math.min(1, this.last_controls.grip)),
+            impulse: Math.max(0, Math.min(1, this.last_controls.impulse)),
+          },
+          driveCovector: [this.last_controls.throttle * 2.0, 0] as [number, number],
+          frictionBeta: this.last_friction_beta,
+          frictionPower: this.last_friction_power,
+        }
+      : null;
+    return {
+      version: 'debug-snapshot/1',
+      timeSeconds: this.step_time_seconds,
+      action,
+      map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
+      physics: {
+        c,
+        velocity: v,
+        signedDistance,
+        realm: signedDistance < 0 ? -1 : signedDistance > 0 ? 1 : 0,
+        rho: Math.sqrt(signedDistance * signedDistance + 1e-8),
+        sigma,
+        sigmaDot: 0,
+        scaleGradient: [0, 0] as [number, number],
+        metric: [1, 0, 1] as [number, number, number],
+        metricSpeed: Math.sqrt(v[0] * v[0] + v[1] * v[1]),
+        kinetic,
+        potential,
+        total: kinetic + potential,
+        geodesicAccel: [0, 0] as [number, number],
+        potentialForce: [0, 0] as [number, number],
+        netAccel: [0, 0] as [number, number],
+        derivativeValid: true,
+      },
+      diagnostics: {
+        derivativeStep: 1e-4,
+        valid: true,
+        lastError: null,
+        lastDeltaTotal: this.last_delta_total,
+        crestPotential: Math.log2(0.1 / 1e-4),
+      },
+    };
   }
 
   step(dt: number, _h = 0.0, bandGates?: Float64Array | null) {
@@ -334,5 +419,34 @@ export default {
       analysis_pipeline_version: 'analysis-pipeline/1',
       controls_version: 'controls/2',
     };
+  },
+  debugSnapshotMeta() {
+    return { version: 'debug-snapshot/1', canonicalDt: 1024 / 48000 };
+  },
+  ManifoldConfig: class MockManifoldConfig {
+    d_ref: number; epsilon: number; lambda_sq: number; kappa: number;
+    constructor(d: number, e: number, l: number, k: number) {
+      this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k;
+    }
+  },
+  debugTerrainPatch(cx: number, cy: number, half: number, n: number) {
+    // Mock terrain: same wire shape as the Rust seam. Heights vary so the
+    // cockpit's mesh-building path is exercised in vitest.
+    const positions: number[] = [];
+    const signed: number[] = [];
+    const realm: number[] = [];
+    for (let row = 0; row < n; row++) {
+      const im = cy + half - 2 * half * (row / (n - 1));
+      for (let col = 0; col < n; col++) {
+        const re = cx - half + 2 * half * (col / (n - 1));
+        const d = 0.25 - re;
+        const rho = Math.sqrt(d * d + 1e-8);
+        const sigma = Math.log2(0.1 / rho);
+        positions.push(re, im, sigma);
+        signed.push(d);
+        realm.push(d < 0 ? -1 : d > 0 ? 1 : 0);
+      }
+    }
+    return { n, center: [cx, cy] as [number, number], half, positions, signed, realm };
   },
 };

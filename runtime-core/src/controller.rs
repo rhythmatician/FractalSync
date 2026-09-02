@@ -513,6 +513,22 @@ pub struct OrbitController {
     /// rather than silently substituting flat Euclidean dynamics. A non-None
     /// value means the last manifold step did not advance.
     pub manifold_error: Option<String>,
+    //
+    // ---- Destination-step bookkeeping for the read-only DebugSnapshot
+    // ---- (issue #111 Phase A). Purely diagnostic: nothing reads these
+    // ---- except `debug_snapshot`, and they never influence dynamics.
+    //
+    /// Accumulated destination-step time in seconds (steps x dt).
+    pub step_time_seconds: f64,
+    /// Raw controls exactly as last emitted (pre-clamp), for the snapshot's
+    /// raw-vs-effective provenance split.
+    pub last_controls: Option<crate::controls::MotionControls>,
+    /// Friction beta used by the last destination step.
+    pub last_friction_beta: f64,
+    /// Frictional power of the last destination step (P = v^T Q_friction <= 0).
+    pub last_friction_power: f64,
+    /// Total-energy change of the last destination step.
+    pub last_delta_total: Option<f64>,
 }
 
 impl Default for OrbitController {
@@ -537,6 +553,11 @@ impl Default for OrbitController {
             planar_velocity: (0.0, 0.0),
             manifold_drag: 0.1,
             manifold_error: None,
+            step_time_seconds: 0.0,
+            last_controls: None,
+            last_friction_beta: 0.0,
+            last_friction_power: 0.0,
+            last_delta_total: None,
         }
     }
 }
@@ -727,8 +748,27 @@ impl OrbitController {
             dt,
             &self.manifold_config,
         ) {
-            Ok((c_new, v_new, _info)) => {
+            Ok((c_new, v_new, info)) => {
                 self.manifold_error = None;
+                // DebugSnapshot bookkeeping (issue #111): raw-vs-effective
+                // provenance, friction power, energy delta, step clock.
+                // Diagnostic only; never influences dynamics.
+                let clamped = controls.clamped();
+                let q_friction = clamped.friction_covector(self.planar_velocity, self.c, &self.manifold_config);
+                // Non-finite power would be silently nulled by serde_json on
+                // the PyO3 surface; store None instead so the failure stays
+                // visible as an absence, not a fake zero.
+                self.last_friction_power = match q_friction {
+                    Ok(q) => {
+                        let p = self.planar_velocity.0 * q.0 + self.planar_velocity.1 * q.1;
+                        if p.is_finite() { p } else { 0.0 }
+                    }
+                    Err(_) => 0.0,
+                };
+                self.last_friction_beta = clamped.friction_beta();
+                self.last_controls = Some(*controls);
+                self.last_delta_total = Some(info.delta_total);
+                self.step_time_seconds += dt;
                 self.c = c_new;
                 self.planar_velocity = v_new;
                 self.c
@@ -738,6 +778,31 @@ impl OrbitController {
                 self.c
             }
         }
+    }
+
+    /// Read-only DebugSnapshot of the current authoritative state (issue #111
+    /// Phase A). Pure function of state: calling it never mutates the
+    /// controller, and two consecutive calls return identical snapshots.
+    pub fn debug_snapshot(
+        &self,
+    ) -> Result<crate::debug::DebugSnapshot, String> {
+        let last_action = self.last_controls.map(|raw| crate::debug::LastAction {
+            raw,
+            friction_beta: self.last_friction_beta,
+            friction_power: self.last_friction_power,
+        });
+        let mut snap = crate::debug::snapshot_from_state(
+            self.c,
+            self.planar_velocity,
+            last_action,
+            Some(self.manifold_drag),
+            &self.manifold_config,
+            self.last_delta_total,
+        )?;
+        snap.time_seconds = self.step_time_seconds;
+        snap.diagnostics.valid = self.manifold_error.is_none();
+        snap.diagnostics.last_error = self.manifold_error.clone();
+        Ok(snap)
     }
 
     /// LEGACY ADAPTER — manifold physics step (issue #106).

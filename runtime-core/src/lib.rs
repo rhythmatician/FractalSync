@@ -34,6 +34,7 @@ pub mod minimap;
 pub mod manifold;
 pub mod proxies;
 pub mod controls;
+pub mod debug;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
 // corresponding feature flag has been enabled.
