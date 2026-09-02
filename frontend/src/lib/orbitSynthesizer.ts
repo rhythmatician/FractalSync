@@ -123,6 +123,29 @@ interface WasmModule {
     residualCap: number,
     radiusScale: number
   ) => object;
+  JuliaViewState?: new (
+    zoom: number,
+    rotation: number,
+    color: unknown,
+    harmony_cooldown: number,
+    harmony_armed: boolean
+  ) => any;
+  JuliaViewControls?: new (
+    zoom_delta: number,
+    rotation_delta: number,
+    hue_delta: number,
+    chroma_delta: number,
+    lightness_delta: number,
+    accent_delta: number,
+    harmony_shift: number
+  ) => any;
+  ColorIntent?: new (
+    anchor_hue: number,
+    chroma: number,
+    lightness: number,
+    harmony: string,
+    accent_weight: number
+  ) => any;
   step(
     state: WasmOrbitState,
     dt: number,
@@ -247,6 +270,43 @@ export function getControlsVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+export function getWasmModule(): WasmModule {
+  return requireWasm();
+}
+
+export function createJuliaViewState(): any {
+  const m = getWasmModule() as any;
+  if (typeof m.JuliaViewState !== 'function') {
+    throw new Error('[orbitSynthesizer] wasm build has no JuliaViewState binding; rebuild wasm-orbit');
+  }
+  // Default JuliaViewState matches Rust JuliaViewState::default()
+  return new m.JuliaViewState(1.0, 0.0, null, 0, true);
+}
+
+export function createJuliaViewControls(view: {
+  zoom_delta: number;
+  rotation_delta: number;
+  hue_delta: number;
+  chroma_delta: number;
+  lightness_delta: number;
+  accent_delta: number;
+  harmony_shift: number;
+}): any {
+  const m = getWasmModule() as any;
+  if (typeof m.JuliaViewControls !== 'function') {
+    throw new Error('[orbitSynthesizer] wasm build has no JuliaViewControls binding; rebuild wasm-orbit');
+  }
+  return new m.JuliaViewControls(
+    view.zoom_delta,
+    view.rotation_delta,
+    view.hue_delta,
+    view.chroma_delta,
+    view.lightness_delta,
+    view.accent_delta,
+    view.harmony_shift
+  );
 }
 
 /**

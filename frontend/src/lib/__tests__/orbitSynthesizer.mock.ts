@@ -281,7 +281,39 @@ export default {
   JuliaViewState: class MockJuliaViewState {
     zoom = 1.0; rotation = 0.0; harmony_cooldown = 0; harmony_armed = true;
     color = { anchor_hue: 0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 };
-    apply_controls(_c: unknown) {}
+    apply_controls(c: unknown) {
+      const ctrl = c as { zoom_delta?: number; rotation_delta?: number; hue_delta?: number; chroma_delta?: number; lightness_delta?: number; accent_delta?: number; harmony_shift?: number };
+      const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+      const wrap01 = (v: number) => ((v % 1) + 1) % 1;
+      const wrapAngle = (a: number) => { const tau = 2*Math.PI; let w = ((a % tau)+tau)%tau; if (w>Math.PI) w-=tau; return w; };
+      if (this.harmony_cooldown > 0) this.harmony_cooldown -= 1;
+      const clamp11 = (v: number) => Math.max(-1, Math.min(1, v));
+      const cz = clamp11(ctrl.zoom_delta ?? 0);
+      const cr = clamp11(ctrl.rotation_delta ?? 0);
+      const ch = clamp11(ctrl.hue_delta ?? 0);
+      const cc = clamp11(ctrl.chroma_delta ?? 0);
+      const cl = clamp11(ctrl.lightness_delta ?? 0);
+      const ca = clamp11(ctrl.accent_delta ?? 0);
+      const hs = clamp11(ctrl.harmony_shift ?? 0);
+      this.zoom = clamp(this.zoom * Math.exp(cz * 0.05), 0.5, 8.0);
+      this.rotation = wrapAngle(this.rotation + cr * 0.08);
+      this.color.anchor_hue = wrap01(this.color.anchor_hue + ch * 0.02);
+      this.color.chroma = clamp(this.color.chroma + cc * 0.03, 0.0, 0.4);
+      this.color.lightness = clamp(this.color.lightness + cl * 0.03, 0.2, 0.9);
+      this.color.accent_weight = clamp(this.color.accent_weight + ca * 0.04, 0.0, 1.0);
+      const HARMONY_SHIFT_THRESHOLD = 0.6;
+      const HARMONY_RELEASE_THRESHOLD = 0.3;
+      if (Math.abs(hs) < HARMONY_RELEASE_THRESHOLD) this.harmony_armed = true;
+      if (Math.abs(hs) > HARMONY_SHIFT_THRESHOLD && this.harmony_armed && this.harmony_cooldown === 0) {
+        const modes = ['monochrome','analogous','opponent'] as const;
+        const cur = this.color.harmony as typeof modes[number];
+        const idx = modes.indexOf(cur);
+        const dir = hs > 0 ? 1 : 2;
+        this.color.harmony = modes[(idx + dir) % 3] as unknown as typeof this.color.harmony;
+        this.harmony_cooldown = 15;
+        this.harmony_armed = false;
+      }
+    }
   },
   ControlsV2: class MockControlsV2 {
     constructor(public motion: unknown, public view: unknown) {}
