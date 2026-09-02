@@ -859,7 +859,7 @@ mod tests {
         let flat = c.to_model_output();
         let back = ControlsV2::from_model_output(&flat).unwrap().clamped();
         // Round-trip within clamping/brake/grip mapping.
-        assert!((c.motion.drive[0] - back.motion.drive[0]).abs() < 1e-12);
+        assert!((c.motion.direction[0] - back.motion.direction[0]).abs() < 1e-12);
         assert!((c.motion.grip - back.motion.grip).abs() < 1e-12);
     }
 
