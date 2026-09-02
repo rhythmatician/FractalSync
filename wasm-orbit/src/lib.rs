@@ -35,6 +35,15 @@ use runtime_core::cycle_bank::{
     CycleEvidenceChannel as RustCycleEvidenceChannel,
     CycleObservation as RustCycleObservation, CYCLE_BANK_VERSION,
 };
+use runtime_core::controls::{
+    ControlsV2 as RustControlsV2,
+    MotionControls as RustMotionControls,
+    JuliaViewControls as RustJuliaViewControls,
+    JuliaViewState as RustJuliaViewState,
+    ColorIntent as RustColorIntent,
+    Harmony as RustHarmony,
+    CONTROLS_VERSION,
+};
 use runtime_core::manifold::{
     ManifoldConfig as RustManifoldConfig,
     signed_distance as rust_signed_distance,
@@ -73,6 +82,7 @@ pub fn constants() -> JsValue {
         feature_version: String,
         analysis_pipeline_version: String,
         cycle_bank_version: String,
+        controls_version: String,
         norm_eps: f64,
     }
 
@@ -89,6 +99,7 @@ pub fn constants() -> JsValue {
         feature_version: FEATURE_VERSION.to_string(),
         analysis_pipeline_version: ANALYSIS_PIPELINE_VERSION.to_string(),
         cycle_bank_version: CYCLE_BANK_VERSION.to_string(),
+        controls_version: CONTROLS_VERSION.to_string(),
         norm_eps: NORM_EPS,
         default_orbit_seed: DEFAULT_ORBIT_SEED,
     };

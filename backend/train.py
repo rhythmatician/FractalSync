@@ -97,6 +97,24 @@ def _runtime_feature_version() -> str:
     return "unknown"
 
 
+def _runtime_controls_version() -> str:
+    """Read CONTROLS_VERSION from the installed runtime_core.
+
+    Versions the unified Controls v2 contract (issue #107): names,
+    grouping, ranges, units, normalization. The browser refuses models
+    stamped with a different controls contract.
+    """
+    try:
+        import runtime_core
+
+        version = getattr(runtime_core, "CONTROLS_VERSION", None)
+        if version:
+            return str(version)
+    except ImportError:
+        pass
+    return "unknown"
+
+
 def _runtime_analysis_pipeline_version() -> str:
     """Read ANALYSIS_PIPELINE_VERSION from the installed runtime_core.
 
@@ -664,6 +682,10 @@ def execute_training_workflow(args):
                 # semantics). The browser refuses mismatches AND pre-timebase
                 # models with no stamp.
                 "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
+                # Controls v2 contract stamp (issue #107): versions the
+                # unified action surface (names, grouping, ranges, units,
+                # normalization). The browser refuses mismatches.
+                "controls_version": _runtime_controls_version(),
             },
         )
         print(f"Model exported to: {onnx_path}")

@@ -159,7 +159,36 @@ def export_to_onnx(
         pass
 
     # Determine parameter names and ranges based on metadata
-    if metadata and metadata.get("model_type") == "orbit_control":
+    if metadata and metadata.get("controls_version") == "controls/2":
+        # Unified Controls v2 (issue #107): MotionControls (drive 2D + brake/grip + impulse 2D) + JuliaViewControls (7 deltas)
+        try:
+            import runtime_core
+            parameter_names = list(runtime_core.ControlsV2.model_output_order())
+            raise ImportError("use fallback for explicitness")
+        except Exception:
+            parameter_names = [
+                "driveX", "driveY", "brake", "grip", "impulseX", "impulseY",
+                "zoomDelta", "rotationDelta", "hueDelta", "chromaDelta", "lightnessDelta", "accentDelta", "harmonyShift",
+            ]
+        output_dim = len(parameter_names)
+        parameter_ranges = {
+            "driveX": [-1.0, 1.0],
+            "driveY": [-1.0, 1.0],
+            "brake": [0.0, 1.0],
+            "grip": [0.0, 1.0],
+            "impulseX": [-1.0, 1.0],
+            "impulseY": [-1.0, 1.0],
+            "zoomDelta": [-1.0, 1.0],
+            "rotationDelta": [-1.0, 1.0],
+            "hueDelta": [-1.0, 1.0],
+            "chromaDelta": [-1.0, 1.0],
+            "lightnessDelta": [-1.0, 1.0],
+            "accentDelta": [-1.0, 1.0],
+            "harmonyShift": [-1.0, 1.0],
+        }
+        if metadata and "output_dim" in metadata:
+            output_dim = int(metadata["output_dim"])
+    elif metadata and metadata.get("model_type") == "orbit_control":
         # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
         k_bands = metadata.get("k_bands", 6)
         output_dim = metadata.get("output_dim", 3 + k_bands)
