@@ -789,8 +789,10 @@ impl OrbitController {
 
     // ---- Manifold physics (issue #106) ----
 
-    /// Enable or disable manifold physics. When on, step() routes through
-    /// the Mandelbrot configuration manifold integrator.
+    /// Enable or disable manifold physics. When on, step() routes through a
+    /// LEGACY ADAPTER that translates the old (s, alpha, energy) servo into a
+    /// generalized force covector for the musically-ignorant manifold kernel.
+    /// Transitional; not destination Controls v2 (issue #107).
     #[wasm_bindgen(setter)]
     pub fn set_manifold_physics(&mut self, on: bool) {
         self.inner.manifold_physics = on;
@@ -800,6 +802,14 @@ impl OrbitController {
     #[wasm_bindgen(getter)]
     pub fn manifold_physics(&self) -> bool {
         self.inner.manifold_physics
+    }
+
+    /// The most recent manifold-physics failure, if any. When manifold mode is
+    /// selected and the integrator fails, the controller fails closed (holds
+    /// the last valid state) and records the error here.
+    #[wasm_bindgen(getter)]
+    pub fn manifold_error(&self) -> Option<String> {
+        self.inner.manifold_error.clone()
     }
 
     /// Set the manifold configuration (used only when manifold_physics is on).
@@ -1190,7 +1200,9 @@ pub fn manifold_geodesic_acceleration(
     Ok(vec![ax, ay])
 }
 
-/// Potential force F_U = -G^{-1} ∇U. Returns [fx, fy].
+/// Generalized potential force covector: Q_potential = -grad U = -kappa grad sigma.
+/// Returns [Qx, Qy]. This is a covector, not a coordinate acceleration; convert
+/// with `manifold_apply_generalized_force`.
 #[wasm_bindgen]
 pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Vec<f64>, JsValue> {
     let c = RustComplex::new(real, imag);
@@ -1198,7 +1210,8 @@ pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -
     Ok(vec![fx, fy])
 }
 
-/// Apply generalized force through the metric: a = G^{-1} Q. Returns [ax, ay].
+/// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
+/// Returns [ax, ay]. This is the single place G^{-1} maps a covector to acceleration.
 #[wasm_bindgen]
 pub fn manifold_apply_generalized_force(
     qx: f64,
@@ -1212,7 +1225,8 @@ pub fn manifold_apply_generalized_force(
     Ok(vec![ax, ay])
 }
 
-/// Metric-consistent isotropic drag: Q_drag = -beta G v. Returns [qx, qy].
+/// Metric-consistent isotropic drag covector: Q_drag = -beta G v. Returns [Qx, Qy].
+/// This is a covector, not a coordinate acceleration; its power P = v^T Q_drag <= 0.
 #[wasm_bindgen]
 pub fn manifold_drag_force(
     vx: f64,

@@ -8,12 +8,15 @@ Covers the acceptance criteria from the issue:
    Q_drag = -beta*G*v dissipates: P = v^T Q_drag <= 0 within tolerance.
 3. Bounded total-energy drift — with Controls and drag disabled, the
    semi-implicit integrator's total energy E = K + U drifts by a small
-   bounded amount per step.
+   bounded amount per step (rollout-level conservative tests).
 4. Shore crossings — the native potential ridge U = kappa*sigma(c)
    produces shoreward force without the transient-gated wall (h signal
-   plays no role in the manifold path).
-5. MIP boundaries — Map-derived mechanics (scale, metric) vary
-   continuously across the discrete mip rungs of the distance field.
+   plays no role in the manifold path). Underpowered trajectories do not
+   crest the ridge; overpowered ones do.
+5. Signed-SDF continuity — mechanics derive from the SINGLE signed
+   distance field authority; sigma/gradient/metric vary continuously
+   through the regularized Shore crest with no dependence on a discrete
+   mip level.
 
 The Rust binding is the canonical source of truth (ADR 0001); these
 tests exercise the Python mirror in ``src.cspace_proxies`` against the
@@ -36,10 +39,10 @@ from src.cspace_proxies import (
     orbit_controller_manifold_sequence,
 )
 
-# Tolerances. The Rust integrator uses finite differences (h = 1e-4,
-# sized to clear the f32 noise floor of the distance field) for
-# gradients and Christoffel symbols, so mirror-vs-Rust agreement is
-# limited by that discretization, not float rounding.
+# Tolerances. The Rust integrator derives its finite-difference step from
+# the distance-field provider resolution (one pixel, ~2.4e-3), so
+# mirror-vs-Rust agreement is limited by that discretization, not float
+# rounding.
 PARITY_TOL = 1e-6
 ENERGY_DRIFT_TOL = 0.05
 FRICTION_TOL = 1e-9
@@ -65,6 +68,25 @@ def _rust_step(rc, c, v, q, beta, dt, config):
     return rc.manifold_integrate_step(
         c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config
     )
+
+
+def _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5):
+    """Bisect along the line y=const to find the Shore crossing where the
+    signed distance changes sign. Returns the x where D ~ 0."""
+    lo, hi = x_lo, x_hi
+    assert rc.manifold_signed_distance(complex(lo, y)) < 0.0, (
+        f"x_lo={lo} not inside the set"
+    )
+    assert rc.manifold_signed_distance(complex(hi, y)) > 0.0, (
+        f"x_hi={hi} not outside the set"
+    )
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if rc.manifold_signed_distance(complex(mid, y)) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
 
 
 class TestConnectionValidity:
@@ -197,6 +219,90 @@ class TestEnergyDrift:
             f"unbounded drift across Shore: {max_drift}"
         )
 
+    def _rollout_energy_drift(self, rc, c0, v0, dt, n_steps, config):
+        """Run a conservative rollout (Q=0, beta=0) and return
+        (|E_final - E_initial|, max |E - E_initial| excursion, relative
+        drift). Uses the Rust energy bindings for E at each step."""
+        e0 = rc.manifold_kinetic_energy(v0[0], v0[1], complex(*c0), config) + (
+            rc.manifold_potential_energy(complex(*c0), config)
+        )
+        c = c0
+        v = v0
+        max_excursion = 0.0
+        for _ in range(n_steps):
+            new_re, new_im, new_vx, new_vy, _ = _rust_step(
+                rc, c, v, (0.0, 0.0), 0.0, dt, config
+            )
+            c = (new_re, new_im)
+            v = (new_vx, new_vy)
+            e = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), config) + (
+                rc.manifold_potential_energy(complex(*c), config)
+            )
+            max_excursion = max(max_excursion, abs(e - e0))
+        rel = abs(e - e0) / max(abs(e0), 1e-12)
+        return abs(e - e0), max_excursion, rel
+
+    def test_energy_conserved_low_curvature_rollout(self, rc):
+        """Conservative rollout in a low-curvature region (open water far
+        from the Shore, inside the field domain): total energy E = K + U
+        must stay within the semi-implicit integrator's O(dt) drift over a
+        long rollout."""
+        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
+        dt = 0.002
+        # Open water above the set, far from the Shore, well inside the
+        # field domain (x in [-2, 0.47], y in [-1.12, 1.12]).
+        c0 = (0.0, 0.9)
+        v0 = (0.01, 0.0)
+        drift, excursion, rel = self._rollout_energy_drift(
+            rc, c0, v0, dt, n_steps=150, config=config
+        )
+        assert drift < ENERGY_DRIFT_TOL, (
+            f"low-curvature rollout drifted: |dE|={drift:.3e}"
+        )
+        assert excursion < ENERGY_DRIFT_TOL, (
+            f"low-curvature rollout excursion: {excursion:.3e}"
+        )
+
+    def test_energy_conserved_high_curvature_deep_scale_rollout(self, rc):
+        """Conservative rollout in a high-curvature / deep-scale region
+        (near the Shore where sigma and the metric vary steeply): energy
+        must still stay bounded. The finite-difference Christoffel is
+        noisier there, so the drift is larger than in open water but must
+        not blow up."""
+        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
+        dt = 0.002
+        # Moderate distance from the Shore (D ~ 0.09), moving tangentially.
+        c0 = (0.35, 0.0)
+        v0 = (0.0, 0.02)
+        drift, excursion, rel = self._rollout_energy_drift(
+            rc, c0, v0, dt, n_steps=150, config=config
+        )
+        assert drift < ENERGY_DRIFT_TOL, (
+            f"high-curvature rollout drifted: |dE|={drift:.3e}"
+        )
+        assert excursion < ENERGY_DRIFT_TOL, (
+            f"high-curvature rollout excursion: {excursion:.3e}"
+        )
+
+    def test_energy_conserved_near_shore_rollout(self, rc):
+        """Conservative rollout launched near the Shore ridge (D ~ 0.04):
+        the trajectory must not gain energy from the discretized Christoffel
+        (no numerical pumping). The drift is bounded but larger than in open
+        water because the finite-difference geometry is noisiest closest to
+        the Shore."""
+        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
+        dt = 0.002
+        # Near the boundary, moving tangentially so it stays close.
+        c0 = (0.30, 0.0)
+        v0 = (0.0, 0.02)
+        drift, excursion, rel = self._rollout_energy_drift(
+            rc, c0, v0, dt, n_steps=100, config=config
+        )
+        assert drift < ENERGY_DRIFT_TOL, f"near-Shore rollout drifted: |dE|={drift:.3e}"
+        assert excursion < ENERGY_DRIFT_TOL, (
+            f"near-Shore rollout excursion: {excursion:.3e}"
+        )
+
 
 class TestShoreCrossings:
     """Acceptance: native potential-ridge Shore crossings without the
@@ -262,31 +368,160 @@ class TestShoreCrossings:
         # And it did not run away to infinity either (bounded stall).
         assert abs(new_re) < 10.0, f"unbounded escape: c=({new_re},{new_im})"
 
+    def test_shore_cresting_underpowered_vs_overpowered(self, rc):
+        """Reproducible native ridge test (issue #106, fix #9): locate the
+        real Shore crossing via the signed SDF, compute the potential
+        barrier U_crest - U_0, then launch an underpowered trajectory
+        (KE below the barrier) that must NOT cross D=0 and an overpowered
+        one (KE above the barrier) that MUST. No h/transient gate, no
+        audio force, no teleport, no target-c bypass."""
+        # kappa=0.1 keeps the potential barrier ~1 energy unit so the
+        # cresting velocities stay moderate and the finite-difference
+        # Christoffel remains stable (a kappa=1 barrier ~10 requires
+        # velocities that push the FD geometry into its noisy regime).
+        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
+        rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
+        dt = 0.001
 
-class TestMipBoundaries:
-    """Acceptance: Map-derived mechanics vary continuously across MIP
-    boundaries."""
+        # Launch point in open water to the right of the cardioid cusp.
+        c0 = (0.5, 0.0)
+        # Locate the Shore along the +x axis (the distance-estimate field's
+        # zero contour, near the cardioid cusp).
+        x_shore = _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5)
+        assert abs(x_shore - 0.25) < 0.05, f"unexpected Shore location: {x_shore}"
 
-    def test_scale_continuous_across_distance_field_resolution(self, rc):
-        """sigma(c) computed from the builtin 1024 distance field must
-        be finite and vary smoothly along a sampled line — no
-        discontinuous jumps at rung boundaries."""
-        # Load the canonical builtin field into the in-memory slot
-        # (get_builtin_distance_field_py installs it and returns metadata).
+        # Potential at launch and at the crest (the Shore is the ridge).
+        u0 = rc.manifold_potential_energy(complex(*c0), rc_config)
+        u_crest = rc.manifold_potential_energy(complex(x_shore, 0.0), rc_config)
+        barrier = u_crest - u0
+        assert barrier > 0.0, f"no potential barrier to crest: {barrier}"
+
+        def _crest_attempt(vx):
+            """Launch from c0 with velocity (-vx, 0) toward the Shore.
+            Returns (crossed, min_signed_d, final_c, energy_log)."""
+            c = c0
+            v = (-vx, 0.0)
+            crossed = False
+            min_d = math.inf
+            energy_log = []
+            for _ in range(2000):
+                new_re, new_im, new_vx, new_vy, _ = _rust_step(
+                    rc, c, v, (0.0, 0.0), 0.0, dt, config
+                )
+                c = (new_re, new_im)
+                v = (new_vx, new_vy)
+                d = rc.manifold_signed_distance(complex(*c))
+                min_d = min(min_d, d)
+                if d < 0.0:
+                    crossed = True
+                    # Record K/U/E at the crossing.
+                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)
+                    u = rc.manifold_potential_energy(complex(*c), rc_config)
+                    energy_log.append((k, u, k + u))
+                    break
+            return crossed, min_d, c, energy_log
+
+        # Underpowered: KE = 0.5 * barrier. Must reflect off the ridge and
+        # NOT crest (D stays > 0).
+        ke_under = 0.5 * barrier
+        vx_under = math.sqrt(2.0 * ke_under)
+        crossed_under, min_d_under, _, _ = _crest_attempt(vx_under)
+        assert not crossed_under, (
+            f"underpowered trajectory crested the ridge: min D={min_d_under}"
+        )
+        assert min_d_under > 0.0, (
+            f"underpowered trajectory reached D<=0: min D={min_d_under}"
+        )
+
+        # Overpowered: KE = 1.2 * barrier. Must crest (D < 0).
+        ke_over = 1.2 * barrier
+        vx_over = math.sqrt(2.0 * ke_over)
+        crossed_over, min_d_over, _, energy_log = _crest_attempt(vx_over)
+        assert crossed_over, (
+            f"overpowered trajectory failed to crest: min D={min_d_over}"
+        )
+        # Energy recorded at the crossing must be finite and consistent.
+        assert energy_log, "no energy recorded at crossing"
+        k, u, e = energy_log[0]
+        assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)
+
+
+class TestSignedSdfContinuity:
+    """Acceptance: mechanics derive from the SINGLE signed distance field
+    authority and vary continuously through the regularized Shore crest —
+    with no dependence on a discrete mip level (issue #106, fix #11)."""
+
+    def test_signed_distance_authority_sign_and_continuity(self, rc):
+        """The signed distance field is the single authority: positive
+        outside the set, negative inside, and continuous across the Shore
+        (no sign reconstruction via a separate escape heuristic)."""
+        # Load the canonical builtin field into the in-memory slot.
         meta = rc.get_builtin_distance_field_py("default")
         assert len(meta) == 6, f"unexpected builtin metadata: {meta}"
+        # Deep inside the main cardioid -> negative; open water -> positive.
+        assert rc.manifold_signed_distance(complex(0.0, 0.0)) < 0.0
+        assert rc.manifold_signed_distance(complex(0.5, 0.0)) > 0.0
+        # Locate the actual zero contour along y=0 (the distance-estimate
+        # field's Shore is not exactly at the analytic cardioid cusp x=0.25).
+        x_shore = _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5)
+        # Continuity: a fine sweep across the boundary must stay finite with
+        # bounded variation (no O(1) cliff, no NaN). The distance-estimate
+        # field has small (~1e-4) noise right at the zero contour, so we do
+        # NOT assert strict monotonicity — only that the field is finite and
+        # does not jump discontinuously.
+        prev = None
+        for x in [
+            x_shore - 5e-3,
+            x_shore - 2e-3,
+            x_shore - 1e-3,
+            x_shore,
+            x_shore + 1e-3,
+            x_shore + 2e-3,
+            x_shore + 5e-3,
+        ]:
+            d = rc.manifold_signed_distance(complex(x, 0.0))
+            assert math.isfinite(d)
+            if prev is not None:
+                # No cliff: adjacent samples (>=1e-3 apart) differ by less
+                # than the local scale would allow for a discontinuity.
+                assert abs(d - prev) < 0.05, (
+                    f"signed distance cliff across Shore: {prev} -> {d}"
+                )
+            prev = d
+
+    def test_signed_distance_unsigned_consistency(self, rc):
+        """The unsigned sampler is abs() of the signed authority, so the
+        two agree in magnitude everywhere (single authority, fix #3)."""
+        meta = rc.get_builtin_distance_field_py("default")
+        assert len(meta) == 6
+        pts = [(0.0, 0.0), (0.25, 0.0), (0.5, 0.0), (-0.75, 0.0), (0.3, 0.5)]
+        unsigned = rc.sample_distance_field_py([complex(x, y) for x, y in pts])
+        for (x, y), u in zip(pts, unsigned):
+            signed = rc.manifold_signed_distance(complex(x, y))
+            assert u == pytest.approx(abs(signed), abs=1e-6), (
+                f"unsigned != abs(signed) at ({x},{y}): {u} vs {abs(signed)}"
+            )
+
+    def test_scale_continuous_through_shore_crest(self, rc):
+        """sigma(c) = log2(d_ref/rho) is finite and smooth through the
+        regularized Shore crest. Sampling a dense line across the boundary
+        must show bounded, monotone-ish variation — NOT a cliff, and NOT a
+        dependence on which discrete mip rung a sample lands on."""
+        meta = rc.get_builtin_distance_field_py("default")
+        assert len(meta) == 6
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        # Sample a line crossing several resolution bands.
-        sigmas = [
-            rc.manifold_mandelbrot_scale(complex(x, 0.1), config)
-            for x in (-1.5, -1.0, -0.5, 0.0, 0.5)
-        ]
+        # Dense sweep across the cardioid boundary at y=0.
+        xs = [0.24 + 0.001 * i for i in range(21)]  # 0.24 .. 0.26
+        sigmas = [rc.manifold_mandelbrot_scale(complex(x, 0.0), config) for x in xs]
         for s in sigmas:
             assert math.isfinite(s)
-        # Continuity: adjacent samples differ by a bounded amount
-        # (no cliff). Scale changes smoothly with position.
+        # Adjacent samples (1e-3 apart) must not jump by more than a small
+        # multiple of the local gradient scale. sigma_x ~ 1/(D ln2) near the
+        # crest; at D ~ 1e-3 that is ~1.4e3, so a 1e-3 step can move sigma by
+        # ~1.4. Use a loose bound that still catches a discontinuous cliff
+        # (an O(1) jump from a mip-rung artifact would be far larger).
         for a, b in zip(sigmas, sigmas[1:]):
-            assert abs(a - b) < 5.0, f"scale cliff: {a} -> {b}"
+            assert abs(a - b) < 20.0, f"scale cliff across Shore: {a} -> {b}"
 
     def test_metric_continuous_across_shore(self, rc):
         """G(c) varies continuously through the boundary: sampling
@@ -333,8 +568,12 @@ class TestMirrorParity:
         assert new_re.item() == pytest.approx(r_re, abs=PARITY_TOL)
         assert new_im.item() == pytest.approx(r_im, abs=PARITY_TOL)
 
-    def test_mirror_gradients_flow(self, rc):
-        """Gradients must flow through the identity surrogate."""
+    def test_mirror_ste_smoke_gradients_flow(self, rc):
+        """STE smoke test (NOT gradient validation): the identity surrogate
+        must keep the autograd graph connected so training can proceed. This
+        does NOT assert the gradient equals the true gradient of the manifold
+        dynamics — that is undefined across the PyO3 boundary and is NOT
+        established (issue #106, fix #12)."""
         config = ManifoldConfig()
         c_re = torch.tensor(0.3, requires_grad=True)
         c_im = torch.tensor(0.1, requires_grad=True)
@@ -406,11 +645,13 @@ class TestManifoldSequence:
             config=config,
         )
 
-        # The mirror starts at c=(0,0) like the Rust default. The mirror
-        # accumulates state in float32 while Rust is float64, so the gap
-        # grows ~2e-6/frame; over 40 frames that is ~1e-4. The tolerance
-        # must absorb f32 accumulation but still catch real divergence
-        # (sign flips, wrong constants are O(1) errors).
+        # The mirror starts at c=(0,0) like the Rust default. The mirror runs
+        # its state and target/force math in float64 (matching the float64
+        # Rust kernel) and calls the same Rust integrate_step binding, so the
+        # two trajectories agree to ~1e-8 over the full sequence. The
+        # tolerance absorbs residual float64 libm rounding while still
+        # catching real semantic divergence (sign flips, wrong constants are
+        # O(1) errors).
         max_err = 0.0
         for i in range(n_frames):
             err = max(
@@ -440,8 +681,12 @@ class TestManifoldSequence:
             assert isinstance(info, ManifoldEnergyInfo)
             assert math.isfinite(info.total)
 
-    def test_sequence_gradients_flow_to_targets(self, rc):
-        """Loss on the final position backprops to s_target/alpha."""
+    def test_sequence_ste_smoke_gradients_flow_to_targets(self, rc):
+        """STE smoke test (NOT gradient validation): a loss on the final
+        position must backprop to s_target/alpha through the identity
+        surrogate. This confirms the training path is connected; it does NOT
+        establish that the gradient equals the gradient of the manifold
+        dynamics (issue #106, fix #12)."""
         n = 5
         s_t = torch.tensor([1.0] * n, requires_grad=True)
         a_t = torch.linspace(0, 1, n)

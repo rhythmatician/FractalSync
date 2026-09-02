@@ -15,7 +15,14 @@
 //!   Gamma^i_jk = connection           -- curvature acceleration
 //!   r_ddot + Gamma(r_dot,r_dot) = -G^{-1}∇U + G^{-1}Q  -- equations of motion
 //!
-//! Physics receives Controls as generalized forces; it does not know about music.
+//! Physics receives Controls as generalized force COVECTORS; it does not know
+//! about music. Generalized forces are summed as covectors and converted to
+//! coordinate acceleration exactly once via G^{-1} (see [`integrate_step`]).
+//!
+//! Signed realm classification comes from the canonical signed SDF sampler in
+//! `distance_field`; this module does not reconstruct sign with an escape
+//! heuristic. Derivative finite-difference steps are derived from the SDF
+//! provider's pixel spacing, not a magic constant.
 
 use num_complex::Complex64;
 
@@ -24,7 +31,13 @@ use num_complex::Complex64;
 pub struct ManifoldConfig {
     /// Reference distance for scale definition (typically 0.1)
     pub d_ref: f64,
-    /// Resolution floor for smooth regularization (typically 1e-4)
+    /// Regularization floor epsilon in rho = sqrt(D^2 + epsilon^2).
+    ///
+    /// This is the smooth-scale regularization floor, NOT the SDF pixel
+    /// spacing and NOT the finite-difference step. It sets the finite but
+    /// high scale at The Shore and keeps derivatives smooth through the
+    /// crossing. It is a capability of the current Map provider, not a
+    /// permanent architectural maximum.
     pub epsilon: f64,
     /// Ambient scale weight lambda^2 in metric H = diag(1,1,lambda^2)
     pub lambda_sq: f64,
@@ -45,34 +58,56 @@ impl Default for ManifoldConfig {
 
 /// Signed distance to the Mandelbrot boundary.
 /// D(c) < 0 inside M, D(c) > 0 outside M.
-/// 
-/// Currently delegates to the unsigned distance field and uses a heuristic
-/// sign from escape iteration. Future: use proper signed distance field.
+///
+/// This delegates to the canonical signed SDF sampler in `distance_field`
+/// (`sample_signed_distance_field`), which interpolates the stored signed
+/// values directly. It does NOT reconstruct the sign with a separate
+/// escape-iteration heuristic — the baked artifact is already signed and is
+/// the single authority for realm classification.
 pub fn signed_distance(c: Complex64) -> Result<f64, String> {
-    // Sample the unsigned distance field
-    let dist_unsigned = crate::distance_field::sample_distance_field(&[c])?
+    let dist_signed = crate::distance_field::sample_signed_distance_field(&[c])?
         .into_iter()
         .next()
         .ok_or_else(|| "empty distance sample".to_string())?;
-    
-    // Heuristic sign from quick escape test (max 256 iterations)
-    let mut z = Complex64::new(0.0, 0.0);
-    let max_iter = 256;
-    let bailout = 4.0;
-    let mut escaped = false;
-    
-    for _ in 0..max_iter {
-        z = z * z + c;
-        if z.norm_sqr() > bailout {
-            escaped = true;
-            break;
-        }
-    }
-    
-    // Sign convention: positive outside, negative inside
-    let sign = if escaped { 1.0 } else { -1.0 };
-    Ok(sign * dist_unsigned as f64)
+    Ok(dist_signed as f64)
 }
+
+/// The finite-difference step used for derivatives of the sampled scale field.
+///
+/// This is chosen from the SDF provider's pixel spacing (via
+/// `distance_field::distance_field_metadata`), NOT a magic constant. The
+/// sampled field is a smooth distance estimate; the finite-difference step
+/// must clear the f32 quantization noise floor of the raster while staying
+/// small enough that the local curvature of sigma ~ log2(d_ref/rho) is
+/// resolved. A step of one full pixel is too coarse near the Shore (where
+/// sigma varies as 1/D) and degrades energy conservation, so we use a small
+/// fraction of a pixel. If no field is loaded a conservative fallback is
+/// used so callers still get a deterministic value.
+pub fn derivative_step() -> f64 {
+    match crate::distance_field::distance_field_metadata() {
+        Some((_, _, _, _, _, _, dx, dy)) => {
+            let px = dx.max(dy);
+            if px > 0.0 {
+                (px * DERIVATIVE_STEP_PIXEL_FRACTION).max(MIN_DERIVATIVE_STEP)
+            } else {
+                DEFAULT_DERIVATIVE_STEP
+            }
+        }
+        None => DEFAULT_DERIVATIVE_STEP,
+    }
+}
+
+/// Fraction of a pixel used as the finite-difference step. The field is a
+/// smooth distance estimate, so a step well below one pixel resolves the
+/// local curvature while still clearing the f32 quantization noise floor.
+const DERIVATIVE_STEP_PIXEL_FRACTION: f64 = 1.0 / 24.0;
+
+/// Floor on the pixel-derived step (keeps the step from collapsing if a
+/// provider reports an unusually fine raster).
+const MIN_DERIVATIVE_STEP: f64 = 1e-5;
+
+/// Fallback finite-difference step when no distance field is loaded.
+const DEFAULT_DERIVATIVE_STEP: f64 = 1e-4;
 
 /// Smooth finite-resolution distance using regularization.
 /// rho(c) = sqrt(D(c)^2 + epsilon^2)
@@ -97,28 +132,27 @@ pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, St
 ///
 /// Returns (∂sigma/∂x, ∂sigma/∂y) in world coordinates.
 ///
-/// Finite-difference step: the distance field is stored f32, so h must
-/// stay well above the f32 noise floor (~1.6e-7 absolute at sigma ~ 1).
-/// h = 1e-4 is converged (h = 1e-6 measures quantization noise, not
-/// geometry — sigma_xx came out ~40000 instead of ~22).
+/// The finite-difference step is derived from the SDF provider's pixel
+/// spacing (see [`derivative_step`]) so it stays above the interpolation
+/// cell / subpixel-refinement noise scale rather than being a magic constant.
 pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
-    let h = 1e-4; // finite difference step (f32 field noise floor)
-    
+    let h = derivative_step();
+
     let c_px = Complex64::new(c.re + h, c.im);
     let sigma_px = mandelbrot_scale(c_px, config)?;
-    
+
     let c_mx = Complex64::new(c.re - h, c.im);
     let sigma_mx = mandelbrot_scale(c_mx, config)?;
-    
+
     let c_py = Complex64::new(c.re, c.im + h);
     let sigma_py = mandelbrot_scale(c_py, config)?;
-    
+
     let c_my = Complex64::new(c.re, c.im - h);
     let sigma_my = mandelbrot_scale(c_my, config)?;
-    
+
     let grad_x = (sigma_px - sigma_mx) / (2.0 * h);
     let grad_y = (sigma_py - sigma_my) / (2.0 * h);
-    
+
     Ok((grad_x, grad_y))
 }
 
@@ -126,28 +160,28 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
 ///
 /// Returns [[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]]
 ///
-/// Same h constraint as scale_gradient: h must clear the f32 noise
-/// floor of the distance field, and the second difference amplifies
-/// noise by an extra 1/h.
+/// The finite-difference step is derived from the SDF provider's pixel
+/// spacing (see [`derivative_step`]). Second differences amplify noise by an
+/// extra 1/h, so the step must clear the interpolation-cell noise scale.
 pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
-    let h = 1e-4;
-    
+    let h = derivative_step();
+
     let c_px = Complex64::new(c.re + h, c.im);
     let (gx_px, _) = scale_gradient(c_px, config)?;
-    
+
     let c_mx = Complex64::new(c.re - h, c.im);
     let (gx_mx, _) = scale_gradient(c_mx, config)?;
-    
+
     let c_py = Complex64::new(c.re, c.im + h);
     let (gx_py, gy_py) = scale_gradient(c_py, config)?;
-    
+
     let c_my = Complex64::new(c.re, c.im - h);
     let (gx_my, gy_my) = scale_gradient(c_my, config)?;
-    
+
     let sigma_xx = (gx_px - gx_mx) / (2.0 * h);
     let sigma_yy = (gy_py - gy_my) / (2.0 * h);
     let sigma_xy = (gx_py - gx_my) / (2.0 * h); // or (gy_px - gy_mx)/(2h), should match
-    
+
     Ok([[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]])
 }
 
@@ -210,58 +244,51 @@ pub fn total_energy(
 /// Returns Gamma as [[[Gamma^0_00, Gamma^0_01], [Gamma^0_10, Gamma^0_11]],
 ///                    [[Gamma^1_00, Gamma^1_01], [Gamma^1_10, Gamma^1_11]]]
 ///
-/// Computed from: Gamma^i_jk = 1/2 G^{il}(∂_j G_{kl} + ∂_k G_{jl} - ∂_l G_{jk})
+/// For the graph metric G = I + lambda^2 grad(sigma) grad(sigma)^T, the
+/// connection has a closed form that avoids finite-differencing an already
+/// finite-differenced metric:
+///
+///   Gamma^i_jk = lambda^2 * sigma_i * sigma_jk / (1 + lambda^2 ||grad sigma||^2)
+///
+/// where sigma_i = ∂_i sigma and sigma_jk = ∂_j ∂_k sigma (the Hessian).
+/// This uses the same gradient/Hessian authority as the metric and reduces
+/// nested finite-difference noise. (Derivation: ∂_j G_{kl} + ∂_k G_{jl} -
+/// ∂_l G_{jk} = 2 lambda^2 sigma_jk sigma_l, and G^{-1} grad sigma =
+/// grad sigma / (1 + lambda^2 ||grad sigma||^2) by Sherman-Morrison.)
 pub fn christoffel_symbols(c: Complex64, config: &ManifoldConfig) -> Result<[[[f64; 2]; 2]; 2], String> {
-    // Same h constraint as scale_hessian: must clear the f32 noise floor
-    // of the distance field (metric derivatives amplify noise by 1/h).
-    let h = 1e-4;
-    let g = induced_metric(c, config)?;
-    let g_inv = inverse_2x2(g)?;
-    
-    // Compute metric at neighboring points
-    let c_px = Complex64::new(c.re + h, c.im);
-    let g_px = induced_metric(c_px, config)?;
-    
-    let c_mx = Complex64::new(c.re - h, c.im);
-    let g_mx = induced_metric(c_mx, config)?;
-    
-    let c_py = Complex64::new(c.re, c.im + h);
-    let g_py = induced_metric(c_py, config)?;
-    
-    let c_my = Complex64::new(c.re, c.im - h);
-    let g_my = induced_metric(c_my, config)?;
-    
-    // Metric derivatives: ∂_j G_{kl}
-    let mut dg = [[[0.0; 2]; 2]; 2]; // dg[j][k][l]
-    
-    // ∂_0 G (derivative w.r.t. x)
-    for k in 0..2 {
-        for l in 0..2 {
-            dg[0][k][l] = (g_px[k][l] - g_mx[k][l]) / (2.0 * h);
-        }
+    let (gx, gy) = scale_gradient(c, config)?;
+    let hess = scale_hessian(c, config)?;
+    let lsq = config.lambda_sq;
+
+    // Denominator: 1 + lambda^2 ||grad sigma||^2
+    let grad_sq = gx * gx + gy * gy;
+    let denom = 1.0 + lsq * grad_sq;
+    if !denom.is_finite() || denom.abs() < 1e-30 {
+        return Err("Christoffel denominator singular".to_string());
     }
-    
-    // ∂_1 G (derivative w.r.t. y)
-    for k in 0..2 {
-        for l in 0..2 {
-            dg[1][k][l] = (g_py[k][l] - g_my[k][l]) / (2.0 * h);
-        }
-    }
-    
-    // Compute Christoffel symbols
+
+    // grad sigma components (sigma_0 = gx, sigma_1 = gy)
+    let sig = [gx, gy];
+    // Hessian components sigma_jk (symmetric)
+    let hxx = hess[0][0];
+    let hxy = hess[0][1];
+    let hyy = hess[1][1];
+
     let mut gamma = [[[0.0; 2]; 2]; 2];
     for i in 0..2 {
         for j in 0..2 {
             for k in 0..2 {
-                let mut sum = 0.0;
-                for l in 0..2 {
-                    sum += g_inv[i][l] * (dg[j][k][l] + dg[k][j][l] - dg[l][j][k]);
-                }
-                gamma[i][j][k] = 0.5 * sum;
+                let sigma_jk = match (j, k) {
+                    (0, 0) => hxx,
+                    (0, 1) | (1, 0) => hxy,
+                    (1, 1) => hyy,
+                    _ => unreachable!(),
+                };
+                gamma[i][j][k] = lsq * sig[i] * sigma_jk / denom;
             }
         }
     }
-    
+
     Ok(gamma)
 }
 
@@ -290,22 +317,23 @@ pub fn geodesic_acceleration(
     Ok((a[0], a[1]))
 }
 
-/// Potential force F_U = -G^{-1} ∇U = -kappa G^{-1} ∇sigma
+/// Generalized potential force covector: Q_potential = -grad U = -kappa grad sigma.
+///
+/// This is a generalized force COVECTOR (lower index), not a coordinate
+/// acceleration. It is converted to acceleration by [`apply_generalized_force`]
+/// (the single place where G^{-1} maps a covector to coordinate acceleration).
+/// The sign makes high-scale Shore geometry a potential ridge: the force points
+/// downhill, away from the Shore.
 pub fn potential_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
     let (grad_x, grad_y) = scale_gradient(c, config)?;
-    let g = induced_metric(c, config)?;
-    let g_inv = inverse_2x2(g)?;
-    
-    let grad_u_x = config.kappa * grad_x;
-    let grad_u_y = config.kappa * grad_y;
-    
-    let f_x = -(g_inv[0][0] * grad_u_x + g_inv[0][1] * grad_u_y);
-    let f_y = -(g_inv[1][0] * grad_u_x + g_inv[1][1] * grad_u_y);
-    
-    Ok((f_x, f_y))
+    Ok((-config.kappa * grad_x, -config.kappa * grad_y))
 }
 
-/// Apply generalized force through the metric: a = G^{-1} Q
+/// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
+///
+/// This is the single place where the metric inverse maps a generalized force
+/// covector (lower index) into a coordinate acceleration. All generalized
+/// forces (potential, control, drag) are summed as covectors and converted here.
 pub fn apply_generalized_force(
     q: (f64, f64),
     c: Complex64,
@@ -313,14 +341,18 @@ pub fn apply_generalized_force(
 ) -> Result<(f64, f64), String> {
     let g = induced_metric(c, config)?;
     let g_inv = inverse_2x2(g)?;
-    
+
     let a_x = g_inv[0][0] * q.0 + g_inv[0][1] * q.1;
     let a_y = g_inv[1][0] * q.0 + g_inv[1][1] * q.1;
-    
+
     Ok((a_x, a_y))
 }
 
-/// Metric-consistent isotropic drag: Q_drag = -beta G v
+/// Metric-consistent isotropic drag covector: Q_drag = -beta G v.
+///
+/// This is a generalized force COVECTOR (lower index), not a coordinate
+/// acceleration. Its power P = v^T Q_drag = -beta v^T G v <= 0, so drag can
+/// never inject mechanical energy.
 pub fn drag_force(
     v: (f64, f64),
     c: Complex64,
@@ -328,10 +360,10 @@ pub fn drag_force(
     config: &ManifoldConfig,
 ) -> Result<(f64, f64), String> {
     let g = induced_metric(c, config)?;
-    
+
     let gv_x = g[0][0] * v.0 + g[0][1] * v.1;
     let gv_y = g[1][0] * v.0 + g[1][1] * v.1;
-    
+
     Ok((-beta * gv_x, -beta * gv_y))
 }
 
@@ -339,7 +371,18 @@ pub fn drag_force(
 ///
 /// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
 ///
-/// Uses semi-implicit scheme:
+/// Generalized forces are summed as COVECTORS and converted to coordinate
+/// acceleration exactly once via G^{-1}:
+///
+///   Q_potential = -grad U
+///   Q_drag      = -beta G v
+///   Q_total     = Q_potential + Q_control + Q_drag
+///   a_force     = G^{-1} Q_total
+///   a_total     = -Gamma(v,v) + a_force
+///
+/// `q_control` is a generalized force covector (units of force, NOT an
+/// already-integrated impulse). Continuous force is integrated exactly once:
+///
 ///   v_new = v + a_total * dt
 ///   r_new = r + v_new * dt
 ///
@@ -352,29 +395,36 @@ pub fn integrate_step(
     dt: f64,
     config: &ManifoldConfig,
 ) -> Result<(Complex64, (f64, f64), EnergyInfo), String> {
-    // Compute forces
+    // Geodesic (curvature) acceleration: -Gamma(v, v).
     let a_geodesic = geodesic_acceleration(v, c, config)?;
-    let f_potential = potential_force(c, config)?;
+
+    // Sum generalized force covectors: potential + control + drag.
+    let q_potential = potential_force(c, config)?;
     let q_drag = drag_force(v, c, beta, config)?;
-    let q_total = (q_control.0 + q_drag.0, q_control.1 + q_drag.1);
-    let a_force = apply_generalized_force(q_total, c, config)?;
-    
-    // Total acceleration
-    let a_total = (
-        -a_geodesic.0 + f_potential.0 + a_force.0,
-        -a_geodesic.1 + f_potential.1 + a_force.1,
+    let q_total = (
+        q_potential.0 + q_control.0 + q_drag.0,
+        q_potential.1 + q_control.1 + q_drag.1,
     );
-    
-    // Semi-implicit update
+
+    // Single G^{-1} conversion of the summed covector into acceleration.
+    let a_force = apply_generalized_force(q_total, c, config)?;
+
+    // Total acceleration.
+    let a_total = (
+        -a_geodesic.0 + a_force.0,
+        -a_geodesic.1 + a_force.1,
+    );
+
+    // Semi-implicit update: continuous force integrated exactly once.
     let v_new = (v.0 + a_total.0 * dt, v.1 + a_total.1 * dt);
     let c_new = Complex64::new(c.re + v_new.0 * dt, c.im + v_new.1 * dt);
-    
+
     // Energy accounting
     let e_old = total_energy(v, c, config)?;
     let e_new = total_energy(v_new, c_new, config)?;
     let k_old = kinetic_energy(v, c, config)?;
     let k_new = kinetic_energy(v_new, c_new, config)?;
-    
+
     let energy_info = EnergyInfo {
         kinetic: k_new,
         potential: e_new - k_new,
@@ -382,7 +432,7 @@ pub fn integrate_step(
         delta_total: e_new - e_old,
         delta_kinetic: k_new - k_old,
     };
-    
+
     Ok((c_new, v_new, energy_info))
 }
 

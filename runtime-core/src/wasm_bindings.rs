@@ -754,7 +754,9 @@ pub fn manifold_geodesic_acceleration(
     Ok(arr)
 }
 
-/// Potential force F_U = -G^{-1} ∇U. Returns [fx, fy].
+/// Generalized potential force covector: Q_potential = -grad U = -kappa grad sigma.
+/// Returns [Qx, Qy]. This is a covector, not a coordinate acceleration; convert
+/// with `manifold_apply_generalized_force`.
 #[wasm_bindgen]
 pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
     let c = RustComplex::new(real, imag);
@@ -765,7 +767,8 @@ pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -
     Ok(arr)
 }
 
-/// Apply generalized force through the metric: a = G^{-1} Q. Returns [ax, ay].
+/// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
+/// Returns [ax, ay]. This is the single place G^{-1} maps a covector to acceleration.
 #[wasm_bindgen]
 pub fn manifold_apply_generalized_force(
     qx: f64,
@@ -782,7 +785,8 @@ pub fn manifold_apply_generalized_force(
     Ok(arr)
 }
 
-/// Metric-consistent isotropic drag: Q_drag = -beta G v. Returns [qx, qy].
+/// Metric-consistent isotropic drag covector: Q_drag = -beta G v. Returns [Qx, Qy].
+/// This is a covector, not a coordinate acceleration; its power P = v^T Q_drag <= 0.
 #[wasm_bindgen]
 pub fn manifold_drag_force(
     vx: f64,

@@ -85,20 +85,52 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
     }
 }
 
-/// Sample the in-memory distance field at the given complex-valued coordinates.
+/// Metadata describing the currently loaded distance field's spatial extent and
+/// resolution (pixel spacing).
 ///
-/// This function returns **unsigned** (absolute) distances to the Mandelbrot boundary,
-/// plus any additional distance for points outside the field's bounding box. The underlying
-/// field stores signed distances (positive outside, negative inside), but this sampler
-/// applies `.abs()` to the interpolated value before returning it. This means callers
-/// cannot distinguish inside vs. outside using the sign; they only receive the magnitude
-/// of the distance to the boundary.
+/// This is the provider's authoritative resolution: the finite-difference step
+/// used for derivatives of the sampled field must be chosen relative to this
+/// spacing, not a magic constant. Returns `None` if no field is loaded.
 ///
-/// - For points within the field's bounding box, bicubic interpolation (with subpixel
-///   refinement for fields >= 4x4) or bilinear interpolation (for smaller fields) is used.
-/// - For points outside the bounding box, the returned distance is the sum of the
-///   Euclidean distance from the point to the nearest edge of the box, plus the unsigned
-///   distance at that edge.
+/// The returned tuple is `(rows, cols, xmin, xmax, ymin, ymax, dx, dy)` where
+/// `dx = (xmax - xmin) / (cols - 1)` and `dy = (ymax - ymin) / (rows - 1)` are
+/// the per-pixel spacings in world coordinates.
+pub fn distance_field_metadata() -> Option<(usize, usize, f64, f64, f64, f64, f64, f64)> {
+    let guard = DIST_FIELD.read().ok()?;
+    let df = guard.as_ref()?;
+    let (rows, cols) = (df.data.nrows(), df.data.ncols());
+    let dx = if cols > 1 {
+        (df.xmax - df.xmin) / (cols as f64 - 1.0)
+    } else {
+        0.0
+    };
+    let dy = if rows > 1 {
+        (df.ymax - df.ymin) / (rows as f64 - 1.0)
+    } else {
+        0.0
+    };
+    Some((rows, cols, df.xmin, df.xmax, df.ymin, df.ymax, dx, dy))
+}
+
+/// Sample the in-memory distance field at the given complex-valued coordinates,
+/// returning **signed** distances to the Mandelbrot boundary.
+///
+/// This is the single authority for signed realm classification. The underlying
+/// field stores signed values (positive outside M, negative inside M); this
+/// sampler interpolates those signed values directly and does **not** reconstruct
+/// the sign with a separate escape-iteration heuristic. Callers that need to know
+/// which realm a point is in must use this function (or :func:`sample_distance_field`
+/// plus an independent realm source), never a second distance authority.
+///
+/// - For points within the field's bounding box, bicubic interpolation (with
+///   subpixel refinement for fields >= 4x4) or bilinear interpolation (for smaller
+///   fields) is used. The subpixel refinement selects the sample closest to the
+///   zero contour and preserves that sample's sign, so the returned value is the
+///   signed distance to the nearest boundary within the local neighborhood.
+/// - For points outside the bounding box, the returned distance is the signed value
+///   at the nearest edge plus the Euclidean distance from the point to that edge.
+///   The field's bounding box encloses the Mandelbrot set, so edge values are
+///   positive (outside M) and the result is positive outside the box.
 ///
 /// If the distance field is not loaded, this function will attempt to auto-load the
 /// built-in "mandelbrot_default" field.
@@ -107,8 +139,10 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
 /// * `points` - complex coordinates in the plane
 ///
 /// # Returns
-/// A vector of unsigned distances (non-negative floats) to the Mandelbrot boundary.
-pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f32>, String> {
+/// A vector of signed distances (positive outside M, negative inside M).
+pub fn sample_signed_distance_field(
+    points: &[num_complex::Complex64],
+) -> Result<Vec<f32>, String> {
     // If no distance field is loaded, try loading the canonical builtin
     // so callers (like tests) can sample without an explicit prior set.
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
@@ -193,24 +227,73 @@ pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f3
             let a = v00 * (1.0 - sx) + v10 * sx;
             let b = v01 * (1.0 - sx) + v11 * sx;
             let s = a * (1.0 - sy) + b * sy;
-            let s = s.abs() + outside_dist as f32;
+            // Signed value at the edge plus the outside distance. The box encloses
+            // M, so edge values are positive and the result stays positive outside.
+            let s = s + outside_dist as f32;
             out.push(s);
         } else {
-            // Bicubic interpolation with local subpixel refinement
+            // Bicubic interpolation with local subpixel refinement. Among the base
+            // point and its subpixel neighbors, select the sample closest to the
+            // zero contour and return its SIGNED value (so the unsigned wrapper
+            // `sample_distance_field` recovers exactly the historical min-abs
+            // magnitude while realm sign is preserved here).
             let base = eval_bicubic_at(df, fx, fy, h, w);
             let offsets = [-0.375f64, -0.125f64, 0.125f64, 0.375f64];
+            let mut best = base;
             let mut min_abs = base.abs();
             for &oy in &offsets {
                 for &ox in &offsets {
                     let val = eval_bicubic_at(df, fx + ox, fy + oy, h, w);
-                    if val.abs() < min_abs { min_abs = val.abs(); }
+                    if val.abs() < min_abs {
+                        min_abs = val.abs();
+                        best = val;
+                    }
                 }
             }
-            let s = min_abs + outside_dist as f32;
+            // best carries the sign of the nearest-boundary sample; outside the box
+            // the edge value is positive so adding outside_dist keeps it positive.
+            let s = best + outside_dist as f32;
             out.push(s);
         }
     }
     Ok(out)
+}
+
+/// Sample the in-memory distance field at the given complex-valued coordinates,
+/// returning **unsigned** (absolute) distances to the Mandelbrot boundary.
+///
+/// This is a thin wrapper over :func:`sample_signed_distance_field`:
+///
+/// ```text
+/// sample_distance_field(p) = |sample_signed_distance_field(p)|
+/// ```
+///
+/// It exists for callers that only need the magnitude of the distance to the
+/// boundary and cannot distinguish inside vs. outside from the sign. Realm
+/// classification must come from :func:`sample_signed_distance_field` (or an
+/// equivalent single authority); do not reconstruct sign with a separate
+/// escape-iteration heuristic.
+///
+/// - For points within the field's bounding box, bicubic interpolation (with
+///   subpixel refinement for fields >= 4x4) or bilinear interpolation (for smaller
+///   fields) is used.
+/// - For points outside the bounding box, the returned distance is the sum of the
+///   Euclidean distance from the point to the nearest edge of the box, plus the
+///   unsigned distance at that edge.
+///
+/// If the distance field is not loaded, this function will attempt to auto-load the
+/// built-in "mandelbrot_default" field.
+///
+/// # Arguments
+/// * `points` - complex coordinates in the plane
+///
+/// # Returns
+/// A vector of unsigned distances (non-negative floats) to the Mandelbrot boundary.
+pub fn sample_distance_field(points: &[num_complex::Complex64]) -> Result<Vec<f32>, String> {
+    Ok(sample_signed_distance_field(points)?
+        .into_iter()
+        .map(|v| v.abs())
+        .collect())
 }
 
 const DEFAULT_MANDELBROT_MAX_ITER: usize = 8192;

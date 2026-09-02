@@ -47,12 +47,16 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       servo becomes a pure uphill PUSH along the shore normal — the
 ///       resting height now emerges from the gravity/push force balance
 ///       (∝ energy) instead of a fixed d_star target.
-///   4 - Manifold physics (issue #106): Player moves on the 2D Mandelbrot
-///       configuration manifold embedded in 3D position-scale space. Replaces
-///       flat momentum+gravity with proper differential geometry: induced
-///       metric G(c), Christoffel symbols Γ for curvature, native potential
-///       U=κσ(c) making The Shore a high-energy ridge, and metric-consistent
-///       forces. Equations of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q.
+///   4 - Manifold physics (issue #106): when `manifold_physics` is on, step()
+///       routes through a LEGACY ADAPTER (`step_manifold`) that translates the
+///       old (s, alpha, energy) target servo into a generalized force covector
+///       and hands it to the musically-ignorant manifold kernel in
+///       `crate::manifold`. The kernel owns the induced metric G(c), the
+///       analytic Christoffel connection Γ, the native potential U=κσ(c)
+///       (Shore = high-energy ridge), and metric-consistent forces. Equations
+///       of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q. The adapter fails closed on
+///       manifold error (no silent flat-physics fallback). This is a
+///       transitional seam, not destination Controls v2 (issue #107).
 pub const CONTROLLER_VERSION: &str = "orbit-controller/4";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
@@ -495,6 +499,13 @@ pub struct OrbitController {
     pub planar_velocity: (f64, f64),
     /// Drag coefficient for manifold physics (beta in Q_drag = -beta*G*v).
     pub manifold_drag: f64,
+    /// Diagnostic: the most recent manifold-physics failure, if any.
+    ///
+    /// When manifold mode is selected and the integrator fails, the controller
+    /// FAILS CLOSED: it holds the last valid (c, v) and records the error here
+    /// rather than silently substituting flat Euclidean dynamics. A non-None
+    /// value means the last manifold step did not advance.
+    pub manifold_error: Option<String>,
 }
 
 impl Default for OrbitController {
@@ -518,6 +529,7 @@ impl Default for OrbitController {
             manifold_config: crate::manifold::ManifoldConfig::default(),
             planar_velocity: (0.0, 0.0),
             manifold_drag: 0.1,
+            manifold_error: None,
         }
     }
 }
@@ -567,8 +579,8 @@ impl OrbitController {
     /// to the May TS controller. Each flag layers ONE PlayerState idea:
     ///   momentum         -> c is persistent state; boundary point attracts
     ///   shore_bias       -> motion routed through minimap contour biasing
-    ///   manifold_physics -> proper differential geometry on the Mandelbrot
-    ///                       configuration manifold (issue #106)
+    ///   manifold_physics -> LEGACY ADAPTER to the musically-ignorant manifold
+    ///                       kernel (issue #106); transitional, not Controls v2
     pub fn step(
         &mut self,
         dt: f64,
@@ -601,8 +613,9 @@ impl OrbitController {
         }
 
         if self.manifold_physics {
-            // Manifold physics path: use proper differential geometry
-            // on the Mandelbrot configuration manifold (issue #106).
+            // Manifold physics path: LEGACY ADAPTER translating the old
+            // (s, alpha, energy) servo into a generalized force covector for
+            // the musically-ignorant manifold kernel (issue #106).
             return self.step_manifold(dt, band_gates, h);
         }
 
@@ -681,21 +694,35 @@ impl OrbitController {
         self.c
     }
 
-    /// Manifold physics step (issue #106).
+    /// LEGACY ADAPTER — manifold physics step (issue #106).
     ///
-    /// Integrates the Player's motion on the Mandelbrot configuration manifold
-    /// using proper differential geometry:
-    ///   r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+    /// This method is a TRANSITIONAL compatibility seam between the legacy
+    /// `(s, alpha, energy)` controller surface and the destination manifold
+    /// Physics kernel in `crate::manifold`. It is NOT destination Controls v2
+    /// (issue #107) and must not be described or tested as such.
     ///
-    /// The Player supplies Controls as generalized forces; Physics itself is
-    /// musically ignorant. The model's (s, alpha) target determines the
-    /// generalized force direction, and audio energy modulates its magnitude.
+    /// The manifold kernel itself (`crate::manifold::integrate_step`) is
+    /// musically ignorant: it accepts an explicit generalized force covector
+    /// `Q_control = (Qx, Qy)` and knows nothing about `s`, `alpha`, audio
+    /// Energy, band gates, onset/transient `h`, transition readiness, target
+    /// `c`, or Shore target distance. All of that legacy state lives HERE, in
+    /// the adapter, which translates the old target servo into a generalized
+    /// force covector before calling the kernel.
+    ///
+    /// Force units: `q_control` is a generalized force COVECTOR (units of
+    /// force), NOT an already-integrated impulse. It is NOT multiplied by `dt`
+    /// here; the kernel integrates continuous force exactly once (v += a*dt).
+    ///
+    /// Fail-closed: if the manifold integrator errors, this method does NOT
+    /// silently substitute flat Euclidean dynamics. It holds the last valid
+    /// (c, v) and records the failure in `self.manifold_error`.
     fn step_manifold(
         &mut self,
         dt: f64,
         band_gates: Option<&[f64]>,
         _h: f64,
     ) -> num_complex::Complex64 {
+        // ---- Legacy target synthesis (adapter-only; not manifold authority) ----
         let target = self.mandelbrot_boundary();
         let mut res_re = 0.0;
         let mut res_im = 0.0;
@@ -710,22 +737,23 @@ impl OrbitController {
         }
         let target = num_complex::Complex64::new(target.re + res_re, target.im + res_im);
 
-        // Generalized force direction: from current c toward the target
+        // ---- Legacy target servo -> generalized force covector ----
+        // Direction: from current c toward the legacy (s, alpha) target.
         let dx = target.re - self.c.re;
         let dy = target.im - self.c.im;
         let dist = (dx * dx + dy * dy).sqrt();
 
-        // Force magnitude scales with omega and energy
+        // Magnitude scales with omega and legacy audio energy. This is a
+        // generalized force (units of force), NOT an impulse: no *dt here.
         let force_mag = self.omega.clamp(0.1, 10.0) * self.energy.clamp(0.0, 1.0) * 2.0;
 
         let q_control = if dist > 1e-9 {
-            let dir = force_mag * dt;
-            (dx / dist * dir, dy / dist * dir)
+            (dx / dist * force_mag, dy / dist * force_mag)
         } else {
             (0.0, 0.0)
         };
 
-        // Integrate using manifold physics
+        // ---- Manifold kernel (musically ignorant) ----
         match crate::manifold::integrate_step(
             self.c,
             self.planar_velocity,
@@ -735,16 +763,15 @@ impl OrbitController {
             &self.manifold_config,
         ) {
             Ok((c_new, v_new, _info)) => {
+                self.manifold_error = None;
                 self.c = c_new;
                 self.planar_velocity = v_new;
                 self.c
             }
-            Err(_) => {
-                // Fallback to plain integration if manifold computation fails
-                self.c = num_complex::Complex64::new(
-                    self.c.re + self.planar_velocity.0 * dt,
-                    self.c.im + self.planar_velocity.1 * dt,
-                );
+            Err(e) => {
+                // FAIL CLOSED: hold the last valid state; do not substitute
+                // flat dynamics. Surface the diagnostic for the caller.
+                self.manifold_error = Some(e);
                 self.c
             }
         }

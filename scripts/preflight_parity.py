@@ -43,13 +43,13 @@ K_RESIDUALS = 6
 RESIDUAL_CAP = 0.5
 CARRIER_TOL = 1e-9
 MIRROR_TOL = 1e-5
-# Manifold mirror tolerance: the mirror accumulates state in float32 while
-# Rust is float64, and the manifold dynamics amplify tiny differences near
-# the potential ridge (sensitive dependence), so the gap grows
-# superlinearly: ~3e-5 at frame 30, ~1e-3 at frame 60. The tolerance
-# absorbs f32 chaos amplification but still catches real divergence
-# (sign flips, wrong constants are O(1) errors).
-MANIFOLD_TOL = 5e-3
+# Manifold mirror tolerance: the mirror runs its state and target/force math
+# in float64 (matching the float64 Rust kernel) and calls the same Rust
+# integrate_step binding, so forward parity is essentially exact (~1e-8 over
+# a 60-step chaotic trajectory). The tolerance is set well above the observed
+# error to absorb residual float64 libm rounding while still catching real
+# divergence (sign flips, wrong constants are O(1) errors).
+MANIFOLD_TOL = 1e-4
 # Feature-window tolerance: librosa's FFT vs rustfft differ slightly in
 # floating-point rounding; 5e-3 relative to [0,1]-scaled features is tight
 # enough to catch semantic drift while tolerating library rounding.

@@ -339,8 +339,10 @@ impl OrbitController {
 
     // ---- Manifold physics (issue #106) ----
 
-    /// Enable or disable manifold physics. When on, step() routes through
-    /// the Mandelbrot configuration manifold integrator.
+    /// Enable or disable manifold physics. When on, step() routes through a
+    /// LEGACY ADAPTER that translates the old (s, alpha, energy) servo into a
+    /// generalized force covector for the musically-ignorant manifold kernel.
+    /// Transitional; not destination Controls v2 (issue #107).
     fn set_manifold_physics(&mut self, on: bool) {
         self.inner.manifold_physics = on;
     }
@@ -349,6 +351,14 @@ impl OrbitController {
     #[getter]
     fn manifold_physics(&self) -> bool {
         self.inner.manifold_physics
+    }
+
+    /// The most recent manifold-physics failure, if any. When manifold mode is
+    /// selected and the integrator fails, the controller fails closed (holds
+    /// the last valid state) and records the error here.
+    #[getter]
+    fn manifold_error(&self) -> Option<String> {
+        self.inner.manifold_error.clone()
     }
 
     /// Set the manifold configuration (used only when manifold_physics is on).
@@ -965,14 +975,20 @@ fn manifold_geodesic_acceleration(
     rust_geodesic_acceleration((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
-/// Potential force F_U = -G^{-1} ∇U = -kappa G^{-1} ∇sigma.
+/// Generalized potential force covector: Q_potential = -grad U = -kappa grad sigma.
+///
+/// This is a generalized force COVECTOR (lower index), not a coordinate
+/// acceleration. Convert to acceleration with `manifold_apply_generalized_force`.
 #[pyfunction]
 fn manifold_potential_force(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64)> {
     let cc = num_complex::Complex64::new(c.real(), c.imag());
     rust_potential_force(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
-/// Apply generalized force through the metric: a = G^{-1} Q.
+/// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
+///
+/// This is the single place where the metric inverse maps a generalized force
+/// covector into coordinate acceleration.
 #[pyfunction]
 #[pyo3(signature = (qx, qy, c, config))]
 fn manifold_apply_generalized_force(
@@ -985,7 +1001,10 @@ fn manifold_apply_generalized_force(
     rust_apply_generalized_force((qx, qy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
-/// Metric-consistent isotropic drag: Q_drag = -beta G v.
+/// Metric-consistent isotropic drag covector: Q_drag = -beta G v.
+///
+/// This is a generalized force COVECTOR (lower index), not a coordinate
+/// acceleration. Its power P = v^T Q_drag <= 0, so drag never injects energy.
 #[pyfunction]
 #[pyo3(signature = (vx, vy, c, beta, config))]
 fn manifold_drag_force(
