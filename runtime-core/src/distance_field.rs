@@ -122,11 +122,13 @@ pub fn distance_field_metadata() -> Option<(usize, usize, f64, f64, f64, f64, f6
 /// which realm a point is in must use this function (or :func:`sample_distance_field`
 /// plus an independent realm source), never a second distance authority.
 ///
-/// - For points within the field's bounding box, bicubic interpolation (with
-///   subpixel refinement for fields >= 4x4) or bilinear interpolation (for smaller
-///   fields) is used. The subpixel refinement selects the sample closest to the
-///   zero contour and preserves that sample's sign, so the returned value is the
-///   signed distance to the nearest boundary within the local neighborhood.
+/// - For points within the field's bounding box, bicubic interpolation (for
+///   fields >= 4x4) or bilinear interpolation (for smaller fields) is used at
+///   exactly the requested coordinate `c`. The returned value is the signed
+///   distance to the boundary at `c` — NOT a neighborhood argmin that picks
+///   a nearby sample. This is essential: the manifold kernel needs a smooth
+///   scalar field whose derivatives mean something, and a local min-abs
+///   selection over 17 neighboring samples is inherently piecewise/non-smooth.
 /// - For points outside the bounding box, the returned distance is the signed value
 ///   at the nearest edge plus the Euclidean distance from the point to that edge.
 ///   The field's bounding box encloses the Mandelbrot set, so edge values are
@@ -232,27 +234,15 @@ pub fn sample_signed_distance_field(
             let s = s + outside_dist as f32;
             out.push(s);
         } else {
-            // Bicubic interpolation with local subpixel refinement. Among the base
-            // point and its subpixel neighbors, select the sample closest to the
-            // zero contour and return its SIGNED value (so the unsigned wrapper
-            // `sample_distance_field` recovers exactly the historical min-abs
-            // magnitude while realm sign is preserved here).
-            let base = eval_bicubic_at(df, fx, fy, h, w);
-            let offsets = [-0.375f64, -0.125f64, 0.125f64, 0.375f64];
-            let mut best = base;
-            let mut min_abs = base.abs();
-            for &oy in &offsets {
-                for &ox in &offsets {
-                    let val = eval_bicubic_at(df, fx + ox, fy + oy, h, w);
-                    if val.abs() < min_abs {
-                        min_abs = val.abs();
-                        best = val;
-                    }
-                }
-            }
-            // best carries the sign of the nearest-boundary sample; outside the box
-            // the edge value is positive so adding outside_dist keeps it positive.
-            let s = best + outside_dist as f32;
+            // Bicubic interpolation evaluated at exactly c. The returned value is
+            // the signed distance to the boundary at c — no min-abs selection over
+            // neighboring subpixel offsets. A local argmin over 17 neighboring
+            // samples is inherently piecewise/non-smooth and breaks the manifold
+            // kernel's derivative semantics (the Shore oscillation in sigma was
+            // caused by the winning offset switching as c moved). Outside the
+            // box the edge value is positive so adding outside_dist keeps it
+            // positive.
+            let s = eval_bicubic_at(df, fx, fy, h, w) + outside_dist as f32;
             out.push(s);
         }
     }
@@ -274,9 +264,10 @@ pub fn sample_signed_distance_field(
 /// equivalent single authority); do not reconstruct sign with a separate
 /// escape-iteration heuristic.
 ///
-/// - For points within the field's bounding box, bicubic interpolation (with
-///   subpixel refinement for fields >= 4x4) or bilinear interpolation (for smaller
-///   fields) is used.
+/// - For points within the field's bounding box, bicubic interpolation (for
+///   fields >= 4x4) or bilinear interpolation (for smaller fields) is used at
+///   exactly the requested coordinate `c`. The returned magnitude is the
+///   absolute distance to the boundary at `c`; it is **not** subpixel-refined.
 /// - For points outside the bounding box, the returned distance is the sum of the
 ///   Euclidean distance from the point to the nearest edge of the box, plus the
 ///   unsigned distance at that edge.
