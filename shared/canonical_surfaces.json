@@ -56,7 +56,8 @@
             "CycleRelation",
             "CycleObservation",
             "CycleEvidenceChannel",
-            "CycleBankConfig"
+            "CycleBankConfig",
+            "EnergyInfo"
         ],
         "exemption_reasons": {
             "RuntimeVisualMetrics": "Training-only diagnostic; the browser computes visual metrics in TypeScript.",
@@ -65,7 +66,8 @@
             "CycleRelation": "Read-only record reached as data from CycleBank on both surfaces (PyO3 dict / wasm-generated TS interface), not an independent #[wasm_bindgen] struct.",
             "CycleObservation": "Binding-layer input DTO; constructed on each surface and passed into the Rust authority, not a tracked domain state type.",
             "CycleEvidenceChannel": "Binding-layer input DTO, same rationale as CycleObservation.",
-            "CycleBankConfig": "Construction-time configuration DTO; the browser runs canonical defaults and does not need a config object."
+            "CycleBankConfig": "Construction-time configuration DTO; the browser runs canonical defaults and does not need a config object.",
+            "EnergyInfo": "Read-only diagnostic record returned by manifold_integrate_step (issue #106); the wasm surface receives the same five energy scalars flattened into the Array return of manifold_integrate_step. One logical domain payload, two surface-idiomatic projections."
         }
     }
 }

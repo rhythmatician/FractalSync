@@ -43,6 +43,13 @@ K_RESIDUALS = 6
 RESIDUAL_CAP = 0.5
 CARRIER_TOL = 1e-9
 MIRROR_TOL = 1e-5
+# Manifold mirror tolerance: the mirror accumulates state in float32 while
+# Rust is float64, and the manifold dynamics amplify tiny differences near
+# the potential ridge (sensitive dependence), so the gap grows
+# superlinearly: ~3e-5 at frame 30, ~1e-3 at frame 60. The tolerance
+# absorbs f32 chaos amplification but still catches real divergence
+# (sign flips, wrong constants are O(1) errors).
+MANIFOLD_TOL = 5e-3
 # Feature-window tolerance: librosa's FFT vs rustfft differ slightly in
 # floating-point rounding; 5e-3 relative to [0,1]-scaled features is tight
 # enough to catch semantic drift while tolerating library rounding.
@@ -266,6 +273,80 @@ def check_player_mirror_parity(rc) -> tuple[bool, float]:
         )
         max_err = max(max_err, err_m)
     return max_err <= MIRROR_TOL, max_err
+
+
+def check_manifold_mirror_parity(rc) -> tuple[bool, float]:
+    """(e5) Manifold-physics mirror vs Rust OrbitController (issue #106).
+
+    The trainer's ``orbit_controller_manifold_sequence`` must reproduce the
+    Rust ``OrbitController`` with ``manifold_physics`` enabled: same target
+    synthesis, same generalized-force construction, same integrator. A
+    divergence means training optimizes physics the browser does not run.
+    """
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "torch is required for manifold mirror parity check (e5). Install "
+            "backend requirements: pip install -r backend/requirements.txt"
+        ) from exc
+
+    if not hasattr(rc, "manifold_integrate_step"):
+        raise RuntimeError(
+            "runtime_core missing manifold bindings; rebuild the wheel "
+            "(maturin develop --release in runtime-core/)."
+        )
+
+    from src.cspace_proxies import (
+        ManifoldConfig,
+        canonical_hop_dt,
+        orbit_controller_manifold_sequence,
+    )
+
+    # PARITY RULE: contract-derived timestep, never a literal (#93).
+    dt = canonical_hop_dt()
+
+    n_steps = 60
+    max_err = 0.0
+    for trial in range(3):
+        rng = torch.Generator().manual_seed(trial)
+        s_vals = (1.0 + 0.4 * torch.randn(n_steps, generator=rng)).clamp(0.2, 3.0)
+        a_vals = torch.rand(n_steps, generator=rng).clamp(0.0, 1.0)
+        gates = torch.rand(n_steps, K_RESIDUALS, generator=rng)
+        seg = torch.zeros(n_steps, dtype=torch.int64)
+        energy = torch.linspace(0.2, 0.8, n_steps)
+
+        # Rust controller with manifold physics on.
+        ctrl = rc.OrbitController(float(s_vals[0]), float(a_vals[0]), 1.0)
+        ctrl.set_manifold_physics(True)
+        ctrl.set_manifold_drag(0.1)
+        ctrl.set_manifold_config(rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0))
+        rust_traj: list[tuple[float, float]] = []
+        for i in range(n_steps):
+            ctrl.apply_controls(float(s_vals[i]), float(a_vals[i]))
+            ctrl.set_energy(float(energy[i]))
+            rre, rim = ctrl.step(dt, [float(g) for g in gates[i]])
+            rust_traj.append((rre, rim))
+
+        # Python mirror of the same path.
+        traj, _infos = orbit_controller_manifold_sequence(
+            s_target=s_vals,
+            alpha=a_vals,
+            omega=1.0,
+            band_gates=gates,
+            segment_ids=seg,
+            dt=dt,
+            energy=energy,
+            manifold_drag=0.1,
+            config=ManifoldConfig(),
+        )
+        for i in range(n_steps):
+            err = max(
+                abs(traj[i].real.item() - rust_traj[i][0]),
+                abs(traj[i].imag.item() - rust_traj[i][1]),
+            )
+            max_err = max(max_err, err)
+    return max_err <= MANIFOLD_TOL, max_err
 
 
 def check_shared_phase_source(rc) -> tuple[bool, float]:
@@ -590,7 +671,6 @@ def _oracle_run(
     dt = _canonical_dt()
     k_residuals = 6
     orr = 0.05
-    max_step_sq = max_step * max_step
     two_pi = 2.0 * math.pi
 
     traj_re: list[float] = []
@@ -811,6 +891,8 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
 
     from src.cspace_proxies import canonical_hop_dt, orbit_controller_oracle_sequence
 
+    import numpy as np
+
     # Contract-derived timestep (never restate a literal).
     dt = canonical_hop_dt()
 
@@ -890,7 +972,7 @@ def check_trainer_oracle_consistency(rc) -> tuple[bool, float]:
 
     max_err = 0.0
     for i, (pre, pim, rre, rim) in enumerate(
-        zip(trainer_traj.real, trainer_traj.imag, rust_re_l, rust_im_l)
+        zip(np.real(trainer_traj), np.imag(trainer_traj), rust_re_l, rust_im_l)
     ):
         err = max(abs(pre - rre), abs(pim - rim))
         max_err = max(max_err, err)
@@ -926,6 +1008,11 @@ CHECKS: list[tuple[str, bool, Callable]] = [
         "e4) Trainer-oracle consistency (mirror vs Rust forward)",
         True,
         check_trainer_oracle_consistency,
+    ),
+    (
+        "e5) Manifold physics parity (mirror vs Rust, issue #106)",
+        True,
+        check_manifold_mirror_parity,
     ),
     (
         "f) Golden vector version (stale-golden guard)",

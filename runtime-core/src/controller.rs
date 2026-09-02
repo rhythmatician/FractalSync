@@ -47,7 +47,13 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       servo becomes a pure uphill PUSH along the shore normal — the
 ///       resting height now emerges from the gravity/push force balance
 ///       (∝ energy) instead of a fixed d_star target.
-pub const CONTROLLER_VERSION: &str = "orbit-controller/3";
+///   4 - Manifold physics (issue #106): Player moves on the 2D Mandelbrot
+///       configuration manifold embedded in 3D position-scale space. Replaces
+///       flat momentum+gravity with proper differential geometry: induced
+///       metric G(c), Christoffel symbols Γ for curvature, native potential
+///       U=κσ(c) making The Shore a high-energy ridge, and metric-consistent
+///       forces. Equations of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q.
+pub const CONTROLLER_VERSION: &str = "orbit-controller/4";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
 /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are
@@ -477,6 +483,18 @@ pub struct OrbitController {
     /// shore-proximity: loud audio pulls c toward the Shore (domain
     /// contract: Energy governs distance from The Shore).
     pub energy: f64,
+    //
+    /// Refinement 3 — MANIFOLD PHYSICS: Player moves on the Mandelbrot
+    /// configuration manifold with proper differential geometry. When enabled,
+    /// replaces planar momentum with manifold-aware integration using the
+    /// induced metric G(c), Christoffel symbols, and native potential U=κσ(c).
+    pub manifold_physics: bool,
+    /// Manifold configuration (used only when manifold_physics is on).
+    pub manifold_config: crate::manifold::ManifoldConfig,
+    /// Planar velocity (vx, vy) for manifold integration.
+    pub planar_velocity: (f64, f64),
+    /// Drag coefficient for manifold physics (beta in Q_drag = -beta*G*v).
+    pub manifold_drag: f64,
 }
 
 impl Default for OrbitController {
@@ -496,6 +514,10 @@ impl Default for OrbitController {
             max_step: 0.05,
             level: 0,
             energy: 0.0,
+            manifold_physics: false,
+            manifold_config: crate::manifold::ManifoldConfig::default(),
+            planar_velocity: (0.0, 0.0),
+            manifold_drag: 0.1,
         }
     }
 }
@@ -543,8 +565,10 @@ impl OrbitController {
     ///
     /// With all refinement flags off (the default), this is bit-identical
     /// to the May TS controller. Each flag layers ONE PlayerState idea:
-    ///   momentum   -> c is persistent state; boundary point attracts
-    ///   shore_bias -> motion routed through minimap contour biasing
+    ///   momentum         -> c is persistent state; boundary point attracts
+    ///   shore_bias       -> motion routed through minimap contour biasing
+    ///   manifold_physics -> proper differential geometry on the Mandelbrot
+    ///                       configuration manifold (issue #106)
     pub fn step(
         &mut self,
         dt: f64,
@@ -571,9 +595,15 @@ impl OrbitController {
         }
         let target = num_complex::Complex64::new(base.re + res_re, base.im + res_im);
 
-        if !self.momentum && !self.shore_bias {
+        if !self.momentum && !self.shore_bias && !self.manifold_physics {
             // Baseline path: c IS the target. Bit-identical to May.
             return target;
+        }
+
+        if self.manifold_physics {
+            // Manifold physics path: use proper differential geometry
+            // on the Mandelbrot configuration manifold (issue #106).
+            return self.step_manifold(dt, band_gates, h);
         }
 
         if !self.momentum {
@@ -649,5 +679,74 @@ impl OrbitController {
         .unwrap_or((self.c.re + du_re, self.c.im + du_im));
         self.c = num_complex::Complex64::new(nr, ni);
         self.c
+    }
+
+    /// Manifold physics step (issue #106).
+    ///
+    /// Integrates the Player's motion on the Mandelbrot configuration manifold
+    /// using proper differential geometry:
+    ///   r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+    ///
+    /// The Player supplies Controls as generalized forces; Physics itself is
+    /// musically ignorant. The model's (s, alpha) target determines the
+    /// generalized force direction, and audio energy modulates its magnitude.
+    fn step_manifold(
+        &mut self,
+        dt: f64,
+        band_gates: Option<&[f64]>,
+        _h: f64,
+    ) -> num_complex::Complex64 {
+        let target = self.mandelbrot_boundary();
+        let mut res_re = 0.0;
+        let mut res_im = 0.0;
+        if let Some(gates) = band_gates {
+            for (k, &g) in gates.iter().enumerate() {
+                let gate = g.clamp(0.0, 1.0);
+                let freq = (k as f64 + 2.0) * 1.0;
+                let phase = freq * self.theta;
+                res_re += gate * 0.05 * phase.cos();
+                res_im += gate * 0.05 * phase.sin();
+            }
+        }
+        let target = num_complex::Complex64::new(target.re + res_re, target.im + res_im);
+
+        // Generalized force direction: from current c toward the target
+        let dx = target.re - self.c.re;
+        let dy = target.im - self.c.im;
+        let dist = (dx * dx + dy * dy).sqrt();
+
+        // Force magnitude scales with omega and energy
+        let force_mag = self.omega.clamp(0.1, 10.0) * self.energy.clamp(0.0, 1.0) * 2.0;
+
+        let q_control = if dist > 1e-9 {
+            let dir = force_mag * dt;
+            (dx / dist * dir, dy / dist * dir)
+        } else {
+            (0.0, 0.0)
+        };
+
+        // Integrate using manifold physics
+        match crate::manifold::integrate_step(
+            self.c,
+            self.planar_velocity,
+            q_control,
+            self.manifold_drag,
+            dt,
+            &self.manifold_config,
+        ) {
+            Ok((c_new, v_new, _info)) => {
+                self.c = c_new;
+                self.planar_velocity = v_new;
+                self.c
+            }
+            Err(_) => {
+                // Fallback to plain integration if manifold computation fails
+                self.c = num_complex::Complex64::new(
+                    self.c.re + self.planar_velocity.0 * dt,
+                    self.c.im + self.planar_velocity.1 * dt,
+                );
+                self.c
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@
 //! WebAssembly bindings to runtime_core for browser use.
 
 use wasm_bindgen::prelude::*;
+use js_sys::Array;
 use serde::Serialize;
 use num_complex::Complex64 as RustComplex;
 use runtime_core::controller::{
@@ -33,6 +34,24 @@ use runtime_core::cycle_bank::{
     CycleBank as RustCycleBank, CycleBankConfig as RustCycleBankConfig,
     CycleEvidenceChannel as RustCycleEvidenceChannel,
     CycleObservation as RustCycleObservation, CYCLE_BANK_VERSION,
+};
+use runtime_core::manifold::{
+    ManifoldConfig as RustManifoldConfig,
+    signed_distance as rust_signed_distance,
+    regularized_distance as rust_regularized_distance,
+    mandelbrot_scale as rust_mandelbrot_scale,
+    scale_gradient as rust_scale_gradient,
+    scale_hessian as rust_scale_hessian,
+    induced_metric as rust_induced_metric,
+    kinetic_energy as rust_kinetic_energy,
+    potential_energy as rust_potential_energy,
+    total_energy as rust_total_energy,
+    christoffel_symbols as rust_christoffel_symbols,
+    geodesic_acceleration as rust_geodesic_acceleration,
+    potential_force as rust_potential_force,
+    apply_generalized_force as rust_apply_generalized_force,
+    drag_force as rust_drag_force,
+    integrate_step as rust_integrate_step,
 };
 use serde::Deserialize;
 
@@ -767,6 +786,48 @@ impl OrbitController {
     pub fn step(&mut self, dt: f64, h: f64, band_gates: Option<Vec<f64>>) -> Complex {
         self.inner.step(dt, band_gates.as_deref(), h).into()
     }
+
+    // ---- Manifold physics (issue #106) ----
+
+    /// Enable or disable manifold physics. When on, step() routes through
+    /// the Mandelbrot configuration manifold integrator.
+    #[wasm_bindgen(setter)]
+    pub fn set_manifold_physics(&mut self, on: bool) {
+        self.inner.manifold_physics = on;
+    }
+
+    /// Whether manifold physics is currently enabled.
+    #[wasm_bindgen(getter)]
+    pub fn manifold_physics(&self) -> bool {
+        self.inner.manifold_physics
+    }
+
+    /// Set the manifold configuration (used only when manifold_physics is on).
+    pub fn set_manifold_config(&mut self, config: &ManifoldConfig) {
+        self.inner.manifold_config = config.into();
+    }
+
+    /// Get the current manifold configuration.
+    pub fn manifold_config(&self) -> ManifoldConfig {
+        ManifoldConfig {
+            d_ref: self.inner.manifold_config.d_ref,
+            epsilon: self.inner.manifold_config.epsilon,
+            lambda_sq: self.inner.manifold_config.lambda_sq,
+            kappa: self.inner.manifold_config.kappa,
+        }
+    }
+
+    /// Set the drag coefficient for manifold physics (beta in Q_drag = -beta*G*v).
+    #[wasm_bindgen(setter)]
+    pub fn set_manifold_drag(&mut self, drag: f64) {
+        self.inner.manifold_drag = drag;
+    }
+
+    /// Get the drag coefficient for manifold physics.
+    #[wasm_bindgen(getter)]
+    pub fn manifold_drag(&self) -> f64 {
+        self.inner.manifold_drag
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -947,4 +1008,261 @@ impl Default for CycleBank {
     fn default() -> Self {
         Self::new().expect("canonical CycleBankConfig is valid")
     }
+}
+
+// ---------------------------------------------------------------------------
+// Manifold physics (issue #106) — BROWSER surface.
+//
+// Mirrors the Python bindings so the browser can run the same differential
+// geometry as the trainer. Rust remains canonical under ADR 0001.
+// ---------------------------------------------------------------------------
+
+/// Manifold configuration for the browser (issue #106).
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct ManifoldConfig {
+    d_ref: f64,
+    epsilon: f64,
+    lambda_sq: f64,
+    kappa: f64,
+}
+
+impl From<&ManifoldConfig> for RustManifoldConfig {
+    fn from(c: &ManifoldConfig) -> RustManifoldConfig {
+        RustManifoldConfig {
+            d_ref: c.d_ref,
+            epsilon: c.epsilon,
+            lambda_sq: c.lambda_sq,
+            kappa: c.kappa,
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl ManifoldConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> ManifoldConfig {
+        ManifoldConfig {
+            d_ref,
+            epsilon,
+            lambda_sq,
+            kappa,
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn d_ref(&self) -> f64 {
+        self.d_ref
+    }
+    #[wasm_bindgen(getter)]
+    pub fn epsilon(&self) -> f64 {
+        self.epsilon
+    }
+    #[wasm_bindgen(getter)]
+    pub fn lambda_sq(&self) -> f64 {
+        self.lambda_sq
+    }
+    #[wasm_bindgen(getter)]
+    pub fn kappa(&self) -> f64 {
+        self.kappa
+    }
+}
+
+/// Signed distance to the Mandelbrot boundary. Positive outside, negative inside.
+#[wasm_bindgen]
+pub fn manifold_signed_distance(real: f64, imag: f64) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_signed_distance(c).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Regularized distance rho(c) = sqrt(D^2 + epsilon^2).
+#[wasm_bindgen]
+pub fn manifold_regularized_distance(real: f64, imag: f64, epsilon: f64) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_regularized_distance(c, epsilon).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Mandelbrot scale sigma(c) = log2(d_ref / rho(c)).
+#[wasm_bindgen]
+pub fn manifold_mandelbrot_scale(real: f64, imag: f64, config: &ManifoldConfig) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_mandelbrot_scale(c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Scale gradient ∇sigma(c) = (∂sigma/∂x, ∂sigma/∂y). Returns [gx, gy].
+#[wasm_bindgen]
+pub fn manifold_scale_gradient(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (gx, gy) = rust_scale_gradient(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![gx, gy])
+}
+
+/// Scale Hessian [[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]].
+/// Returns a flat JS array [xx, xy, xy, yy].
+#[wasm_bindgen]
+pub fn manifold_scale_hessian(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let h = rust_scale_hessian(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(h[0][0]));
+    arr.push(&JsValue::from_f64(h[0][1]));
+    arr.push(&JsValue::from_f64(h[1][0]));
+    arr.push(&JsValue::from_f64(h[1][1]));
+    Ok(arr)
+}
+
+/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Returns a flat JS array [g11, g12, g12, g22].
+#[wasm_bindgen]
+pub fn manifold_induced_metric(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let g = rust_induced_metric(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(g[0][0]));
+    arr.push(&JsValue::from_f64(g[0][1]));
+    arr.push(&JsValue::from_f64(g[1][0]));
+    arr.push(&JsValue::from_f64(g[1][1]));
+    Ok(arr)
+}
+
+/// Kinetic energy K = 1/2 v^T G v.
+#[wasm_bindgen]
+pub fn manifold_kinetic_energy(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_kinetic_energy((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Native potential U = kappa * sigma(c).
+#[wasm_bindgen]
+pub fn manifold_potential_energy(real: f64, imag: f64, config: &ManifoldConfig) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_potential_energy(c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Total mechanical energy E = K + U.
+#[wasm_bindgen]
+pub fn manifold_total_energy(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_total_energy((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Christoffel symbols Gamma^i_jk. Returns a flat JS array of 8 values:
+/// [Gamma^0_00, Gamma^0_01, Gamma^0_10, Gamma^0_11, Gamma^1_00, Gamma^1_01, Gamma^1_10, Gamma^1_11].
+#[wasm_bindgen]
+pub fn manifold_christoffel_symbols(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let g = rust_christoffel_symbols(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(g[0][0][0]));
+    arr.push(&JsValue::from_f64(g[0][0][1]));
+    arr.push(&JsValue::from_f64(g[0][1][0]));
+    arr.push(&JsValue::from_f64(g[0][1][1]));
+    arr.push(&JsValue::from_f64(g[1][0][0]));
+    arr.push(&JsValue::from_f64(g[1][0][1]));
+    arr.push(&JsValue::from_f64(g[1][1][0]));
+    arr.push(&JsValue::from_f64(g[1][1][1]));
+    Ok(arr)
+}
+
+/// Geodesic acceleration term: Gamma^i_jk v^j v^k. Returns [ax, ay].
+#[wasm_bindgen]
+pub fn manifold_geodesic_acceleration(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (ax, ay) = rust_geodesic_acceleration((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![ax, ay])
+}
+
+/// Potential force F_U = -G^{-1} ∇U. Returns [fx, fy].
+#[wasm_bindgen]
+pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (fx, fy) = rust_potential_force(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![fx, fy])
+}
+
+/// Apply generalized force through the metric: a = G^{-1} Q. Returns [ax, ay].
+#[wasm_bindgen]
+pub fn manifold_apply_generalized_force(
+    qx: f64,
+    qy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (ax, ay) = rust_apply_generalized_force((qx, qy), c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![ax, ay])
+}
+
+/// Metric-consistent isotropic drag: Q_drag = -beta G v. Returns [qx, qy].
+#[wasm_bindgen]
+pub fn manifold_drag_force(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    beta: f64,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (qx, qy) = rust_drag_force((vx, vy), c, beta, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![qx, qy])
+}
+
+/// Semi-implicit Euler integration step for manifold dynamics.
+///
+/// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+///
+/// Returns [new_re, new_im, new_vx, new_vy, kinetic, potential, total, delta_total, delta_kinetic].
+#[wasm_bindgen]
+pub fn manifold_integrate_step(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    qx: f64,
+    qy: f64,
+    beta: f64,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Result<Vec<f64>, JsValue> {
+    let c = RustComplex::new(c_re, c_im);
+    let (c_new, v_new, info) = rust_integrate_step(
+        c,
+        (vx, vy),
+        (qx, qy),
+        beta,
+        dt,
+        &config.into(),
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    Ok(vec![
+        c_new.re,
+        c_new.im,
+        v_new.0,
+        v_new.1,
+        info.kinetic,
+        info.potential,
+        info.total,
+        info.delta_total,
+        info.delta_kinetic,
+    ])
 }

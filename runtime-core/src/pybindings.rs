@@ -33,6 +33,25 @@ use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::proxies as rust_proxies;
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
 use crate::distance_field::{sample_distance_field};
+use crate::manifold::{
+    ManifoldConfig as RustManifoldConfig,
+    EnergyInfo as RustEnergyInfo,
+    signed_distance as rust_signed_distance,
+    regularized_distance as rust_regularized_distance,
+    mandelbrot_scale as rust_mandelbrot_scale,
+    scale_gradient as rust_scale_gradient,
+    scale_hessian as rust_scale_hessian,
+    induced_metric as rust_induced_metric,
+    kinetic_energy as rust_kinetic_energy,
+    potential_energy as rust_potential_energy,
+    total_energy as rust_total_energy,
+    christoffel_symbols as rust_christoffel_symbols,
+    geodesic_acceleration as rust_geodesic_acceleration,
+    potential_force as rust_potential_force,
+    apply_generalized_force as rust_apply_generalized_force,
+    drag_force as rust_drag_force,
+    integrate_step as rust_integrate_step,
+};
 
 
 /// Python wrapper for `ResidualParams`.
@@ -80,6 +99,88 @@ impl From<ResidualParams> for RustResidualParams {
             k_residuals: p.k_residuals,
             residual_cap: p.residual_cap,
             radius_scale: p.radius_scale,
+        }
+    }
+}
+
+/// Python wrapper for the manifold configuration (issue #106).
+///
+/// Controls the induced metric, native potential, and integration on the
+/// Mandelbrot configuration manifold. All fields are get/set so the
+/// trainer can tune them and the runtime can read them back.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct ManifoldConfig {
+    #[pyo3(get, set)]
+    pub d_ref: f64,
+    #[pyo3(get, set)]
+    pub epsilon: f64,
+    #[pyo3(get, set)]
+    pub lambda_sq: f64,
+    #[pyo3(get, set)]
+    pub kappa: f64,
+}
+
+#[pymethods]
+impl ManifoldConfig {
+    #[new]
+    #[pyo3(signature = (d_ref=0.1, epsilon=1e-4, lambda_sq=1.0, kappa=1.0))]
+    fn py_new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> Self {
+        Self {
+            d_ref,
+            epsilon,
+            lambda_sq,
+            kappa,
+        }
+    }
+}
+
+impl From<RustManifoldConfig> for ManifoldConfig {
+    fn from(c: RustManifoldConfig) -> Self {
+        Self {
+            d_ref: c.d_ref,
+            epsilon: c.epsilon,
+            lambda_sq: c.lambda_sq,
+            kappa: c.kappa,
+        }
+    }
+}
+
+impl From<ManifoldConfig> for RustManifoldConfig {
+    fn from(c: ManifoldConfig) -> RustManifoldConfig {
+        RustManifoldConfig {
+            d_ref: c.d_ref,
+            epsilon: c.epsilon,
+            lambda_sq: c.lambda_sq,
+            kappa: c.kappa,
+        }
+    }
+}
+
+/// Python wrapper for the energy diagnostic returned by integrate_step.
+#[pyclass]
+#[derive(Clone, Debug)]
+pub struct EnergyInfo {
+    #[pyo3(get)]
+    pub kinetic: f64,
+    #[pyo3(get)]
+    pub potential: f64,
+    #[pyo3(get)]
+    pub total: f64,
+    #[pyo3(get)]
+    pub delta_total: f64,
+    #[pyo3(get)]
+    pub delta_kinetic: f64,
+}
+
+impl From<RustEnergyInfo> for EnergyInfo {
+    fn from(e: RustEnergyInfo) -> Self {
+        Self {
+            kinetic: e.kinetic,
+            potential: e.potential,
+            total: e.total,
+            delta_total: e.delta_total,
+            delta_kinetic: e.delta_kinetic,
         }
     }
 }
@@ -234,6 +335,42 @@ impl OrbitController {
     /// Set the persistent c position (momentum/shore-bias paths).
     fn set_c(&mut self, re: f64, im: f64) {
         self.inner.c = num_complex::Complex64::new(re, im);
+    }
+
+    // ---- Manifold physics (issue #106) ----
+
+    /// Enable or disable manifold physics. When on, step() routes through
+    /// the Mandelbrot configuration manifold integrator.
+    fn set_manifold_physics(&mut self, on: bool) {
+        self.inner.manifold_physics = on;
+    }
+
+    /// Whether manifold physics is currently enabled.
+    #[getter]
+    fn manifold_physics(&self) -> bool {
+        self.inner.manifold_physics
+    }
+
+    /// Set the manifold configuration (used only when manifold_physics is on).
+    fn set_manifold_config(&mut self, config: ManifoldConfig) {
+        self.inner.manifold_config = config.into();
+    }
+
+    /// Get the current manifold configuration.
+    #[getter]
+    fn manifold_config(&self) -> ManifoldConfig {
+        self.inner.manifold_config.clone().into()
+    }
+
+    /// Set the drag coefficient for manifold physics (beta in Q_drag = -beta*G*v).
+    fn set_manifold_drag(&mut self, drag: f64) {
+        self.inner.manifold_drag = drag;
+    }
+
+    /// Get the drag coefficient for manifold physics.
+    #[getter]
+    fn manifold_drag(&self) -> f64 {
+        self.inner.manifold_drag
     }
 
     /// Advance one frame; returns (re, im). `h` is the transient signal
@@ -713,6 +850,190 @@ fn mandelbrot_distance_estimate_py(
 
     crate::distance_field::mandelbrot_distance_estimate(&cs)
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+// ---------------------------------------------------------------------------
+// Manifold physics (issue #106) — Python surface.
+//
+// These are the TRAINING surface of the manifold math: the trainer's
+// differentiable mirror (see backend/src/cspace_proxies.py) must reproduce
+// these values within tolerance, enforced by preflight parity checks.
+// Rust remains canonical under ADR 0001.
+// ---------------------------------------------------------------------------
+
+/// Signed distance to the Mandelbrot boundary. Positive outside, negative inside.
+#[pyfunction]
+fn manifold_signed_distance(c: &Bound<'_, PyComplex>) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_signed_distance(cc).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Regularized distance rho(c) = sqrt(D^2 + epsilon^2).
+#[pyfunction]
+#[pyo3(signature = (c, epsilon))]
+fn manifold_regularized_distance(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_regularized_distance(cc, epsilon).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Mandelbrot scale sigma(c) = log2(d_ref / rho(c)).
+#[pyfunction]
+fn manifold_mandelbrot_scale(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_mandelbrot_scale(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Scale gradient ∇sigma(c) = (∂sigma/∂x, ∂sigma/∂y).
+#[pyfunction]
+fn manifold_scale_gradient(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_scale_gradient(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Scale Hessian [[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]].
+#[pyfunction]
+fn manifold_scale_hessian(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<f64>>> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    let h = rust_scale_hessian(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(vec![vec![h[0][0], h[0][1]], vec![h[1][0], h[1][1]]])
+}
+
+/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Returns [[g11, g12], [g12, g22]].
+#[pyfunction]
+fn manifold_induced_metric(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<f64>>> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    let g = rust_induced_metric(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(vec![vec![g[0][0], g[0][1]], vec![g[1][0], g[1][1]]])
+}
+
+/// Kinetic energy K = 1/2 v^T G v.
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, config))]
+fn manifold_kinetic_energy(
+    vx: f64,
+    vy: f64,
+    c: &Bound<'_, PyComplex>,
+    config: ManifoldConfig,
+) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_kinetic_energy((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Native potential U = kappa * sigma(c).
+#[pyfunction]
+fn manifold_potential_energy(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_potential_energy(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Total mechanical energy E = K + U.
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, config))]
+fn manifold_total_energy(
+    vx: f64,
+    vy: f64,
+    c: &Bound<'_, PyComplex>,
+    config: ManifoldConfig,
+) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_total_energy((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Christoffel symbols Gamma^i_jk of the Levi-Civita connection.
+/// Returns [[[g00, g01], [g10, g11]], [[g20, g21], [g30, g31]]]
+#[pyfunction]
+fn manifold_christoffel_symbols(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<Vec<f64>>>> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    let g = rust_christoffel_symbols(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(vec![
+        vec![vec![g[0][0][0], g[0][0][1]], vec![g[0][1][0], g[0][1][1]]],
+        vec![vec![g[1][0][0], g[1][0][1]], vec![g[1][1][0], g[1][1][1]]],
+    ])
+}
+
+/// Geodesic acceleration term: Gamma^i_jk v^j v^k.
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, config))]
+fn manifold_geodesic_acceleration(
+    vx: f64,
+    vy: f64,
+    c: &Bound<'_, PyComplex>,
+    config: ManifoldConfig,
+) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_geodesic_acceleration((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Potential force F_U = -G^{-1} ∇U = -kappa G^{-1} ∇sigma.
+#[pyfunction]
+fn manifold_potential_force(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_potential_force(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Apply generalized force through the metric: a = G^{-1} Q.
+#[pyfunction]
+#[pyo3(signature = (qx, qy, c, config))]
+fn manifold_apply_generalized_force(
+    qx: f64,
+    qy: f64,
+    c: &Bound<'_, PyComplex>,
+    config: ManifoldConfig,
+) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_apply_generalized_force((qx, qy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Metric-consistent isotropic drag: Q_drag = -beta G v.
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, beta, config))]
+fn manifold_drag_force(
+    vx: f64,
+    vy: f64,
+    c: &Bound<'_, PyComplex>,
+    beta: f64,
+    config: ManifoldConfig,
+) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_drag_force((vx, vy), cc, beta, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Semi-implicit Euler integration step for manifold dynamics.
+///
+/// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+///
+/// Returns (new_re, new_im, new_vx, new_vy, energy_info).
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, vx, vy, qx, qy, beta, dt, config))]
+fn manifold_integrate_step(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    qx: f64,
+    qy: f64,
+    beta: f64,
+    dt: f64,
+    config: ManifoldConfig,
+) -> PyResult<(f64, f64, f64, f64, EnergyInfo)> {
+    let c = num_complex::Complex64::new(c_re, c_im);
+    let (c_new, v_new, info) = rust_integrate_step(
+        c,
+        (vx, vy),
+        (qx, qy),
+        beta,
+        dt,
+        &config.into(),
+    )
+    .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok((
+        c_new.re,
+        c_new.im,
+        v_new.0,
+        v_new.1,
+        info.into(),
+    ))
 }
 
 /// Module-level __getattr__ to dynamically provide fallback callables for
@@ -1524,6 +1845,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add("CYCLE_BANK_VERSION", crate::cycle_bank::CYCLE_BANK_VERSION)?;
 
     m.add_class::<ResidualParams>()?;
+    m.add_class::<ManifoldConfig>()?;
+    m.add_class::<EnergyInfo>()?;
     m.add_class::<OrbitState>()?;
     m.add_class::<PlayerState>()?;
     m.add_class::<OrbitController>()?;
@@ -1562,6 +1885,22 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // Differentiable-proxy reference implementations (training supervision)
     m.add_function(wrap_pyfunction!(mandelbrot_cardioid_proximity_batch, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_path_metrics_py, m)?)?;
+    // Manifold physics (issue #106) — training surface
+    m.add_function(wrap_pyfunction!(manifold_signed_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_regularized_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_mandelbrot_scale, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_scale_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_scale_hessian, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_induced_metric, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_kinetic_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_potential_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_total_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_christoffel_symbols, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_geodesic_acceleration, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_potential_force, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_apply_generalized_force, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_drag_force, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
