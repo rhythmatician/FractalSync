@@ -46,6 +46,10 @@ class MockOrbitController {
   shore_bias = false;
   d_star = 0.5;
   max_step = 0.05;
+  manifold_physics = false;
+  manifold_drag = 0.1;
+  manifold_error: string | null = null;
+  planar_velocity: [number, number] = [0, 0];
   // Momentum state (used when momentum is on).
   v_re = 0;
   v_im = 0;
@@ -73,6 +77,55 @@ class MockOrbitController {
       re: r * Math.cos(theta / 2.0) * scale,
       im: r * Math.sin(theta / 2.0) * scale,
     };
+  }
+
+  stepWithControls(dt: number, motion: unknown) {
+    // Destination manifold mock: integrate MotionControls as simple metric-consistent drive.
+    // In the real wasm this routes through manifold::integrate_motion_controls — here we
+    // simulate a plausible trajectory so stepWithControls does not throw in vitest.
+    const m = motion as { direction_x?: number; direction_y?: number; throttle?: number; brake?: number; grip?: number; impulse?: number; direction?: [number, number] } | null;
+    let dirX = 0, dirY = 0, throttle = 0, brake = 0, grip = 0.5, impulse = 0;
+    if (m) {
+      if ('direction_x' in (m as object) && 'direction_y' in (m as object)) {
+        dirX = (m as { direction_x: number }).direction_x ?? 0;
+        dirY = (m as { direction_y: number }).direction_y ?? 0;
+        throttle = (m as { throttle: number }).throttle ?? 0;
+        brake = (m as { brake: number }).brake ?? 0;
+        grip = (m as { grip: number }).grip ?? 0.5;
+        impulse = (m as { impulse: number }).impulse ?? 0;
+      } else if ('direction' in (m as object)) {
+        const d = (m as { direction: [number, number] }).direction ?? [0, 0];
+        dirX = d[0] ?? 0; dirY = d[1] ?? 0;
+        throttle = (m as { throttle: number }).throttle ?? 0;
+        brake = (m as { brake: number }).brake ?? 0;
+        grip = (m as { grip: number }).grip ?? 0.5;
+        impulse = (m as { impulse: number }).impulse ?? 0;
+      }
+    }
+    // Simple planar integration: drive as direct acceleration scaled by throttle
+    const mag = Math.sqrt(dirX * dirX + dirY * dirY);
+    let ax = 0, ay = 0;
+    if (mag > 1e-9 && throttle > 1e-9) {
+      const nX = dirX / mag, nY = dirY / mag;
+      const force = throttle * 2.0;
+      ax += force * nX;
+      ay += force * nY;
+    }
+    // Drag as simple linear damping (PSD)
+    const beta = 0.05 + grip * 0.15 + brake * 1.0;
+    ax -= beta * this.planar_velocity[0];
+    ay -= beta * this.planar_velocity[1];
+    // Geodesic + potential omitted in mock — direct integration.
+    this.planar_velocity[0] += ax * dt;
+    this.planar_velocity[1] += ay * dt;
+    if (impulse > 1e-9 && mag > 1e-9) {
+      this.planar_velocity[0] += (dirX / mag) * impulse * 0.5;
+      this.planar_velocity[1] += (dirY / mag) * impulse * 0.5;
+    }
+    this.c_re += this.planar_velocity[0] * dt;
+    this.c_im += this.planar_velocity[1] * dt;
+    this.theta = (this.theta + this.omega * dt) % TWO_PI;
+    return { real: this.c_re, imag: this.c_im };
   }
 
   step(dt: number, _h = 0.0, bandGates?: Float64Array | null) {

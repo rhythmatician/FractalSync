@@ -25,7 +25,11 @@ def runtime_core_module():
     this will raise a helpful RuntimeError instructing the developer how to
     install it (recommended: `pip install -r backend/requirements-dev.txt`).
     """
-    # Try importing runtime_core; if present we will prefer a local-source build
+    # Try importing runtime_core; if present we will prefer a local-source build.
+    # For editable installs via `maturin develop` the module lives in
+    # site-packages as a shim (e.g. .venv/Lib/site-packages/runtime_core/__init__.py)
+    # that re-exports the compiled extension from `runtime-core/target`. That
+    # shim is the correct local-source build and should be considered installed.
     installed = False
     runtime_core_mod = None
     try:
@@ -33,19 +37,6 @@ def runtime_core_module():
 
         runtime_core_mod = runtime_core
         installed = True
-        # If the installed runtime_core is not the one built from our local source
-        # (e.g., it's a site-packages wheel), force a rebuild so tests exercise
-        # the current repository source.
-        try:
-            module_file = getattr(runtime_core_mod, "__file__", "")
-            if module_file:
-                module_path = Path(module_file).resolve()
-                # If the installed module's path is not inside our repo's runtime-core dir, rebuild
-                if str((ROOT / "runtime-core").resolve()) not in str(module_path):
-                    installed = False
-        except Exception:
-            # Be conservative and rebuild if we can't determine origin
-            installed = False
     except Exception:
         installed = False
 
@@ -96,8 +87,17 @@ def runtime_core_module():
         # Try to run the maturin CLI to make it easy for devs who rely on the
         # fixture to auto-install. If maturin is not available this will raise
         # and instruct developers to install dev dependencies.
-        cmd = [sys.executable, "-m", "maturin", "develop", "--release"]
-        subprocess.run(cmd, cwd=ROOT / "runtime-core", check=True)
+        # Workspace layout requires --manifest-path (see Cargo.toml [workspace]).
+        cmd = [
+            sys.executable,
+            "-m",
+            "maturin",
+            "develop",
+            "--release",
+            "--manifest-path",
+            str(ROOT / "runtime-core" / "Cargo.toml"),
+        ]
+        subprocess.run(cmd, cwd=ROOT, check=True)
 
     # Update the build marker so future test sessions can skip rebuilding
     try:

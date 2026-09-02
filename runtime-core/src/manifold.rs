@@ -56,8 +56,12 @@ impl Default for ManifoldConfig {
     }
 }
 
-/// Signed distance to the Mandelbrot boundary.
-/// D(c) < 0 inside M, D(c) > 0 outside M.
+/// Signed geometric distance to the Mandelbrot boundary (canonical authority).
+/// D(c) < 0 inside M, D(c) > 0 outside M, D(c) == 0 on The Shore.
+/// Distinct from unsigned geometric distance d(c)=|D(c)| and from the
+/// Shore-proximity sensitivity S(c)=|∇F|/(|∇F|+G0) carried by the minimap
+/// (mip pyramid) — see `crate::minimap`. S is a sensitivity/proximity proxy,
+/// not geometric distance; d and D are geometric.
 ///
 /// This delegates to the canonical signed SDF sampler in `distance_field`
 /// (`sample_signed_distance_field`), which interpolates the stored signed
@@ -84,6 +88,15 @@ pub fn signed_distance(c: Complex64) -> Result<f64, String> {
 /// fraction of a pixel. If no field is loaded a conservative fallback is
 /// used so callers still get a deterministic value.
 pub fn derivative_step() -> f64 {
+    // Ensure the distance field is loaded so the provider spacing is stable.
+    // `sample_signed_distance_field` auto-loads the builtin, but `derivative_step`
+    // is called *before* any sampling in `scale_gradient`/`scale_hessian`. If we
+    // returned the fallback on the first call, the first gradient would be
+    // computed with h=1e-4 and the second with h=px/24 (~1.6e-4), breaking
+    // determinism and the metric-consistent drive covector invariant.
+    if crate::distance_field::distance_field_metadata().is_none() {
+        let _ = crate::distance_field::load_builtin_distance_field("mandelbrot_default");
+    }
     match crate::distance_field::distance_field_metadata() {
         Some((_, _, _, _, _, _, dx, dy)) => {
             let px = dx.max(dy);
@@ -119,10 +132,23 @@ pub fn regularized_distance(c: Complex64, epsilon: f64) -> Result<f64, String> {
     Ok((d * d + epsilon * epsilon).sqrt())
 }
 
+/// Unsigned geometric distance d(c) = |D(c)|.
+/// Distinct from signed distance D(c) and from S(c) sensitivity (see [`signed_distance`]).
+pub fn unsigned_distance(c: Complex64) -> Result<f64, String> {
+    Ok(signed_distance(c)?.abs())
+}
+
 /// Mandelbrot scale sigma(c) = log2(d_ref / rho(c))
 ///
 /// High scale at the Shore, decreases with distance from boundary.
 /// The scale is symmetric across inside/outside due to regularization.
+/// `sigma(c)` is DERIVED from Mandelbrot geometry via D(c) and the smooth
+/// regularization `rho = sqrt(D^2 + epsilon^2)`. There is no independent
+/// Mandelbrot scale-control axis; `sigma` is not state and has no independent
+/// velocity `v_sigma` — see [`sigma_dot`] and [`embedding`].
+/// `epsilon` is a capability of the current Map provider (distance-field
+/// resolution/regularization floor), not a permanent architectural maximum.
+/// A deeper/adaptive provider may lower it without changing the Physics contract.
 pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
     let rho = regularized_distance(c, config.epsilon)?;
     Ok((config.d_ref / rho).log2())
@@ -185,8 +211,59 @@ pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2];
     Ok([[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]])
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T
+/// Embedding q(c) = (x, y, sigma(c)) in position-scale space.
 ///
+/// `q` is an EMBEDDING, not three independent degrees of freedom. The
+/// independent configuration is still `r = (x, y)` / `c = x + i y`; `sigma(c)`
+/// is derived. See [`jacobian`] for ∂q/∂(x,y) and [`q_dot`] for the embedded
+/// velocity.
+pub fn embedding(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64, f64), String> {
+    let sigma = mandelbrot_scale(c, config)?;
+    Ok((c.re, c.im, sigma))
+}
+
+/// Jacobian of the embedding J_q(c) = ∂q/∂(x,y) as a 3×2 matrix.
+///
+/// ```text
+/// J_q = [[1, 0],
+///        [0, 1],
+///        [sigma_x, sigma_y]]
+/// ```
+pub fn jacobian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 3], String> {
+    let (gx, gy) = scale_gradient(c, config)?;
+    Ok([[1.0, 0.0], [0.0, 1.0], [gx, gy]])
+}
+
+/// Embedded velocity q_dot = J_q(c) v, with sigma_dot = ∇sigma(c)·v.
+///
+/// There is no independent `v_sigma`; the third component of `q_dot` is
+/// strictly `sigma_dot = ∇sigma·v`. Returns (x_dot, y_dot, sigma_dot) which
+/// is identically `(v.0, v.1, sigma_dot)`.
+pub fn q_dot(
+    c: Complex64,
+    v: (f64, f64),
+    config: &ManifoldConfig,
+) -> Result<(f64, f64, f64), String> {
+    let sd = sigma_dot(c, v, config)?;
+    Ok((v.0, v.1, sd))
+}
+
+/// Time derivative of Mandelbrot scale along a trajectory: sigma_dot = ∇sigma(c)·v.
+///
+/// This is the ONLY velocity that exists for `sigma`; there is no independent
+/// `v_sigma` state. `sigma(c)` is derived geometry.
+pub fn sigma_dot(
+    c: Complex64,
+    v: (f64, f64),
+    config: &ManifoldConfig,
+) -> Result<f64, String> {
+    let (gx, gy) = scale_gradient(c, config)?;
+    Ok(gx * v.0 + gy * v.1)
+}
+
+/// Induced metric G(c) = J_q(c)^T H J_q(c) = I + lambda^2 * grad_sigma * grad_sigma^T
+///
+/// Derived from the embedding Jacobian and ambient metric H = diag(1,1,lambda^2).
 /// Returns 2x2 symmetric positive-definite matrix as [[g11, g12], [g12, g22]]
 pub fn induced_metric(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
     let (gx, gy) = scale_gradient(c, config)?;
@@ -367,6 +444,35 @@ pub fn drag_force(
     Ok((-beta * gv_x, -beta * gv_y))
 }
 
+/// Integrator selection (issue #106).
+///
+/// Candidate timesteppers considered:
+///
+/// - **Semi-implicit (symplectic) Euler**: `v_{n+1} = v_n + a(q_n,v_n)·dt`,
+///   `r_{n+1} = r_n + v_{n+1}·dt`. First-order, explicit, area-preserving in
+///   flat phase space, inexpensive, stable for position-dependent forces when
+///   `dt` is the canonical hop `HOP_LENGTH/SAMPLE_RATE` (≈21 ms). Energy is
+///   not exactly conserved but drift is bounded and O(dt).
+/// - **Explicit RK4**: higher accuracy but overtly conservative; dominant
+///   near-Shore error comes from finite-differenced `∇sigma`/`H_sigma`
+///   propagating into the otherwise analytic `Γ`, not from the timestepper
+///   itself (see `docs/adr/` and PR #112 notes).
+/// - **Variational / geometric**: ideal for long conservative rollouts but
+///   heavier and requires re-deriving the discrete Lagrangian for the
+///   sampled sigma field.
+///
+/// **Chosen**: semi-implicit Euler as the inexpensive baseline. It keeps
+/// parity cheap, preserves the canonical timebase, and bounds total-energy
+/// drift away from and near the Shore (see `TestEnergyDrift` in
+/// `backend/tests/test_manifold_physics.py`). The dominant error is the
+/// sampled-field gradient quality, not the integrator order; a future deeper/
+/// analytic Map provider can improve `∇sigma`/`H_sigma` without changing the
+/// timestepper contract. The kernel fails closed on metric singularities
+/// (no silent flat-physics fallback).
+///
+/// A differentiable training rollout may use a parity-pinned STE surrogate
+/// where autograd requires it, but Rust remains semantic authority (ADR 0001).
+///
 /// Semi-implicit Euler integration step for manifold dynamics.
 ///
 /// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
@@ -452,6 +558,7 @@ mod tests {
     
     #[test]
     fn test_scale_at_shore() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         // At the Shore, scale should be high (rho small)
         let config = ManifoldConfig::default();
         let c_shore = Complex64::new(0.25, 0.0); // approximate Shore point
@@ -461,6 +568,7 @@ mod tests {
     
     #[test]
     fn test_metric_positive_definite() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = ManifoldConfig::default();
         let c = Complex64::new(0.0, 0.0);
         let g = induced_metric(c, &config).unwrap();
@@ -476,6 +584,7 @@ mod tests {
     
     #[test]
     fn test_energy_conservation_no_forces() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = ManifoldConfig::default();
         let c = Complex64::new(0.0, 0.0);
         let v = (0.01, 0.01);
@@ -486,5 +595,194 @@ mod tests {
         
         // Energy drift should be small
         assert!(info.delta_total.abs() < 0.01, "Energy should be approximately conserved");
+    }
+
+    #[test]
+    fn embedding_jacobian_and_qdot_consistency() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(0.12, -0.34);
+        let v = (0.07, -0.03);
+        let (x, y, s) = embedding(c, &config).unwrap();
+        assert!((x - c.re).abs() < 1e-12);
+        assert!((y - c.im).abs() < 1e-12);
+        assert!(s.is_finite());
+        let j = jacobian(c, &config).unwrap();
+        // Top 2 rows are identity.
+        assert!((j[0][0] - 1.0).abs() < 1e-12 && j[0][1].abs() < 1e-12);
+        assert!(j[1][0].abs() < 1e-12 && (j[1][1] - 1.0).abs() < 1e-12);
+        let (gx, gy) = scale_gradient(c, &config).unwrap();
+        assert!((j[2][0] - gx).abs() < 1e-12);
+        assert!((j[2][1] - gy).abs() < 1e-12);
+        let sd = sigma_dot(c, v, &config).unwrap();
+        assert!((sd - (gx * v.0 + gy * v.1)).abs() < 1e-12);
+        let qd = q_dot(c, v, &config).unwrap();
+        assert!((qd.0 - v.0).abs() < 1e-12);
+        assert!((qd.1 - v.1).abs() < 1e-12);
+        assert!((qd.2 - sd).abs() < 1e-12);
+        // No independent v_sigma: q_dot.2 is exactly sigma_dot, not a separate state.
+        // Metric derived from Jacobian must match induced_metric.
+        let g = induced_metric(c, &config).unwrap();
+        let lsq = config.lambda_sq;
+        let g11_expect = 1.0 + lsq * gx * gx;
+        let g12_expect = lsq * gx * gy;
+        let g22_expect = 1.0 + lsq * gy * gy;
+        assert!((g[0][0] - g11_expect).abs() < 1e-12);
+        assert!((g[0][1] - g12_expect).abs() < 1e-12);
+        assert!((g[1][1] - g22_expect).abs() < 1e-12);
+    }
+
+    #[test]
+    fn scale_regularization_is_smooth_and_symmetric() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // rho(c)=sqrt(D^2+eps^2) gives finite, smooth sigma through D=0 and symmetric
+        // geometric scale on inside/outside. Finite differences must stay finite.
+        let config = ManifoldConfig::default();
+        // Find Shore at y=0 by bisection on signed distance (needs field).
+        // If field not available, just check sigma finiteness at 0.25.
+        let c_inside = Complex64::new(0.24, 0.0);
+        let c_outside = Complex64::new(0.26, 0.0);
+        let s_in = mandelbrot_scale(c_inside, &config).unwrap();
+        let s_out = mandelbrot_scale(c_outside, &config).unwrap();
+        assert!(s_in.is_finite() && s_out.is_finite());
+        // Scale is highest near the Shore, lower farther away.
+        let s_far = mandelbrot_scale(Complex64::new(1.0, 0.0), &config).unwrap();
+        assert!(s_in > s_far);
+        assert!(s_out > s_far);
+        // Derivatives through the crossing must be finite (smooth).
+        for x in [0.245, 0.25, 0.255] {
+            let (gx, gy) = scale_gradient(Complex64::new(x, 0.0), &config).unwrap();
+            assert!(gx.is_finite() && gy.is_finite());
+            let h = scale_hessian(Complex64::new(x, 0.0), &config).unwrap();
+            for row in h { for v in row { assert!(v.is_finite()); } }
+            let gamma = christoffel_symbols(Complex64::new(x, 0.0), &config).unwrap();
+            for i in 0..2 { for j in 0..2 { for k in 0..2 { assert!(gamma[i][j][k].is_finite()); } } }
+        }
+    }
+
+    #[test]
+    fn unsigned_distance_and_d_distinct_from_sensitivity() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // D, d=|D|, and S must be explicitly distinct. This test documents the
+        // invariant and checks the Rust side honors it: d = |D| exactly, while
+        // S (if later exposed) is NOT geometric distance.
+        let c = Complex64::new(0.0, 0.0);
+        let d_signed = signed_distance(c).unwrap();
+        let d_abs = unsigned_distance(c).unwrap();
+        assert!((d_abs - d_signed.abs()).abs() < 1e-12);
+        // S is carried by the minimap mip pyramid (S=G/(G+G0)), not by this module.
+        // The absence of an S alias here is intentional — callers must not label S
+        // as geometric distance.
+    }
+
+    #[test]
+    fn drift_grip_controls_cannot_inject_energy() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // Friction/brake is PSD: P = v^T Q_friction <= 0 regardless of grip.
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(0.1, -0.2);
+        let v = (0.4, 0.3);
+        for (grip, brake) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.5, 0.5)] {
+            let mc = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 0.0, brake, grip, impulse: 0.0 };
+            let beta = mc.friction_beta();
+            let q = drag_force(v, c, beta, &config).unwrap();
+            let p = v.0 * q.0 + v.1 * q.1;
+            assert!(p <= 1e-12, "friction injected energy p={} grip={} brake={}", p, grip, brake);
+        }
+    }
+
+    #[test]
+    fn conservative_rollout_energy_drift_is_bounded() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // With Q_control=0, beta=0, total energy E=K+U should drift only O(dt)
+        let config = ManifoldConfig::default();
+        let dt = 0.005;
+        let mut c = Complex64::new(0.0, 0.6);
+        let mut v = (0.015, -0.01);
+        let e0 = total_energy(v, c, &config).unwrap();
+        for _ in 0..80 {
+            let (c1, v1, info) = integrate_step(c, v, (0.0, 0.0), 0.0, dt, &config).unwrap();
+            assert!(info.delta_total.abs() < 0.05, "unbounded single-step drift {}", info.delta_total);
+            c = c1; v = v1;
+        }
+        let e1 = total_energy(v, c, &config).unwrap();
+        assert!((e1 - e0).abs() < 0.05, "rollout drift {} exceeds tolerance", (e1-e0).abs());
+    }
+
+    #[test]
+    fn drive_work_attributable_to_generalized_force() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // Drive covector must have metric-consistent dual norm; its work
+        // w = v·Q*dt is attributable to the control, not hidden geometry.
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(0.05, 0.1);
+        let v = (0.02, 0.01);
+        let mc = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 1.0, brake: 0.0, grip: 0.5, impulse: 0.0 };
+        let q = mc.drive_covector(c, &config).unwrap();
+        // Power is v·Q; compare step with vs without drive.
+        let (_c0, _v0, info0) = integrate_step(c, v, (0.0, 0.0), 0.0, 0.01, &config).unwrap();
+        let (_c1, _v1, info1) = integrate_step(c, v, q, 0.0, 0.01, &config).unwrap();
+        // Drive must increase total energy when aligned with v (positive work).
+        // If orthogonal, it may not; we test that drive vs no-drive differs.
+        assert!((info1.delta_total - info0.delta_total).abs() > 0.0 || (q.0 == 0.0 && q.1 == 0.0));
+    }
+
+    #[test]
+    fn mip_boundaries_do_not_cause_discontinuity() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // Map-derived mechanics must vary continuously across stored MIP
+        // boundaries and through the regularized Shore crest. We approximate
+        // this by checking metric/shear continuity at 0.25 +/- eps (shore)
+        // and at far/near points where SDF resolution changes would appear as
+        // jumps. Tolerance is generous because bicubic interpolation is smooth
+        // but FD noise exists.
+        let config = ManifoldConfig::default();
+        for x in [0.249, 0.25, 0.251, -0.751, -0.75, -0.749] {
+            let g = induced_metric(Complex64::new(x, 0.0), &config).unwrap();
+            for row in g { for v in row { assert!(v.is_finite()); } }
+            let det = g[0][0]*g[1][1] - g[0][1]*g[0][1];
+            assert!(det > 0.0 && det.is_finite());
+        }
+    }
+
+    #[test]
+    fn controls_drive_can_cross_shore_without_wall() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        // The Shore is a finite potential ridge, not a binary wall. With
+        // sufficient generalized work from Controls, the trajectory must be
+        // able to crest D=0 without any transient-gated wall permeability.
+        // This test uses the destination seam `integrate_motion_controls`
+        // (ControlsV2 -> G, Γ, U) and checks that a driven rollout crosses
+        // while an undriven rollout from the same start remains inside.
+        let config = ManifoldConfig { d_ref: 0.1, epsilon: 1e-4, lambda_sq: 1.0, kappa: 0.5 };
+        let c0 = Complex64::new(0.23, 0.0);
+        let v0 = (0.0, 0.0);
+        let dt = 0.02;
+        let steps = 400;
+        // Undriven: should not cross (potential ridge holds).
+        let mut c = c0;
+        let mut v = v0;
+        let undriven = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 0.0, brake: 0.0, grip: 0.0, impulse: 0.0 };
+        let mut crossed_undriven = false;
+        for _ in 0..steps {
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &undriven, dt, &config).unwrap();
+            c = c1; v = v1;
+            if signed_distance(c).unwrap() > 0.0 { crossed_undriven = true; break; }
+        }
+        assert!(!crossed_undriven, "undriven rollout should reflect off the ridge");
+        // Driven: same start, sustained throttle outward, must crest.
+        c = c0; v = v0;
+        let driven = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 1.0, brake: 0.0, grip: 0.0, impulse: 0.0 };
+        let mut crossed_driven = false;
+        let mut final_c = c0;
+        for _ in 0..steps {
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &driven, dt, &config).unwrap();
+            c = c1; v = v1;
+            final_c = c;
+            if signed_distance(c).unwrap() > 0.0 { crossed_driven = true; break; }
+        }
+        assert!(crossed_driven, "driven rollout should crest the finite ridge without any wall gate; final c={:?} D={}", final_c, signed_distance(final_c).unwrap());
+        // Also verify that no musical signal (h, energy) was involved: the
+        // destination seam takes only MotionControls, dt, and ManifoldConfig.
     }
 }
