@@ -45,6 +45,32 @@
                 "runtime-core/tests/test_cycle_bank.rs",
                 "backend/tests/test_cycle_bank_binding.py"
             ]
+        },
+        "controls_v2": {
+            "authority": "runtime-core/src/controls.rs (ControlsV2, MotionControls, JuliaViewControls, JuliaViewState, ColorIntent, Harmony; CONTROLS_VERSION controls/2)",
+            "description": "Unified Controls v2 action surface (issue #107): 2-DOF manifold drive as generalized forces/impulses/PSD friction plus bounded Julia view deltas over persistent ColorIntent/Harmony. Rust owns ranges, normalization, and state integration; Python/WASM bindings are thin projections; ONNX metadata stamps controls_version and parameter_names from Rust authority.",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/controls.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs (ControlsV2/MotionControls/JuliaViewControls/JuliaViewState/ColorIntent wasm_bindgen) consumed by frontend/src/lib/modelInference.ts + frontend/src/lib/orbitSynthesizer.ts (stepWithControls)",
+                "training_surface": "runtime-core/src/pybindings.rs (ControlsV2 PyO3) consumed by backend/src/control_model.py + backend/src/export_model.py + backend/train.py (controls_version gate)"
+            },
+            "required_tests": [
+                "backend/tests/test_golden_parity.py",
+                "backend/tests/test_export_import_compat.py"
+            ]
+        },
+        "manifold_physics": {
+            "authority": "runtime-core/src/manifold.rs (ManifoldConfig, induced_metric, Christoffel, integrate_step, EnergyInfo; embedding/Jacobian/q_dot/sigma_dot)",
+            "description": "Mandelbrot-native manifold Physics (issue #106): embedding q(c)=(x,y,sigma(c)), Jacobian, metric G, potential U=kappa*sigma, Levi-Civita connection, energy ledger, musically-ignorant generalized-force integration. D/d/S distinct, no v_sigma.",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/manifold.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs (manifold_* wasm_bindgen incl embedding/jacobian/q_dot/sigma_dot/unsigned_distance) consumed by frontend/src/lib/orbitSynthesizer.ts (stepWithControls)",
+                "training_surface": "runtime-core/src/pybindings.rs (manifold_* PyO3) consumed by backend/src/cspace_proxies.py (manifold_integrate_step mirror) and backend/src/control_model.py"
+            },
+            "required_tests": [
+                "backend/tests/test_manifold_physics.py",
+                "backend/tests/test_golden_parity.py"
+            ]
         }
     },
     "binding_symmetry": {

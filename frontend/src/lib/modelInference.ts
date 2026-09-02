@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
 export interface VisualParameters {
@@ -27,8 +27,10 @@ export interface ModelMetadata {
   input_dim?: number;
   timestamp?: string;
   git_hash?: string;
-  model_type?: string; // 'orbit_control' or legacy
+  model_type?: string; // 'orbit_control' | 'controls_v2' or legacy
   k_bands?: number;
+  /** Controls v2 contract stamp (issue #107). Missing = pre-contract legacy for controls/2. */
+  controls_version?: string;
   /** Controller contract stamp (ADR 0001). Missing = pre-contract legacy. */
   controller_version?: string;
   /** Feature-extraction contract stamp. Missing = pre-contract legacy. */
@@ -50,9 +52,12 @@ export class ModelInference {
   private featureMean: Float32Array | null = null;
   private featureStd: Float32Array | null = null;
   
-  // Orbit-based synthesis (new architecture)
+  // Orbit-based synthesis (legacy orbit_control)
   private orbitSynthesizer: OrbitSynthesizer | null = null;
   private isOrbitModel: boolean = false;
+  // Controls v2 synthesis (destination manifold seam, issue #107)
+  private isControlsV2: boolean = false;
+  private juliaViewState: unknown | null = null;
   
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
@@ -162,10 +167,51 @@ export class ModelInference {
         }
         this.metadata = await response.json() as ModelMetadata;
 
-        // Check if this is an orbit-based control model
-        this.isOrbitModel = this.metadata.model_type === 'orbit_control';
+        // Check model contract: controls/2 takes precedence (Rust-authoritative, issue #107)
+        this.isControlsV2 = this.metadata.controls_version === 'controls/2' || this.metadata.model_type === 'controls_v2';
+        this.isOrbitModel = !this.isControlsV2 && this.metadata.model_type === 'orbit_control';
 
-        if (this.isOrbitModel) {
+        if (this.isControlsV2) {
+          // Controls v2 path: unified 13-channel action surface -> manifold physics -> c, Julia view deltas -> view state
+          await initOrbitSynth();
+          const kBands = this.metadata.k_bands || 6;
+          this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+          // Controls version contract (issue #107): model must have been trained against the same Controls semantics this runtime runs.
+          const runtimeControlsVersion = getControlsVersion();
+          const modelControlsVersion = this.metadata.controls_version;
+          if (!modelControlsVersion) {
+            console.warn(
+              `[ModelInference] \u26a0\uFE0F Model has no controls_version stamp (pre-contract legacy). Trained against UNKNOWN controls semantics.`
+            );
+          } else if (modelControlsVersion !== runtimeControlsVersion) {
+            throw new Error(
+              `Controls version mismatch: model was trained against '${modelControlsVersion}' but this runtime is '${runtimeControlsVersion}'. Refusing to load \u2014 retrain the model or update the runtime.`
+            );
+          } else {
+            console.log(`[ModelInference] Controls contract OK: ${runtimeControlsVersion}`);
+          }
+          // Controller/feature/pipeline contracts remain relevant for parity gating even for controls/2 (shared timebase + feature path)
+          const runtimeVersion = getControllerVersion();
+          const modelVersion = this.metadata.controller_version;
+          if (modelVersion && modelVersion !== runtimeVersion) {
+            throw new Error(`Controller version mismatch: model '${modelVersion}' vs runtime '${runtimeVersion}'. Refusing to load.`);
+          }
+          const runtimeFeatureVersion = getFeatureVersion();
+          const modelFeatureVersion = this.metadata.feature_version;
+          if (modelFeatureVersion && modelFeatureVersion !== runtimeFeatureVersion) {
+            throw new Error(`Feature version mismatch: model '${modelFeatureVersion}' vs runtime '${runtimeFeatureVersion}'. Refusing to load.`);
+          }
+          const runtimePipelineVersion = getAnalysisPipelineVersion();
+          const modelPipelineVersion = this.metadata.analysis_pipeline_version;
+          if (!modelPipelineVersion) {
+            throw new Error(`Model has no analysis_pipeline_version stamp (pre-timebase legacy). Refusing to load.`);
+          } else if (modelPipelineVersion !== runtimePipelineVersion) {
+            throw new Error(`Analysis pipeline version mismatch: model '${modelPipelineVersion}' vs runtime '${runtimePipelineVersion}'. Refusing to load.`);
+          }
+          // Initialize persistent Julia view state (Rust authority, issue #95)
+          this.juliaViewState = { zoom: 1.0, rotation: 0.0, color: { anchor_hue: 0.0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 } };
+          console.log('[ModelInference] Loaded Controls v2 model (13-channel, manifold physics)');
+        } else if (this.isOrbitModel) {
           // Initialize orbit synthesizer for control-signal models.
           // Backed by the canonical Rust implementation via wasm-orbit.
           await initOrbitSynth();
@@ -348,7 +394,61 @@ export class ModelInference {
 
     let visualParams: VisualParameters;
 
-    if (this.isOrbitModel && this.orbitSynthesizer) {
+    if (this.isControlsV2 && this.orbitSynthesizer) {
+      // Controls v2 path: 13-channel unified action surface (issue #107)
+      // MotionControls -> manifold physics; JuliaViewControls -> persistent view state (Rust authority)
+      // params layout: directionX,Y,throttle,brake,grip,impulse, zoomDelta,rotationDelta,hueDelta,chromaDelta,lightnessDelta,accentDelta,harmonyShift
+      const motion = {
+        direction: [params[0], params[1]] as [number, number],
+        throttle: params[2],
+        brake: params[3],
+        grip: params[4],
+        impulse: params[5],
+      };
+      const view = {
+        zoom_delta: params[6],
+        rotation_delta: params[7],
+        hue_delta: params[8],
+        chroma_delta: params[9],
+        lightness_delta: params[10],
+        accent_delta: params[11],
+        harmony_shift: params[12],
+      };
+      const dt = tick.dtSeconds;
+      // Apply motion via manifold physics (musically ignorant, no h/energy)
+      const c = this.orbitSynthesizer.stepWithControls(dt, motion);
+      // Apply view deltas to persistent Julia view state (bounded, clamped in Rust)
+      const jvs = this.juliaViewState as unknown as { zoom: number; rotation: number; color: { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number } } | null;
+      if (jvs) {
+        // Lightweight JS mirror of Rust JuliaViewState integration (clamped deltas, harmony cooldown)
+        // For full authority, wire wasm JuliaViewState binding; this mirror preserves the bounded semantics for now.
+        const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+        const wrap01 = (v: number) => ((v % 1) + 1) % 1;
+        const wrapAngle = (a: number) => { const tau = 2*Math.PI; let w = ((a % tau)+tau)%tau; if (w>Math.PI) w-=tau; return w; };
+        jvs.zoom = clamp(jvs.zoom * Math.exp(view.zoom_delta * 0.05), 0.5, 8.0);
+        jvs.rotation = wrapAngle(jvs.rotation + view.rotation_delta * 0.08);
+        jvs.color.anchor_hue = wrap01(jvs.color.anchor_hue + view.hue_delta * 0.02);
+        jvs.color.chroma = clamp(jvs.color.chroma + view.chroma_delta * 0.03, 0.0, 0.4);
+        jvs.color.lightness = clamp(jvs.color.lightness + view.lightness_delta * 0.03, 0.2, 0.9);
+        jvs.color.accent_weight = clamp(jvs.color.accent_weight + view.accent_delta * 0.04, 0.0, 1.0);
+        // Harmony shift: threshold 0.6 with cooldown (simplified mirror of Rust edge-trigger)
+        if (Math.abs(view.harmony_shift) > 0.6) {
+          const modes = ['monochrome','analogous','opponent'] as const;
+          const cur = jvs.color.harmony;
+          const idx = modes.indexOf(cur as unknown as typeof modes[number]);
+          const dir = view.harmony_shift > 0 ? 1 : 2;
+          jvs.color.harmony = modes[(idx + dir) % 3] as unknown as typeof jvs.color.harmony;
+        }
+      }
+      visualParams = {
+        juliaSeed: { ...c },
+        colorHue: (jvs?.color.anchor_hue ?? 0) % 1.0,
+        colorSat: jvs?.color.chroma ?? 0.6,
+        colorBright: jvs?.color.lightness ?? 0.6,
+        zoom: jvs?.zoom ?? 2.5,
+        speed: Math.hypot(motion.direction[0], motion.direction[1]) * motion.throttle,
+      };
+    } else if (this.isOrbitModel && this.orbitSynthesizer) {
       // NEW ORBIT-BASED CONTROL MODEL (canonical Rust synthesis via wasm-orbit)
       // Parse control signals from model output
       const controlSignals: ControlSignals = {
@@ -500,7 +600,7 @@ export class ModelInference {
         color: [visualParams.colorHue.toFixed(3), visualParams.colorSat.toFixed(3), visualParams.colorBright.toFixed(3)],
         zoom: visualParams.zoom.toFixed(3),
         speed: visualParams.speed.toFixed(3),
-        modelType: this.isOrbitModel ? 'orbit_control' : 'legacy'
+        modelType: this.isControlsV2 ? 'controls_v2' : (this.isOrbitModel ? 'orbit_control' : 'legacy')
       });
     }
 

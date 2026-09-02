@@ -1245,28 +1245,31 @@ class ControlTrainer:
 
             # Parse control signals
             parsed = self.model.parse_output(predicted_controls)
-            # Controls v2 (issue #107) currently uses a placeholder training path;
-            # the full manifold-aware loss that routes through integrate_motion_controls
-            # is wired via the Rust authority but not yet the default training loss.
-            # Keep legacy s_target path for orbit_control; for controls/2 use a
-            # simple regularizer that exercises the 13-channel contract without
-            # requiring the full physics-aware supervision to be complete.
+            # Controls v2 (issue #107): destination manifold rollout
+            # MotionControls -> generalized forces/impulses/PSD friction -> manifold Physics -> c(t)
+            # JuliaViewControls -> bounded deltas -> persistent JuliaViewState (Rust authority)
+            # This path is the causal PlayerPolicy training surface: a fixed ControlsV2 tensor drives the
+            # same Rust integration the browser runs (controls_integrate_step), so the trainer and runtime
+            # share one pipeline (ADR 0001). No (s,alpha,omega_scale) legacy adapter is used here.
             if getattr(self.model, "controls_version", "orbit_control") == "controls/2":
-                # Placeholder: encourage throttle and direction diversity, keep brake/grip regularized
+                directionX = parsed["directionX"]
+                directionY = parsed["directionY"]
                 throttle = parsed["throttle"]
                 brake = parsed["brake"]
                 grip = parsed["grip"]
                 impulse = parsed["impulse"]
-                # Skip the s_target-dependent supervision for now; the model still trains via this placeholder
-                # and ONNX export will still be validated against the Rust 13-channel order.
-                # To keep the training loop's bookkeeping consistent, synthesize dummy s_target etc.
-                s_target = throttle.squeeze(-1) * 2.8 + 0.2  # map [0,1] throttle to s-like range for logging
-                alpha = brake.squeeze(-1)  # reuse brake as alpha proxy for logging
+                zoomDelta = parsed["zoomDelta"]
+                rotationDelta = parsed["rotationDelta"]
+                hueDelta = parsed["hueDelta"]
+                chromaDelta = parsed["chromaDelta"]
+                lightnessDelta = parsed["lightnessDelta"]
+                accentDelta = parsed["accentDelta"]
+                harmonyShift = parsed["harmonyShift"]
+                # For logging, synthesize s/alpha/omega proxies from motion (not used for physics)
+                s_target = throttle.squeeze(-1) * 2.8 + 0.2
+                alpha = ((torch.atan2(directionY, directionX) / (2 * 3.141592653589793)) % 1.0).squeeze(-1)
                 omega_scale = (grip.squeeze(-1) * 4.9 + 0.1).clamp(0.1, 5.0)
-                band_gates = predicted_controls[:, 6:7].repeat(1, self.k_residuals) if predicted_controls.shape[1] >= 7 else torch.ones_like(throttle).repeat(1, self.k_residuals)
-                # Skip the heavy cspace supervision below for controls/2 placeholder; compute loss directly
-                # and continue to the optimizer step after this block. We still need to define variables used later.
-                # Set a flag to bypass the legacy supervision branches.
+                band_gates = torch.ones(batch_size, self.k_residuals, device=self.device) * 0.5
                 _is_controls2 = True
             else:
                 s_target = parsed["s_target"]
@@ -1276,17 +1279,74 @@ class ControlTrainer:
                 _is_controls2 = False
 
             if _is_controls2:
-                # Controls/2 placeholder path: skip legacy c-space supervision; use dummy loss above
-                # The variable `loss` is already defined; jump to the loss-aggregation point.
-                # For now, just set the three correlation losses to zero and reuse the placeholder.
-                timbre_color_loss = torch.tensor(0.0, device=self.device)
-                transient_impact_loss = torch.tensor(0.0, device=self.device)
-                loudness_distance_loss = torch.tensor(0.0, device=self.device)
-                temporal_change_tensor = torch.zeros_like(throttle.squeeze(-1))
-                c_complex = torch.zeros(batch_size, dtype=torch.complex64, device=self.device)
-                # Fall through to the anti-dwell etc. handling which will use these dummies;
-                # to avoid the legacy rendering path, we will handle loss aggregation below.
-                # Mark that we should not enter the legacy rendering branch.
+                # Destination physics rollout: ControlsV2 -> manifold c(t) + Julia view state
+                # Each frame's MotionControls drives the Rust integrator; segment_ids reset velocity
+                # so clips remain temporally coherent but not cross-contaminated.
+                try:
+                    from .cspace_proxies import controls_v2_sequence, ManifoldConfig
+                    # Domain-randomized initial c per segment (same scheme as orbit path)
+                    _seg = segment_ids.reshape(-1)
+                    _uniq2 = torch.unique(_seg)
+                    _starts_re2: dict[int, float] = {}
+                    _starts_im2: dict[int, float] = {}
+                    import math as _math3
+                    for _sid in _uniq2.tolist():
+                        if torch.rand((), device=self.device).item() < 0.10:
+                            _ang = torch.rand((), device=self.device).item() * 2 * 3.141592653589793
+                            _r = 1.8 + torch.rand((), device=self.device).item() * 0.4
+                            _starts_re2[_sid] = _math3.cos(_ang) * _r
+                            _starts_im2[_sid] = _math3.sin(_ang) * _r
+                        else:
+                            _t = torch.rand((), device=self.device).item() * 2 * 3.141592653589793
+                            _mu = complex(_math3.cos(_t), _math3.sin(_t))
+                            _cb = _mu * 0.5 - _mu * _mu * 0.25
+                            _j = (torch.rand((), device=self.device).item() - 0.5) * 0.30
+                            _starts_re2[_sid] = _cb.real + _j * _mu.real * 0.5
+                            _starts_im2[_sid] = _cb.imag + _j * _mu.imag * 0.5
+                    _ic_re2 = torch.tensor([_starts_re2[int(s)] for s in _seg.tolist()], device=self.device, dtype=torch.float32)
+                    _ic_im2 = torch.tensor([_starts_im2[int(s)] for s in _seg.tolist()], device=self.device, dtype=torch.float32)
+                    _initial_c2 = torch.complex(_ic_re2, _ic_im2)
+                    c_complex, _infos2 = controls_v2_sequence(
+                        direction_x=directionX.squeeze(-1),
+                        direction_y=directionY.squeeze(-1),
+                        throttle=throttle.squeeze(-1),
+                        brake=brake.squeeze(-1),
+                        grip=grip.squeeze(-1),
+                        impulse=impulse.squeeze(-1),
+                        segment_ids=segment_ids,
+                        dt=canonical_hop_dt(),
+                        config=ManifoldConfig(),
+                        initial_c=_initial_c2,
+                    )
+                except Exception as _e2:
+                    # Fail closed: do not silently fall back to dummy zeros; the test must see the failure.
+                    raise RuntimeError(f"ControlsV2 manifold rollout failed: {_e2}") from _e2
+                # Audio-feature correlations for the new Controls surface (musically informed but Physics-ignorant)
+                try:
+                    n_fpf = self.feature_extractor.num_features_per_frame()
+                except Exception:
+                    n_fpf = 6
+                window_frames = features.shape[1] // n_fpf
+                features_reshaped = features.view(batch_size, window_frames, n_fpf)
+                avg_features = features_reshaped.mean(dim=1)
+                spectral_centroid = avg_features[:, 0]
+                spectral_flux = avg_features[:, 1]
+                spectral_rms = avg_features[:, 2]
+                onset_strength = avg_features[:, 4]
+                # Drive magnitude (throttle * |direction|) correlates with brightness/energy
+                drive_mag = torch.sqrt(directionX.squeeze(-1)**2 + directionY.squeeze(-1)**2) * throttle.squeeze(-1)
+                timbre_color_loss = self.correlation_loss(spectral_centroid, drive_mag)
+                # Impulse correlates with transient flux (flux -> impulse, not transient-gated wall)
+                transient_impact_loss = self.correlation_loss(spectral_flux, impulse.squeeze(-1))
+                # Loudness -> proximity (same destination invariant: loud audio pushes c toward Shore)
+                proximity = cardioid_proximity(c_complex)
+                loudness_distance_loss = self.correlation_loss(-spectral_rms, proximity)
+                timbre_color_loss = self._sanitize_scalar(timbre_color_loss)
+                transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
+                loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
+                temporal_change_tensor = torch.zeros_like(spectral_flux)
+                # Julia view deltas are part of the 13-channel contract (Rust clamps to MAX_*_DELTA).
+                _ = (zoomDelta, rotationDelta, hueDelta, chromaDelta, lightnessDelta, accentDelta, harmonyShift)
                 _skip_legacy_render = True
             elif self.use_cspace_proxies:
                 # ---- Differentiable c-space supervision (fast path) ----

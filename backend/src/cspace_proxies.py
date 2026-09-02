@@ -1169,3 +1169,214 @@ def orbit_controller_manifold_sequence(
         c_im[i] = cur_im
 
     return torch.complex(c_re, c_im), infos
+# ---------------------------------------------------------------------------
+# Controls v2 -> manifold Physics rollout (issue #107)
+# Mirrors ``runtime_core::controls::integrate_motion_controls`` so the trainer
+# exercises the same manifold-aware, metric-consistent drive/impulse/PSD
+# friction path the browser runs via OrbitController::step_with_controls.
+# The trainer must not re-derive drive_covector or friction_beta inline:
+# it calls the Rust binding controls_integrate_step which owns those
+# normalizations, so forward parity is exact (see preflight).
+#
+# BACKWARD IS STE, NOT PHYSICS GRADIENT — same caveat as manifold_mirror.
+# ---------------------------------------------------------------------------
+
+
+class _ControlsStep(torch.autograd.Function):
+    """Autograd bridge for ``runtime_core.controls_integrate_step``.
+
+    Forward calls the Rust binding ``controls_integrate_step(c_re, c_im, vx, vy, motion, dt, config)``
+    which internally computes:
+        Q_drive = throttle * MAX_DRIVE_FORCE * G dir / ||dir||_G
+        Q_drag  = -beta(brake,grip) G v
+        Q_total = Q_drive + Q_potential + Q_drag
+        a = G^{-1} Q_total - Gamma(v,v)
+        v' = v + a dt, c' = c + v' dt, v'' = v' + delta_v_impulse
+    Backward is a STE surrogate: gradient w.r.t new (c,v) routes back to old
+    (c,v) and also to the motion components that produced the force, so the
+    model receives a learning signal from the trajectory loss through the
+    Controls surface. This is not the gradient of the manifold dynamics.
+    """
+
+    @staticmethod
+    def forward(ctx, c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse, dt, config):
+        import runtime_core
+
+        # Fail closed if the destination binding is absent (no flat fallback)
+        rust_step = getattr(runtime_core, "controls_integrate_step", None)
+        if rust_step is None:
+            raise RuntimeError(
+                "runtime_core.controls_integrate_step is unavailable; refusing flat fallback. "
+                "Rebuild runtime_core wheel (maturin develop --release)."
+            )
+        rc_config = runtime_core.ManifoldConfig(
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+        )
+        motion = runtime_core.MotionControls(
+            direction_x=float(dir_x.item()),
+            direction_y=float(dir_y.item()),
+            throttle=float(throttle.item()),
+            brake=float(brake.item()),
+            grip=float(grip.item()),
+            impulse=float(impulse.item()),
+        )
+        new_re, new_im, new_vx, new_vy, _info = rust_step(
+            float(c_re.item()),
+            float(c_im.item()),
+            float(vx.item()),
+            float(vy.item()),
+            motion,
+            float(dt.item()),
+            rc_config,
+        )
+        device = c_re.device
+        dtype = c_re.dtype
+        # Stash for backward (not needed for this STE)
+        ctx.save_for_backward(c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse)
+        return (
+            torch.tensor(new_re, device=device, dtype=dtype),
+            torch.tensor(new_im, device=device, dtype=dtype),
+            torch.tensor(new_vx, device=device, dtype=dtype),
+            torch.tensor(new_vy, device=device, dtype=dtype),
+        )
+
+    @staticmethod
+    def backward(ctx, grad_re, grad_im, grad_vx, grad_vy):
+        # STE: route upstream c/v gradients back to predecessor c/v and to
+        # the motion components that drive Q. The exact manifold gradient is
+        # undefined across the PyO3 boundary; this surrogate keeps the graph
+        # connected so the model learns to steer/drive/brake/grip/tap.
+        # Motion gradients are approximated as projections of grad_c onto the
+        # control axes; brake/grip/impulse receive the mean magnitude.
+        c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse = ctx.saved_tensors
+        # Base gradient magnitude
+        g_mag = (grad_re.abs() + grad_im.abs() + grad_vx.abs() + grad_vy.abs()) / 4.0
+        # Direction gradients: project grad_c onto direction axes, scaled by throttle
+        # Throttle/impulse gradients: project along current direction
+        # Brake/grip gradients: scalar dissipation, receive negative of grad magnitude (more brake = less motion)
+        grad_dir_x = grad_re * torch.sigmoid(throttle) * 0.5
+        grad_dir_y = grad_im * torch.sigmoid(throttle) * 0.5
+        grad_throttle = (grad_re * dir_x + grad_im * dir_y).abs() * 0.5
+        grad_impulse = (grad_re * dir_x + grad_im * dir_y).abs() * 0.3
+        grad_brake = -g_mag * 0.1
+        grad_grip = -g_mag * 0.1
+        # c/v gradients pass through
+        return grad_re, grad_im, grad_vx, grad_vy, grad_dir_x, grad_dir_y, grad_throttle, grad_brake, grad_grip, grad_impulse, None, None
+
+
+def controls_v2_sequence(
+    direction_x: torch.Tensor,
+    direction_y: torch.Tensor,
+    throttle: torch.Tensor,
+    brake: torch.Tensor,
+    grip: torch.Tensor,
+    impulse: torch.Tensor,
+    segment_ids: torch.Tensor,
+    dt: float,
+    config: ManifoldConfig | None = None,
+    initial_c: torch.Tensor | None = None,
+    initial_v: tuple[float, float] = (0.0, 0.0),
+) -> tuple[torch.Tensor, list[ManifoldEnergyInfo]]:
+    """Replay of ``runtime_core::controls::integrate_motion_controls`` as a sequence.
+
+    Each frame's ``MotionControls`` drives one manifold step via
+    ``controls_integrate_step`` (metric-consistent drive, PSD friction,
+    bounded impulse). Segment boundaries reset velocity (and optionally c).
+
+    Args:
+        direction_x, direction_y: (N,) tensors in [-1,1] (clamped to unit disk in Rust)
+        throttle, brake, grip, impulse: (N,) tensors in [0,1]
+        segment_ids: (N,) int64 — velocity resets at segment boundaries
+        dt: canonical hop dt (HOP_LENGTH / SAMPLE_RATE)
+        config: manifold config (defaults to ManifoldConfig())
+        initial_c: optional (N,) complex tensor for domain-randomized starts
+        initial_v: initial planar velocity for the first frame of each segment
+    Returns:
+        (trajectory, infos): complex tensor (N,) and per-frame energy infos
+    """
+    import runtime_core
+
+    cfg = config if config is not None else ManifoldConfig()
+    n = direction_x.shape[0]
+    device = direction_x.device
+    seg = segment_ids.reshape(-1)
+    seg_boundary = torch.zeros(n, dtype=torch.bool, device=device)
+    if n > 1:
+        seg_boundary[1:] = seg[1:] != seg[:-1]
+
+    c_re = torch.zeros(n, device=device, dtype=torch.float32)
+    c_im = torch.zeros(n, device=device, dtype=torch.float32)
+
+    state_dtype = torch.float64
+    # Initial c
+    if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.numel() > 0:
+        ic = initial_c
+        if ic.is_complex() and ic.numel() == n:
+            cur_re = ic[0].real.to(state_dtype)
+            cur_im = ic[0].imag.to(state_dtype)
+        elif ic.is_complex():
+            cur_re = ic.real.to(state_dtype).squeeze()
+            cur_im = ic.imag.to(state_dtype).squeeze()
+        else:
+            cur_re = torch.zeros((), device=device, dtype=state_dtype)
+            cur_im = torch.zeros((), device=device, dtype=state_dtype)
+    else:
+        cur_re = torch.zeros((), device=device, dtype=state_dtype)
+        cur_im = torch.zeros((), device=device, dtype=state_dtype)
+
+    v_re = torch.tensor(initial_v[0], device=device, dtype=state_dtype)
+    v_im = torch.tensor(initial_v[1], device=device, dtype=state_dtype)
+
+    infos: list[ManifoldEnergyInfo] = []
+    dt_t = torch.tensor(float(dt), device=device, dtype=torch.float64)
+
+    for i in range(n):
+        if seg_boundary[i]:
+            v_re = torch.zeros_like(v_re)
+            v_im = torch.zeros_like(v_im)
+            if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.is_complex() and initial_c.numel() == n:
+                cur_re = initial_c[i].real.to(state_dtype)
+                cur_im = initial_c[i].imag.to(state_dtype)
+
+        # Clamp motion components to Rust ranges (mirrors MotionControls::clamped)
+        dx = direction_x[i].to(state_dtype)
+        dy = direction_y[i].to(state_dtype)
+        th = throttle[i].to(state_dtype).clamp(0.0, 1.0)
+        br = brake[i].to(state_dtype).clamp(0.0, 1.0)
+        gr = grip[i].to(state_dtype).clamp(0.0, 1.0)
+        imp = impulse[i].to(state_dtype).clamp(0.0, 1.0)
+        # Disk clamp for direction (mirrors Rust)
+        mag2 = dx * dx + dy * dy
+        if float(mag2.detach()) > 1.0:
+            mag = torch.sqrt(mag2)
+            dx = dx / mag
+            dy = dy / mag
+
+        v_old_re = float(v_re.detach())
+        v_old_im = float(v_im.detach())
+        new_re, new_im, v_re, v_im = _ControlsStep.apply(
+            cur_re, cur_im, v_re, v_im, dx, dy, th, br, gr, imp, dt_t, cfg
+        )
+        # Energy diagnostics (detached, via Rust bindings for the new state)
+        rc_config = runtime_core.ManifoldConfig(cfg.d_ref, cfg.epsilon, cfg.lambda_sq, cfg.kappa)
+        c_new = complex(float(new_re.detach()), float(new_im.detach()))
+        c_old = complex(float(cur_re.detach()), float(cur_im.detach()))
+        v_new = (float(v_re.detach()), float(v_im.detach()))
+        v_old = (v_old_re, v_old_im)
+        # For info, compute KE at new/old via Rust
+        try:
+            k_new = runtime_core.manifold_kinetic_energy(v_new[0], v_new[1], c_new, rc_config)
+            u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
+            k_old = runtime_core.manifold_kinetic_energy(v_old[0], v_old[1], c_old, rc_config)
+            u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
+        except Exception:
+            k_new = u_new = k_old = u_old = 0.0
+        infos.append(ManifoldEnergyInfo(kinetic=k_new, potential=u_new, total=k_new+u_new, delta_total=(k_new+u_new)-(k_old+u_old), delta_kinetic=k_new-k_old))
+
+        cur_re = new_re
+        cur_im = new_im
+        c_re[i] = cur_re
+        c_im[i] = cur_im
+
+    return torch.complex(c_re, c_im), infos
+

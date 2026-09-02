@@ -237,6 +237,19 @@ export function getAnalysisPipelineVersion(): string {
 }
 
 /**
+ * The runtime's Controls v2 contract version (from the Rust constant via
+ * wasm constants). Returns 'unknown' if the wasm build predates the field.
+ */
+export function getControlsVersion(): string {
+  if (!wasm) return 'unknown';
+  try {
+    return (wasm.constants() as Record<string, unknown>).controls_version as string ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
  * The wasm module's raw constants (runtime-core authority for SAMPLE_RATE,
  * HOP_LENGTH, N_FFT, WINDOW_FRAMES). Returns null before initOrbitSynth().
  * Consumers must handle null — there is no TypeScript fallback authority.

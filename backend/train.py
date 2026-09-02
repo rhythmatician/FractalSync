@@ -651,11 +651,45 @@ def execute_training_workflow(args):
     except Exception as e:
         print(f"Warning: Could not get git hash: {e}")
 
-    onnx_model_filename = f"model_orbit_control_{timestamp}.onnx"
+    is_controls_v2 = getattr(model, "controls_version", "orbit_control") == "controls/2"
+    if is_controls_v2:
+        onnx_model_filename = f"model_controls_v2_{timestamp}.onnx"
+    else:
+        onnx_model_filename = f"model_orbit_control_{timestamp}.onnx"
     onnx_path = os.path.join(args.save_dir, onnx_model_filename)
 
     try:
         model.eval()
+        if is_controls_v2:
+            meta = {
+                "model_type": "controls_v2",
+                "controls_version": _runtime_controls_version(),
+                "output_dim": model.output_dim,
+                "epoch": args.epochs,
+                "window_frames": args.window_frames,
+                "num_features_per_frame": 6,
+                "input_dim": model.input_dim,
+                "timestamp": iso_timestamp,
+                "git_hash": git_hash,
+                "controller_version": _runtime_controller_version(),
+                "feature_version": _runtime_feature_version(),
+                "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
+            }
+        else:
+            meta = {
+                "model_type": "orbit_control",
+                "output_dim": model.output_dim,
+                "k_bands": args.k_bands,
+                "epoch": args.epochs,
+                "window_frames": args.window_frames,
+                "num_features_per_frame": 6,
+                "input_dim": model.input_dim,
+                "timestamp": iso_timestamp,
+                "git_hash": git_hash,
+                "controller_version": _runtime_controller_version(),
+                "feature_version": _runtime_feature_version(),
+                "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
+            }
         export_to_onnx(
             model=model,
             input_shape=(1, model.input_dim),
@@ -670,30 +704,7 @@ def execute_training_workflow(args):
                 if hasattr(feature_extractor, "feature_std")
                 else None
             ),
-            metadata={
-                "model_type": "controls_v2",
-                "controls_version": _runtime_controls_version(),
-                "output_dim": model.output_dim,
-                "k_bands": args.k_bands,
-                "epoch": args.epochs,
-                "window_frames": args.window_frames,
-                "num_features_per_frame": 6,
-                "input_dim": model.input_dim,
-                "timestamp": iso_timestamp,
-                "git_hash": git_hash,
-                # Controller contract stamp (ADR 0001): the browser refuses
-                # to load an orbit_control model whose controller_version
-                # differs from its own runtime's version.
-                "controller_version": _runtime_controller_version(),
-                # Feature-extraction contract stamp (ADR 0001): same
-                # mechanism for the audio feature pipeline.
-                "feature_version": _runtime_feature_version(),
-                # Analysis-pipeline contract stamp (issue #93): versions the
-                # ingestion pipeline (Rust resampling, hop scheduling, epoch
-                # semantics). The browser refuses mismatches AND pre-timebase
-                # models with no stamp.
-                "analysis_pipeline_version": _runtime_analysis_pipeline_version(),
-            },
+            metadata=meta,
         )
         print(f"Model exported to: {onnx_path}")
     except Exception as e:
