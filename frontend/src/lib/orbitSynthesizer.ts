@@ -53,6 +53,15 @@ interface WasmOrbitState {
   advance(dt: number): void;
 }
 
+interface WasmMotionControls {
+  direction_x: number;
+  direction_y: number;
+  throttle: number;
+  brake: number;
+  grip: number;
+  impulse: number;
+}
+
 interface WasmOrbitController {
   readonly theta: number;
   apply_controls(s: number, alpha: number): void;
@@ -63,7 +72,12 @@ interface WasmOrbitController {
   set_shore_bias(on: boolean): void;
   set_d_star(d_star: number): void;
   set_max_step(max_step: number): void;
+  set_manifold_physics?(on: boolean): void;
+  set_manifold_config?(c: unknown): void;
+  set_manifold_drag?(d: number): void;
   step(dt: number, h: number, bandGates?: Float64Array | null): { real: number; imag: number };
+  stepWithControls?(dt: number, motion: unknown): { real: number; imag: number };
+  step_with_controls?(dt: number, motion: unknown): { real: number; imag: number };
 }
 
 interface WasmModule {
@@ -487,7 +501,8 @@ export class OrbitSynthesizer {
    *
    * `h` is the transient/hit signal in [0, 1]; near 1 opens the Shore wall
    * (boundary crossing becomes easy — the "Skyrim clip"). Used for section
-   * changes / onsets.
+   * changes / onsets. Retained for legacy `orbit_controller` path; destination
+   * manifold physics uses {@link stepWithControls} which is musically ignorant.
    */
   step(dt: number, bandGates: number[], h = 0.0): Complex {
     const gates = new Float64Array(Math.min(bandGates.length, this.kBands));
@@ -495,6 +510,60 @@ export class OrbitSynthesizer {
       gates[i] = Math.max(0.0, Math.min(1.0, bandGates[i]));
     }
     const c = this.state.step(dt, Math.max(0.0, Math.min(1.0, h)), gates);
+    if (this._prevC) {
+      this._lastSpeed = Math.hypot(c.real - this._prevC.real, c.imag - this._prevC.imag);
+    }
+    this._prevC = { real: c.real, imag: c.imag };
+    this._lastC = { real: c.real, imag: c.imag };
+    return { real: c.real, imag: c.imag };
+  }
+
+  /**
+   * Destination manifold step driven by Controls v2 (issue #107/#106).
+   *
+   * `controls.motion` resolves to a metric-consistent generalized drive
+   * covector + PSD friction + bounded impulse; physics owns `G, Γ, U` and
+   * integration. No musical feature (energy, transient h, band gates) is
+   * needed — only the already-interpreted motion controls.
+   */
+  stepWithControls(
+    dt: number,
+    motion: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number }
+  ): Complex {
+    const m = requireWasm() as unknown as { MotionControls?: new (...args: number[]) => unknown };
+    let ctrl: unknown;
+    if (m.MotionControls) {
+      ctrl = new (m.MotionControls as new (...a: number[]) => unknown)(
+        motion.direction[0],
+        motion.direction[1],
+        motion.throttle,
+        motion.brake,
+        motion.grip,
+        motion.impulse
+      );
+    } else {
+      // Mock / test double without WASM MotionControls binding
+      ctrl = {
+        direction_x: motion.direction[0],
+        direction_y: motion.direction[1],
+        throttle: motion.throttle,
+        brake: motion.brake,
+        grip: motion.grip,
+        impulse: motion.impulse
+      } as unknown as WasmMotionControls;
+    }
+    const s = this.state as unknown as {
+      stepWithControls?: (dt: number, c: unknown) => { real: number; imag: number };
+      step_with_controls?: (dt: number, c: unknown) => { real: number; imag: number };
+    };
+    let c: { real: number; imag: number };
+    if (typeof s.stepWithControls === 'function') {
+      c = s.stepWithControls(dt, ctrl);
+    } else if (typeof s.step_with_controls === 'function') {
+      c = s.step_with_controls(dt, ctrl);
+    } else {
+      throw new Error('[orbitSynthesizer] wasm build has no stepWithControls binding; rebuild wasm-orbit');
+    }
     if (this._prevC) {
       this._lastSpeed = Math.hypot(c.real - this._prevC.real, c.imag - this._prevC.imag);
     }

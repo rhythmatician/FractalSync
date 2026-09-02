@@ -239,6 +239,31 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "config": "ManifoldConfig",
         RET: "tuple[float, float, float, float, EnergyInfo]",
     },
+    "manifold_embedding": {
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "tuple[float, float, float]",
+    },
+    "manifold_jacobian": {
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "list[list[float]]",
+    },
+    "manifold_q_dot": {
+        "vx": "float",
+        "vy": "float",
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "tuple[float, float, float]",
+    },
+    "manifold_sigma_dot": {
+        "vx": "float",
+        "vy": "float",
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "float",
+    },
+    "manifold_unsigned_distance": {"c": "complex", RET: "float"},
 }
 
 # Per-class member annotations. "__init__" uses the constructor's
@@ -372,6 +397,11 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
             "h": "float",
             RET: "tuple[float, float]",
         },
+        "step_with_controls": {
+            "dt": "float",
+            "controls": "MotionControls",
+            RET: "tuple[float, float]",
+        },
     },
     "AnalysisTimebase": {
         "__init__": {RET: "None"},
@@ -432,6 +462,7 @@ ATTR_TYPES: dict[str, dict[str, str]] = {
         "manifold_error": "Optional[str]",
         "manifold_config": "ManifoldConfig",
         "manifold_drag": "float",
+        "planar_velocity": "tuple[float, float]",
     },
     "FeatureExtractor": {
         "feature_mean": "Optional[list[float]]",
@@ -526,6 +557,11 @@ FUNCTION_ORDER = [
     "manifold_scale_gradient",
     "manifold_scale_hessian",
     "manifold_induced_metric",
+    "manifold_embedding",
+    "manifold_jacobian",
+    "manifold_q_dot",
+    "manifold_sigma_dot",
+    "manifold_unsigned_distance",
     "manifold_kinetic_energy",
     "manifold_potential_energy",
     "manifold_total_energy",

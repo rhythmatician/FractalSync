@@ -703,12 +703,50 @@ impl OrbitController {
         self.c
     }
 
+    /// Destination manifold step driven by Controls v2 (issue #107/#106).
+    ///
+    /// This is the **destination physics seam**: motion controls resolve to a
+    /// metric-consistent generalized drive covector, a PSD friction/dissipation
+    /// term, and a bounded impulse; physics owns `G, Γ, U` and integration.
+    /// No musical feature reaches this function — only the already-interpreted
+    /// `MotionControls` the PlayerPolicy chose. This satisfies the acceptance
+    /// criterion that Physics receives no musical feature directly and that
+    /// controls enter as bounded generalized forces/impulses/dissipation.
+    ///
+    /// Fail-closed: if the manifold integrator errors, this method holds the
+    /// last valid `(c, v)` and records the failure in `self.manifold_error`.
+    pub fn step_with_controls(
+        &mut self,
+        dt: f64,
+        controls: &crate::controls::MotionControls,
+    ) -> num_complex::Complex64 {
+        match crate::controls::integrate_motion_controls(
+            self.c,
+            self.planar_velocity,
+            controls,
+            dt,
+            &self.manifold_config,
+        ) {
+            Ok((c_new, v_new, _info)) => {
+                self.manifold_error = None;
+                self.c = c_new;
+                self.planar_velocity = v_new;
+                self.c
+            }
+            Err(e) => {
+                self.manifold_error = Some(e);
+                self.c
+            }
+        }
+    }
+
     /// LEGACY ADAPTER — manifold physics step (issue #106).
     ///
     /// This method is a TRANSITIONAL compatibility seam between the legacy
     /// `(s, alpha, energy)` controller surface and the destination manifold
     /// Physics kernel in `crate::manifold`. It is NOT destination Controls v2
-    /// (issue #107) and must not be described or tested as such.
+    /// (issue #107) and must not be described or tested as such. New code must
+    /// use [`Self::step_with_controls`] with [`crate::controls::MotionControls`].
     ///
     /// The manifold kernel itself (`crate::manifold::integrate_step`) is
     /// musically ignorant: it accepts an explicit generalized force covector

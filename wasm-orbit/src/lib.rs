@@ -41,7 +41,8 @@ use runtime_core::controls::{
     ColorIntent as RustColorIntent, Harmony as RustHarmony, CONTROLS_VERSION,
 };
 use runtime_core::manifold::{
-    ManifoldConfig as RustManifoldConfig,
+    ManifoldConfig as RustManifoldConfig, embedding as rust_embedding,
+    jacobian as rust_jacobian, q_dot as rust_q_dot, sigma_dot as rust_sigma_dot,
     signed_distance as rust_signed_distance,
     regularized_distance as rust_regularized_distance,
     mandelbrot_scale as rust_mandelbrot_scale,
@@ -56,7 +57,7 @@ use runtime_core::manifold::{
     potential_force as rust_potential_force,
     apply_generalized_force as rust_apply_generalized_force,
     drag_force as rust_drag_force,
-    integrate_step as rust_integrate_step,
+    integrate_step as rust_integrate_step, unsigned_distance as rust_unsigned_distance,
 };
 use serde::Deserialize;
 
@@ -845,6 +846,13 @@ impl OrbitController {
     pub fn manifold_drag(&self) -> f64 {
         self.inner.manifold_drag
     }
+
+    /// Destination manifold step driven by Controls v2 (issue #107/#106).
+    #[wasm_bindgen(js_name = "stepWithControls")]
+    pub fn step_with_controls(&mut self, dt: f64, motion: &MotionControls) -> Complex {
+        let c = self.inner.step_with_controls(dt, &motion.clone().into());
+        c.into()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1246,6 +1254,54 @@ pub fn manifold_drag_force(
     let c = RustComplex::new(real, imag);
     let (qx, qy) = rust_drag_force((vx, vy), c, beta, &config.into()).map_err(|e| JsValue::from_str(&e))?;
     Ok(vec![qx, qy])
+}
+
+/// Embedding q(c) = (x, y, sigma(c)). Returns [x, y, sigma].
+#[wasm_bindgen]
+pub fn manifold_embedding(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (x, y, s) = rust_embedding(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(x));
+    arr.push(&JsValue::from_f64(y));
+    arr.push(&JsValue::from_f64(s));
+    Ok(arr)
+}
+
+/// Jacobian J_q(c) = ∂q/∂(x,y) as a 3×2 matrix. Returns flat array [1,0,0,1,sigma_x,sigma_y].
+#[wasm_bindgen]
+pub fn manifold_jacobian(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let j = rust_jacobian(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    for row in j { for v in row { arr.push(&JsValue::from_f64(v)); } }
+    Ok(arr)
+}
+
+/// Embedded velocity q_dot = J_q(c) v. Returns [vx, vy, sigma_dot].
+#[wasm_bindgen]
+pub fn manifold_q_dot(vx: f64, vy: f64, real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (qx, qy, qz) = rust_q_dot(c, (vx, vy), &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(qx));
+    arr.push(&JsValue::from_f64(qy));
+    arr.push(&JsValue::from_f64(qz));
+    Ok(arr)
+}
+
+/// Time derivative of Mandelbrot scale: sigma_dot = ∇sigma·v. No independent v_sigma.
+#[wasm_bindgen]
+pub fn manifold_sigma_dot(vx: f64, vy: f64, real: f64, imag: f64, config: &ManifoldConfig) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_sigma_dot(c, (vx, vy), &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Unsigned geometric distance d(c) = |D(c)|. Distinct from S sensitivity.
+#[wasm_bindgen]
+pub fn manifold_unsigned_distance(real: f64, imag: f64) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_unsigned_distance(c).map_err(|e| JsValue::from_str(&e))
 }
 
 /// Semi-implicit Euler integration step for manifold dynamics.

@@ -318,6 +318,29 @@ impl OrbitController {
         let c = self.inner.step(dt, band_gates.as_deref(), h);
         (c.re, c.im)
     }
+
+    /// Destination manifold step driven by Controls v2 (issue #107/#106).
+    ///
+    /// This is the **destination physics seam**: motion controls resolve to a
+    /// metric-consistent generalized drive covector, PSD friction, and bounded
+    /// impulse; physics owns `G, Γ, U` and integration. No musical feature
+    /// reaches this function — only the already-interpreted `MotionControls`.
+    fn step_with_controls(&mut self, dt: f64, controls: MotionControls) -> (f64, f64) {
+        let rc_controls: crate::controls::MotionControls = controls.into();
+        let c = self.inner.step_with_controls(dt, &rc_controls);
+        (c.re, c.im)
+    }
+
+    /// Planar velocity for manifold integration (diagnostic).
+    #[getter]
+    fn planar_velocity(&self) -> (f64, f64) {
+        self.inner.planar_velocity
+    }
+
+    #[setter]
+    fn set_planar_velocity(&mut self, v: (f64, f64)) {
+        self.inner.planar_velocity = v;
+    }
 }
 
 /// Python wrapper for the orbit state.
@@ -843,6 +866,44 @@ fn manifold_induced_metric(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> 
     let cc = num_complex::Complex64::new(c.real(), c.imag());
     let g = rust_induced_metric(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     Ok(vec![vec![g[0][0], g[0][1]], vec![g[1][0], g[1][1]]])
+}
+
+/// Embedding q(c) = (x, y, sigma(c)). Returns [x, y, sigma].
+#[pyfunction]
+fn manifold_embedding(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    crate::manifold::embedding(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Jacobian J_q(c) = ∂q/∂(x,y) as a 3×2 matrix. Returns [[1,0],[0,1],[sigma_x,sigma_y]].
+#[pyfunction]
+fn manifold_jacobian(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<f64>>> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    let j = crate::manifold::jacobian(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(vec![vec![j[0][0], j[0][1]], vec![j[1][0], j[1][1]], vec![j[2][0], j[2][1]]])
+}
+
+/// Embedded velocity q_dot = J_q(c) v. Returns [vx, vy, sigma_dot].
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, config))]
+fn manifold_q_dot(vx: f64, vy: f64, c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    crate::manifold::q_dot(cc, (vx, vy), &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Time derivative of Mandelbrot scale: sigma_dot = ∇sigma·v. No independent v_sigma.
+#[pyfunction]
+#[pyo3(signature = (vx, vy, c, config))]
+fn manifold_sigma_dot(vx: f64, vy: f64, c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    crate::manifold::sigma_dot(cc, (vx, vy), &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Unsigned geometric distance d(c) = |D(c)|. Distinct from S sensitivity.
+#[pyfunction]
+fn manifold_unsigned_distance(c: &Bound<'_, PyComplex>) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    crate::manifold::unsigned_distance(cc).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Kinetic energy K = 1/2 v^T G v.
@@ -2111,6 +2172,11 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_scale_gradient, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_scale_hessian, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_induced_metric, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_embedding, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_jacobian, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_q_dot, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_sigma_dot, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_unsigned_distance, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_kinetic_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_total_energy, m)?)?;
