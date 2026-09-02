@@ -1179,14 +1179,16 @@ pub struct JuliaViewState {
     pub color: ColorIntent,
     #[pyo3(get, set)]
     pub harmony_cooldown: u32,
+    #[pyo3(get, set)]
+    pub harmony_armed: bool,
 }
 
 #[pymethods]
 impl JuliaViewState {
     #[new]
-    #[pyo3(signature = (zoom=1.0, rotation=0.0, color=None))]
-    fn py_new(zoom: f64, rotation: f64, color: Option<ColorIntent>) -> Self {
-        Self { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()), harmony_cooldown: 0 }
+    #[pyo3(signature = (zoom=1.0, rotation=0.0, color=None, harmony_cooldown=0, harmony_armed=true))]
+    fn py_new(zoom: f64, rotation: f64, color: Option<ColorIntent>, harmony_cooldown: u32, harmony_armed: bool) -> Self {
+        Self { zoom, rotation, color: color.unwrap_or_else(|| RustColorIntent::default().into()), harmony_cooldown, harmony_armed }
     }
     fn apply_controls(&mut self, controls: JuliaViewControls) {
         let mut inner: RustJuliaViewState = self.clone().into();
@@ -1201,12 +1203,12 @@ impl JuliaViewState {
 
 impl From<RustJuliaViewState> for JuliaViewState {
     fn from(s: RustJuliaViewState) -> Self {
-        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown }
+        Self { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }
     }
 }
 impl From<JuliaViewState> for RustJuliaViewState {
     fn from(s: JuliaViewState) -> RustJuliaViewState {
-        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown }.clamped()
+        RustJuliaViewState { zoom: s.zoom, rotation: s.rotation, color: s.color.into(), harmony_cooldown: s.harmony_cooldown, harmony_armed: s.harmony_armed }.clamped()
     }
 }
 
