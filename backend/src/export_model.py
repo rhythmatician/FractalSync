@@ -160,14 +160,14 @@ def export_to_onnx(
 
     # Determine parameter names and ranges based on metadata
     if metadata and metadata.get("controls_version") == "controls/2":
-        # Unified Controls v2 (issue #107): MotionControls (drive 2D + brake/grip + impulse 2D) + JuliaViewControls (7 deltas)
+        # Unified Controls v2 (issue #107): MotionControls (aim 2D, throttle, brake, grip, impulse) + JuliaViewControls (7 deltas)
+        # Rust is single authority for names/order; Python consumes it. Fallback is only for environments without wheel and must stay in sync.
         try:
             import runtime_core
             parameter_names = list(runtime_core.ControlsV2.model_output_order())
-            raise ImportError("use fallback for explicitness")
         except Exception:
             parameter_names = [
-                "driveX", "driveY", "brake", "grip", "impulseX", "impulseY",
+                "directionX", "directionY", "throttle", "brake", "grip", "impulse",
                 "zoomDelta", "rotationDelta", "hueDelta", "chromaDelta", "lightnessDelta", "accentDelta", "harmonyShift",
             ]
         output_dim = len(parameter_names)

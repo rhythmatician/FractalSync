@@ -992,9 +992,11 @@ fn manifold_integrate_step(
 #[derive(Clone, Debug)]
 pub struct MotionControls {
     #[pyo3(get, set)]
-    pub drive_x: f64,
+    pub direction_x: f64,
     #[pyo3(get, set)]
-    pub drive_y: f64,
+    pub direction_y: f64,
+    #[pyo3(get, set)]
+    pub throttle: f64,
     #[pyo3(get, set)]
     pub brake: f64,
     #[pyo3(get, set)]
@@ -1006,9 +1008,9 @@ pub struct MotionControls {
 #[pymethods]
 impl MotionControls {
     #[new]
-    #[pyo3(signature = (drive_x=0.0, drive_y=0.0, brake=0.0, grip=0.5, impulse=0.0))]
-    fn py_new(drive_x: f64, drive_y: f64, brake: f64, grip: f64, impulse: f64) -> Self {
-        Self { drive_x, drive_y, brake, grip, impulse }
+    #[pyo3(signature = (direction_x=0.0, direction_y=0.0, throttle=0.0, brake=0.0, grip=0.5, impulse=0.0))]
+    fn py_new(direction_x: f64, direction_y: f64, throttle: f64, brake: f64, grip: f64, impulse: f64) -> Self {
+        Self { direction_x, direction_y, throttle, brake, grip, impulse }
     }
     fn drive_magnitude(&self) -> f64 {
         let inner: RustMotionControls = self.clone().into();
@@ -1026,12 +1028,12 @@ impl MotionControls {
 
 impl From<RustMotionControls> for MotionControls {
     fn from(m: RustMotionControls) -> Self {
-        Self { drive_x: m.drive[0], drive_y: m.drive[1], brake: m.brake, grip: m.grip, impulse: m.impulse }
+        Self { direction_x: m.direction[0], direction_y: m.direction[1], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }
     }
 }
 impl From<MotionControls> for RustMotionControls {
     fn from(m: MotionControls) -> RustMotionControls {
-        RustMotionControls { drive: [m.drive_x, m.drive_y], brake: m.brake, grip: m.grip, impulse: m.impulse }.clamped()
+        RustMotionControls { direction: [m.direction_x, m.direction_y], throttle: m.throttle, brake: m.brake, grip: m.grip, impulse: m.impulse }.clamped()
     }
 }
 

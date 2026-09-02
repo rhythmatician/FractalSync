@@ -54,7 +54,7 @@
 //!
 //! ### Motion field semantics
 //!
-//! - `drive: [f64;2]` — desired local drive direction in world coordinates. Components ∈ [-1,1],
+//! - `direction: [f64;2] + throttle: f64` — desired local drive direction in world coordinates. Components ∈ [-1,1],
 //!   clamped to unit disk. Magnitude is throttle; direction is steer. Maps to a metric-consistent
 //!   generalized force covector so identical throttle has predictable energy meaning across `c`
 //!   (see `drive_covector`).
@@ -65,7 +65,7 @@
 //!   `grip=0` = drift (lower β). Anisotropy is reserved for a future `controls/3` extension;
 //!   isotropy already satisfies PSD and "modulates explicit PSD dissipation rather than Shore
 //!   permeability" without coupling to map or `D`.
-//! - `impulse: [f64;2]` — bounded generalized impulse, components ∈ [-1,1] clamped to unit disk.
+//! - `impulse: f64 scalar` — bounded generalized impulse, components ∈ [-1,1] clamped to unit disk.
 //!   Applied as an instantaneous `Δv = G^{-1} impulse_covector` layered on persistent momentum.
 //!   Power attribution is via `0.5 vᵀ G v` change; impulses are bounded by `MAX_IMPULSE`.
 //!
@@ -141,6 +141,8 @@ pub const JULIA_CHROMA_MIN: f64 = 0.0;
 pub const JULIA_CHROMA_MAX: f64 = 0.4;
 pub const JULIA_LIGHTNESS_MIN: f64 = 0.2;
 pub const JULIA_LIGHTNESS_MAX: f64 = 0.9;
+
+fn default_harmony_armed() -> bool { true }
 
 // ColorIntent OKLCH-ish bounds (v1 from #95).
 pub const COLOR_HARMONY_MODES: usize = 3;
@@ -274,23 +276,26 @@ impl ColorIntent {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MotionControls {
-    /// Desired local drive direction in world tangent coordinates.
-    /// Components each ∈ [-1,1]; vector clamped to unit disk.
-    pub drive: [f64; 2],
+    /// Shared 2D directional intent in world tangent coordinates (exactly two DOFs per #107).
+    /// Components each ∈ [-1,1]; vector clamped to unit disk and normalized to unit direction.
+    /// Throttle and impulse are independent scalars sharing this direction.
+    pub direction: [f64; 2],
+    /// Throttle magnitude ∈ [0,1]; scales drive force along `direction`.
+    pub throttle: f64,
     /// Additional explicit dissipation ∈ [0,1].
     pub brake: f64,
     /// Traction ∈ [0,1]; 1 = full grip (higher friction), 0 = drift (lower friction).
     pub grip: f64,
-    /// Bounded generalized impulse magnitude ∈ [0,1]; direction shares the
-    /// canonical 2D drive surface (exactly two directional DOFs per #107).
-    /// Applied as `impulse * MAX_IMPULSE` along the current drive direction.
+    /// Bounded generalized impulse magnitude ∈ [0,1]; shares `direction`, independent of `throttle`.
+    /// Allows aimed tap while coasting (throttle=0) without continuous thrust.
     pub impulse: f64,
 }
 
 impl Default for MotionControls {
     fn default() -> Self {
         Self {
-            drive: [0.0, 0.0],
+            direction: [0.0, 0.0],
+            throttle: 0.0,
             brake: 0.0,
             grip: 0.5,
             impulse: 0.0,
@@ -302,27 +307,27 @@ impl MotionControls {
     /// Deterministic clamped view: projects drive/impulse to unit disk, clamps scalars.
     pub fn clamped(self) -> Self {
         Self {
-            drive: clamp_to_unit_disk([clamp11(self.drive[0]), clamp11(self.drive[1])]),
+            direction: clamp_to_unit_disk([clamp11(self.direction[0]), clamp11(self.direction[1])]),
+            throttle: clamp01(self.throttle),
             brake: clamp01(self.brake),
             grip: clamp01(self.grip),
             impulse: clamp01(self.impulse),
         }
     }
 
-    /// Drive magnitude (throttle) ∈ [0,1].
+    /// Throttle magnitude ∈ [0,1].
     pub fn drive_magnitude(&self) -> f64 {
-        let v = clamp_to_unit_disk([clamp11(self.drive[0]), clamp11(self.drive[1])]);
-        (v[0] * v[0] + v[1] * v[1]).sqrt().min(1.0)
+        clamp01(self.throttle)
     }
 
-    /// Unit drive direction in world coordinates, if magnitude is non-negligible.
+    /// Unit direction in world coordinates, if non-negligible.
     pub fn drive_direction(&self) -> Option<[f64; 2]> {
-        let mag = self.drive_magnitude();
+        let v = clamp_to_unit_disk([clamp11(self.direction[0]), clamp11(self.direction[1])]);
+        let mag = (v[0]*v[0]+v[1]*v[1]).sqrt();
         if mag < 1e-12 {
             return None;
         }
-        let v = clamp_to_unit_disk([clamp11(self.drive[0]), clamp11(self.drive[1])]);
-        Some([v[0] / mag, v[1] / mag])
+        Some([v[0]/mag, v[1]/mag])
     }
 
     /// Impulse magnitude ∈ [0,1].
@@ -509,6 +514,9 @@ pub struct JuliaViewState {
     /// Prevents sustained `harmony_shift` from chattering every tick (#95).
     #[serde(default)]
     pub harmony_cooldown: u32,
+    /// Latch for true edge-trigger: only re-arms after shift falls below release threshold.
+    #[serde(default = "default_harmony_armed")]
+    pub harmony_armed: bool,
 }
 
 impl Default for JuliaViewState {
@@ -518,6 +526,7 @@ impl Default for JuliaViewState {
             rotation: 0.0,
             color: ColorIntent::default(),
             harmony_cooldown: 0,
+            harmony_armed: true,
         }
     }
 }
@@ -529,6 +538,7 @@ impl JuliaViewState {
             rotation: wrap_angle(self.rotation),
             color: self.color.clamped(),
             harmony_cooldown: self.harmony_cooldown,
+            harmony_armed: self.harmony_armed,
         }
     }
 
@@ -561,13 +571,18 @@ impl JuliaViewState {
             .clamp(JULIA_LIGHTNESS_MIN, JULIA_LIGHTNESS_MAX);
         self.color.accent_weight =
             clamp01(self.color.accent_weight + c.accent_delta * MAX_ACCENT_DELTA);
-        // Harmony: edge-triggered with cooldown to prevent chatter (#95).
-        // Sustained high shift must not cycle every tick; require cooldown expiry.
-        if c.harmony_shift.abs() > HARMONY_SHIFT_THRESHOLD && self.harmony_cooldown == 0 {
+        // Harmony: true one-gesture/one-transition with hysteresis (#95).
+        // Latch stays disarmed while shift is held high; only re-arms after falling below release threshold.
+        const HARMONY_RELEASE_THRESHOLD: f64 = 0.3;
+        if c.harmony_shift.abs() < HARMONY_RELEASE_THRESHOLD {
+            self.harmony_armed = true;
+        }
+        if c.harmony_shift.abs() > HARMONY_SHIFT_THRESHOLD && self.harmony_armed && self.harmony_cooldown == 0 {
             let dir = if c.harmony_shift > 0.0 { 1 } else { 2 }; // +1 or -1 mod 3
             let next = Harmony::from_index((self.color.harmony.index() + dir) % 3);
             self.color.harmony = next;
-            self.harmony_cooldown = 15; // ~0.3s at 50Hz hop cadence, prevents high-frequency chatter
+            self.harmony_cooldown = 15; // ~0.3s at 50Hz hop cadence
+            self.harmony_armed = false;
         }
     }
 }
@@ -624,8 +639,9 @@ impl ControlsV2 {
     /// mechanically detectable.
     pub fn model_output_order() -> Vec<&'static str> {
         vec![
-            "driveX",
-            "driveY",
+            "directionX",
+            "directionY",
+            "throttle",
             "brake",
             "grip",
             "impulse",
@@ -643,8 +659,9 @@ impl ControlsV2 {
     /// Rust scales to physical deltas/forces).
     pub fn parameter_ranges() -> std::collections::HashMap<&'static str, [f64; 2]> {
         [
-            ("driveX", [-1.0, 1.0]),
-            ("driveY", [-1.0, 1.0]),
+            ("directionX", [-1.0, 1.0]),
+            ("directionY", [-1.0, 1.0]),
+            ("throttle", [0.0, 1.0]),
             ("brake", [0.0, 1.0]),
             ("grip", [0.0, 1.0]),
             ("impulse", [0.0, 1.0]),
@@ -673,19 +690,20 @@ impl ControlsV2 {
         }
         Ok(Self {
             motion: MotionControls {
-                drive: [output[0], output[1]],
-                brake: output[2].clamp(0.0, 1.0),
-                grip: output[3].clamp(0.0, 1.0),
-                impulse: output[4].clamp(0.0, 1.0),
+                direction: [output[0], output[1]],
+                throttle: output[2].clamp(0.0, 1.0),
+                brake: output[3].clamp(0.0, 1.0),
+                grip: output[4].clamp(0.0, 1.0),
+                impulse: output[5].clamp(0.0, 1.0),
             },
             view: JuliaViewControls {
-                zoom_delta: output[5],
-                rotation_delta: output[6],
-                hue_delta: output[7],
-                chroma_delta: output[8],
-                lightness_delta: output[9],
-                accent_delta: output[10],
-                harmony_shift: output[11],
+                zoom_delta: output[6],
+                rotation_delta: output[7],
+                hue_delta: output[8],
+                chroma_delta: output[9],
+                lightness_delta: output[10],
+                accent_delta: output[11],
+                harmony_shift: output[12],
             },
         }
         .clamped())
@@ -696,8 +714,9 @@ impl ControlsV2 {
         let m = self.motion.clamped();
         let v = self.view.clamped();
         vec![
-            m.drive[0],
-            m.drive[1],
+            m.direction[0],
+            m.direction[1],
+            m.throttle,
             m.brake,
             m.grip,
             m.impulse,
@@ -800,18 +819,19 @@ mod tests {
     #[test]
     fn motion_clamped_projection_and_ranges() {
         let m = MotionControls {
-            drive: [2.0, 0.0],
+            direction: [2.0, 0.0],
+            throttle: 2.0,
             brake: 2.0,
             grip: -1.0,
             impulse: 3.0,
         }
         .clamped();
-        assert!((m.drive[0] - 1.0).abs() < 1e-12);
+        assert!((m.direction[0] - 1.0).abs() < 1e-12);
         assert!((m.brake - 1.0).abs() < 1e-12);
         assert!((m.grip - 0.0).abs() < 1e-12);
         assert!((m.impulse - 1.0).abs() < 1e-12);
         // Drive must be inside unit disk; impulse is scalar [0,1]
-        assert!((m.drive[0] * m.drive[0] + m.drive[1] * m.drive[1]) <= 1.0 + 1e-12);
+        assert!((m.direction[0] * m.direction[0] + m.direction[1] * m.direction[1]) <= 1.0 + 1e-12);
         assert!(m.impulse >= 0.0 && m.impulse <= 1.0);
     }
 
@@ -819,7 +839,8 @@ mod tests {
     fn model_output_round_trip() {
         let c = ControlsV2 {
             motion: MotionControls {
-                drive: [0.6, -0.4],
+                direction: [0.6, -0.4],
+                throttle: 0.8,
                 brake: 0.7,
                 grip: 0.3,
                 impulse: 0.9,
@@ -856,11 +877,13 @@ mod tests {
         // Compare two directions at same c: their G^{-1} norms should match for same throttle.
         let c = C::new(0.0, 0.0);
         let m_x = MotionControls {
-            drive: [1.0, 0.0],
+            direction: [1.0, 0.0],
+            throttle: 1.0,
             ..Default::default()
         };
         let m_y = MotionControls {
-            drive: [0.0, 1.0],
+            direction: [0.0, 1.0],
+            throttle: 1.0,
             ..Default::default()
         };
         let qx = m_x.drive_covector(c, &config).unwrap();
@@ -895,7 +918,8 @@ mod tests {
         let c_a = C::new(0.0, 0.0);
         let c_b = C::new(0.8, 0.0);
         let m = MotionControls {
-            drive: [1.0, 0.0],
+            direction: [1.0, 0.0],
+            throttle: 1.0,
             ..Default::default()
         };
         let qa = m.drive_covector(c_a, &config).unwrap();
@@ -1035,7 +1059,8 @@ mod tests {
         let v0 = (0.02, -0.01);
         let dt = 0.02;
         let controls = MotionControls {
-            drive: [0.5, 0.7],
+            direction: [0.5, 0.7],
+            throttle: 0.8,
             brake: 0.2,
             grip: 0.8,
             impulse: 0.0,
@@ -1059,7 +1084,8 @@ mod tests {
         // MotionControls has exactly 4 fields (drive 2D, brake, grip, impulse 2D) — count at compile time by match.
         fn assert_motion_fields(m: MotionControls) {
             let MotionControls {
-                drive: _,
+                direction: _,
+                throttle: _,
                 brake: _,
                 grip: _,
                 impulse: _,
@@ -1108,7 +1134,8 @@ mod tests {
         let c_shore = C::new(0.25, 0.0);
         // World-aligned: drive vector directly, no heading state, works at flat region where grad~0
         let m_world = MotionControls {
-            drive: [1.0, 0.0],
+            direction: [1.0, 0.0],
+            throttle: 1.0,
             ..Default::default()
         };
         let q_world_flat = m_world.drive_covector(c_flat, &config).unwrap();
