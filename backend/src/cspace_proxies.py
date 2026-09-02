@@ -7,6 +7,8 @@ implementations in ``runtime_core``:
   for the main cardioid (lobe=1).
 - :func:`cardioid_proximity` mirrors
   ``runtime_core::proxies::mandelbrot_cardioid_proximity``.
+- :func:`manifold_integrate_step` mirrors
+  ``runtime_core::manifold::integrate_step`` (issue #106).
 
 They exist so gradients can flow during training. The residual phases used
 by :func:`synthesize_c` come from ``runtime_core.residual_phases_for_seed_py``
@@ -20,6 +22,7 @@ truth.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -797,3 +800,372 @@ class _ContourStep(torch.autograd.Function):
         # that the Rust step uses internally but the trainer does
         # not optimize through).
         return grad_c_re, grad_c_im, grad_u_re, grad_u_im, None, None, None, None, None
+
+
+# ---------------------------------------------------------------------------
+# Manifold physics (issue #106) — training mirror.
+#
+# Mirrors ``runtime_core::manifold::integrate_step`` so the trainer can run
+# the same trajectory the runtime integrates. The Rust integrator is the
+# canonical source of truth; the trainer's forward replay reproduces it
+# (Rust-forward parity). The mirror runs its state and target/force math in
+# float64 (matching the float64 Rust kernel) and calls the same Rust
+# integrate_step binding, so forward parity is essentially exact (~1e-8 over
+# a 60-step chaotic trajectory).
+#
+# BACKWARD GRADIENTS ARE A TEMPORARY STE, NOT DIFFERENTIABLE PARITY. The
+# autograd bridge below routes the upstream c-gradient into the generalized
+# force (qx, qy) via an identity surrogate. That is NOT the gradient of the
+# manifold dynamics (which is undefined across the PyO3 boundary) and must
+# not be described or tested as such. It is a stopgap so the model's
+# (s, alpha) target can influence the trajectory during training. The
+# forward trajectory is real; the backward gradient is a surrogate.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ManifoldConfig:
+    """Mirror of ``runtime_core::manifold::ManifoldConfig`` (issue #106).
+
+    Defaults match the Rust ``Default`` impl exactly; the trainer must not
+    invent its own values (Rust-first parity, ADR 0001).
+    """
+
+    d_ref: float = 0.1
+    epsilon: float = 1e-4
+    lambda_sq: float = 1.0
+    kappa: float = 1.0
+
+
+@dataclass
+class ManifoldEnergyInfo:
+    """Mirror of ``runtime_core::manifold::EnergyInfo``."""
+
+    kinetic: float
+    potential: float
+    total: float
+    delta_total: float
+    delta_kinetic: float
+
+
+def manifold_integrate_step(
+    c_re: torch.Tensor,
+    c_im: torch.Tensor,
+    vx: torch.Tensor,
+    vy: torch.Tensor,
+    qx: torch.Tensor,
+    qy: torch.Tensor,
+    beta: float,
+    dt: float,
+    config: ManifoldConfig,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ManifoldEnergyInfo]:
+    """Replay of ``runtime_core::manifold::integrate_step`` (issue #106).
+
+    The forward call hits the Rust binding (scalar signature:
+    ``manifold_integrate_step(c_re, c_im, vx, vy, qx, qy, beta, dt,
+    ManifoldConfig)``) so the trajectory is bit-for-bit the runtime
+    physics (Rust-forward parity).
+
+    Backward gradients pass through the identity surrogate in
+    :class:`_ManifoldStep`. This is a TEMPORARY STE, NOT differentiable
+    parity: the true gradient of the manifold dynamics is undefined across
+    the PyO3 boundary, and the surrogate does not reproduce it. Only the
+    forward trajectory is established; the backward path is a stopgap for
+    training and must not be described or tested as a gradient of the
+    physics.
+
+    Returns ``(c_new_re, c_new_im, v_new_x, v_new_y, energy_info)`` where
+    the first four are 0-dim tensors on the input device and
+    ``energy_info`` is a :class:`ManifoldEnergyInfo` diagnostic computed
+    from the Rust energy bindings (same quantities the Rust
+    ``integrate_step`` reports).
+    """
+    device = c_re.device
+    new_re, new_im, new_vx, new_vy = _ManifoldStep.apply(
+        c_re.reshape(()),
+        c_im.reshape(()),
+        vx.reshape(()),
+        vy.reshape(()),
+        qx.reshape(()),
+        qy.reshape(()),
+        torch.tensor(float(beta), device=device, dtype=torch.float64),
+        torch.tensor(float(dt), device=device, dtype=torch.float64),
+        config,
+    )
+    # Energy diagnostics from the Rust bindings (detached, same math as
+    # runtime_core::manifold::integrate_step's EnergyInfo).
+    import runtime_core
+
+    rc_config = runtime_core.ManifoldConfig(
+        config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+    )
+    c_new = complex(new_re.detach().item(), new_im.detach().item())
+    c_old = complex(float(c_re.detach()), float(c_im.detach()))
+    v_new = (new_vx.detach().item(), new_vy.detach().item())
+    v_old = (float(vx.detach()), float(vy.detach()))
+    k_new = runtime_core.manifold_kinetic_energy(v_new[0], v_new[1], c_new, rc_config)
+    k_old = runtime_core.manifold_kinetic_energy(v_old[0], v_old[1], c_old, rc_config)
+    u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
+    u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
+    e_new = k_new + u_new
+    e_old = k_old + u_old
+    info = ManifoldEnergyInfo(
+        kinetic=k_new,
+        potential=u_new,
+        total=e_new,
+        delta_total=e_new - e_old,
+        delta_kinetic=k_new - k_old,
+    )
+    return new_re, new_im, new_vx, new_vy, info
+
+
+class _ManifoldStep(torch.autograd.Function):
+    """Autograd bridge for ``runtime_core.manifold_integrate_step``.
+
+    Forward calls the Rust scalar binding (real forward parity). Backward
+    routes the upstream gradient through an identity STE surrogate — NOT the
+    gradient of the manifold dynamics. The Rust binding returns
+    ``(new_re, new_im, new_vx, new_vy, EnergyInfo)``; we return the deltas so
+    ``old + delta`` keeps the autograd graph connected, mirroring the
+    contour-step bridge.
+    """
+
+    @staticmethod
+    def forward(
+        ctx,
+        c_re: torch.Tensor,
+        c_im: torch.Tensor,
+        vx: torch.Tensor,
+        vy: torch.Tensor,
+        qx: torch.Tensor,
+        qy: torch.Tensor,
+        beta: torch.Tensor,
+        dt: torch.Tensor,
+        config: ManifoldConfig,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        import runtime_core
+
+        rust_step = getattr(runtime_core, "manifold_integrate_step", None)
+        if rust_step is None:
+            # FAIL CLOSED (issue #106, fix #6): do NOT silently substitute
+            # flat Euclidean dynamics. The forward trajectory is claimed to
+            # be the runtime physics; a plain-Euler fallback would silently
+            # produce different physics. If the binding is genuinely absent
+            # (e.g. a fake runtime_core in a lightweight test), the caller
+            # must not route through manifold physics at all.
+            raise RuntimeError(
+                "runtime_core.manifold_integrate_step is unavailable; refusing "
+                "to substitute flat-physics fallback in the manifold mirror."
+            )
+        rc_config = runtime_core.ManifoldConfig(
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+        )
+        new_re, new_im, new_vx, new_vy, rc_info = rust_step(
+            float(c_re.item()),
+            float(c_im.item()),
+            float(vx.item()),
+            float(vy.item()),
+            float(qx.item()),
+            float(qy.item()),
+            float(beta.item()),
+            float(dt.item()),
+            rc_config,
+        )
+        info = ManifoldEnergyInfo(
+            kinetic=rc_info.kinetic,
+            potential=rc_info.potential,
+            total=rc_info.total,
+            delta_total=rc_info.delta_total,
+            delta_kinetic=rc_info.delta_kinetic,
+        )
+        device = c_re.device
+        ctx.manifold_info = info
+        # Preserve the input dtype so a float64 state (used for forward
+        # parity with the float64 Rust kernel) is not silently downcast to
+        # float32, which would re-introduce chaotic rounding drift.
+        dtype = c_re.dtype
+        return (
+            torch.tensor(new_re, device=device, dtype=dtype),
+            torch.tensor(new_im, device=device, dtype=dtype),
+            torch.tensor(new_vx, device=device, dtype=dtype),
+            torch.tensor(new_vy, device=device, dtype=dtype),
+        )
+
+    @staticmethod
+    def backward(  # type: ignore[override]
+        ctx,
+        grad_re: torch.Tensor,
+        grad_im: torch.Tensor,
+        grad_vx: torch.Tensor,
+        grad_vy: torch.Tensor,
+    ):
+        # TEMPORARY STE surrogate (NOT differentiable parity): gradient w.r.t.
+        # the new state routes back to the old state. The c-gradient is ALSO
+        # routed to the generalized force (qx, qy): the force direction is
+        # what carries the learning signal from the model's (s, alpha) target
+        # into the trajectory, so dropping it would sever the gradient path
+        # entirely (the target only affects c through Q). This is a stopgap
+        # for training, not the gradient of the manifold dynamics. beta, dt,
+        # and config are not differentiated.
+        return grad_re, grad_im, grad_vx, grad_vy, grad_re, grad_im, None, None, None
+
+
+def orbit_controller_manifold_sequence(
+    s_target: torch.Tensor,
+    alpha: torch.Tensor,
+    omega: float,
+    band_gates: torch.Tensor,
+    segment_ids: torch.Tensor,
+    dt: float,
+    energy: torch.Tensor | None = None,
+    initial_c: torch.Tensor | None = None,
+    initial_v: tuple[float, float] = (0.0, 0.0),
+    manifold_drag: float = 0.1,
+    config: ManifoldConfig | None = None,
+) -> tuple[torch.Tensor, list[ManifoldEnergyInfo]]:
+    """Replay of the legacy ``OrbitController::step_manifold`` ADAPTER (#106).
+
+    Mirrors the Rust legacy-adapter manifold path per frame:
+      theta += omega*dt
+      target = mandelbrot_boundary(s, alpha) + residual epicycles
+      Q = force_mag * (target - c) / |target - c|   # generalized force COVECTOR
+        with force_mag = clamp(omega, 0.1, 10) * clamp(energy, 0, 1) * 2
+      (c, v) = manifold_integrate_step(c, v, Q, beta, dt, config)
+
+    ``Q`` is a generalized force covector (units of force), NOT an impulse:
+    it is NOT multiplied by ``dt`` here. The Rust kernel integrates the
+    continuous force exactly once (``v += a*dt``). This matches the Rust
+    ``step_manifold`` adapter, which also does not scale ``Q`` by ``dt``.
+
+    The target/residual/force-direction math is pure PyTorch (fully
+    differentiable w.r.t. s, alpha, band_gates); the integrator itself
+    routes through the Rust binding via :class:`_ManifoldStep`.
+
+    Returns ``(trajectory, energy_infos)``: a complex tensor of shape (N,)
+    and the per-frame :class:`ManifoldEnergyInfo` diagnostics.
+    """
+    import runtime_core  # noqa: F401 - availability check for early failure
+
+    cfg = config if config is not None else ManifoldConfig()
+    n = s_target.shape[0]
+    device = s_target.device
+
+    # The differentiable target/force math runs in float64 so the mirror
+    # reproduces the float64 Rust kernel's target synthesis and force
+    # construction without f32 rounding drift. Inputs are upcast from their
+    # (typically float32) source; the Rust controller receives the same
+    # float32 values upcast to float64, so the two agree.
+    s = s_target.reshape(-1).double().clamp(0.01, 3.0)
+    a = alpha.reshape(-1).double().clamp(0.0, 1.0)
+
+    theta_b = a * 2.0 * math.pi
+    r = 0.25 * (1.0 - torch.cos(theta_b))
+    scale = torch.clamp(s, max=1.5)
+    base_re = r * torch.cos(theta_b / 2.0) * scale
+    base_im = r * torch.sin(theta_b / 2.0) * scale
+
+    seg = segment_ids.reshape(-1)
+    seg_boundary = torch.zeros(n, dtype=torch.bool, device=device)
+    if n > 1:
+        seg_boundary[1:] = seg[1:] != seg[:-1]
+
+    two_pi = 2.0 * math.pi
+    theta = torch.zeros(n, device=device, dtype=torch.float64)
+    th = torch.zeros((), device=device, dtype=torch.float64)
+    for i in range(n):
+        if seg_boundary[i]:
+            th = torch.zeros_like(th)
+        th = (th + omega * dt) % two_pi
+        theta[i] = th
+
+    k_idx = torch.arange(band_gates.shape[1], device=device, dtype=torch.float64)
+    freqs = k_idx + 2.0
+    phase = theta.reshape(-1, 1) * freqs.reshape(1, -1)
+    gates = band_gates.double().clamp(0.0, 1.0)
+    res_re = (gates * ORBIT_RESIDUAL_AMP * torch.cos(phase)).sum(dim=1)
+    res_im = (gates * ORBIT_RESIDUAL_AMP * torch.sin(phase)).sum(dim=1)
+
+    tgt_re = base_re + res_re
+    tgt_im = base_im + res_im
+
+    if energy is None:
+        energy_t = torch.zeros(n, device=device, dtype=torch.float64)
+    else:
+        energy_t = energy.reshape(-1).double().clamp(0.0, 1.0)
+
+    # Force magnitude: clamp(omega, 0.1, 10) * clamp(energy, 0, 1) * 2
+    # (matches controller.rs step_manifold exactly). Energy is folded in per
+    # frame below via e_i = energy_t[i].
+    force_mag = max(0.1, min(10.0, omega)) * 2.0
+
+    c_re = torch.zeros(n, device=device, dtype=torch.float32)
+    c_im = torch.zeros(n, device=device, dtype=torch.float32)
+
+    # The integrator STATE (c, v) is kept in float64 so the mirror tracks the
+    # float64 Rust kernel without chaotic f32 rounding drift over long
+    # horizons. The output trajectory is downcast to float32 at readout.
+    state_dtype = torch.float64
+
+    ic: torch.Tensor | None = None
+    if (
+        initial_c is not None
+        and isinstance(initial_c, torch.Tensor)
+        and initial_c.numel() > 0
+    ):
+        ic = initial_c
+        if ic.is_complex() and ic.numel() == n:
+            cur_re = ic[0].real.to(state_dtype)
+            cur_im = ic[0].imag.to(state_dtype)
+        elif ic.is_complex():
+            cur_re = ic.real.to(state_dtype).squeeze()
+            cur_im = ic.imag.to(state_dtype).squeeze()
+        else:
+            cur_re = torch.zeros((), device=device, dtype=state_dtype)
+            cur_im = torch.zeros((), device=device, dtype=state_dtype)
+    else:
+        cur_re = torch.zeros((), device=device, dtype=state_dtype)
+        cur_im = torch.zeros((), device=device, dtype=state_dtype)
+
+    v_re = torch.tensor(initial_v[0], device=device, dtype=state_dtype)
+    v_im = torch.tensor(initial_v[1], device=device, dtype=state_dtype)
+
+    infos: list[ManifoldEnergyInfo] = []
+    for i in range(n):
+        if seg_boundary[i]:
+            v_re = torch.zeros_like(v_re)
+            v_im = torch.zeros_like(v_im)
+            if ic is not None and ic.is_complex() and ic.numel() == n:
+                cur_re = ic[i].real.to(state_dtype)
+                cur_im = ic[i].imag.to(state_dtype)
+        dx = tgt_re[i] - cur_re
+        dy = tgt_im[i] - cur_im
+        dist = torch.sqrt(dx * dx + dy * dy)
+        # Q = force_mag * unit(target - c); zero when at the target.
+        # Q is a generalized force COVECTOR (units of force), NOT an impulse:
+        # no *dt here. The Rust kernel integrates the continuous force once.
+        if float(dist.detach()) > 1e-9:
+            e_i = energy_t[i]
+            q_re = (dx / dist) * (force_mag * e_i)
+            q_im = (dy / dist) * (force_mag * e_i)
+        else:
+            q_re = torch.zeros((), device=device, dtype=state_dtype)
+            q_im = torch.zeros((), device=device, dtype=state_dtype)
+
+        new_re, new_im, v_re, v_im, info = manifold_integrate_step(
+            cur_re,
+            cur_im,
+            v_re,
+            v_im,
+            q_re,
+            q_im,
+            beta=manifold_drag,
+            dt=dt,
+            config=cfg,
+        )
+        infos.append(info)
+        cur_re = new_re
+        cur_im = new_im
+        c_re[i] = cur_re
+        c_im[i] = cur_im
+
+    return torch.complex(c_re, c_im), infos

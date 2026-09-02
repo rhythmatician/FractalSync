@@ -31,6 +31,7 @@ pub mod cycle_bank;
 pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
+pub mod manifold;
 pub mod proxies;
 
 // Conditional bindings.  Only compile the Python or WASM API if the

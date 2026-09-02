@@ -27,6 +27,76 @@ use crate::controller::{
 use crate::features::FeatureExtractor as RustFeatureExtractor;
 use crate::geometry::{lobe_point_at_angle as rust_lobe_point_at_angle};
 use crate::visual_metrics::{compute_runtime_metrics, RuntimeVisualMetrics as RustRuntimeVisualMetrics};
+use crate::manifold::{
+    ManifoldConfig as RustManifoldConfig,
+    EnergyInfo as RustEnergyInfo,
+    signed_distance as rust_signed_distance,
+    regularized_distance as rust_regularized_distance,
+    mandelbrot_scale as rust_mandelbrot_scale,
+    scale_gradient as rust_scale_gradient,
+    scale_hessian as rust_scale_hessian,
+    induced_metric as rust_induced_metric,
+    kinetic_energy as rust_kinetic_energy,
+    potential_energy as rust_potential_energy,
+    total_energy as rust_total_energy,
+    christoffel_symbols as rust_christoffel_symbols,
+    geodesic_acceleration as rust_geodesic_acceleration,
+    potential_force as rust_potential_force,
+    apply_generalized_force as rust_apply_generalized_force,
+    drag_force as rust_drag_force,
+    integrate_step as rust_integrate_step,
+};
+
+/// Manifold configuration for WASM (issue #106).
+#[wasm_bindgen]
+#[derive(Clone, Debug)]
+pub struct ManifoldConfig {
+    d_ref: f64,
+    epsilon: f64,
+    lambda_sq: f64,
+    kappa: f64,
+}
+
+impl From<&ManifoldConfig> for RustManifoldConfig {
+    fn from(c: &ManifoldConfig) -> RustManifoldConfig {
+        RustManifoldConfig {
+            d_ref: c.d_ref,
+            epsilon: c.epsilon,
+            lambda_sq: c.lambda_sq,
+            kappa: c.kappa,
+        }
+    }
+}
+
+#[wasm_bindgen]
+impl ManifoldConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> ManifoldConfig {
+        ManifoldConfig {
+            d_ref,
+            epsilon,
+            lambda_sq,
+            kappa,
+        }
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn d_ref(&self) -> f64 {
+        self.d_ref
+    }
+    #[wasm_bindgen(getter)]
+    pub fn epsilon(&self) -> f64 {
+        self.epsilon
+    }
+    #[wasm_bindgen(getter)]
+    pub fn lambda_sq(&self) -> f64 {
+        self.lambda_sq
+    }
+    #[wasm_bindgen(getter)]
+    pub fn kappa(&self) -> f64 {
+        self.kappa
+    }
+}
 
 /// A complex number (Julia parameter c = a + bi).
 #[wasm_bindgen]
@@ -538,5 +608,238 @@ pub fn contour_biased_step(
     let arr = Array::new();
     arr.push(&JsValue::from_f64(nr));
     arr.push(&JsValue::from_f64(ni));
+    Ok(arr)
+}
+
+// ---------------------------------------------------------------------------
+// Manifold physics (issue #106) — WASM surface.
+//
+// Mirrors the Python bindings so the browser can run the same differential
+// geometry as the trainer. Rust remains canonical under ADR 0001.
+// ---------------------------------------------------------------------------
+
+/// Signed distance to the Mandelbrot boundary. Positive outside, negative inside.
+#[wasm_bindgen]
+pub fn manifold_signed_distance(real: f64, imag: f64) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_signed_distance(c).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Regularized distance rho(c) = sqrt(D^2 + epsilon^2).
+#[wasm_bindgen]
+pub fn manifold_regularized_distance(real: f64, imag: f64, epsilon: f64) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_regularized_distance(c, epsilon).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Mandelbrot scale sigma(c) = log2(d_ref / rho(c)).
+#[wasm_bindgen]
+pub fn manifold_mandelbrot_scale(real: f64, imag: f64, config: &ManifoldConfig) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_mandelbrot_scale(c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Scale gradient ∇sigma(c) = (∂sigma/∂x, ∂sigma/∂y). Returns [gx, gy].
+#[wasm_bindgen]
+pub fn manifold_scale_gradient(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (gx, gy) = rust_scale_gradient(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(gx));
+    arr.push(&JsValue::from_f64(gy));
+    Ok(arr)
+}
+
+/// Scale Hessian [[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]].
+#[wasm_bindgen]
+pub fn manifold_scale_hessian(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let h = rust_scale_hessian(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let outer = Array::new();
+    let row0 = Array::new();
+    row0.push(&JsValue::from_f64(h[0][0]));
+    row0.push(&JsValue::from_f64(h[0][1]));
+    let row1 = Array::new();
+    row1.push(&JsValue::from_f64(h[1][0]));
+    row1.push(&JsValue::from_f64(h[1][1]));
+    outer.push(&row0);
+    outer.push(&row1);
+    Ok(outer)
+}
+
+/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Returns [[g11, g12], [g12, g22]].
+#[wasm_bindgen]
+pub fn manifold_induced_metric(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let g = rust_induced_metric(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let outer = Array::new();
+    let row0 = Array::new();
+    row0.push(&JsValue::from_f64(g[0][0]));
+    row0.push(&JsValue::from_f64(g[0][1]));
+    let row1 = Array::new();
+    row1.push(&JsValue::from_f64(g[1][0]));
+    row1.push(&JsValue::from_f64(g[1][1]));
+    outer.push(&row0);
+    outer.push(&row1);
+    Ok(outer)
+}
+
+/// Kinetic energy K = 1/2 v^T G v.
+#[wasm_bindgen]
+pub fn manifold_kinetic_energy(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_kinetic_energy((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Native potential U = kappa * sigma(c).
+#[wasm_bindgen]
+pub fn manifold_potential_energy(real: f64, imag: f64, config: &ManifoldConfig) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_potential_energy(c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Total mechanical energy E = K + U.
+#[wasm_bindgen]
+pub fn manifold_total_energy(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<f64, JsValue> {
+    let c = RustComplex::new(real, imag);
+    rust_total_energy((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Christoffel symbols Gamma^i_jk. Returns [[[g00,g01],[g10,g11]],[[g20,g21],[g30,g31]]].
+#[wasm_bindgen]
+pub fn manifold_christoffel_symbols(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let g = rust_christoffel_symbols(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let outer = Array::new();
+    for i in 0..2 {
+        let mid = Array::new();
+        for j in 0..2 {
+            let inner = Array::new();
+            inner.push(&JsValue::from_f64(g[i][j][0]));
+            inner.push(&JsValue::from_f64(g[i][j][1]));
+            mid.push(&inner);
+        }
+        outer.push(&mid);
+    }
+    Ok(outer)
+}
+
+/// Geodesic acceleration term: Gamma^i_jk v^j v^k. Returns [ax, ay].
+#[wasm_bindgen]
+pub fn manifold_geodesic_acceleration(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (ax, ay) = rust_geodesic_acceleration((vx, vy), c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(ax));
+    arr.push(&JsValue::from_f64(ay));
+    Ok(arr)
+}
+
+/// Generalized potential force covector: Q_potential = -grad U = -kappa grad sigma.
+/// Returns [Qx, Qy]. This is a covector, not a coordinate acceleration; convert
+/// with `manifold_apply_generalized_force`.
+#[wasm_bindgen]
+pub fn manifold_potential_force(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (fx, fy) = rust_potential_force(c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(fx));
+    arr.push(&JsValue::from_f64(fy));
+    Ok(arr)
+}
+
+/// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
+/// Returns [ax, ay]. This is the single place G^{-1} maps a covector to acceleration.
+#[wasm_bindgen]
+pub fn manifold_apply_generalized_force(
+    qx: f64,
+    qy: f64,
+    real: f64,
+    imag: f64,
+    config: &ManifoldConfig,
+) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (ax, ay) = rust_apply_generalized_force((qx, qy), c, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(ax));
+    arr.push(&JsValue::from_f64(ay));
+    Ok(arr)
+}
+
+/// Metric-consistent isotropic drag covector: Q_drag = -beta G v. Returns [Qx, Qy].
+/// This is a covector, not a coordinate acceleration; its power P = v^T Q_drag <= 0.
+#[wasm_bindgen]
+pub fn manifold_drag_force(
+    vx: f64,
+    vy: f64,
+    real: f64,
+    imag: f64,
+    beta: f64,
+    config: &ManifoldConfig,
+) -> Result<Array, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let (qx, qy) = rust_drag_force((vx, vy), c, beta, &config.into()).map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(qx));
+    arr.push(&JsValue::from_f64(qy));
+    Ok(arr)
+}
+
+/// Semi-implicit Euler integration step for manifold dynamics.
+///
+/// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+///
+/// Returns [new_re, new_im, new_vx, new_vy, kinetic, potential, total, delta_total, delta_kinetic].
+#[wasm_bindgen]
+pub fn manifold_integrate_step(
+    c_re: f64,
+    c_im: f64,
+    vx: f64,
+    vy: f64,
+    qx: f64,
+    qy: f64,
+    beta: f64,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Result<Array, JsValue> {
+    let c = RustComplex::new(c_re, c_im);
+    let (c_new, v_new, info) = rust_integrate_step(
+        c,
+        (vx, vy),
+        (qx, qy),
+        beta,
+        dt,
+        &config.into(),
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    let arr = Array::new();
+    arr.push(&JsValue::from_f64(c_new.re));
+    arr.push(&JsValue::from_f64(c_new.im));
+    arr.push(&JsValue::from_f64(v_new.0));
+    arr.push(&JsValue::from_f64(v_new.1));
+    arr.push(&JsValue::from_f64(info.kinetic));
+    arr.push(&JsValue::from_f64(info.potential));
+    arr.push(&JsValue::from_f64(info.total));
+    arr.push(&JsValue::from_f64(info.delta_total));
+    arr.push(&JsValue::from_f64(info.delta_kinetic));
     Ok(arr)
 }
