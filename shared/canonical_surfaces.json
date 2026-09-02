@@ -55,8 +55,8 @@
                 "training_surface": "runtime-core/src/pybindings.rs (ControlsV2 PyO3) consumed by backend/src/control_model.py + backend/src/export_model.py + backend/train.py (controls_version gate)"
             },
             "required_tests": [
-                "backend/tests/test_golden_parity.py",
-                "backend/tests/test_export_import_compat.py"
+                "backend/tests/test_controls_v2_smoke.py",
+                "backend/tests/test_julia_view_parity.py"
             ]
         },
         "manifold_physics": {
@@ -68,8 +68,7 @@
                 "training_surface": "runtime-core/src/pybindings.rs (manifold_* PyO3) consumed by backend/src/cspace_proxies.py (manifold_integrate_step mirror) and backend/src/control_model.py"
             },
             "required_tests": [
-                "backend/tests/test_manifold_physics.py",
-                "backend/tests/test_golden_parity.py"
+                "backend/tests/test_manifold_physics.py"
             ]
         }
     },

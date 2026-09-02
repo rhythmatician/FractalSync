@@ -3,7 +3,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type ControlSignals, type Complex, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion } from './orbitSynthesizer';
+import { OrbitSynthesizer, type ControlSignals, type Complex, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
 export interface VisualParameters {
@@ -57,7 +57,7 @@ export class ModelInference {
   private isOrbitModel: boolean = false;
   // Controls v2 synthesis (destination manifold seam, issue #107)
   private isControlsV2: boolean = false;
-  private juliaViewState: unknown | null = null;
+  private juliaViewState: JuliaViewStateHandle | null = null;
   
   // Color-based section detection for lobe switching
   private colorHistory: number[] = [];
@@ -208,8 +208,9 @@ export class ModelInference {
           } else if (modelPipelineVersion !== runtimePipelineVersion) {
             throw new Error(`Analysis pipeline version mismatch: model '${modelPipelineVersion}' vs runtime '${runtimePipelineVersion}'. Refusing to load.`);
           }
-          // Initialize persistent Julia view state (Rust authority, issue #95)
-          this.juliaViewState = { zoom: 1.0, rotation: 0.0, color: { anchor_hue: 0.0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 } };
+          // Initialize persistent Julia view state via Rust authority (ADR 0001, issue #95/107)
+          // Deterministic shared action-to-view-state semantics belong in Rust; browser consumes via WASM.
+          this.juliaViewState = createJuliaViewState();
           console.log('[ModelInference] Loaded Controls v2 model (13-channel, manifold physics)');
         } else if (this.isOrbitModel) {
           // Initialize orbit synthesizer for control-signal models.
@@ -417,37 +418,34 @@ export class ModelInference {
       const dt = tick.dtSeconds;
       // Apply motion via manifold physics (musically ignorant, no h/energy)
       const c = this.orbitSynthesizer.stepWithControls(dt, motion);
-      // Apply view deltas to persistent Julia view state (bounded, clamped in Rust)
-      const jvs = this.juliaViewState as unknown as { zoom: number; rotation: number; color: { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number } } | null;
+      // Apply view deltas via Rust authority (ADR 0001): no JS duplicate of clamps/rates/harmony logic.
+      // The JS mirror is deleted; the canonical semantics live in runtime-core/src/controls.rs
+      // (JuliaViewState::apply_controls) and are consumed via WASM. This satisfies the #107
+      // requirement that deterministic shared action-to-view-state semantics belong in Rust.
+      const jvs: JuliaViewStateHandle | null = this.juliaViewState;
       if (jvs) {
-        // Lightweight JS mirror of Rust JuliaViewState integration (clamped deltas, harmony cooldown)
-        // For full authority, wire wasm JuliaViewState binding; this mirror preserves the bounded semantics for now.
-        const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-        const wrap01 = (v: number) => ((v % 1) + 1) % 1;
-        const wrapAngle = (a: number) => { const tau = 2*Math.PI; let w = ((a % tau)+tau)%tau; if (w>Math.PI) w-=tau; return w; };
-        jvs.zoom = clamp(jvs.zoom * Math.exp(view.zoom_delta * 0.05), 0.5, 8.0);
-        jvs.rotation = wrapAngle(jvs.rotation + view.rotation_delta * 0.08);
-        jvs.color.anchor_hue = wrap01(jvs.color.anchor_hue + view.hue_delta * 0.02);
-        jvs.color.chroma = clamp(jvs.color.chroma + view.chroma_delta * 0.03, 0.0, 0.4);
-        jvs.color.lightness = clamp(jvs.color.lightness + view.lightness_delta * 0.03, 0.2, 0.9);
-        jvs.color.accent_weight = clamp(jvs.color.accent_weight + view.accent_delta * 0.04, 0.0, 1.0);
-        // Harmony shift: threshold 0.6 with cooldown (simplified mirror of Rust edge-trigger)
-        if (Math.abs(view.harmony_shift) > 0.6) {
-          const modes = ['monochrome','analogous','opponent'] as const;
-          const cur = jvs.color.harmony;
-          const idx = modes.indexOf(cur as unknown as typeof modes[number]);
-          const dir = view.harmony_shift > 0 ? 1 : 2;
-          jvs.color.harmony = modes[(idx + dir) % 3] as unknown as typeof jvs.color.harmony;
-        }
+        const viewControls = createJuliaViewControls(view);
+        jvs.apply_controls(viewControls);
+        const color = jvs.color;
+        const zoom = jvs.zoom;
+        visualParams = {
+          juliaSeed: { ...c },
+          colorHue: (color?.anchor_hue ?? 0) % 1.0,
+          colorSat: color?.chroma ?? 0.6,
+          colorBright: color?.lightness ?? 0.6,
+          zoom: zoom ?? 2.5,
+          speed: Math.hypot(motion.direction[0], motion.direction[1]) * motion.throttle,
+        };
+      } else {
+        visualParams = {
+          juliaSeed: { ...c },
+          colorHue: 0,
+          colorSat: 0.6,
+          colorBright: 0.6,
+          zoom: 2.5,
+          speed: Math.hypot(motion.direction[0], motion.direction[1]) * motion.throttle,
+        };
       }
-      visualParams = {
-        juliaSeed: { ...c },
-        colorHue: (jvs?.color.anchor_hue ?? 0) % 1.0,
-        colorSat: jvs?.color.chroma ?? 0.6,
-        colorBright: jvs?.color.lightness ?? 0.6,
-        zoom: jvs?.zoom ?? 2.5,
-        speed: Math.hypot(motion.direction[0], motion.direction[1]) * motion.throttle,
-      };
     } else if (this.isOrbitModel && this.orbitSynthesizer) {
       // NEW ORBIT-BASED CONTROL MODEL (canonical Rust synthesis via wasm-orbit)
       // Parse control signals from model output
