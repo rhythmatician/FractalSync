@@ -28,7 +28,6 @@ static DIST_FIELD: Lazy<RwLock<Option<DistanceField>>> = Lazy::new(|| RwLock::ne
 /// Public so integration tests can reset state; callers outside tests should
 /// avoid calling this in production code.
 pub fn clear_distance_field() {
-    let _m = global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     if let Ok(mut g) = DIST_FIELD.write() {
         *g = None;
     }
@@ -39,7 +38,6 @@ pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
 }
 
 pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmin: f64, xmax: f64, ymin: f64, ymax: f64) -> Result<(), String> {
-    let _m = global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
     if data.len() != rows.saturating_mul(cols) {
         return Err("data length does not match rows*cols".into());
     }

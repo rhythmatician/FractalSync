@@ -172,8 +172,9 @@ def export_to_onnx(
             ]
         output_dim = len(parameter_names)
         parameter_ranges = {
-            "driveX": [-1.0, 1.0],
-            "driveY": [-1.0, 1.0],
+            "directionX": [-1.0, 1.0],
+            "directionY": [-1.0, 1.0],
+            "throttle": [0.0, 1.0],
             "brake": [0.0, 1.0],
             "grip": [0.0, 1.0],
             "impulse": [0.0, 1.0],
@@ -186,7 +187,15 @@ def export_to_onnx(
             "harmonyShift": [-1.0, 1.0],
         }
         if metadata and "output_dim" in metadata:
-            output_dim = int(metadata["output_dim"])
+            # Enforce boxed invariant: model output tensor length must exactly match Rust authority
+            expected = len(parameter_names)
+            actual = int(metadata["output_dim"])
+            if actual != expected:
+                raise ValueError(
+                    f"controls/2 output_dim {actual} != ControlsV2.model_output_order() length {expected} ({parameter_names}); "
+                    "model head and Rust schema must share the frozen 13-channel contract"
+                )
+            output_dim = actual
     elif metadata and metadata.get("model_type") == "orbit_control":
         # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
         k_bands = metadata.get("k_bands", 6)
