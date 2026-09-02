@@ -2043,7 +2043,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     // the browser read it and never restate it.
     m.add("CYCLE_BANK_VERSION", crate::cycle_bank::CYCLE_BANK_VERSION)?;
     // Controls v2 contract (issue #107)
-    m.add("CONTROLS_VERSION", crate::controls::CONTROLS_VERSION)?;
+    m.add("CONTROLS_VERSION", CONTROLS_VERSION)?;
     m.add("CONTROLS_MAX_DRIVE_FORCE", crate::controls::MAX_DRIVE_FORCE)?;
     m.add("CONTROLS_MAX_IMPULSE", crate::controls::MAX_IMPULSE)?;
     m.add("CONTROLS_BRAKE_COEFF", crate::controls::BRAKE_COEFF)?;
