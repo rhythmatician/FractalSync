@@ -282,42 +282,19 @@ class AudioToControlModel(nn.Module):
             Dictionary mapping parameter names to (min, max) tuples
         """
         if self.controls_version == "controls/2":
-            # Canonical ControlsV2 ranges from Rust ControlsV2::parameter_ranges()
+            # Canonical ControlsV2 ranges from Rust — single authority per ADR 0001.
+            # Fail closed if Rust contract is unavailable; do not maintain a fallback copy.
+            import runtime_core  # type: ignore[import-not-found]
+
             try:
-                import runtime_core
-                order = runtime_core.ControlsV2.model_output_order()
-                # Use Rust ranges if available via python helper; fallback to hardcoded
-                return {
-                    "directionX": (-1.0, 1.0),
-                    "directionY": (-1.0, 1.0),
-                    "throttle": (0.0, 1.0),
-                    "brake": (0.0, 1.0),
-                    "grip": (0.0, 1.0),
-                    "impulse": (0.0, 1.0),
-                    "zoomDelta": (-1.0, 1.0),
-                    "rotationDelta": (-1.0, 1.0),
-                    "hueDelta": (-1.0, 1.0),
-                    "chromaDelta": (-1.0, 1.0),
-                    "lightnessDelta": (-1.0, 1.0),
-                    "accentDelta": (-1.0, 1.0),
-                    "harmonyShift": (-1.0, 1.0),
-                }
-            except Exception:
-                return {
-                    "directionX": (-1.0, 1.0),
-                    "directionY": (-1.0, 1.0),
-                    "throttle": (0.0, 1.0),
-                    "brake": (0.0, 1.0),
-                    "grip": (0.0, 1.0),
-                    "impulse": (0.0, 1.0),
-                    "zoomDelta": (-1.0, 1.0),
-                    "rotationDelta": (-1.0, 1.0),
-                    "hueDelta": (-1.0, 1.0),
-                    "chromaDelta": (-1.0, 1.0),
-                    "lightnessDelta": (-1.0, 1.0),
-                    "accentDelta": (-1.0, 1.0),
-                    "harmonyShift": (-1.0, 1.0),
-                }
+                raw = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
+            except AttributeError as exc:
+                raise RuntimeError(
+                    "ControlsV2::parameter_ranges() not available from Rust; "
+                    f"failing closed for controls/2: {exc}"
+                ) from exc
+            # Rust returns {name: [min, max]}; normalize to {name: (min, max)}
+            return {k: (float(v[0]), float(v[1])) for k, v in raw.items()}
         ranges = {
             "s_target": (0.2, 3.0),
             "alpha": (0.05, 0.95),

@@ -347,6 +347,9 @@ class ControlsV2:
     @property
     def motion(self): ...
 
+    @staticmethod
+    def parameter_ranges(): ...
+
     def to_model_output(self): ...
 
     @property

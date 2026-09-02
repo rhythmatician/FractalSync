@@ -991,8 +991,11 @@ mod tests {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = cfg();
         let c = C::new(0.0, 0.0);
-        // Impulse magnitude is bounded by MAX_IMPULSE metric-consistent
+        // Impulse is bounded and direction-dependent: direction=[1,0], throttle=0, impulse=1
+        // must give non-zero Δv, while drive force is zero when throttle=0.
         let m = MotionControls {
+            direction: [1.0, 0.0],
+            throttle: 0.0,
             impulse: 1.0,
             ..Default::default()
         };
@@ -1003,8 +1006,26 @@ mod tests {
         let impulse_ke = 0.5 * dv_g_dv;
         // Max impulse KE is bounded: for G≈I, KE ≈0.5*MAX_IMPULSE^2
         assert!(impulse_ke <= 0.5 * MAX_IMPULSE * MAX_IMPULSE + 1e-9);
-        // Zero impulse gives zero delta
-        let m0 = MotionControls::default();
+        // Drive force must be zero when throttle=0 even with non-zero direction
+        let q = m.drive_covector(c, &config).unwrap();
+        assert!(
+            q.0.abs() < 1e-12 && q.1.abs() < 1e-12,
+            "drive force should be zero when throttle=0, got q=({},{})",
+            q.0, q.1
+        );
+        // Impulse must be non-zero when impulse=1 with direction
+        assert!(
+            dv.0.abs() > 1e-9 || dv.1.abs() > 1e-9,
+            "impulse Δv should be non-zero when impulse=1 with direction, got dv=({},{})",
+            dv.0, dv.1
+        );
+        // Zero impulse gives zero delta (with same direction)
+        let m0 = MotionControls {
+            direction: [1.0, 0.0],
+            throttle: 0.0,
+            impulse: 0.0,
+            ..Default::default()
+        };
         let dv0 = m0.impulse_delta_v(c, &config).unwrap();
         assert!(dv0.0.abs() < 1e-12);
         assert!(dv0.1.abs() < 1e-12);
@@ -1096,32 +1117,40 @@ mod tests {
     #[test]
     fn harmony_cooldown_prevents_chatter() {
         let mut s = JuliaViewState::default();
-        // Sustained high shift should only transition once per cooldown period
         let start_harmony = s.color.harmony;
-        for _ in 0..5 {
+        // Hold harmony_shift=1 for 20 ticks (> cooldown 15) — should only transition once
+        // until signal falls below release threshold (0.3).
+        for _ in 0..20 {
             s.apply_controls(JuliaViewControls {
                 harmony_shift: 1.0,
                 ..Default::default()
             });
         }
-        // Should have transitioned exactly once, not 5 times
-        assert_ne!(s.color.harmony, start_harmony);
-        // Next immediate sustained shift should not transition again due to cooldown
+        assert_ne!(s.color.harmony, start_harmony, "should have transitioned exactly once in 20 ticks");
         let after_first = s.color.harmony;
-        s.apply_controls(JuliaViewControls {
-            harmony_shift: 1.0,
-            ..Default::default()
-        });
-        assert_eq!(s.color.harmony, after_first, "cooldown should prevent immediate re-trigger");
-        // After cooldown expires, should allow next transition
-        for _ in 0..15 {
-            s.apply_controls(JuliaViewControls::default());
+        // Holding at 1 for another 20 ticks should not cause second transition
+        // even after cooldown, because harmony_armed remains false until release <0.3
+        for _ in 0..20 {
+            s.apply_controls(JuliaViewControls {
+                harmony_shift: 1.0,
+                ..Default::default()
+            });
         }
+        assert_eq!(
+            s.color.harmony, after_first,
+            "holding shift=1 should not re-trigger until release below 0.3"
+        );
+        // Release below threshold
+        s.apply_controls(JuliaViewControls {
+            harmony_shift: 0.0,
+            ..Default::default()
+        });
+        // After release, next hold should transition again
         s.apply_controls(JuliaViewControls {
             harmony_shift: 1.0,
             ..Default::default()
         });
-        assert_ne!(s.color.harmony, after_first, "should transition again after cooldown");
+        assert_ne!(s.color.harmony, after_first, "should transition again after release below threshold");
     }
 
     #[test]

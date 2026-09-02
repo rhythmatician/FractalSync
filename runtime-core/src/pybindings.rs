@@ -1113,6 +1113,13 @@ impl ControlsV2 {
     fn model_output_order() -> Vec<String> {
         RustControlsV2::model_output_order().into_iter().map(|s| s.to_string()).collect()
     }
+    #[staticmethod]
+    fn parameter_ranges() -> std::collections::HashMap<String, Vec<f64>> {
+        RustControlsV2::parameter_ranges()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), vec![v[0], v[1]]))
+            .collect()
+    }
 }
 
 impl From<RustControlsV2> for ControlsV2 {

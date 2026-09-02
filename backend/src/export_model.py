@@ -160,32 +160,26 @@ def export_to_onnx(
 
     # Determine parameter names and ranges based on metadata
     if metadata and metadata.get("controls_version") == "controls/2":
-        # Unified Controls v2 (issue #107): MotionControls (aim 2D, throttle, brake, grip, impulse) + JuliaViewControls (7 deltas)
-        # Rust is single authority for names/order; Python consumes it. Fallback is only for environments without wheel and must stay in sync.
+        # Unified Controls v2 (issue #107): Rust is single authority per ADR 0001.
+        # Fail closed if Rust contract is unavailable — no Python fallback copy.
+        import runtime_core  # type: ignore[import-not-found]
+
         try:
-            import runtime_core
-            parameter_names = list(runtime_core.ControlsV2.model_output_order())
-        except Exception:
-            parameter_names = [
-                "directionX", "directionY", "throttle", "brake", "grip", "impulse",
-                "zoomDelta", "rotationDelta", "hueDelta", "chromaDelta", "lightnessDelta", "accentDelta", "harmonyShift",
-            ]
+            parameter_names = list(runtime_core.ControlsV2.model_output_order())  # type: ignore[attr-defined]
+        except AttributeError as exc:
+            raise RuntimeError(
+                "ControlsV2::model_output_order() not available from Rust; "
+                f"failing closed for controls/2: {exc}"
+            ) from exc
+        try:
+            raw_ranges = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
+            parameter_ranges = {k: [float(v[0]), float(v[1])] for k, v in raw_ranges.items()}
+        except AttributeError as exc:
+            raise RuntimeError(
+                "ControlsV2::parameter_ranges() not available from Rust; "
+                f"failing closed for controls/2: {exc}"
+            ) from exc
         output_dim = len(parameter_names)
-        parameter_ranges = {
-            "directionX": [-1.0, 1.0],
-            "directionY": [-1.0, 1.0],
-            "throttle": [0.0, 1.0],
-            "brake": [0.0, 1.0],
-            "grip": [0.0, 1.0],
-            "impulse": [0.0, 1.0],
-            "zoomDelta": [-1.0, 1.0],
-            "rotationDelta": [-1.0, 1.0],
-            "hueDelta": [-1.0, 1.0],
-            "chromaDelta": [-1.0, 1.0],
-            "lightnessDelta": [-1.0, 1.0],
-            "accentDelta": [-1.0, 1.0],
-            "harmonyShift": [-1.0, 1.0],
-        }
         if metadata and "output_dim" in metadata:
             # Enforce boxed invariant: model output tensor length must exactly match Rust authority
             expected = len(parameter_names)
