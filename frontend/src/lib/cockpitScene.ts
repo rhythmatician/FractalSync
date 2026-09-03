@@ -358,8 +358,14 @@ export function treadmillTrailTransform(trail: THREE.Line, snap: DebugSnapshot):
   const magnify = 1.0 / rho0;
   trail.position.x = -cx * SCENE_SCALE * magnify;
   trail.position.z = cy * SCENE_SCALE * magnify;
+  // Vertical recentering subtracts the rider's CURRENT rendered surface
+  // height (surfaceY(sigma)) so terrain immediately beneath the
+  // origin-pinned rider stays at Y=0. The vertical axis is NOT magnified:
+  // the treadmill chart is anisotropic (1/rho0 on X/Z, 1 on Y). The old
+  // setScalar(magnify) also scaled Y, leaving a (1/rho0 - 1)*h0 height
+  // residue that launched the rider ~77k scene units high at the crest.
   trail.position.y = -surfaceY(sigma);
-  trail.scale.setScalar(magnify);
+  trail.scale.set(magnify, 1.0, magnify);
 }
 
 /** Reset the trail to physical coordinates. */
@@ -416,10 +422,17 @@ export function updateCamera(
  * Scale-stabilized treadmill chart (issue #111):
  *   X = (x - x0) / rho0,  Z = lambda * (sigma(c) - sigma(c0))
  * implemented as a mesh transform: translate the patch by -c0 horizontally
- * and by -lambda*sigma0 vertically, then scale the whole patch by 1/rho0 so
- * local terrain stays visually resolvable as the rider descends into finer
+ * and by -lambda*sigma0 vertically, then scale the patch by 1/rho0 so local
+ * terrain stays visually resolvable as the rider descends into finer
  * Mandelbrot scale. Debug presentation ONLY — this module has no path back
  * into physics (the recorder never reads scene objects).
+ *
+ * The magnification is ANISOTROPIC: 1/rho0 on the planar X/Z axes only. The
+ * vertical axis keeps scale 1 — the intended chart is
+ *   X = (x-x0)/rho0,  Y = lambda*(sigma-sigma0),  Z = -(y-y0)/rho0,
+ * so height is a pure relative log-distance, never magnified. The old
+ * setScalar(1/rho0) also scaled Y, leaving a (1/rho0 - 1)*h0 height residue
+ * that launched the rider ~77k scene units high at the crest.
  */
 export function treadmillTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void {
   const [cx, cy] = snap.physics.c;
@@ -428,8 +441,11 @@ export function treadmillTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void 
   const magnify = 1.0 / rho0;
   mesh.position.x = -cx * SCENE_SCALE * magnify;
   mesh.position.z = cy * SCENE_SCALE * magnify;
+  // Vertical recentering subtracts the rider's CURRENT rendered surface
+  // height so terrain immediately beneath the origin-pinned rider stays at
+  // Y=0 — NOT multiplied by 1/rho0 (that is the bug this corrects).
   mesh.position.y = -surfaceY(sigma);
-  mesh.scale.setScalar(magnify);
+  mesh.scale.set(magnify, 1.0, magnify);
 }
 
 /** Reset the treadmill transform when returning to physical mode. */
