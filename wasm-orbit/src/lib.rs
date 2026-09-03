@@ -1814,6 +1814,16 @@ pub fn debug_terrain_patch(
     serde_wasm_bindgen::to_value(&patch).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Deep-zoom unsigned distance field for the minimap (issue #111 feedback:
+/// the minimap is a Mandelbrot deep zoom whose zoom level follows the
+/// player). Resolution-unlimited escape-iteration estimator — resolves
+/// structure where the baked mip pyramid runs out of texels. Returns one
+/// unsigned distance per input point (0 inside the set).
+#[wasm_bindgen(js_name = "deepZoomField")]
+pub fn deep_zoom_field(re: Vec<f64>, im: Vec<f64>) -> Result<Vec<f32>, JsValue> {
+    runtime_core::minimap::deep_zoom_field(&re, &im).map_err(|e| JsValue::from_str(&e))
+}
+
 /// Convenience: DebugSnapshot for an OrbitController's current state.
 #[wasm_bindgen]
 impl OrbitController {
@@ -1823,4 +1833,17 @@ impl OrbitController {
         let snap = self.inner.debug_snapshot().map_err(|e| JsValue::from_str(&e))?;
         serde_wasm_bindgen::to_value(&snap).map_err(|e| JsValue::from_str(&e.to_string()))
     }
+}
+
+/// Batch shore-proximity (S field) sampling over the canonical mip pyramid
+/// (issue #111 minimap panel). Same field/level/rounding as the single-point
+/// sampler; one lock for the whole batch. Returns a flat Float32Array.
+#[wasm_bindgen(js_name = "minimapShoreProximityBatch")]
+pub fn minimap_shore_proximity_batch(
+    re: Vec<f64>,
+    im: Vec<f64>,
+    level: usize,
+) -> Result<Vec<f32>, JsValue> {
+    runtime_core::minimap::shore_proximity_batch(&re, &im, level)
+        .map_err(|e| JsValue::from_str(&e))
 }

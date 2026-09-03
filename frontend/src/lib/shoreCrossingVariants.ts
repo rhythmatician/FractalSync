@@ -109,3 +109,65 @@ export function expandActions(variant: CrossingVariantSpec): HandAuthoredAction[
   }
   return out;
 }
+
+/**
+ * Exploration variants (issue #111 feedback): the baseline family drives
+ * [1, 0] only, so the rider never leaves the real number line and the 2D
+ * topography — interior bays, the period-2 bulb, antenna fjords — stays
+ * unseen. These variants steer OFF the axis in several directions so the
+ * cockpit actually tours interesting terrain.
+ *
+ * Same contract as the baseline family: ordinary MotionControls, fresh
+ * controller per replay (c=0, v=0), no scripted c(t), no musical features.
+ */
+export function explorationVariants(): CrossingVariantSpec[] {
+  const make = (
+    name: string,
+    description: string,
+    dir: [number, number],
+    throttle: number,
+    pairs: number,
+    hold: number
+  ): CrossingVariantSpec => {
+    const dirNorm = ((): [number, number] => {
+      const mag = Math.hypot(dir[0], dir[1]);
+      return [dir[0] / mag, dir[1] / mag];
+    })();
+    const build: HandAuthoredAction = {
+      direction: dirNorm,
+      throttle,
+      brake: 0.0,
+      grip: 0.0,
+      impulse: 0.0,
+      frames: 120,
+    };
+    const commit: HandAuthoredAction = { ...build, frames: 1 };
+    // Settle keeps traction but no drive, so the gait coasts into terrain.
+    const settle: HandAuthoredAction = {
+      direction: dirNorm,
+      throttle: 0.0,
+      brake: 0.6,
+      grip: 1.0,
+      impulse: 0.0,
+      frames: 1,
+    };
+    const actions: HandAuthoredAction[] = [build];
+    for (let i = 0; i < pairs; i++) {
+      actions.push(commit);
+      actions.push(settle);
+    }
+    actions.push({ ...settle, frames: hold });
+    return { name, description, actions };
+  };
+
+  return [
+    // Straight up the imaginary axis: tours the antenna valley topography.
+    make('explore_up', 'build+commit toward +i (imaginary tour)', [0.15, 1.0], 0.6, 300, 200),
+    // Northwest: over the interior toward the period-2 bulb region.
+    make('explore_nw', 'build+commit toward (-0.75, +i) bulb', [-0.75, 0.5], 0.6, 300, 200),
+    // Southwest: the needle valley west of the main cardioid.
+    make('explore_sw', 'build+commit toward (-1.75, -i) needle', [-0.9, -0.45], 0.6, 300, 200),
+    // Northeast diagonal: crosses the real line on the way out.
+    make('explore_ne', 'build+commit diagonal (+x, +i) crossing', [0.8, 0.6], 0.6, 300, 200),
+  ];
+}

@@ -75,9 +75,7 @@ class TestDebugSnapshotFromState:
 
     def test_raw_vs_effective_provenance(self, rc):
         raw = rc.MotionControls(2.0, 0.0, 2.0, -3.0, 5.0, 0.0)
-        snap = rc.debug_snapshot_from_state(
-            0.0, 0.0, 0.0, 0.0, motion_raw=raw
-        )
+        snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0, motion_raw=raw)
         action = snap["action"]
         assert action["raw"]["throttle"] == pytest.approx(2.0)
         assert action["effective"]["throttle"] == pytest.approx(1.0)
@@ -106,9 +104,7 @@ class TestDebugSnapshotFromState:
         assert snap["timeSeconds"] == pytest.approx(7 * CANONICAL_DT)
 
     def test_last_delta_total_passthrough(self, rc):
-        snap = rc.debug_snapshot_from_state(
-            0.0, 0.0, 0.0, 0.0, last_delta_total=0.125
-        )
+        snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0, last_delta_total=0.125)
         assert snap["diagnostics"]["lastDeltaTotal"] == pytest.approx(0.125)
 
     def test_map_unavailable_without_pyramid(self, rc):
@@ -237,8 +233,17 @@ class TestWireFormat:
         """The crest ceiling comes from the config, not a restated constant."""
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
         expected = 1.0 * math.log2(0.1 / 1e-4)  # kappa * log2(d_ref/epsilon)
-        assert snap["diagnostics"]["crestPotential"] == pytest.approx(expected, rel=1e-12)
+        assert snap["diagnostics"]["crestPotential"] == pytest.approx(
+            expected, rel=1e-12
+        )
 
     def test_terrain_patch_keys(self, rc):
         patch = rc.debug_terrain_patch(0.0, 0.0, 0.5, 9)
-        assert set(patch.keys()) == {"n", "center", "half", "positions", "signed", "realm"}
+        assert set(patch.keys()) == {
+            "n",
+            "center",
+            "half",
+            "positions",
+            "signed",
+            "realm",
+        }

@@ -332,6 +332,81 @@ fn terrain_patch_rejects_degenerate_grids() {
 }
 
 #[test]
+fn deep_zoom_field_resolves_beyond_the_baked_pyramid() {
+    // Issue #111 feedback: the minimap is a Mandelbrot DEEP ZOOM whose zoom
+    // level follows the player. The baked 2048^2 pyramid runs out of
+    // texels near the Shore (a 1e-3-wide window spans ~1 texel), so the
+    // deep-zoom field must come from the escape-iteration distance
+    // estimator, which is resolution-unlimited.
+    let _g = lock();
+    let n = 24;
+    // A window 1e-3 wide centered just inside the Shore at (0.25, 0).
+    let half = 5e-4;
+    let mut re = Vec::with_capacity(n * n);
+    let mut im = Vec::with_capacity(n * n);
+    for row in 0..n {
+        let y = -half + 2.0 * half * (row as f64) / ((n - 1) as f64);
+        for col in 0..n {
+            let x = 0.25 - half + 2.0 * half * (col as f64) / ((n - 1) as f64);
+            re.push(x);
+            im.push(y);
+        }
+    }
+    let field = runtime_core::minimap::deep_zoom_field(&re, &im)
+        .expect("deep zoom field over a near-Shore window");
+    assert_eq!(field.len(), n * n);
+    // The estimator must resolve STRUCTURE at this zoom: the field varies
+    // meaningfully across the window (the baked pyramid would be ~flat).
+    let min = field.iter().cloned().fold(f32::INFINITY, f32::min);
+    let max = field.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    assert!(
+        max - min > 1e-4,
+        "deep-zoom field must vary across a 1e-3 window (min={min}, max={max})"
+    );
+    // Non-negative unsigned distances.
+    assert!(min >= 0.0);
+}
+
+#[test]
+fn deep_zoom_field_matches_pyramid_near_its_resolution() {
+    // At valley zoom the deep-zoom field must agree with the canonical
+    // signed-SDF authority OUTSIDE the boundary (same geometry, different
+    // sampler). Interior points legitimately return 0: the escape-iteration
+    // estimator detects the cycle and reports "no distance to escape",
+    // which is the correct deep-zoom semantic (the fractal detail lives
+    // outside the boundary).
+    let _g = lock();
+    let pts = [(0.26f64, 0.0f64), (0.27, 0.0), (0.3, 0.0), (0.5, 0.0), (1.0, 1.0)];
+    let re: Vec<f64> = pts.iter().map(|p| p.0).collect();
+    let im: Vec<f64> = pts.iter().map(|p| p.1).collect();
+    let deep = runtime_core::minimap::deep_zoom_field(&re, &im).expect("deep zoom field");
+    for (i, p) in pts.iter().enumerate() {
+        let sdf = runtime_core::manifold::signed_distance(C::new(p.0, p.1)).unwrap();
+        assert!(sdf > 0.0, "test point {p:?} must be outside the set");
+        let d_deep = deep[i] as f64;
+        let d_sdf = sdf.abs();
+        // Near the boundary the two authorities must agree tightly (the
+        // baked raster resolves fine there). Far out the analytic DEM is
+        // the better estimate; only require relative agreement (the
+        // raster's pixel-spacing floor inflates far distances).
+        if d_sdf < 0.25 {
+            assert!(
+                (d_deep - d_sdf).abs() < 5e-2,
+                "point {p:?}: deep={d_deep}, sdf=|{sdf}| (near-boundary)"
+            );
+        } else {
+            assert!(
+                (d_deep - d_sdf).abs() <= 0.4 * d_sdf,
+                "point {p:?}: deep={d_deep}, sdf=|{sdf}| (far-field relative)"
+            );
+        }
+    }
+    // Interior points report 0 (cycle-detected, no escape distance).
+    let interior = runtime_core::minimap::deep_zoom_field(&[0.0], &[0.0]).unwrap();
+    assert_eq!(interior[0], 0.0);
+}
+
+#[test]
 fn debug_snapshot_serializes_camel_case() {
     let _g = lock();
     let snap = snapshot_from_state(C::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
@@ -340,4 +415,54 @@ fn debug_snapshot_serializes_camel_case() {
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"signedDistance\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"pyramidLoaded\""), "wire format is camelCase: {json}");
+}
+
+#[test]
+fn shore_proximity_batch_matches_single_samples() {
+    let _g = lock();
+    // Synthetic pyramid over the canonical bake extent.
+    let w0 = 8usize;
+    let mut levels = vec![vec![0.5f32; w0 * w0]];
+    let mut widths = vec![w0];
+    let mut heights = vec![w0];
+    for size in [4usize, 1, 1, 1, 1, 1] {
+        levels.push(vec![0.75f32; size * size]);
+        widths.push(size);
+        heights.push(size);
+    }
+    let pyr = runtime_core::minimap::MipPyramid::from_levels(
+        levels,
+        widths,
+        heights,
+        -2.0,
+        1.0,
+        -1.5,
+        1.5,
+    )
+    .expect("synthetic pyramid");
+    runtime_core::minimap::set_pyramid(pyr).expect("install pyramid");
+
+    // Batch of points spanning the extent; batch values must equal the
+    // canonical single-point sampler (same field, same level).
+    let pts = [
+        (-2.0, -1.5),
+        (0.0, 0.0),
+        (0.9, 1.4),
+        (-1.0, 0.5),
+    ];
+    let (re, im): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
+    let batch = runtime_core::minimap::shore_proximity_batch(&re, &im, 0)
+        .expect("batch sample");
+    assert_eq!(batch.len(), pts.len());
+    for ((r, i), &b) in pts.iter().zip(batch.iter()) {
+        let single = runtime_core::minimap::with_pyramid(|p| {
+            p.and_then(|pyr| pyr.shore_proximity_at(C::new(*r, *i), 0))
+        });
+        assert_eq!(Some(b), single, "batch must match single at ({r},{i})");
+    }
+
+    // Length mismatch is an error.
+    assert!(runtime_core::minimap::shore_proximity_batch(&re[..2].to_vec(), &im, 0).is_err());
+
+    runtime_core::minimap::clear_pyramid();
 }

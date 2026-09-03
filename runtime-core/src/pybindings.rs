@@ -718,22 +718,8 @@ fn minimap_shore_proximity_batch_py(
             "re/im length mismatch",
         ));
     }
-    crate::minimap::with_pyramid(|pyr| {
-        let pyr = pyr.ok_or_else(|| {
-            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
-        })?;
-        let mut out = Vec::with_capacity(re.len());
-        for (&r, &i) in re.iter().zip(im.iter()) {
-            let c = num_complex::Complex64::new(r, i);
-            let (fx, fy) = pyr
-                .world_to_texel_pub(level, c)
-                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("bad level"))?;
-            let cx = fx.round() as isize;
-            let cy = fy.round() as isize;
-            out.push(pyr.sample_field_pub(level, cx, cy));
-        }
-        Ok(out)
-    })
+    crate::minimap::shore_proximity_batch(&re, &im, level)
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Contour-biased integrator step for Physics. Returns (new_re, new_im).
@@ -1409,6 +1395,18 @@ fn debug_terrain_patch(
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
     Ok(pythonize::pythonize(py, &value)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")))?)
+}
+
+/// Deep-zoom unsigned distance field for the minimap (issue #111 feedback:
+/// the minimap is a Mandelbrot deep zoom whose zoom level follows the
+/// player). Resolution-unlimited escape-iteration estimator — resolves
+/// structure where the baked mip pyramid runs out of texels. Returns a
+/// list of unsigned distances (0 inside the set), one per input point.
+#[pyfunction]
+#[pyo3(signature = (re, im))]
+fn deep_zoom_field(re: Vec<f64>, im: Vec<f64>) -> PyResult<Vec<f32>> {
+    crate::minimap::deep_zoom_field(&re, &im)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))
 }
 
 /// Compute drive covector for inspection/diagnostics.
@@ -2303,6 +2301,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
     m.add_function(wrap_pyfunction!(debug_snapshot_from_state, m)?)?;
     m.add_function(wrap_pyfunction!(debug_terrain_patch, m)?)?;
+    m.add_function(wrap_pyfunction!(deep_zoom_field, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())

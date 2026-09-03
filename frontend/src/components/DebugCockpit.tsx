@@ -22,24 +22,39 @@ import {
   CockpitRecorder,
   CANONICAL_DT,
   DEFAULT_TERRAIN_HALF,
-  DEFAULT_TERRAIN_GRID,
+  planTerrainLod,
+  riderSurfaceHeight,
   sampleTerrainPatch,
+  ensureMinimapPyramid,
   type CockpitTrajectory,
 } from '../lib/debugCockpit';
-import { baselineVariants } from '../lib/shoreCrossingVariants';
+import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
 import { initOrbitSynth, getWasmModule } from '../lib/orbitSynthesizer';
+import { JuliaRenderer } from '../lib/juliaRenderer';
+import {
+  MINIMAP_SIZE,
+  paintMinimap,
+  setMinimapWasmSurface,
+  type MinimapPaintInput,
+} from '../lib/cockpitMinimap';
 import {
   buildTerrainMesh,
   buildRider,
   buildTrail,
   placeRider,
   updateCamera,
+  updateRiderAnimation,
   treadmillTransform,
   physicalTransform,
   treadmillTrailTransform,
   physicalTrailTransform,
   buildSceneDressing,
+  applyOverlays,
+  applyRenderDistance,
+  surfaceY,
+  DEFAULT_OVERLAYS,
   type CameraMode,
+  type TerrainOverlays,
 } from '../lib/cockpitScene';
 
 type Badge = 'STATE' | 'ACTION' | 'DIAG';
@@ -114,18 +129,74 @@ function realmName(realm: number): string {
   return realm < 0 ? 'INSIDE (connected)' : realm > 0 ? 'OUTSIDE (dust)' : 'ON SHORE';
 }
 
+/**
+ * K/U/E history sparkline keyed to the hop-clock timeline (issue #111
+ * timeline: "K,U,E history"). Values come straight from the recorded
+ * snapshots — no recomputation. The current frame is marked.
+ */
+function EnergySparkline({
+  trajectory,
+  frameIdx,
+}: {
+  trajectory: CockpitTrajectory | undefined;
+  frameIdx: number;
+}): JSX.Element {
+  const W = 220;
+  const H = 40;
+  if (!trajectory || trajectory.snapshots.length === 0) {
+    return <svg width={W} height={H} />;
+  }
+  // Sample at most ~400 points across the trajectory for the polyline.
+  const total = trajectory.snapshots.length;
+  const stride = Math.max(1, Math.floor(total / 400));
+  const pts: Array<{ k: number; u: number; e: number }> = [];
+  for (let i = 0; i < total; i += stride) {
+    const s = trajectory.snapshots[i];
+    pts.push({ k: s.physics.kinetic, u: s.physics.potential, e: s.physics.total });
+  }
+  const eMin = Math.min(...pts.map((p) => p.e));
+  const eMax = Math.max(...pts.map((p) => p.e));
+  const span = Math.max(eMax - eMin, 1e-9);
+  const toY = (v: number): number => H - 2 - ((v - eMin) / span) * (H - 4);
+  const toX = (i: number): number => (i / Math.max(pts.length - 1, 1)) * (W - 2) + 1;
+
+  const poly = (key: 'k' | 'u' | 'e'): string =>
+    pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(p[key]).toFixed(1)}`).join(' ');
+
+  // Marker for the current frame.
+  const curIdx = Math.min(Math.floor(frameIdx / stride), pts.length - 1);
+  const cur = pts[curIdx];
+
+  return (
+    <svg width={W} height={H} style={{ display: 'block' }}>
+      <path d={poly('e')} fill="none" stroke="#9fe8b0" strokeWidth={1.2} />
+      <path d={poly('u')} fill="none" stroke="#7fb0ff" strokeWidth={1} />
+      <path d={poly('k')} fill="none" stroke="#ffd479" strokeWidth={1} />
+      {cur && <circle cx={toX(curIdx)} cy={toY(cur.e)} r={2.5} fill="#fff" />}
+    </svg>
+  );
+}
+
 export function DebugCockpit(): JSX.Element {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const minimapRef = useRef<HTMLCanvasElement | null>(null);
+  const juliaCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const juliaRendererRef = useRef<JuliaRenderer | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState(3);
+  const [selected, setSelected] = useState(4);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>('physical');
   const [playerView, setPlayerView] = useState(false);
+  const [overlays, setOverlays] = useState<TerrainOverlays>(DEFAULT_OVERLAYS);
+  const [pyramidReady, setPyramidReady] = useState(false);
   const [runs, setRuns] = useState<CockpitTrajectory[] | null>(null);
 
-  const variants = useMemo(() => baselineVariants(), []);
+  const variants = useMemo(
+    () => [...baselineVariants(), ...explorationVariants()],
+    []
+  );
   const sceneRefs = useRef<{
     renderer?: THREE.WebGLRenderer;
     scene?: THREE.Scene;
@@ -134,6 +205,11 @@ export function DebugCockpit(): JSX.Element {
     terrain?: THREE.Mesh;
     trail?: THREE.Line;
     terrainCenter?: [number, number];
+    terrainPatch?: ReturnType<typeof sampleTerrainPatch>;
+    /** Latest authoritative metric speed, consumed by the rAF loop. */
+    lastMetricSpeed?: number;
+    /** Half-extent of the currently built terrain patch (LOD tracking). */
+    lodHalf?: number;
   }>({});
 
   // Load wasm + record all variant trajectories once.
@@ -149,10 +225,15 @@ export function DebugCockpit(): JSX.Element {
           throw new Error('wasm build lacks debug-snapshot/1 seam; rebuild wasm-orbit');
         }
         if (disposed) return;
+        setMinimapWasmSurface(getWasmModule() as never);
         const recorder = new CockpitRecorder();
         const all = variants.map((v) => recorder.recordVariant(v));
         setRuns(all);
         setReady(true);
+        // Minimap pyramid: best-effort, off the critical path.
+        ensureMinimapPyramid().then((ok) => {
+          if (!disposed) setPyramidReady(ok);
+        });
       } catch (e) {
         setError(String(e));
       }
@@ -180,10 +261,16 @@ export function DebugCockpit(): JSX.Element {
     const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
     camera.position.set(0, 6, -10);
 
-    const rider = buildRider();
-    scene.add(rider);
+    sceneRefs.current = { renderer, scene, camera };
 
-    sceneRefs.current = { renderer, scene, camera, rider };
+    // Rider is async (GLB load); add it to the scene once ready. The
+    // fallback capsule keeps the rider present even if the model 404s.
+    let disposed = false;
+    buildRider().then((rider) => {
+      if (disposed) return;
+      scene.add(rider);
+      sceneRefs.current.rider = rider;
+    });
 
     const onResize = () => {
       const w = mount.clientWidth;
@@ -194,13 +281,25 @@ export function DebugCockpit(): JSX.Element {
     };
     window.addEventListener('resize', onResize);
 
+    // Animation clock: advances the rider's GLB mixer every frame (rAF runs
+    // continuously, so the gait plays even while the timeline is paused).
+    let last = performance.now();
     const loop = () => {
       requestAnimationFrame(loop);
+      const now = performance.now();
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      const rider = sceneRefs.current.rider;
+      if (rider) {
+        const speed = sceneRefs.current.lastMetricSpeed ?? 0;
+        updateRiderAnimation(rider, dt, speed);
+      }
       renderer.render(scene, camera);
     };
     loop();
 
     return () => {
+      disposed = true;
       window.removeEventListener('resize', onResize);
       renderer.dispose();
       mount.removeChild(renderer.domElement);
@@ -209,7 +308,8 @@ export function DebugCockpit(): JSX.Element {
   }, [ready]);
 
   // Rebuild terrain when the selected frame's patch center moves far from
-  // the current mesh center (terrain follows the rider).
+  // the current mesh center (terrain follows the rider), and when the LOD
+  // plan changes (scale shifted enough to re-plan fidelity vs performance).
   const run = runs?.[selected];
   const frame = run?.snapshots[Math.min(frameIdx, (run?.snapshots.length ?? 1) - 1)];
 
@@ -217,19 +317,36 @@ export function DebugCockpit(): JSX.Element {
     const refs = sceneRefs.current;
     if (!refs.scene || !frame) return;
     const [cx, cy] = frame.physics.c;
+    const planarSpeed = Math.hypot(frame.physics.velocity[0], frame.physics.velocity[1]);
+    const lod = planTerrainLod(frame.physics.rho, planarSpeed);
     const current = refs.terrainCenter;
-    const moved = !current || Math.hypot(cx - current[0], cy - current[1]) > DEFAULT_TERRAIN_HALF * 0.6;
-    if (!moved) return;
+    const lodChanged =
+      refs.lodHalf === undefined || Math.abs(refs.lodHalf - lod.half) > lod.half * 0.35;
+    const moved =
+      !current || Math.hypot(cx - current[0], cy - current[1]) > lod.half * 0.6;
+    if (!moved && !lodChanged && refs.terrain && refs.terrainPatch) {
+      applyOverlays(refs.terrain, refs.terrainPatch, overlays);
+      return;
+    }
     if (refs.terrain) {
       refs.scene.remove(refs.terrain);
       refs.terrain.geometry.dispose();
     }
-    const patch = sampleTerrainPatch(cx, cy, DEFAULT_TERRAIN_HALF, DEFAULT_TERRAIN_GRID);
+    const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
     const mesh = buildTerrainMesh(patch);
+    applyOverlays(mesh, patch, overlays);
     refs.scene.add(mesh);
     refs.terrain = mesh;
+    refs.terrainPatch = patch;
     refs.terrainCenter = [cx, cy];
-  }, [frame]);
+    refs.lodHalf = lod.half;
+    // Render distance + fog wall track the patch (and the treadmill chart's
+    // 1/rho magnification) so the mesh edge always hides inside the fog
+    // while the rider stays fog-free — fidelity balanced with performance.
+    if (refs.camera) {
+      applyRenderDistance(refs.camera, refs.scene, cameraMode, frame.physics.rho, lod.half);
+    }
+  }, [frame, overlays, cameraMode]);
 
   // Per-frame updates: rider, trail, camera.
   useEffect(() => {
@@ -237,13 +354,17 @@ export function DebugCockpit(): JSX.Element {
     const trajectory = runs?.[selected];
     if (!refs.scene || !refs.rider || !refs.camera || !trajectory || !frame) return;
 
-    // Rider height: the terrain patch is centered on the rider, so the
-    // surface height under the rider is the patch-center embedding height
-    // lambda*sigma (Z_SCALE applied, matching buildTerrainMesh).
-    const sigma = frame.physics.sigma;
-    const heightAt = (_x: number, _y: number): number => sigma * 2.0;
+    // Rider height: sampled per-position through the authoritative Rust
+    // embedding seam — never the patch-center sigma, which diverges from
+    // the surface near the Shore (|grad sigma| ~ 1e3) and let the rider
+    // fly off the mountains. surfaceY applies the shared asinh compression
+    // matching buildTerrainMesh.
+    const heightAt = (x: number, y: number): number =>
+      surfaceY(riderSurfaceHeight(frame, x, y));
 
     placeRider(refs.rider, frame, heightAt);
+    // Feed the animation gait from authoritative metric speed.
+    refs.lastMetricSpeed = frame.physics.metricSpeed;
 
     if (refs.trail) {
       refs.scene.remove(refs.trail);
@@ -270,6 +391,79 @@ export function DebugCockpit(): JSX.Element {
     }
     updateCamera(refs.camera, frame, cameraMode);
   }, [runs, selected, frameIdx, frame, cameraMode]);
+
+  // Minimap panel: repaint from the canonical pyramid when the frame moves.
+  useEffect(() => {
+    const canvas = minimapRef.current;
+    const trajectory = runs?.[selected];
+    if (!canvas || !trajectory || !frame) return;
+    const extent = frame.map.extent;
+    if (!extent) return;
+    // Trail window: last 200 steps for panel legibility.
+    const from = Math.max(0, frameIdx - 200);
+    const trail = trajectory.snapshots
+      .slice(from, frameIdx + 1)
+      .map((s) => [s.physics.c[0], s.physics.c[1]] as [number, number]);
+    const input: MinimapPaintInput = {
+      extent: [extent[0], extent[1], extent[2], extent[3]],
+      trail,
+      currentC: [frame.physics.c[0], frame.physics.c[1]],
+      // Zoom-with-scale: the window tracks the current LOD patch extent.
+      footprintHalf: sceneRefs.current.lodHalf ?? DEFAULT_TERRAIN_HALF,
+      // FOV triangle: heading from the authoritative planar velocity (the
+      // same rule placeRider uses), FOV from the cockpit camera.
+      heading:
+        Math.hypot(frame.physics.velocity[0], frame.physics.velocity[1]) > 1e-7
+          ? Math.atan2(-frame.physics.velocity[1], frame.physics.velocity[0])
+          : 0,
+      fovDeg: 55,
+    };
+    paintMinimap(canvas, input);
+  }, [runs, selected, frameIdx, frame, pyramidReady]);
+
+  // Julia panel: the ACTUAL audience-facing view (issue #111). The existing
+  // JuliaRenderer stays the authoritative presentation surface.
+  useEffect(() => {
+    if (!ready || !juliaCanvasRef.current || juliaRendererRef.current) return;
+    let cancelled = false;
+    const renderer = new JuliaRenderer(juliaCanvasRef.current);
+    juliaRendererRef.current = renderer;
+    (async () => {
+      try {
+        await renderer.init();
+        if (cancelled) return;
+        renderer.updateParameters({
+          juliaSeed: { real: 0, imag: 0 },
+          colorHue: 0.58,
+          colorSat: 0.75,
+          colorBright: 0.6,
+          zoom: 2.5,
+          speed: 1.0,
+        });
+        renderer.start();
+      } catch (e) {
+        if (!cancelled) console.warn('[debugCockpit] julia panel init failed:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      renderer.stop();
+      juliaRendererRef.current = null;
+    };
+  }, [ready]);
+
+  // Push the current frame's c into the fixed-view Julia renderer. Only the
+  // seed follows physics; zoom/rotation/palette stay FIXED so the audience
+  // view's presentation deltas remain distinct from Mandelbrot scale.
+  useEffect(() => {
+    const renderer = juliaRendererRef.current;
+    if (!renderer || !frame) return;
+    const current = renderer.getCurrentParameters();
+    renderer.updateParameters({
+      ...current,
+      juliaSeed: { real: frame.physics.c[0], imag: frame.physics.c[1] },
+    });
+  }, [frame]);
 
   // Playback loop.
   useEffect(() => {
@@ -368,6 +562,45 @@ export function DebugCockpit(): JSX.Element {
             <Row label="integrator" value={diag.valid ? 'ok' : `FAIL: ${diag.lastError ?? ''}`} kind="DIAG" />
           </Panel>
         )}
+
+        {!playerView && (
+          <Panel title="TERRAIN OVERLAYS">
+            {(
+              [
+                ['shoreBand', 'Shore D(c)=0 band'],
+                ['realm', 'Inside/Outside realm'],
+                ['sigma', 'sigma(c) scale ramp'],
+                ['potential', 'U(c) potential ramp'],
+                ['validity', 'derivative validity'],
+              ] as Array<[keyof TerrainOverlays, string]>
+            ).map(([key, label]) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, lineHeight: 1.7, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={overlays[key]}
+                  onChange={(e) => setOverlays((o) => ({ ...o, [key]: e.target.checked }))}
+                />
+                {label}
+              </label>
+            ))}
+          </Panel>
+        )}
+
+        {!playerView && (
+          <Panel title="MANDELBROT MINIMAP / TRAIL">
+            <canvas
+              ref={minimapRef}
+              width={MINIMAP_SIZE}
+              height={MINIMAP_SIZE}
+              style={{ width: '100%', borderRadius: 4, border: '1px solid #262640', display: 'block' }}
+            />
+            <div style={{ fontSize: 10, color: '#667', marginTop: 4 }}>
+              {pyramidReady
+                ? 'canonical mip pyramid · zoomed to scale · trail (green) · c (red) · FOV (triangle)'
+                : 'mip pyramid unavailable (backend :8000) — panel degraded honestly'}
+            </div>
+          </Panel>
+        )}
       </div>
 
       {/* CENTER: 3D SKATER + MANIFOLD */}
@@ -434,6 +667,27 @@ export function DebugCockpit(): JSX.Element {
             </Panel>
           </div>
         )}
+
+        {/* RIGHT-BOTTOM: ACTUAL JULIA AUDIENCE VIEW (fixed presentation) */}
+        <div
+          style={{
+            position: 'absolute',
+            right: 12,
+            bottom: 64,
+            width: 250,
+          }}
+        >
+          <Panel title="ACTUAL JULIA AUDIENCE VIEW (fixed)">
+            <canvas
+              ref={juliaCanvasRef}
+              style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 4, display: 'block' }}
+            />
+            <div style={{ fontSize: 10, color: '#667', marginTop: 4 }}>
+              seed = physics c · zoom/rotation/palette HELD FIXED — what the audience
+              sees vs the terrain the Player rides
+            </div>
+          </Panel>
+        </div>
       </div>
 
       {/* BOTTOM: timeline */}
@@ -490,6 +744,16 @@ export function DebugCockpit(): JSX.Element {
           style={{ flex: 1 }}
           disabled={!run}
         />
+        {!playerView && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <EnergySparkline trajectory={run} frameIdx={frameIdx} />
+            <span style={{ fontSize: 9, color: '#667', lineHeight: 1.4 }}>
+              <span style={{ color: '#ffd479' }}>K</span> ·{' '}
+              <span style={{ color: '#7fb0ff' }}>U</span> ·{' '}
+              <span style={{ color: '#9fe8b0' }}>E</span>
+            </span>
+          </div>
+        )}
         <span style={{ fontSize: 11, color: '#889', minWidth: 190, textAlign: 'right' }}>
           tick {Math.min(frameIdx, (run?.snapshots.length ?? 1) - 1)} / {(run?.snapshots.length ?? 1) - 1}
           {' · '}Δt {CANONICAL_DT.toFixed(6)}s (hop clock)

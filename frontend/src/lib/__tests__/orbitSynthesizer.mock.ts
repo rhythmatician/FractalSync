@@ -429,6 +429,15 @@ export default {
       this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k;
     }
   },
+  manifold_embedding(re: number, im: number) {
+    // Mock embedding with REAL slope near the Shore (x=0.25): sigma rises
+    // as the rider approaches it, so per-position height sampling is
+    // distinguishable from patch-center height in tests.
+    const d = 0.25 - re;
+    const rho = Math.sqrt(d * d + 1e-8);
+    const sigma = Math.log2(0.1 / rho);
+    return [re, im, sigma] as [number, number, number];
+  },
   debugTerrainPatch(cx: number, cy: number, half: number, n: number) {
     // Mock terrain: same wire shape as the Rust seam. Heights vary so the
     // cockpit's mesh-building path is exercised in vitest.
@@ -448,5 +457,23 @@ export default {
       }
     }
     return { n, center: [cx, cy] as [number, number], half, positions, signed, realm };
+  },
+  minimapShoreProximityBatch(re: number[], _im: number[], _level: number) {
+    // Mock S field over the canonical extent: a smooth ramp toward the
+    // Shore band at x=0.25 (shape only — the real field comes from the
+    // Rust pyramid). Points outside the extent clamp to the edge value.
+    return Float32Array.from(re.map((x) => Math.max(0, Math.min(1, 1 - Math.abs(x - 0.25) * 2))));
+  },
+  deepZoomField(re: number[], im: number[]) {
+    // Mock deep-zoom DEM: unsigned distance to the boundary (0 inside),
+    // same boundary the S ramp encodes. Shape only — the real field comes
+    // from the Rust escape-iteration estimator.
+    return Float32Array.from(
+      re.map((x, i) => {
+        const y = im[i];
+        const d = Math.abs(x - 0.25) + Math.abs(y) * 0.5;
+        return d;
+      })
+    );
   },
 };

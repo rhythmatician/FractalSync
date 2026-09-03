@@ -467,11 +467,70 @@ pub fn set_pyramid(pyr: MipPyramid) -> Result<(), String> {
     Ok(())
 }
 
+/// Batch shore-proximity (S field) sampling over the process-wide pyramid.
+///
+/// Same field, level, and texel-rounding as [`MipPyramid::shore_proximity_at`]
+/// — one read lock for the whole batch so callers (minimap rendering,
+/// trajectory overlays) avoid per-point lock round-trips. Points outside the
+/// extent sample the clamped edge value (consistent with window sampling).
+pub fn shore_proximity_batch(re: &[f64], im: &[f64], level: usize) -> Result<Vec<f32>, String> {
+    if re.len() != im.len() {
+        return Err(format!(
+            "re/im length mismatch: {} vs {}",
+            re.len(),
+            im.len()
+        ));
+    }
+    with_pyramid(|pyr| {
+        let pyr = pyr.ok_or_else(|| "mip pyramid not loaded".to_string())?;
+        let mut out = Vec::with_capacity(re.len());
+        for (&r, &i) in re.iter().zip(im.iter()) {
+            let c = num_complex::Complex64::new(r, i);
+            match pyr.world_to_texel_pub(level, c) {
+                Some((fx, fy)) => {
+                    let cx = fx.round() as isize;
+                    let cy = fy.round() as isize;
+                    out.push(pyr.sample_field_pub(level, cx, cy));
+                }
+                None => return Err(format!("bad mip level {level}")),
+            }
+        }
+        Ok(out)
+    })
+}
+
 /// Clear the process-wide pyramid (test helper).
 pub fn clear_pyramid() {
     if let Ok(mut g) = PYRAMID.write() {
         *g = None;
     }
+}
+
+/// Deep-zoom unsigned distance field for the minimap (issue #111 feedback:
+/// "think about our minimap like a Mandelbrot deep zoom ... zoom level
+/// depends on the player location").
+///
+/// The baked mip pyramid has finite texel resolution: near the Shore a
+/// player-centered window can span only a handful of texels, and the S
+/// field degenerates to a flat smear. This sampler instead uses the
+/// canonical escape-iteration distance estimator in `distance_field`
+/// (resolution-unlimited, Rust-owned), so the zoomed minimap keeps
+/// resolving structure at ANY zoom depth. It is the same boundary geometry
+/// the pyramid bakes — just sampled on demand.
+pub fn deep_zoom_field(re: &[f64], im: &[f64]) -> Result<Vec<f32>, String> {
+    if re.len() != im.len() {
+        return Err(format!(
+            "re/im length mismatch: {} vs {}",
+            re.len(),
+            im.len()
+        ));
+    }
+    let cs: Vec<num_complex::Complex64> = re
+        .iter()
+        .zip(im.iter())
+        .map(|(&r, &i)| num_complex::Complex64::new(r, i))
+        .collect();
+    crate::distance_field::mandelbrot_distance_estimate(&cs)
 }
 
 /// Access the process-wide pyramid.
