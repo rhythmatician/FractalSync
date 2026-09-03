@@ -333,7 +333,13 @@ export function DebugCockpit(): JSX.Element {
       refs.terrain.geometry.dispose();
     }
     const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
-    const mesh = buildTerrainMesh(patch);
+    // Build the terrain mesh in CHART COORDINATES for the active camera
+    // mode so the Y axis is the right surface from the start: physical
+    // mode uses the asinh-compressed surfaceY(); treadmill mode uses
+    // the exact linear SCENE_SCALE * LAMBDA * sigma chart Y. The mesh
+    // rebuild hook also fires on cameraMode change, so toggling the
+    // mode re-emits the geometry with the correct Y mapping.
+    const mesh = buildTerrainMesh(patch, cameraMode);
     applyOverlays(mesh, patch, overlays);
     refs.scene.add(mesh);
     refs.terrain = mesh;
@@ -376,7 +382,11 @@ export function DebugCockpit(): JSX.Element {
       ...trajectory,
       snapshots: trajectory.snapshots.slice(from, frameIdx + 1),
     };
-    refs.trail = buildTrail(windowTraj, windowTraj.snapshots.length - 1);
+    // Build the trail in CHART COORDINATES for the active camera mode:
+    // physical mode uses surfaceY(); treadmill mode uses the linear
+    // SCENE_SCALE * LAMBDA * sigma chart. The trail is rebuilt every
+    // frame, so the camera mode is always reflected.
+    refs.trail = buildTrail(windowTraj, windowTraj.snapshots.length - 1, cameraMode);
     refs.scene.add(refs.trail);
 
     if (cameraMode === 'treadmill') {

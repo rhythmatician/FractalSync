@@ -21,19 +21,47 @@ import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from './debugCock
 /** Camera presentation modes (issue #111). */
 export type CameraMode = 'physical' | 'treadmill';
 
+/**
+ * Terrain-mesh build mode: 'physical' renders y = surfaceY(sigma) (the
+ * asinh-compressed physical embedding); 'treadmill' renders y =
+ * SCENE_SCALE * LAMBDA * sigma so the chart Y is the exact relative
+ * log-distance, with NO nonlinear compression. The two modes share the
+ * same (x, y, signed, realm) Rust patch input — only the Y mapping
+ * differs.
+ */
+export type TerrainMeshMode = CameraMode;
+
 /** Scene scale: world units per c-space unit (visual magnification).
  *  Exported so the LOD planner (debugCockpit) plans in the same units. */
 export const SCENE_SCALE = 10.0;
 
 /**
- * Vertical scale of the sigma axis.
+ * Default lambda for the controller-default manifold config
+ * (`ManifoldConfig(d=0.1, eps=1e-4, lambda_sq=1.0, kappa=1.0)` used by
+ * `sampleTerrainPatch`). Used by the chart helpers below to keep the
+ * treadmill chart in the same units as the rider's authoritative sigma.
+ *
+ * NOTE: the previous fix's comment mentioned lambda but used surfaceY
+ * (which has Z_SCALE baked in). The two are NOT the same surface: lambda
+ * is a manifold math constant; surfaceY is a presentation curve applied
+ * to the compressed physical embedding. This file keeps both: physical
+ * mode keeps surfaceY (unchanged), treadmill mode uses lambda*sigma
+ * (this PR).
+ */
+export const LAMBDA_SQ = 1.0;
+export const LAMBDA = Math.sqrt(LAMBDA_SQ);
+
+/**
+ * Vertical scale of the sigma axis (PHYSICAL MODE ONLY).
  *
  * Issue feedback: the raw lambda*sigma surface is far too steep — near the
  * Shore sigma reaches ~10 while valleys sit at ~-1.5, so linear scaling
  * turns hills into cliffs. surfaceY() applies an asinh compression
  * (logarithmic for large |sigma|, linear near 0) so the crest stays
- * dramatic but ridable, and EVERY scene height (mesh, rider, trail,
- * camera) goes through this one function — no place re-derives it.
+ * dramatic but ridable, and EVERY scene height in physical mode (mesh,
+ * rider, trail, camera) goes through this one function — no place
+ * re-derives it. TREADMILL MODE does not use surfaceY (see the chart
+ * helpers below).
  */
 const Z_SCALE = 2.0;
 
@@ -41,22 +69,145 @@ const Z_SCALE = 2.0;
 const Z_COMPRESS_LINEAR = 1.5;
 
 /**
- * Scene Y for a sigma value — the single vertical-mapping authority.
+ * Scene Y for a sigma value — the single physical-mode vertical authority.
  * asinh(sigma / k) * k * Z_SCALE: linear for |sigma| << k, logarithmic for
  * |sigma| >> k. Preserves sign and monotonicity (uphill stays uphill).
+ * Treadmill mode bypasses this entirely (see treadmillChart).
  */
 export function surfaceY(sigma: number): number {
   const s = sigma / Z_COMPRESS_LINEAR;
   return Math.asinh(s) * Z_COMPRESS_LINEAR * Z_SCALE;
 }
 
+// ---------------------------------------------------------------------------
+// Coordinate charts (issue #111 / this PR)
+// ---------------------------------------------------------------------------
+//
+// Every scene position in the cockpit comes from one of two charts applied
+// to authoritative (x, y, sigma) from the Rust DebugSnapshot / TerrainPatch.
+// Each chart is a single explicit formula; no presentation layer adds a
+// hidden transform on top.
+//
+//   Q_physical  = SCENE_SCALE * ( x,             LAMBDA * sigma,            -y )
+//   Q_treadmill = SCENE_SCALE * ( (x-x0)/rho0,   LAMBDA * (sigma - sigma0), -(y-y0)/rho0 )
+//
+// Physical mode: uniform scale on every axis — metric-exact; the induced
+// scene metric is SCENE_SCALE^2 * G where G is the canonical c-space metric
+// sampled by Rust. Slopes, angles, and the U(c) = (kappa/(LAMBDA*S))*Q_z
+// potential-on-height relationship are all honest.
+//
+// Treadmill mode: ANISOTROPIC magnification. The horizontal axes (x, y)
+// are scaled by 1/rho0 so local terrain stays visually resolvable as the
+// rider descends into finer Mandelbrot scale. The vertical axis keeps
+// scale 1 — height is the pure relative log-distance, NEVER magnified.
+// The current rider point (x0, y0, sigma0) is the chart origin.
+//
+// These two helpers are the single source of truth for what "the
+// treadmill/physical chart" means in cockpit coordinates. Both are
+// exported so tests can prove their contract directly without depending
+// on Three.js objects or affine transforms.
+
+/**
+ * Physical chart Q_phys = S * (x, LAMBDA*sigma, -y) for an arbitrary
+ * (x, y, sigma) point (defaults to the snapshot's current c). The single
+ * authority for "what scene position corresponds to a c-space point in
+ * physical mode".
+ */
+export function physicalChart(
+  snap: DebugSnapshot,
+  x: number = snap.physics.c[0],
+  y: number = snap.physics.c[1],
+  sigma: number = snap.physics.sigma
+): { x: number; y: number; z: number } {
+  return {
+    x: x * SCENE_SCALE,
+    y: SCENE_SCALE * LAMBDA * sigma,
+    z: -y * SCENE_SCALE,
+  };
+}
+
+/**
+ * Treadmill chart Q_tread = S * ((x-x0)/rho0, LAMBDA*(sigma-sigma0), -(y-y0)/rho0)
+ * for an arbitrary (x, y, sigma) point (defaults to the snapshot's
+ * current c). The single authority for "what scene position corresponds
+ * to a c-space point in treadmill mode".
+ *
+ * Note: the Y mapping is LAMBDA*(sigma-sigma0), NOT surfaceY(sigma) -
+ * surfaceY(sigma0). The asinh compression in surfaceY is a presentation
+ * curve for the COSMETIC physical embedding; the treadmill chart is
+ * supposed to be a mathematically meaningful local-scale chart, so its
+ * Y axis is the pure linear relative-log-distance.
+ */
+export function treadmillChart(
+  snap: DebugSnapshot,
+  x: number = snap.physics.c[0],
+  y: number = snap.physics.c[1],
+  sigma: number = snap.physics.sigma
+): { x: number; y: number; z: number } {
+  const [cx, cy] = snap.physics.c;
+  const sigma0 = snap.physics.sigma;
+  const rho0 = Math.max(snap.physics.rho, 1e-9);
+  return {
+    x: ((x - cx) / rho0) * SCENE_SCALE,
+    y: SCENE_SCALE * LAMBDA * (sigma - sigma0),
+    z: -((y - cy) / rho0) * SCENE_SCALE,
+  };
+}
+
+/**
+ * Pitch (radians) under the physical chart. The Y rate of change of c
+ * is LAMBDA * sigmaDot (in scene units / second), the planar rate is
+ * planarSpeed (also in scene units / second after the SCENE_SCALE cancels
+ * between numerator and denominator of the slope ratio). So the angle
+ * is   atan2(LAMBDA * sigmaDot, planarSpeed).
+ * Surface compression (Z_SCALE / asinh) does not apply here because
+ * physical mode is metric-exact.
+ */
+export function physicalPitch(snap: DebugSnapshot): number {
+  const planarSpeed = Math.hypot(snap.physics.velocity[0], snap.physics.velocity[1]);
+  return Math.atan2(
+    LAMBDA * snap.physics.sigmaDot,
+    Math.max(planarSpeed, 1e-9)
+  );
+}
+
+/**
+ * Pitch (radians) under the treadmill chart. Horizontal magnification
+ * 1/rho0 makes the planar speed appear rho0 times larger in scene units,
+ * while vertical remains scale-1 — so the scene slope ratio is
+ *   LAMBDA * sigmaDot / (planarSpeed / rho0)
+ * = LAMBDA * rho0 * sigmaDot / planarSpeed,
+ * giving angle = atan2(LAMBDA * rho0 * sigmaDot, planarSpeed).
+ */
+export function treadmillPitch(snap: DebugSnapshot): number {
+  const planarSpeed = Math.hypot(snap.physics.velocity[0], snap.physics.velocity[1]);
+  const rho0 = Math.max(snap.physics.rho, 1e-9);
+  return Math.atan2(
+    LAMBDA * rho0 * snap.physics.sigmaDot,
+    Math.max(planarSpeed, 1e-9)
+  );
+}
+
 /**
  * Build (or rebuild) the terrain mesh from a Rust-sampled TerrainPatch.
- * The rendered surface is Q(c) = (x, y, surfaceY(lambda*sigma(c))) — the
- * canonical embedding with the asinh vertical compression (see surfaceY);
- * no invented heightfield (issue #111 mathematical basis).
+ *
+ * - mode = 'physical' (default): y = surfaceY(sigma) — the asinh-compressed
+ *   physical embedding. The rendered surface IS Q(c) = (x, y,
+ *   surfaceY(sigma(c))) — the canonical embedding with cosmetic
+ *   compression; no invented heightfield (issue #111 mathematical basis).
+ *
+ * - mode = 'treadmill': y = SCENE_SCALE * LAMBDA * sigma — the exact
+ *   linear chart. Combined with `treadmillTransform`'s recenter, the
+ *   rider's own vertex lands at y = 0 and nearby terrain sits at
+ *   SCENE_SCALE * LAMBDA * (sigma - sigma0). No surfaceY() compression
+ *   is applied: the treadmill chart is meant to be a mathematically
+ *   meaningful local scale chart, not the cosmetic physical embedding.
+ *
+ * The patch input (x, y, signed, realm) is identical in both modes —
+ * only the Y mapping differs. Both modes go through this one function
+ * so there is no parallel mesh builder.
  */
-export function buildTerrainMesh(patch: TerrainPatch): THREE.Mesh {
+export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'physical'): THREE.Mesh {
   const n = patch.n;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(n * n * 3);
@@ -67,7 +218,8 @@ export function buildTerrainMesh(patch: TerrainPatch): THREE.Mesh {
     const y = patch.positions[i * 3 + 1];
     const z = patch.positions[i * 3 + 2];
     positions[i * 3] = x * SCENE_SCALE;
-    positions[i * 3 + 1] = surfaceY(z);
+    positions[i * 3 + 1] =
+      mode === 'treadmill' ? SCENE_SCALE * LAMBDA * z : surfaceY(z);
     positions[i * 3 + 2] = -y * SCENE_SCALE;
 
     // Realm coloring from the authoritative signed distance: inside = deep
@@ -333,14 +485,39 @@ export function placeRider(
   }
 }
 
-/** Build the trail line from a recorded trajectory up to `upTo` (inclusive). */
-export function buildTrail(trajectory: CockpitTrajectory, upTo: number): THREE.Line {
+/**
+ * Build the trail line from a recorded trajectory up to `upTo` (inclusive).
+ *
+ * - mode = 'physical' (default): y = surfaceY(sigma) + 0.05 (small lift
+ *   so the trail draws just above the surface) — matches the cosmetic
+ *   compressed physical embedding.
+ *
+ * - mode = 'treadmill': y = SCENE_SCALE * LAMBDA * sigma — the exact
+ *   linear chart. Combined with `treadmillTrailTransform`'s recenter, the
+ *   trail sits in the same chart as the treadmill terrain mesh so the
+ *   trail stays glued to the surface in scale-stabilized mode.
+ *
+ * Building the trail in chart coordinates per-mode (rather than building
+ * it once in physical coordinates and trying to compensate via a Y
+ * affine transform) is the cleanest way to honor the "exact relative
+ * log-distance" Y contract without leaking the asinh compression into
+ * treadmill mode.
+ */
+export function buildTrail(
+  trajectory: CockpitTrajectory,
+  upTo: number,
+  mode: CameraMode = 'physical'
+): THREE.Line {
   const count = Math.min(upTo + 1, trajectory.snapshots.length);
   const points: THREE.Vector3[] = [];
   for (let i = 0; i < count; i++) {
     const [cx, cy] = trajectory.snapshots[i].physics.c;
     const z = trajectory.snapshots[i].physics.sigma;
-    points.push(new THREE.Vector3(cx * SCENE_SCALE, surfaceY(z) + 0.05, -cy * SCENE_SCALE));
+    const yCoord =
+      mode === 'treadmill'
+        ? SCENE_SCALE * LAMBDA * z
+        : surfaceY(z) + 0.05;
+    points.push(new THREE.Vector3(cx * SCENE_SCALE, yCoord, -cy * SCENE_SCALE));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
   const material = new THREE.LineBasicMaterial({ color: 0x66ff99 });
@@ -350,6 +527,21 @@ export function buildTrail(trajectory: CockpitTrajectory, upTo: number): THREE.L
 /**
  * Apply the treadmill chart transform to the trail (same chart as the
  * terrain so the trail stays glued to the surface in treadmill mode).
+ *
+ * The trail's Y coordinate was built in `buildTrail` with mode='treadmill'
+ * as `SCENE_SCALE * LAMBDA * sigma`. To make the chart contract explicit:
+ * the post-transform vertex Y is
+ *   (SCENE_SCALE * LAMBDA * sigma) * scale.y + position.y
+ * = SCENE_SCALE * LAMBDA * (sigma - sigma0)
+ * which is exactly the chart Y (see `treadmillChart`).
+ *
+ * Previous fix (c3b6456) recentered with `position.y = -surfaceY(sigma)`,
+ * which produced Y = surfaceY(sigma) - surfaceY(sigma0) + tiny — the
+ * nonlinear asinh compression leaked into the treadmill chart, making it
+ * a cosmetic view rather than a mathematically meaningful local scale.
+ * Now `position.y = -SCENE_SCALE * LAMBDA * sigma` (the rider's own value
+ * in the LINEAR chart), and the trail's pre-built Y already matches the
+ * chart's linear Y.
  */
 export function treadmillTrailTransform(trail: THREE.Line, snap: DebugSnapshot): void {
   const [cx, cy] = snap.physics.c;
@@ -358,13 +550,10 @@ export function treadmillTrailTransform(trail: THREE.Line, snap: DebugSnapshot):
   const magnify = 1.0 / rho0;
   trail.position.x = -cx * SCENE_SCALE * magnify;
   trail.position.z = cy * SCENE_SCALE * magnify;
-  // Vertical recentering subtracts the rider's CURRENT rendered surface
-  // height (surfaceY(sigma)) so terrain immediately beneath the
-  // origin-pinned rider stays at Y=0. The vertical axis is NOT magnified:
-  // the treadmill chart is anisotropic (1/rho0 on X/Z, 1 on Y). The old
-  // setScalar(magnify) also scaled Y, leaving a (1/rho0 - 1)*h0 height
-  // residue that launched the rider ~77k scene units high at the crest.
-  trail.position.y = -surfaceY(sigma);
+  // Vertical recentering subtracts the rider's CURRENT chart Y so the
+  // trail at the rider's own sigma sits at Y=0 — the LINEAR chart Y,
+  // NOT surfaceY(sigma) (the cosmetic physical-mode compression).
+  trail.position.y = -SCENE_SCALE * LAMBDA * sigma;
   trail.scale.set(magnify, 1.0, magnify);
 }
 
@@ -420,19 +609,26 @@ export function updateCamera(
 
 /**
  * Scale-stabilized treadmill chart (issue #111):
- *   X = (x - x0) / rho0,  Z = lambda * (sigma(c) - sigma(c0))
- * implemented as a mesh transform: translate the patch by -c0 horizontally
- * and by -lambda*sigma0 vertically, then scale the patch by 1/rho0 so local
- * terrain stays visually resolvable as the rider descends into finer
- * Mandelbrot scale. Debug presentation ONLY — this module has no path back
- * into physics (the recorder never reads scene objects).
+ *   X = (x - x0) / rho0,
+ *   Y = LAMBDA * (sigma(c) - sigma(c0)),
+ *   Z = -(y - y0) / rho0
  *
- * The magnification is ANISOTROPIC: 1/rho0 on the planar X/Z axes only. The
- * vertical axis keeps scale 1 — the intended chart is
- *   X = (x-x0)/rho0,  Y = lambda*(sigma-sigma0),  Z = -(y-y0)/rho0,
- * so height is a pure relative log-distance, never magnified. The old
- * setScalar(1/rho0) also scaled Y, leaving a (1/rho0 - 1)*h0 height residue
- * that launched the rider ~77k scene units high at the crest.
+ * Implemented as a Three.js mesh transform on a `buildTerrainMesh(patch,
+ * 'treadmill')` mesh:
+ *   - Translate the patch horizontally by -c0 (scene units) and
+ *     vertically by -SCENE_SCALE * LAMBDA * sigma0 (the rider's own
+ *     value in the LINEAR chart Y, NOT surfaceY(sigma0)).
+ *   - Scale the patch by 1/rho0 on X/Z only (anisotropic).
+ *
+ * With the terrain mesh built using `SCENE_SCALE * LAMBDA * sigma` for Y
+ * (see `buildTerrainMesh` with mode='treadmill'), the post-transform
+ * vertex Y is `SCENE_SCALE * LAMBDA * (sigma - sigma0)` — exactly the
+ * intended chart Y. There is NO surfaceY() compression anywhere in the
+ * treadmill chart path: the cosmetic asinh curve is reserved for
+ * physical mode.
+ *
+ * Debug presentation ONLY — this module has no path back into physics
+ * (the recorder never reads scene objects).
  */
 export function treadmillTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void {
   const [cx, cy] = snap.physics.c;
@@ -441,10 +637,12 @@ export function treadmillTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void 
   const magnify = 1.0 / rho0;
   mesh.position.x = -cx * SCENE_SCALE * magnify;
   mesh.position.z = cy * SCENE_SCALE * magnify;
-  // Vertical recentering subtracts the rider's CURRENT rendered surface
-  // height so terrain immediately beneath the origin-pinned rider stays at
-  // Y=0 — NOT multiplied by 1/rho0 (that is the bug this corrects).
-  mesh.position.y = -surfaceY(sigma);
+  // Vertical recentering subtracts the rider's CURRENT LINEAR chart Y
+  // (SCENE_SCALE * LAMBDA * sigma), NOT surfaceY(sigma). The terrain
+  // mesh built in mode='treadmill' already uses SCENE_SCALE * LAMBDA *
+  // sigma for Y, so after this recenter a vertex sits at exactly
+  // SCENE_SCALE * LAMBDA * (sigma - sigma0).
+  mesh.position.y = -SCENE_SCALE * LAMBDA * sigma;
   mesh.scale.set(magnify, 1.0, magnify);
 }
 
