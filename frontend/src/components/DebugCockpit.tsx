@@ -210,6 +210,8 @@ export function DebugCockpit(): JSX.Element {
     lastMetricSpeed?: number;
     /** Half-extent of the currently built terrain patch (LOD tracking). */
     lodHalf?: number;
+    /** Camera mode the current terrain mesh was built for. */
+    terrainMode?: CameraMode;
   }>({});
 
   // Load wasm + record all variant trajectories once.
@@ -324,7 +326,8 @@ export function DebugCockpit(): JSX.Element {
       refs.lodHalf === undefined || Math.abs(refs.lodHalf - lod.half) > lod.half * 0.35;
     const moved =
       !current || Math.hypot(cx - current[0], cy - current[1]) > lod.half * 0.6;
-    if (!moved && !lodChanged && refs.terrain && refs.terrainPatch) {
+    const modeChanged = refs.terrainMode !== cameraMode;
+    if (!moved && !lodChanged && !modeChanged && refs.terrain && refs.terrainPatch) {
       applyOverlays(refs.terrain, refs.terrainPatch, overlays);
       return;
     }
@@ -335,10 +338,10 @@ export function DebugCockpit(): JSX.Element {
     const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
     // Build the terrain mesh in CHART COORDINATES for the active camera
     // mode so the Y axis is the right surface from the start: physical
-    // mode uses the asinh-compressed surfaceY(); treadmill mode uses
-    // the exact linear SCENE_SCALE * LAMBDA * sigma chart Y. The mesh
-    // rebuild hook also fires on cameraMode change, so toggling the
-    // mode re-emits the geometry with the correct Y mapping.
+    // mode uses the asinh-compressed surfaceY(); treadmill mode uses the
+    // exact linear embedding-height chart Y. modeChanged above guarantees
+    // a mode toggle re-emits the geometry instead of reusing a mesh built
+    // for the other mode's Y mapping.
     const mesh = buildTerrainMesh(patch, cameraMode);
     applyOverlays(mesh, patch, overlays);
     refs.scene.add(mesh);
@@ -346,6 +349,7 @@ export function DebugCockpit(): JSX.Element {
     refs.terrainPatch = patch;
     refs.terrainCenter = [cx, cy];
     refs.lodHalf = lod.half;
+    refs.terrainMode = cameraMode;
     // Render distance + fog wall track the patch (and the treadmill chart's
     // 1/rho magnification) so the mesh edge always hides inside the fog
     // while the rider stays fog-free — fidelity balanced with performance.
@@ -384,8 +388,8 @@ export function DebugCockpit(): JSX.Element {
     };
     // Build the trail in CHART COORDINATES for the active camera mode:
     // physical mode uses surfaceY(); treadmill mode uses the linear
-    // SCENE_SCALE * LAMBDA * sigma chart. The trail is rebuilt every
-    // frame, so the camera mode is always reflected.
+    // embedding-height chart. The trail is rebuilt every frame, so the
+    // camera mode is always reflected.
     refs.trail = buildTrail(windowTraj, windowTraj.snapshots.length - 1, cameraMode);
     refs.scene.add(refs.trail);
 

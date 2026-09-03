@@ -1,32 +1,31 @@
 /**
- * Tests for the cockpit's exact coordinate charts (issue #111 review).
+ * Tests for the cockpit's treadmill chart and its independence from the
+ * physical presentation (issue #111 review, point 2).
  *
- * The critique (2026-09-03) established that the rendered charts must be
- * LITERAL:
+ * The Rust seam embeds terrain as Q(c) = (x, y, lambda*sigma(c));
+ * TerrainPatch.positions arrive with z ALREADY multiplied by lambda
+ * (runtime-core debug.rs), and DebugSnapshot.physics.sigma is raw sigma
+ * (equal to the embedding height under the controller-default lambda^2 = 1
+ * config).
  *
- *   Q_physical  = S * (x, lambda*sigma, -y)          (one uniform S, all axes)
- *   Q_treadmill = S * ((x-x0)/rho0, lambda*(sigma-sigma0), -(y-y0)/rho0)
+ * Physical mode is the cosmetic compressed embedding: y = surfaceY(z)
+ * (asinh), unchanged by the treadmill work. Treadmill mode is the exact
+ * scale-stabilized chart around the rider's current point:
  *
- * Physical mode restores metric truth: its induced Euclidean metric is
- * S^2*G, so slopes/angles are honest, and height relates to potential by
- * U = (kappa/lambda) * Q_z — the skateboard-terrain metaphor is a surface
- * under uniform gravity. Treadmill mode is scale-stabilized: horizontal
- * magnification 1/rho0 with UNCHANGED vertical scale, so the rider sits at
- * the chart origin with zero height residue. The asinh surfaceY() is
- * retired from geometry (kept only as a labeled "compressed" presentation
- * option concept, not implemented here).
+ *   X = (x - x0) / rho0
+ *   Y = (lambda*sigma)(c) - (lambda*sigma)(c0)   [linear, no asinh]
+ *   Z = -(y - y0) / rho0
+ *
+ * Horizontal magnification 1/rho0; vertical scale stays 1; the rider sits
+ * at the chart origin with zero height residue.
  */
 
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
   SCENE_SCALE,
-  LAMBDA,
   surfaceY,
-  physicalChart,
   treadmillChart,
-  physicalPitch,
-  treadmillPitch,
   buildTerrainMesh,
   treadmillTransform,
   treadmillTrailTransform,
@@ -34,10 +33,6 @@ import {
   physicalTrailTransform,
 } from '../cockpitScene';
 import type { DebugSnapshot, TerrainPatch } from '../debugCockpit';
-import mockModule from './orbitSynthesizer.mock';
-import { setWasmModuleForTesting, initOrbitSynth } from '../orbitSynthesizer';
-import { baselineVariants } from '../shoreCrossingVariants';
-import { CockpitRecorder } from '../debugCockpit';
 
 /** Tiny stub mesh used for transform-only tests (geometry is irrelevant). */
 function makeMesh(): THREE.Mesh {
@@ -51,8 +46,11 @@ function makeMesh(): THREE.Mesh {
 
 /**
  * Tiny TerrainPatch stub used for buildTerrainMesh Y-coordinate tests.
- * `positions` is a flat [x, y, sigma, x, y, sigma, ...] array; only the
- * sigma (z) slot is read for the Y coordinate in treadmill mode.
+ * `positions` is a flat [x, y, lambda*sigma, ...] array — the z slot is
+ * the RUST-EMBEDDED height (already lambda-multiplied), matching the
+ * runtime-core TerrainPatch contract. Only that slot is read for the Y
+ * coordinate in treadmill mode; a stub that documented it as raw sigma
+ * would be unable to catch a double-lambda bug.
  */
 function makePatch(positions: number[]): TerrainPatch {
   return {
@@ -107,42 +105,7 @@ function snapFixture(overrides: {
   };
 }
 
-describe('exact physical chart Q_phys = S*(x, lambda*sigma, -y)', () => {
-  it('maps c to horizontal position with the uniform scene scale', () => {
-    const s = snapFixture({ c: [0.3, 0.1], sigma: -1.0, rho: 0.126 });
-    const p = physicalChart(s);
-    expect(p.x).toBeCloseTo(0.3 * SCENE_SCALE, 9);
-    expect(p.z).toBeCloseTo(-0.1 * SCENE_SCALE, 9);
-  });
-
-  it('vertical height is lambda*sigma with NO asinh compression', () => {
-    // lambda = sqrt(lambda_sq) = 1 for the controller-default config, so
-    // height must EQUAL sigma * S — metric truth, not a compressed view.
-    const s = snapFixture({ c: [0.3, 0.0], sigma: 5.0, rho: 0.001 });
-    const p = physicalChart(s);
-    expect(p.y).toBeCloseTo(5.0 * SCENE_SCALE, 9);
-  });
-
-  it('height is an affine function of sigma (metric-exactness property)', () => {
-    // U = kappa*sigma, Q_z = S*lambda*sigma => U = (kappa/(lambda*S)) * Q_z.
-    // Equivalently Q_z(sigma)/Q_z(sigma') must equal sigma/sigma'.
-    const a = snapFixture({ c: [0.3, 0.0], sigma: 2.0, rho: 0.025 });
-    const b = snapFixture({ c: [0.3, 0.0], sigma: 6.0, rho: 0.0016 });
-    const pa = physicalChart(a);
-    const pb = physicalChart(b);
-    // asinh would violate this ratio (asinh(2/1.5)/asinh(6/1.5) != 1/3).
-    expect(pa.y / pb.y).toBeCloseTo(2.0 / 6.0, 9);
-  });
-
-  it('preserves the scene handedness x -> +X, y -> -Z', () => {
-    const s = snapFixture({ c: [0.0, 0.5], sigma: 0.0, rho: 0.5 });
-    const p = physicalChart(s);
-    expect(p.x).toBeCloseTo(0, 9);
-    expect(p.z).toBeLessThan(0);
-  });
-});
-
-describe('exact treadmill chart Q_tread = S*((x-x0)/rho0, lambda*(sigma-sigma0), -(y-y0)/rho0)', () => {
+describe('exact treadmill chart Q_tread = S*((x-x0)/rho0, z(c)-z(c0), -(y-y0)/rho0)', () => {
   it('pins the rider at the chart origin with ZERO height residue', () => {
     // The old bug: uniform 1/rho scale + Y-translate left residue
     // (1/rho0 - 1) * h0, launching the rider 77k scene units high at the
@@ -155,25 +118,26 @@ describe('exact treadmill chart Q_tread = S*((x-x0)/rho0, lambda*(sigma-sigma0),
     expect(p.z).toBeCloseTo(0, 9);
   });
 
-  it('neighboring terrain keeps the vertical scale (lambda unchanged)', () => {
-    // A point 0.001 c-units away with sigma LOWER by log2(rho0/rho) maps to
-    // horizontal offset 0.001/rho0 and vertical offset lambda*(sigma-sigma0)
+  it('neighboring terrain keeps the vertical scale (no 1/rho0 magnification)', () => {
+    // A point 0.001 c-units away with embedding height z LOWER by 1 maps to
+    // horizontal offset 0.001/rho0 and vertical offset (z - z0)
     // in scene units * S — NOT magnified by 1/rho0 vertically.
     const rho0 = 1e-3;
     const s0 = snapFixture({ c: [0.25, 0.0], sigma: 6.643856, rho: rho0 });
-    // Neighbor at the same sigma: vertical offset must be exactly 0.
+    // Neighbor at the same embedding height: vertical offset must be 0.
     const neighborSameHeight = treadmillChart(s0, 0.251, 0.0, 6.643856);
     expect(neighborSameHeight.y).toBeCloseTo(0, 9);
     expect(neighborSameHeight.x).toBeCloseTo(0.001 / rho0 * SCENE_SCALE, 9);
-    // A neighbor one octave deeper in scale (sigma+1) sits exactly
-    // lambda*S scene units higher — vertical is never magnified.
+    // A neighbor with embedding height one unit higher sits exactly
+    // S scene units higher — vertical is never magnified.
     const neighborDeeper = treadmillChart(s0, 0.251, 0.0, 6.643856 + 1.0);
     expect(neighborDeeper.y).toBeCloseTo(1.0 * SCENE_SCALE, 9);
   });
 
-  it('uses the identity sigma - sigma0 = log2(rho0/rho)', () => {
-    // For a point whose rho doubles relative to rho0, the vertical offset
-    // is lambda * log2(1/2) = -lambda scene units (* S).
+  it('vertical offset is the relative embedding height (log2 identity under the default config)', () => {
+    // Under the controller-default lambda^2 = 1, the embedding height of a
+    // point whose rho doubles is log2(1/2) = -1 below the rider's — so the
+    // vertical offset is -1 scene units (* S).
     const rho0 = 2e-3;
     const s0 = snapFixture({ c: [0.25, 0.0], sigma: 5.643856, rho: rho0 });
     const neighbor = treadmillChart(s0, 0.252, 0.0, 5.643856 - 1.0);
@@ -187,41 +151,6 @@ describe('exact treadmill chart Q_tread = S*((x-x0)/rho0, lambda*(sigma-sigma0),
     expect(p.x).toBeCloseTo((0.01 / rho0) * SCENE_SCALE, 9);
     expect(p.z).toBeCloseTo((-0.1 / rho0) * SCENE_SCALE, 9);
     expect(p.y).toBeCloseTo(0, 9);
-  });
-});
-
-describe('rider pitch per camera chart', () => {
-  it('physical pitch is atan2(lambda*sigmaDot, planarSpeed)', () => {
-    // lambda=1: pitch = atan2(sigmaDot, |v|).
-    const s = snapFixture({ c: [0.2, 0.0], sigma: 2.0, rho: 0.025, sigmaDot: 0.5, velocity: [1.0, 0.0] });
-    expect(physicalPitch(s)).toBeCloseTo(Math.atan2(0.5, 1.0), 9);
-  });
-
-  it('treadmill pitch gains the rho0 factor: atan2(lambda*rho0*sigmaDot, |v|)', () => {
-    // Without the rho0 factor the rider looks near-vertical near the Shore
-    // even though the scale-normalized chart stays legible.
-    const s = snapFixture({ c: [0.25, 0.0], sigma: 9.9, rho: 1e-4, sigmaDot: 200.0, velocity: [0.5, 0.0] });
-    expect(treadmillPitch(s)).toBeCloseTo(Math.atan2(1.0 * 1e-4 * 200.0, 0.5), 9);
-  });
-
-  it('both pitches are zero when sigmaDot is zero', () => {
-    const s = snapFixture({ c: [0.2, 0.0], sigma: 2.0, rho: 0.025, sigmaDot: 0, velocity: [1, 0] });
-    expect(physicalPitch(s)).toBeCloseTo(0, 12);
-    expect(treadmillPitch(s)).toBeCloseTo(0, 12);
-  });
-
-  it('pitch on a RECORDED trajectory is finite at every frame (both charts)', () => {
-    setWasmModuleForTesting(mockModule as never);
-    return initOrbitSynth().then(() => {
-      const recorder = new CockpitRecorder();
-      for (const variant of [...baselineVariants(), ...[4, 5, 6, 7].flatMap((i) => [baselineVariants()[i % baselineVariants().length]])]) {
-        const trajectory = recorder.recordVariant(variant);
-        for (const snap of trajectory.snapshots) {
-          expect(Number.isFinite(physicalPitch(snap))).toBe(true);
-          expect(Number.isFinite(treadmillPitch(snap))).toBe(true);
-        }
-      }
-    });
   });
 });
 
@@ -262,13 +191,15 @@ describe('treadmill mesh + trail transforms (anisotropic 1/rho0)', () => {
     const s = snapFixture({ c: [0.25, 0.0], sigma: 9.96578, rho: 1e-4 });
     const mesh = makeMesh();
     // A vertex sitting exactly at the rider's own LINEAR chart point
-    // (cx*SCENE_SCALE, SCENE_SCALE*LAMBDA*sigma, -cy*SCENE_SCALE) must
+    // (cx*SCENE_SCALE, SCENE_SCALE*z(c0), -cy*SCENE_SCALE) must
     // map to (0,0,0). This is the identity term of the chart transform;
     // note the Y coordinate uses the LINEAR chart, NOT surfaceY(sigma)
     // — surfaceY carries the cosmetic asinh compression reserved for
     // physical mode.
     const gx = 0.25 * SCENE_SCALE;
-    const gy = SCENE_SCALE * LAMBDA * 9.96578;
+    // The rider's own embedded height z(c0) = lambda*sigma — here given
+    // directly as the embedded quantity.
+    const gy = SCENE_SCALE * 9.96578;
     const gz = 0.0;
     mesh.geometry.setAttribute(
       'position',
@@ -292,12 +223,12 @@ describe('treadmill mesh + trail transforms (anisotropic 1/rho0)', () => {
     const mesh = makeMesh();
     treadmillTransform(mesh, s);
     // Linear chart Y of the rider, NOT surfaceY(sigma) (the cosmetic
-    // physical-mode compression). NOT -SCENE_SCALE * LAMBDA * sigma / rho0
+    // physical-mode compression). NOT -SCENE_SCALE * sigma / rho0
     // either (the old magnified-residue bug).
-    expect(mesh.position.y).toBeCloseTo(-SCENE_SCALE * LAMBDA * 9.96578, 9);
+    expect(mesh.position.y).toBeCloseTo(-SCENE_SCALE * 9.96578, 9);
     expect(mesh.position.y).not.toBeCloseTo(-surfaceY(9.96578), 6);
     expect(mesh.position.y).not.toBeCloseTo(
-      -SCENE_SCALE * LAMBDA * 9.96578 / 1e-4,
+      -SCENE_SCALE * 9.96578 / 1e-4,
       6
     );
   });
@@ -332,11 +263,11 @@ describe('treadmill mesh + trail transforms (anisotropic 1/rho0)', () => {
     );
     treadmillTrailTransform(trail, s);
     // Linear chart Y of the rider — NOT surfaceY(sigma), and NOT the
-    // magnified -SCENE_SCALE * LAMBDA * sigma / rho0 residue.
-    expect(trail.position.y).toBeCloseTo(-SCENE_SCALE * LAMBDA * 9.96578, 9);
+    // magnified -SCENE_SCALE * sigma / rho0 residue.
+    expect(trail.position.y).toBeCloseTo(-SCENE_SCALE * 9.96578, 9);
     expect(trail.position.y).not.toBeCloseTo(-surfaceY(9.96578), 6);
     expect(trail.position.y).not.toBeCloseTo(
-      -SCENE_SCALE * LAMBDA * 9.96578 / 1e-4,
+      -SCENE_SCALE * 9.96578 / 1e-4,
       6
     );
   });
@@ -367,17 +298,18 @@ describe('treadmill mesh + trail transforms (anisotropic 1/rho0)', () => {
 
 /**
  * Contract guard: the treadmill chart's vertical coordinate is the pure
- * LINEAR relative log-distance SCENE_SCALE * LAMBDA * (sigma - sigma0),
- * independent of the cosmetic `surfaceY()` asinh compression. The chart
- * is supposed to be a mathematically meaningful local-scale chart, not
- * a presentation curve of the compressed physical embedding.
+ * LINEAR relative embedding height SCENE_SCALE * (z - z0) — i.e.
+ * (lambda*sigma)(c) - (lambda*sigma)(c0) — independent of the cosmetic
+ * `surfaceY()` asinh compression. The chart is supposed to be a
+ * mathematically meaningful local-scale chart, not a presentation curve
+ * of the compressed physical embedding.
  *
  * Conversely, physical mode keeps its asinh-compressed surfaceY() Y
  * coordinate unchanged — the cosmetic compression is reserved for
  * physical mode by design.
  */
 describe('treadmill chart Y is independent of surfaceY() compression; physical mode unchanged', () => {
-  it('treadmill chart Y equals SCENE_SCALE * LAMBDA * (sigma - sigma0) regardless of surfaceY', () => {
+  it('treadmill chart Y equals SCENE_SCALE * (z - z0) regardless of surfaceY', () => {
     // Two snapshots at the same rider c, with very different sigma values
     // so the old asinh compression (surfaceY) would produce visibly
     // different RATIOS than the linear chart. The new chart must collapse
@@ -395,8 +327,8 @@ describe('treadmill chart Y is independent of surfaceY() compression; physical m
     // give a smaller response at sigma=5.0 than at sigma=-1.0.
     const pAd = treadmillChart(sA, 0.25, 0.0, sA.physics.sigma + 0.5);
     const pBd = treadmillChart(sB, 0.25, 0.0, sB.physics.sigma + 0.5);
-    expect(pAd.y).toBeCloseTo(0.5 * SCENE_SCALE * LAMBDA, 9);
-    expect(pBd.y).toBeCloseTo(0.5 * SCENE_SCALE * LAMBDA, 9);
+    expect(pAd.y).toBeCloseTo(0.5 * SCENE_SCALE, 9);
+    expect(pBd.y).toBeCloseTo(0.5 * SCENE_SCALE, 9);
     expect(pAd.y).toBeCloseTo(pBd.y, 9);
   });
 
@@ -407,7 +339,7 @@ describe('treadmill chart Y is independent of surfaceY() compression; physical m
     // any sigma where the asinh is nonlinear.
     const s = snapFixture({ c: [0.25, 0.0], sigma: 5.0, rho: 1e-3 });
     const neighbor = treadmillChart(s, 0.25, 0.0, s.physics.sigma + 1.0);
-    const chartY = SCENE_SCALE * LAMBDA * 1.0;
+    const chartY = SCENE_SCALE * 1.0;
     const oldCompressedY = surfaceY(s.physics.sigma + 1.0) - surfaceY(s.physics.sigma);
     // The two values must disagree at sigma=5.0 (well into the asinh
     // compression regime). If they happened to agree the chart would
@@ -416,17 +348,19 @@ describe('treadmill chart Y is independent of surfaceY() compression; physical m
     expect(Math.abs(neighbor.y - oldCompressedY)).toBeGreaterThan(0.1);
   });
 
-  it('buildTerrainMesh(mode=treadmill) sets vertex Y to SCENE_SCALE * LAMBDA * sigma', () => {
+  it('buildTerrainMesh(mode=treadmill) sets vertex Y to SCENE_SCALE * z (the embedded height)', () => {
     // Build a tiny fake patch and read the position attribute directly —
     // proves the mesh is built in LINEAR chart coordinates for treadmill
-    // mode, independent of surfaceY().
+    // mode, independent of surfaceY(). The z values in the fixture are
+    // Rust-embedded heights (lambda*sigma), passed through unchanged (up
+    // to the uniform scene scale).
     const mesh = buildTerrainMesh(
       makePatch([0.24, 0.01, -1.0, 0.26, -0.01, 5.0]),
       'treadmill'
     );
     const pos = mesh.geometry.getAttribute('position').array as Float32Array;
-    expect(pos[1]).toBeCloseTo(SCENE_SCALE * LAMBDA * -1.0, 9);
-    expect(pos[4]).toBeCloseTo(SCENE_SCALE * LAMBDA * 5.0, 9);
+    expect(pos[1]).toBeCloseTo(SCENE_SCALE * -1.0, 9);
+    expect(pos[4]).toBeCloseTo(SCENE_SCALE * 5.0, 9);
   });
 
   it('buildTerrainMesh(mode=physical) keeps vertex Y = surfaceY(sigma) (unchanged)', () => {
@@ -445,15 +379,15 @@ describe('treadmill chart Y is independent of surfaceY() compression; physical m
   });
 
   it('treadmillTransform mesh.position.y is the LINEAR chart Y, not surfaceY(sigma)', () => {
-    // A very large sigma would push surfaceY into deep asinh compression
-    // (sigma=10 -> surfaceY ~ 6.49, while SCENE_SCALE * LAMBDA * 10 =
-    // 100). If the chart recenter still followed surfaceY, the rider
-    // would sit at Y=-6.49 rather than Y=-100, breaking the chart Y
-    // contract. This test pins the difference.
+    // A very large height pushes surfaceY into deep asinh compression
+    // (z=10 -> surfaceY ~ 6.49, while SCENE_SCALE * z = 100). If the
+    // chart recenter still followed surfaceY, the rider would sit at
+    // Y=-6.49 rather than Y=-100, breaking the chart Y contract.
+    // This test pins the difference.
     const s = snapFixture({ c: [0.25, 0.0], sigma: 10.0, rho: 1e-5 });
     const mesh = makeMesh();
     treadmillTransform(mesh, s);
-    expect(mesh.position.y).toBeCloseTo(-SCENE_SCALE * LAMBDA * 10.0, 9);
+    expect(mesh.position.y).toBeCloseTo(-SCENE_SCALE * 10.0, 9);
     expect(Math.abs(mesh.position.y - (-surfaceY(10.0)))).toBeGreaterThan(1.0);
   });
 
