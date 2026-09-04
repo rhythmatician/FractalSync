@@ -46,8 +46,10 @@ import {
   updateRiderAnimation,
   treadmillTransform,
   physicalTransform,
+  scaleFollowTransform,
   treadmillTrailTransform,
   physicalTrailTransform,
+  scaleFollowTrailTransform,
   buildSceneDressing,
   applyOverlays,
   applyRenderDistance,
@@ -187,7 +189,7 @@ export function DebugCockpit(): JSX.Element {
   const [selected, setSelected] = useState(4);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('physical');
+  const [cameraMode, setCameraMode] = useState<CameraMode>('scale-follow');
   const [playerView, setPlayerView] = useState(false);
   const [overlays, setOverlays] = useState<TerrainOverlays>(DEFAULT_OVERLAYS);
   const [pyramidReady, setPyramidReady] = useState(false);
@@ -399,7 +401,15 @@ export function DebugCockpit(): JSX.Element {
       if (refs.terrain) treadmillTransform(refs.terrain, frame);
       treadmillTrailTransform(refs.trail, frame);
       refs.rider.position.set(0, 0, 0);
+    } else if (cameraMode === 'scale-follow') {
+      // Scale-follow: horizontal recentering + 1/rho0 magnification on
+      // terrain and trail (they stay registered), physical vertical, rider
+      // at X/Z origin.
+      if (refs.terrain) scaleFollowTransform(refs.terrain, frame);
+      scaleFollowTrailTransform(refs.trail, frame);
+      refs.rider.position.set(0, heightAt(frame.physics.c[0], frame.physics.c[1]), 0);
     } else {
+      // Physical: no transforms, rider follows c directly.
       if (refs.terrain) physicalTransform(refs.terrain);
       physicalTrailTransform(refs.trail);
     }
@@ -646,10 +656,19 @@ export function DebugCockpit(): JSX.Element {
         {/* Camera + Player View controls */}
         <div style={{ position: 'absolute', top: 10, right: 12, display: 'flex', gap: 8 }}>
           <button
-            onClick={() => setCameraMode((m) => (m === 'physical' ? 'treadmill' : 'physical'))}
+            onClick={() =>
+              setCameraMode((m) =>
+                m === 'physical' ? 'scale-follow' : m === 'scale-follow' ? 'treadmill' : 'physical'
+              )
+            }
             style={{ background: '#20203a', color: '#dde', border: '1px solid #2c2c48', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}
           >
-            cam: {cameraMode === 'physical' ? 'PHYSICAL (x,y,λσ)' : 'TREADMILL (debug chart)'}
+            cam:{' '}
+            {cameraMode === 'physical'
+              ? 'PHYSICAL (x,y,λσ)'
+              : cameraMode === 'scale-follow'
+                ? 'SCALE-FOLLOW (1/ρ X/Z)'
+                : 'TREADMILL (debug chart)'}
           </button>
           <button
             onClick={() => setPlayerView((p) => !p)}

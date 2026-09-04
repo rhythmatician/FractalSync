@@ -11,7 +11,9 @@
  * - Rider: low-poly board + capsule, heading/pitch from authoritative
  *   c, velocity, and embedding geometry.
  * - Trail: the recorded c(t) polyline lifted onto the surface.
- * - Camera modes: physical embedding and scale-stabilized treadmill.
+ * - Camera modes: physical embedding, scale-follow (physical vertical +
+ *   1/rho0 horizontal ruler — the controlled experiment), and the
+ *   scale-stabilized treadmill chart.
  */
 
 import * as THREE from 'three';
@@ -19,16 +21,39 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from './debugCockpit';
 
 /** Camera presentation modes (issue #111). */
-export type CameraMode = 'physical' | 'treadmill';
+export type CameraMode = 'physical' | 'scale-follow' | 'treadmill';
 
 /**
- * Terrain-mesh build mode: 'physical' renders y = surfaceY(z) (the
- * asinh-compressed physical embedding); 'treadmill' renders y =
+ * Terrain-mesh build mode: 'physical' and 'scale-follow' render y =
+ * surfaceY(z) (the asinh-compressed physical embedding) — scale-follow
+ * deliberately keeps the physical vertical presentation and only changes
+ * the horizontal ruler at presentation time; 'treadmill' renders y =
  * SCENE_SCALE * z so the chart Y is the exact relative embedding height,
- * with NO nonlinear compression. The two modes share the same Rust patch
+ * with NO nonlinear compression. All modes share the same Rust patch
  * input — only the Y mapping differs.
  */
 export type TerrainMeshMode = CameraMode;
+
+/**
+ * True for modes whose TERRAIN MESH is built with the physical surfaceY()
+ * vertical mapping. The terrain builder and any code that needs to know
+ * "which vertical authority does this mode's mesh use" consults this —
+ * 'scale-follow' keeps the physical vertical and only magnifies X/Z.
+ */
+export function isPhysicalYMode(mode: CameraMode): boolean {
+  return mode !== 'treadmill';
+}
+
+/**
+ * Horizontal magnification factor for a presentation mode at a given rho.
+ * Single authority for "is this mode horizontally magnified, and by how
+ * much": scale-follow and treadmill both use the local Mandelbrot ruler
+ * 1/rho; physical uses none. Used by the transforms AND by the LOD/fog
+ * render-distance planner so the fog wall tracks the magnified footprint.
+ */
+export function horizontalMagnification(mode: CameraMode, rho: number): number {
+  return mode === 'physical' ? 1.0 : 1.0 / Math.max(rho, 1e-9);
+}
 
 /** Scene scale: world units per c-space unit (visual magnification).
  *  Exported so the LOD planner (debugCockpit) plans in the same units. */
@@ -123,10 +148,13 @@ export function treadmillChart(
 /**
  * Build (or rebuild) the terrain mesh from a Rust-sampled TerrainPatch.
  *
- * - mode = 'physical' (default): y = surfaceY(z) — the asinh-compressed
- *   physical embedding of the canonical Q(c) = (x, y, lambda*sigma(c))
- *   sampled by Rust; no invented heightfield (issue #111 mathematical
- *   basis).
+ * - mode = 'physical' or 'scale-follow': y = surfaceY(z) — the
+ *   asinh-compressed physical embedding of the canonical
+ *   Q(c) = (x, y, lambda*sigma(c)) sampled by Rust; no invented heightfield
+ *   (issue #111 mathematical basis). Scale-follow deliberately shares the
+ *   physical vertical: the experiment changes ONLY the horizontal ruler
+ *   (applied later by `scaleFollowTransform`), so the same mesh geometry
+ *   serves both modes.
  *
  * - mode = 'treadmill': y = SCENE_SCALE * z — the exact linear chart,
  *   consuming the patch's own embedding height z = lambda*sigma(c)
@@ -155,7 +183,7 @@ export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'p
     // Treadmill mode consumes z AS the embedding height — re-multiplying
     // by a TypeScript lambda constant would square it (hidden by lambda^2
     // = 1 in the controller-default config).
-    positions[i * 3 + 1] = mode === 'treadmill' ? SCENE_SCALE * z : surfaceY(z);
+    positions[i * 3 + 1] = isPhysicalYMode(mode) ? surfaceY(z) : SCENE_SCALE * z;
     positions[i * 3 + 2] = -y * SCENE_SCALE;
 
     // Realm coloring from the authoritative signed distance: inside = deep
@@ -424,9 +452,13 @@ export function placeRider(
 /**
  * Build the trail line from a recorded trajectory up to `upTo` (inclusive).
  *
- * - mode = 'physical' (default): y = surfaceY(sigma) + 0.05 (small lift
- *   so the trail draws just above the surface) — matches the cosmetic
- *   compressed physical embedding.
+ * - mode = 'physical' or 'scale-follow': y = surfaceY(sigma) + 0.05
+ *   (small lift so the trail draws just above the surface) — matches the
+ *   cosmetic compressed physical embedding. Scale-follow keeps this
+ *   physical vertical on purpose: the trail mesh is built exactly as in
+ *   physical mode, and `scaleFollowTrailTransform` applies only the
+ *   horizontal recenter + 1/rho0 magnification, so terrain and trail stay
+ *   registered.
  *
  * - mode = 'treadmill': y = SCENE_SCALE * sigma — the exact linear chart
  *   height (physics.sigma equals the Rust embedding height under the
@@ -451,10 +483,9 @@ export function buildTrail(
   for (let i = 0; i < count; i++) {
     const [cx, cy] = trajectory.snapshots[i].physics.c;
     const z = trajectory.snapshots[i].physics.sigma;
-    const yCoord =
-      mode === 'treadmill'
-        ? SCENE_SCALE * z
-        : surfaceY(z) + 0.05;
+    const yCoord = isPhysicalYMode(mode)
+      ? surfaceY(z) + 0.05
+      : SCENE_SCALE * z;
     points.push(new THREE.Vector3(cx * SCENE_SCALE, yCoord, -cy * SCENE_SCALE));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -501,10 +532,73 @@ export function physicalTrailTransform(trail: THREE.Line): void {
   trail.scale.setScalar(1.0);
 }
 
+// ---------------------------------------------------------------------------
+// Scale-follow presentation (horizontal-ruler experiment)
+// ---------------------------------------------------------------------------
+//
+// Controlled experiment (issue #111): the Shore reads as a near-vertical
+// wall in physical mode possibly NOT because heights are wrong but because
+// the FIXED horizontal ruler collapses valid terrain as rho(c) shrinks.
+// Scale-follow tests that hypothesis by changing ONLY the horizontal ruler:
+//
+//   X = SCENE_SCALE * (x - x0) / rho0
+//   Y = surfaceY(lambda*sigma(c))        <- EXACTLY physical mode's Y
+//   Z = -SCENE_SCALE * (y - y0) / rho0
+//
+// The mesh is built with the physical surfaceY() mapping (identical
+// geometry to physical mode) and only the PRESENTATION transform differs:
+// translate by -c0 and scale by 1/rho0 on X/Z. Y scale stays exactly 1 —
+// no vertical recentering, no asinh changes. Unlike treadmill, there is
+// no relative-height chart; the rider's height comes from the same
+// surfaceY() the rider stands on in physical mode.
+//
+// Debug presentation ONLY — no path back into physics.
+
+/**
+ * Apply the scale-follow horizontal transform to a terrain mesh whose
+ * geometry was built in physical coordinates (same mesh `buildTerrainMesh`
+ * produces for physical mode).
+ *
+ * Post-transform vertex position for the patch point at c = (x, y):
+ *   X = SCENE_SCALE * (x - cx) / rho0
+ *   Y = surfaceY(z)              (mesh Y scale is exactly 1)
+ *   Z = -SCENE_SCALE * (y - cy) / rho0
+ */
+export function scaleFollowTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void {
+  const [cx, cy] = snap.physics.c;
+  const magnify = horizontalMagnification('scale-follow', snap.physics.rho);
+  mesh.position.x = -cx * SCENE_SCALE * magnify;
+  mesh.position.z = cy * SCENE_SCALE * magnify;
+  // Vertical: physical surface, NO recentering. Y scale stays exactly 1.
+  mesh.position.y = 0;
+  mesh.scale.set(magnify, 1.0, magnify);
+}
+
+/**
+ * Apply the same horizontal transform to the trail so it stays registered
+ * with the scale-follow terrain. The trail is built in physical
+ * coordinates (`buildTrail` with a physical-Y mode), so the identical
+ * recenter + 1/rho0 X/Z magnification glues it to the surface. Y is left
+ * exactly as built.
+ */
+export function scaleFollowTrailTransform(trail: THREE.Line, snap: DebugSnapshot): void {
+  const [cx, cy] = snap.physics.c;
+  const magnify = horizontalMagnification('scale-follow', snap.physics.rho);
+  trail.position.x = -cx * SCENE_SCALE * magnify;
+  trail.position.z = cy * SCENE_SCALE * magnify;
+  trail.position.y = 0;
+  trail.scale.set(magnify, 1.0, magnify);
+}
+
 /**
  * Position the third-person camera behind and above the rider.
  *
  * - physical: raw (x, y, lambda*sigma) embedding — geometry-debug mode.
+ * - scale-follow: the world is horizontally recentered/magnified beneath
+ *   the rider, so the rider sits at X/Z origin, but the vertical follows
+ *   the physical surface: camera Y tracks surfaceY(current sigma) exactly
+ *   like physical mode. Feels like the normal third-person skateboard
+ *   camera.
  * - treadmill: scale-stabilized chart X=(x-x0)/rho0, Y=(z(c)-z(c0))
  *   around the CURRENT rider position c0 — debug presentation ONLY; never
  *   feeds physics (guaranteed structurally: the camera only reads the
@@ -519,14 +613,23 @@ export function updateCamera(
   const sigma = snap.physics.sigma;
 
   let rx: number, rz: number;
+  let followSurface: boolean;
   if (mode === 'physical') {
     rx = cx * SCENE_SCALE;
     rz = -cy * SCENE_SCALE;
+    followSurface = true;
+  } else if (mode === 'scale-follow') {
+    // The terrain carries the (x-x0)/rho0 horizontal transform; the rider
+    // is pinned at the horizontal origin, but height stays physical.
+    rx = 0;
+    rz = 0;
+    followSurface = true;
   } else {
     // Treadmill: the rider is pinned at the chart origin; the terrain mesh
     // carries the (x-x0)/rho0 transform (see treadmillTransform).
     rx = 0;
     rz = 0;
+    followSurface = false;
   }
 
   // Behind and above, biased along the rider's heading.
@@ -535,11 +638,12 @@ export function updateCamera(
   const heading = speed > 1e-7 ? Math.atan2(-vy, vx) : Math.PI / 2;
   const back = 3.2;
   const up = 2.2;
-  const targetY = (mode === 'treadmill' ? 0 : surfaceY(sigma)) + 0.6;
+  const riderY = followSurface ? surfaceY(sigma) : 0;
+  const targetY = riderY + 0.6;
 
   const camX = rx - Math.cos(heading) * back;
   const camZ = rz + Math.sin(heading) * back;
-  const camY = (mode === 'treadmill' ? 0 : surfaceY(sigma)) + up;
+  const camY = riderY + up;
 
   camera.position.set(camX, camY, camZ);
   camera.lookAt(rx, targetY, rz);
@@ -610,9 +714,10 @@ export function buildSceneDressing(scene: THREE.Scene): void {
  *
  * The fog wall is floored at the camera-to-rider distance: the LOD patch
  * shrinks at deep scale, and a fog wall tighter than the camera distance
- * would swallow the whole scene (the "black viewport" failure mode). In
- * treadmill mode the 1/rho0 chart magnification inflates the effective
- * patch, so its fog wall inflates with it.
+ * would swallow the whole scene (the "black viewport" failure mode).
+ * Horizontally magnified modes (treadmill AND scale-follow) inflate the
+ * effective patch via `horizontalMagnification`, so their fog wall
+ * inflates with it; physical mode is unchanged.
  */
 export function applyRenderDistance(
   camera: THREE.PerspectiveCamera,
@@ -622,7 +727,7 @@ export function applyRenderDistance(
   half: number
 ): void {
   const r = Math.max(rho, 1e-9);
-  const magnify = mode === 'treadmill' ? 1.0 / r : 1.0;
+  const magnify = horizontalMagnification(mode, r);
   const patchScene = half * 2 * SCENE_SCALE * magnify;
   const diagonal = patchScene * Math.SQRT2;
   // updateCamera keeps the camera ~sqrt(3.2^2 + 2.2^2) ~ 3.9 scene units
