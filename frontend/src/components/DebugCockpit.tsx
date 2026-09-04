@@ -25,16 +25,14 @@ import {
   planTerrainLod,
   riderSurfaceHeight,
   sampleTerrainPatch,
-  ensureMinimapPyramid,
   type CockpitTrajectory,
 } from '../lib/debugCockpit';
 import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
-import { initOrbitSynth, getWasmModule } from '../lib/orbitSynthesizer';
+import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import {
   MINIMAP_SIZE,
   paintMinimap,
-  setMinimapWasmSurface,
   type MinimapPaintInput,
 } from '../lib/cockpitMinimap';
 import {
@@ -192,7 +190,6 @@ export function DebugCockpit(): JSX.Element {
   const [cameraMode, setCameraMode] = useState<CameraMode>('scale-follow');
   const [playerView, setPlayerView] = useState(false);
   const [overlays, setOverlays] = useState<TerrainOverlays>(DEFAULT_OVERLAYS);
-  const [pyramidReady, setPyramidReady] = useState(false);
   const [runs, setRuns] = useState<CockpitTrajectory[] | null>(null);
 
   const variants = useMemo(
@@ -218,33 +215,17 @@ export function DebugCockpit(): JSX.Element {
 
   // Load wasm + record all variant trajectories once.
   useEffect(() => {
-    let disposed = false;
     (async () => {
       try {
         await initOrbitSynth();
-        const meta = (getWasmModule() as unknown as {
-          debugSnapshotMeta?: () => { version: string; canonicalDt: number };
-        }).debugSnapshotMeta?.();
-        if (!meta || meta.version !== 'debug-snapshot/1') {
-          throw new Error('wasm build lacks debug-snapshot/1 seam; rebuild wasm-orbit');
-        }
-        if (disposed) return;
-        setMinimapWasmSurface(getWasmModule() as never);
         const recorder = new CockpitRecorder();
         const all = variants.map((v) => recorder.recordVariant(v));
         setRuns(all);
         setReady(true);
-        // Minimap pyramid: best-effort, off the critical path.
-        ensureMinimapPyramid().then((ok) => {
-          if (!disposed) setPyramidReady(ok);
-        });
       } catch (e) {
         setError(String(e));
       }
     })();
-    return () => {
-      disposed = true;
-    };
   }, [variants]);
 
   // Three.js scene lifecycle.
@@ -421,15 +402,12 @@ export function DebugCockpit(): JSX.Element {
     const canvas = minimapRef.current;
     const trajectory = runs?.[selected];
     if (!canvas || !trajectory || !frame) return;
-    const extent = frame.map.extent;
-    if (!extent) return;
     // Trail window: last 200 steps for panel legibility.
     const from = Math.max(0, frameIdx - 200);
     const trail = trajectory.snapshots
       .slice(from, frameIdx + 1)
       .map((s) => [s.physics.c[0], s.physics.c[1]] as [number, number]);
     const input: MinimapPaintInput = {
-      extent: [extent[0], extent[1], extent[2], extent[3]],
       trail,
       currentC: [frame.physics.c[0], frame.physics.c[1]],
       // Zoom-with-scale: the window tracks the current LOD patch extent.
@@ -443,7 +421,7 @@ export function DebugCockpit(): JSX.Element {
       fovDeg: 55,
     };
     paintMinimap(canvas, input);
-  }, [runs, selected, frameIdx, frame, pyramidReady]);
+  }, [runs, selected, frameIdx, frame]);
 
   // Julia panel: the ACTUAL audience-facing view (issue #111). The existing
   // JuliaRenderer stays the authoritative presentation surface.
@@ -621,9 +599,7 @@ export function DebugCockpit(): JSX.Element {
               style={{ width: '100%', borderRadius: 4, border: '1px solid #262640', display: 'block' }}
             />
             <div style={{ fontSize: 10, color: '#667', marginTop: 4 }}>
-              {pyramidReady
-                ? 'canonical mip pyramid · zoomed to scale · trail (green) · c (red) · FOV (triangle)'
-                : 'mip pyramid unavailable (backend :8000) — panel degraded honestly'}
+              mandelbrot deep zoom · zoomed to scale · trail (green) · c (red) · FOV (triangle)
             </div>
           </Panel>
         )}

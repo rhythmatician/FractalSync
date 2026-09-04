@@ -1,27 +1,19 @@
 /**
  * Cockpit minimap panel renderer (issue #111 Phase A).
  *
- * Reuses the CANONICAL Rust mip pyramid via the wasm
- * `minimapShoreProximityBatch` binding — there is deliberately no TypeScript
- * Mandelbrot formula here (ADR 0001; issue #111: "Reuse the canonical Rust
- * Map/minimap machinery from #88/#106 rather than introducing another
- * frontend geometry authority").
+ * Renders a Mandelbrot deep zoom centered on the player, with the zoom
+ * level matching the in-game horizontal zoom. Self-contained TypeScript
+ * escape-time renderer — no wasm, no Python backend dependency.
  *
- * The panel shows: the Shore/realm field (S), the recent trajectory trail,
- * the current c, and the 3D viewport footprint (the terrain patch extent).
- * All geometry comes from the pyramid extent + authoritative snapshot data.
+ * The panel shows: the Mandelbrot set (Shore = boundary), the recent
+ * trajectory trail, the current c, and the 3D viewport footprint.
  */
 
 /** Panel canvas size in pixels (square). */
 export const MINIMAP_SIZE = 192;
 
-/** Wire shape of the pyramid extent [re_min, re_max, im_min, im_max]. */
-export type MinimapExtent = [number, number, number, number];
-
 /** Input for one minimap paint. */
 export interface MinimapPaintInput {
-  /** Canonical pyramid extent. */
-  extent: MinimapExtent;
   /** Recent trajectory points in c-space (oldest first). */
   trail: Array<[number, number]>;
   /** Current rider position in c-space. */
@@ -32,34 +24,6 @@ export interface MinimapPaintInput {
   heading?: number;
   /** Camera vertical FOV in degrees. Default 55 (the cockpit camera). */
   fovDeg?: number;
-}
-
-/** A zoomed minimap sampling window. */
-export interface MinimapWindow {
-  center: [number, number];
-  half: number;
-}
-
-/**
- * Compute the zoomed sampling window for the minimap (issue #111 feedback:
- * "the minimap should zoom with scale"). The window follows the rider and
- * tracks the LOD patch half-extent — at deep scale the map magnifies the
- * crest neighborhood, in the valley it shows the broad view. Clamped so
- * the window never leaves the canonical pyramid extent.
- */
-export function minimapWindowFor(
-  c: [number, number],
-  footprintHalf: number,
-  extent: MinimapExtent
-): MinimapWindow {
-  const [reMin, reMax, imMin, imMax] = extent;
-  const rawHalf = Math.max(footprintHalf, 1e-6);
-  // Window spans 4x the terrain patch for orientation context, clamped to
-  // a quarter of the extent so the zoomed map never exceeds the bake.
-  const half = Math.min(rawHalf * 4, Math.min(reMax - reMin, imMax - imMin) / 4);
-  const cx = Math.min(Math.max(c[0], reMin + half), reMax - half);
-  const cy = Math.min(Math.max(c[1], imMin + half), imMax - half);
-  return { center: [cx, cy], half };
 }
 
 /**
@@ -102,108 +66,66 @@ export function fovTriangleC(
   ];
 }
 
-/** Shape of the wasm module surface this module needs. */
-interface WasmMinimapSurface {
-  minimapShoreProximityBatch?: (
-    re: number[],
-    im: number[],
-    level: number
-  ) => Float32Array | number[];
-  /** Resolution-unlimited deep-zoom distance field (issue #111 feedback). */
-  deepZoomField?: (re: number[], im: number[]) => Float32Array | number[];
-}
-
-let wasmSurface: WasmMinimapSurface | null = null;
-
-/** Test seam: inject the wasm module surface. */
-export function setMinimapWasmSurface(surface: WasmMinimapSurface | null): void {
-  wasmSurface = surface;
-}
-
 /**
- * Paint one minimap frame. Returns true when the canonical pyramid was
- * available (field painted); false when it was not (caller should show the
- * panel's "pyramid unavailable" state rather than a blank lie).
+ * Paint one minimap frame. Renders a Mandelbrot deep zoom centered on the
+ * player, with the zoom level matching the in-game horizontal zoom ratio
+ * (the terrain patch half-extent). Self-contained TypeScript escape-time
+ * renderer — no wasm, no Python backend dependency.
  */
 export function paintMinimap(
   canvas: HTMLCanvasElement,
   input: MinimapPaintInput
 ): boolean {
-  const surface = wasmSurface;
-  if (!surface || typeof surface.minimapShoreProximityBatch !== 'function') {
-    return false;
-  }
-
-  // Zoomed window: track the rider and the LOD patch scale (issue #111
-  // feedback: "the minimap should zoom with scale"). The canonical extent
-  // only bounds the window via minimapWindowFor.
-  const window = minimapWindowFor(input.currentC, input.footprintHalf, input.extent);
-  const [reMin, reMax, imMin, imMax] = [
-    window.center[0] - window.half,
-    window.center[0] + window.half,
-    window.center[1] - window.half,
-    window.center[1] + window.half,
-  ];
-  // The canonical bake is 2048x2048 over the extent — its texel size sets
-  // the pyramid's resolution limit (see deep-zoom handoff below).
-  const [extentReMin, extentReMax] = input.extent;
-  const pyramidTexel = (extentReMax - extentReMin) / 2048;
   const size = canvas.width;
   const ctx = canvas.getContext('2d');
   if (!ctx) return false;
 
-  // Sample the S field on a size x size grid over the extent via the
-  // canonical batch binding (level 0 = finest).
-  const re: number[] = [];
-  const im: number[] = [];
+  // Zoom window: centered on the player, spanning 4x the terrain patch
+  // half-extent so the minimap zooms with the in-game horizontal zoom.
+  const [cx, cy] = input.currentC;
+  const half = Math.max(input.footprintHalf, 1e-6) * 4;
+  const reMin = cx - half;
+  const reMax = cx + half;
+  const imMin = cy - half;
+  const imMax = cy + half;
+
+  // Render the Mandelbrot set via escape-time iteration.
+  const image = ctx.createImageData(size, size);
+  const maxIter = 128;
+  const bailout = 4.0;
   for (let row = 0; row < size; row++) {
-    // Row 0 = north edge (im_max), matching the pyramid's row convention.
     const y = imMax - ((imMax - imMin) * row) / (size - 1);
     for (let col = 0; col < size; col++) {
       const x = reMin + ((reMax - reMin) * col) / (size - 1);
-      re.push(x);
-      im.push(y);
+      let zx = 0;
+      let zy = 0;
+      let zx2 = 0;
+      let zy2 = 0;
+      let iter = 0;
+      while (zx2 + zy2 < bailout && iter < maxIter) {
+        zy = 2 * zx * zy + y;
+        zx = zx2 - zy2 + x;
+        zx2 = zx * zx;
+        zy2 = zy * zy;
+        iter++;
+      }
+      const i = image.data;
+      const idx = (row * size + col) * 4;
+      if (iter >= maxIter) {
+        // Inside the set: dark blue.
+        i[idx] = 10;
+        i[idx + 1] = 20;
+        i[idx + 2] = 60;
+      } else {
+        // Outside: proximity ramp — brighter near the Shore boundary.
+        const proximity = 1.0 - iter / maxIter;
+        const v = proximity * proximity;
+        i[idx] = Math.round(30 + 200 * v);
+        i[idx + 1] = Math.round(40 + 190 * v);
+        i[idx + 2] = Math.round(90 + 60 * (1 - v));
+      }
+      i[idx + 3] = 255;
     }
-  }
-  let field: Float32Array | number[];
-  // Deep-zoom handoff (issue #111 feedback: "think about our minimap like
-  // a Mandelbrot deep zoom ... zoom level depends on the player location"):
-  // the baked pyramid has finite texel resolution. When the window spans
-  // fewer than ~8 pyramid texels across, the S field degenerates to a
-  // smear — switch to the resolution-unlimited escape-iteration distance
-  // estimator, which resolves structure at ANY zoom depth.
-  const windowSpan = reMax - reMin;
-  const deepZoom = windowSpan < pyramidTexel * 8;
-  try {
-    if (deepZoom && typeof surface.deepZoomField === 'function') {
-      field = surface.deepZoomField(re, im);
-    } else {
-      field = surface.minimapShoreProximityBatch(re, im, 0);
-    }
-  } catch {
-    return false;
-  }
-  if (!field || field.length !== re.length) return false;
-
-  // Paint the field. Two sources, one visual language:
-  // - S field (pyramid): [0,1] proximity, 1 = at Shore.
-  // - Deep-zoom DEM: unsigned distance to the boundary (0 inside). Convert
-  //   to a proximity-like ramp via exp(-d / zoomScale) so the Shore band
-  //   stays bright and structure fades with distance, matching the S look.
-  const image = ctx.createImageData(size, size);
-  const zoomScale = Math.max(windowSpan * 0.08, 1e-9);
-  for (let i = 0; i < field.length; i++) {
-    const raw = field[i];
-    const v = deepZoom
-      ? Math.max(0, Math.min(1, Math.exp(-raw / zoomScale)))
-      : Math.max(0, Math.min(1, raw));
-    const r = Math.round(30 + 200 * v * v);
-    const g = Math.round(40 + 190 * v);
-    const b = Math.round(90 + 60 * (1 - v));
-    image.data[i * 4] = r;
-    image.data[i * 4 + 1] = g;
-    image.data[i * 4 + 2] = b;
-    image.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(image, 0, 0);
 
@@ -213,9 +135,7 @@ export function paintMinimap(
     ((imMax - y) / (imMax - imMin)) * (size - 1),
   ];
 
-  // Viewport footprint: the camera FOV ground triangle (issue #111
-  // feedback: a triangle accurately signifying the FOV, not a square).
-  const [cx, cy] = input.currentC;
+  // Viewport footprint: the camera FOV ground triangle.
   const triangle = fovTriangleC(
     [cx, cy],
     input.footprintHalf,
