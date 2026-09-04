@@ -169,5 +169,22 @@ export function explorationVariants(): CrossingVariantSpec[] {
     make('explore_sw', 'build+commit toward (-1.75, -i) needle', [-0.9, -0.45], 0.6, 300, 200),
     // Northeast diagonal: crosses the real line on the way out.
     make('explore_ne', 'build+commit diagonal (+x, +i) crossing', [0.8, 0.6], 0.6, 300, 200),
+    // Seahorse Valley (TOUR, not cross). The seahorse basin is a
+    // topological feature INSIDE the cardioid (the bay between the
+    // cusp at c=0.25 and the period-2 bulb at c=-1.0), centered around
+    // c ~ -0.744 + 0.132i. Aim at the basin ENTRANCE at c ~ -0.5 + 0.1i
+    // (well inside M) so the throttle=0.6 tour pace lands the rider in
+    // the seahorse region without clearing the cardioid ridge. The
+    // measured commit=1.0 crossing cadence is wrong for this — clearing
+    // the ridge dumps the full U~9.97 crest budget into a single step
+    // and launches the rider into the far dust.
+    make(
+      'explore_seahorse',
+      'build+commit tour toward Seahorse Valley basin (~-0.5 + 0.1i, inside cardioid)',
+      [-0.98, 0.196],
+      0.6,
+      300,
+      200
+    ),
   ];
 }
