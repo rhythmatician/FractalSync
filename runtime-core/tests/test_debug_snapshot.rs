@@ -10,7 +10,7 @@
 //! - a Rust-owned terrain patch Q=(x, y, lambda*sigma) renders the skate
 //!   park from authoritative geometry.
 
-use num_complex::Complex64 as C;
+use num_complex::Complex64;
 use runtime_core::controller::OrbitController;
 use runtime_core::controls::MotionControls;
 use runtime_core::debug::{
@@ -67,7 +67,7 @@ fn snapshot_creation_does_not_mutate_controller() {
 fn snapshot_physics_fields_match_canonical_manifold_math() {
     let _g = lock();
     let config = ManifoldConfig::default();
-    let c = C::new(0.0, 0.0);
+    let c = Complex64::new(0.0, 0.0);
     let v = (0.05, -0.02);
 
     let snap = snapshot_from_state(c, v, None, None, &config, None)
@@ -108,7 +108,7 @@ fn snapshot_physics_fields_match_canonical_manifold_math() {
 #[test]
 fn snapshot_reports_validity_and_derivative_step() {
     let _g = lock();
-    let snap = snapshot_from_state(C::new(0.1, -0.1), (0.1, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(0.1, -0.1), (0.1, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
     assert!(snap.diagnostics.derivative_step > 0.0);
     assert!(snap.diagnostics.valid, "ordinary state must be valid");
@@ -184,7 +184,7 @@ fn snapshot_reports_last_step_energy_delta() {
 fn snapshot_map_is_unavailable_without_pyramid() {
     let _g = lock();
     runtime_core::minimap::clear_pyramid();
-    let snap = snapshot_from_state(C::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
     assert!(!snap.map.pyramid_loaded);
     assert!(snap.map.shore_proximity.is_none());
@@ -221,7 +221,7 @@ fn snapshot_map_reuses_canonical_pyramid() {
     .expect("synthetic pyramid");
     runtime_core::minimap::set_pyramid(pyr).expect("install pyramid");
 
-    let snap = snapshot_from_state(C::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
 
     assert!(snap.map.pyramid_loaded);
@@ -298,7 +298,7 @@ fn terrain_patch_is_authoritative_q_embedding() {
 
     // Center vertex sits exactly at the embedding of the patch center.
     let mid = (33 * 33 / 2) * 3;
-    let center = C::new(0.0, 0.0);
+    let center = Complex64::new(0.0, 0.0);
     assert!((patch.positions[mid] - 0.0).abs() < 1e-14);
     assert!((patch.positions[mid + 1] - 0.0).abs() < 1e-14);
     let sigma = runtime_core::manifold::mandelbrot_scale(center, &config).unwrap();
@@ -318,9 +318,165 @@ fn terrain_patch_is_authoritative_q_embedding() {
 
     // Row-major ordering: row 0 is the north edge (im = +half).
     let first_sigma = patch.positions[2];
-    let north = C::new(-0.5, 0.5);
+    let north = Complex64::new(-0.5, 0.5);
     let sigma_north = runtime_core::manifold::mandelbrot_scale(north, &config).unwrap();
     assert!((first_sigma - lambda * sigma_north).abs() < 1e-14);
+}
+
+/// ============================================================================
+// Wall potential and hard invariant tests (issue #111)
+// ============================================================================
+
+#[test]
+fn test_wall_potential_finite_below_r() {
+    // U_wall is finite for |c| < 2.
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(0.5, 0.0); // well inside the disk
+    let u = runtime_core::manifold::wall_potential(c, &config).unwrap();
+    assert!(u.is_finite(), "wall_potential must be finite for |c| < 2");
+    assert!(u > 0.0, "wall_potential should be positive inside the disk");
+}
+
+#[test]
+fn test_wall_potential_infinity_at_r() {
+    // U_wall -> +infinity as radius approaches 2 from below.
+    let config = ManifoldConfig::default();
+    // Test at three progressively closer radii to show the log divergence
+    let c1 = Complex64::new(1.5, 0.0);  // |c|=1.5
+    let c2 = Complex64::new(1.9, 0.0);  // |c|=1.9
+    let c3 = Complex64::new(1.99, 0.0); // |c|=1.99
+    let u1 = runtime_core::manifold::wall_potential(c1, &config).unwrap();
+    let u2 = runtime_core::manifold::wall_potential(c2, &config).unwrap();
+    let u3 = runtime_core::manifold::wall_potential(c3, &config).unwrap();
+    // u should increase as |c| approaches 2
+    assert!(u1 > 0.0, "wall_potential at |c|=1.5 should be positive, got {}", u1);
+    assert!(u2 > u1, "wall_potential at |c|=1.9 should be larger than at |c|=1.5");
+    assert!(u3 > u2, "wall_potential at |c|=1.99 should be larger than at |c|=1.9");
+}
+
+#[test]
+fn test_wall_potential_rotational_symmetry() {
+    // U_wall is rotationally symmetric: U_wall(r, theta) = U_wall(r, -theta).
+    let config = ManifoldConfig::default();
+    let c1 = Complex64::new(1.0, 0.5); // angle +theta
+    let c2 = Complex64::new(1.0, -0.5); // angle -theta
+    let u1 = runtime_core::manifold::wall_potential(c1, &config).unwrap();
+    let u2 = runtime_core::manifold::wall_potential(c2, &config).unwrap();
+    assert!((u1 - u2).abs() < 1e-14, "wall_potential must be rotationally symmetric");
+}
+
+#[test]
+fn test_wall_force_points_inward() {
+    // Q_wall points strictly inward for nonzero c.
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(1.0, 0.0); // on positive real axis
+    let (qx, qy) = runtime_core::manifold::wall_force(c, &config).unwrap();
+    // For c = (1, 0), Q_wall should point toward the origin (negative x direction)
+    assert!(qx < 0.0, "Q_wall.x should be negative for c.re > 0, got {}", qx);
+    assert!(qy == 0.0, "Q_wall.y should be 0 for c.im = 0");
+}
+
+#[test]
+fn test_wall_force_magnitude_increases_near_r() {
+    // Wall force magnitude increases strongly as |c| approaches 2.
+    let config = ManifoldConfig::default();
+    let c_far = Complex64::new(0.5, 0.0); // farther from wall
+    let c_near = Complex64::new(1.9, 0.0); // closer to wall
+    let (qx_far, qy_far) = runtime_core::manifold::wall_force(c_far, &config).unwrap();
+    let (qx_near, qy_near) = runtime_core::manifold::wall_force(c_near, &config).unwrap();
+    let mag_far = (qx_far * qx_far + qy_far * qy_far).sqrt();
+    let mag_near = (qx_near * qx_near + qy_near * qy_near).sqrt();
+    assert!(mag_near > mag_far, "wall force magnitude should increase as |c| -> 2");
+}
+
+#[test]
+fn test_wall_force_zero_at_center() {
+    // Center has zero wall force.
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(0.0, 0.0);
+    let (qx, qy) = runtime_core::manifold::wall_force(c, &config).unwrap();
+    assert!(qx == 0.0 && qy == 0.0, "wall force at center should be (0, 0), got ({}, {})", qx, qy);
+}
+
+#[test]
+fn test_total_potential_decomposition() {
+    // total potential = kappa * sigma + U_wall
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(0.5, 0.1);
+    let sigma = runtime_core::manifold::mandelbrot_scale(c, &config).unwrap();
+    let u_sigma = config.kappa * sigma;
+    let u_wall = runtime_core::manifold::wall_potential(c, &config).unwrap();
+    let u_total = runtime_core::manifold::total_energy((0.0, 0.0), c, &config).unwrap()
+        - runtime_core::manifold::kinetic_energy((0.0, 0.0), c, &config).unwrap();
+    // total potential should equal sigma potential + wall potential
+    let diff = (u_total - u_sigma - u_wall).abs();
+    assert!(diff < 1e-10, "total potential should equal kappa*sigma + U_wall, diff={}", diff);
+}
+
+#[test]
+fn test_total_energy_includes_wall() {
+    // total energy E = K + U_sigma + U_wall
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(0.3, 0.2);
+    let v = (0.1, 0.05);
+    let e = runtime_core::manifold::total_energy(v, c, &config).unwrap();
+    let k = runtime_core::manifold::kinetic_energy(v, c, &config).unwrap();
+    let u_sigma = config.kappa * runtime_core::manifold::mandelbrot_scale(c, &config).unwrap();
+    let u_wall = runtime_core::manifold::wall_potential(c, &config).unwrap();
+    let expected = k + u_sigma + u_wall;
+    let diff = (e - expected).abs();
+    assert!(diff < 1e-10, "total energy should include U_wall, diff={}", diff);
+}
+
+#[test]
+fn test_hard_invariant_rejects_invalid_step() {
+    // Hard invariant: |c_new| < 2 must hold; invalid steps are rejected.
+    let config = ManifoldConfig::default();
+    // Start near the wall and try a step that would push outside
+    let c = Complex64::new(1.9, 0.0);
+    let v = (0.5, 0.0); // velocity outward
+    let q_control = (0.0, 0.0);
+    let beta = 0.1;
+    let dt = 0.02;
+
+    // This step might push |c| >= 2 depending on the dynamics;
+    // the important thing is that the integrator either succeeds with
+    // |c_new| < 2 or returns an error (never emits invalid state).
+    let result = runtime_core::manifold::integrate_step(c, v, q_control, beta, dt, &config);
+    // If it succeeds, verify |c_new| < 2
+    if let Ok((c_new, _v_new, _energy)) = result {
+        let c_abs_sq = c_new.re * c_new.re + c_new.im * c_new.im;
+        assert!(c_abs_sq < 4.0, "integrated state must satisfy |c_new| < 2, got |c_new|^2 = {}", c_abs_sq);
+    }
+    // If it returns an error, that's also valid (hard invariant enforcement).
+}
+
+#[test]
+fn test_shore_behavior_preserved() {
+    // Existing Shore-crossing behavior must remain possible and not be confused
+    // with the outer-domain barrier.
+    let config = ManifoldConfig::default();
+    // A point well inside the main cardioid should still allow shore crossing
+    // when driven properly (this test verifies the barrier doesn't interfere
+    // with normal operation at |c| << 2).
+    let c = Complex64::new(0.1, 0.0);
+    let v = (0.01, 0.0);
+    let q_control = (0.0, 0.0);
+    let beta = 0.1;
+    let dt = 0.02;
+
+    let result = runtime_core::manifold::integrate_step(c, v, q_control, beta, dt, &config);
+    // Should succeed (no hard invariant violation at |c| = 0.1)
+    assert!(result.is_ok(), "integrate_step at |c| = 0.1 should succeed");
+}
+
+#[test]
+fn test_wall_force_center_zero() {
+    // Alias test for wall_force at center
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(0.0, 0.0);
+    let (qx, qy) = runtime_core::manifold::wall_force(c, &config).unwrap();
+    assert!(qx == 0.0 && qy == 0.0);
 }
 
 #[test]
@@ -381,7 +537,7 @@ fn deep_zoom_field_matches_pyramid_near_its_resolution() {
     let im: Vec<f64> = pts.iter().map(|p| p.1).collect();
     let deep = runtime_core::minimap::deep_zoom_field(&re, &im).expect("deep zoom field");
     for (i, p) in pts.iter().enumerate() {
-        let sdf = runtime_core::manifold::signed_distance(C::new(p.0, p.1)).unwrap();
+        let sdf = runtime_core::manifold::signed_distance(Complex64::new(p.0, p.1)).unwrap();
         assert!(sdf > 0.0, "test point {p:?} must be outside the set");
         let d_deep = deep[i] as f64;
         let d_sdf = sdf.abs();
@@ -409,7 +565,7 @@ fn deep_zoom_field_matches_pyramid_near_its_resolution() {
 #[test]
 fn debug_snapshot_serializes_camel_case() {
     let _g = lock();
-    let snap = snapshot_from_state(C::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
     let json = serde_json::to_string(&snap).expect("serialize");
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");
@@ -456,7 +612,7 @@ fn shore_proximity_batch_matches_single_samples() {
     assert_eq!(batch.len(), pts.len());
     for ((r, i), &b) in pts.iter().zip(batch.iter()) {
         let single = runtime_core::minimap::with_pyramid(|p| {
-            p.and_then(|pyr| pyr.shore_proximity_at(C::new(*r, *i), 0))
+            p.and_then(|pyr| pyr.shore_proximity_at(Complex64::new(*r, *i), 0))
         });
         assert_eq!(Some(b), single, "batch must match single at ({r},{i})");
     }

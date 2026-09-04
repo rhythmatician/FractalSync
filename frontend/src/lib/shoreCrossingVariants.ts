@@ -219,5 +219,119 @@ export function explorationVariants(): CrossingVariantSpec[] {
       300,
       200
     ),
+    // Seahorse Valley UPHILL CLIMB (sustained drive, no settle). Unlike
+    // explore_seahorse (drip-feed tour), this variant holds the drive at
+    // full commit every frame — the rider intentionally climbs the
+    // potential ridge toward the shore the whole way, so sigma(r),
+    // U_sigma(r) and (with the new outer-domain wall) U_wall(r) can all
+    // be watched rising monotonically in the panels. Aim at the valley
+    // shore point ~(-0.75, 0.13): the direction is the normalized vector
+    // from c=0 to the basin center (-0.744, 0.132). grip=0/brake=0 keeps
+    // friction at GRIP_BASE only, so the climb is as aggressive as the
+    // destination physics allows. The seahorse shore sits at |c| ~ 0.76,
+    // far inside the |c| < 2 wall, so this trajectory exercises the
+    // Shore ridge, not the outer-domain barrier.
+    {
+      name: 'climb_seahorse_uphill',
+      description:
+        'sustained uphill drive toward the Seahorse Valley shore (~-0.75 + 0.13i): build x120 -> full-commit x900, no settle frames',
+      actions: [
+        {
+          direction: [-0.9848, 0.1747],
+          throttle: 0.6,
+          brake: 0.0,
+          grip: 0.0,
+          impulse: 0.0,
+          frames: 120,
+        },
+        {
+          direction: [-0.9848, 0.1747],
+          throttle: 1.0,
+          brake: 0.0,
+          impulse: 0.0,
+          grip: 0.0,
+          frames: 900,
+        },
+      ],
+    },
+    // Outside-seeded UPHILL CLIMB (sibling of climb_seahorse_uphill). Seed
+    // the rider OUTSIDE the set in the seahorse-valley dust at
+    // c = -0.744 + 0.132i (canonical D = +0.0027, sigma ~ 5.2), then hold
+    // full commit along the LOCAL UPHILL direction: the unit vector of
+    // grad sigma at the seed, measured via the Rust
+    // manifold_scale_gradient authority (~(184.1, -3.5) -> (0.9998,
+    // -0.0192)), so the drive points straight UP the potential slope from
+    // the dust side. The drive is cut at frame 147 (the measured crest
+    // frame: sigma peaks 9.95) and a brake-settle tail parks the rider.
+    // This is the uphill sibling of seed_seahorse_coast (which coasts
+    // instead of driving) and the outside-seeded mirror of
+    // climb_seahorse_uphill (which starts inside at c=0). Sustained
+    // commit past ~frame 313 runs the reflected rider out to the |c| < 2
+    // wall and the hard invariant fails the step closed — the tail keeps
+    // the whole replay inside the valid disk.
+    {
+      name: 'climb_seahorse_outside',
+      description:
+        'seed outside in valley dust c=(-0.744, 0.132) -> uphill drive along grad sigma x147 (crest) -> brake-settle x500',
+      initialC: [-0.744, 0.132],
+      initialV: [0.0, 0.0],
+      actions: [
+        {
+          direction: [0.9998, -0.0192],
+          throttle: 1.0,
+          brake: 0.0,
+          grip: 0.0,
+          impulse: 0.0,
+          frames: 147,
+        },
+        {
+          direction: [0.9998, -0.0192],
+          throttle: 0.0,
+          brake: 0.8,
+          grip: 1.0,
+          impulse: 0.0,
+          frames: 500,
+        },
+      ],
+    },
+    // MINI-MANDELBROT BASIN TOUR (period-3 antenna mini at c = -1.7549).
+    // Seed INSIDE the mini's basin (D = -0.006, sigma ~ 4.1), tour WEST
+    // up the basin shore toward the antenna tip (throttle 0.4, grip 1.0:
+    // the drive hugs the west shore band, sigma climbs to ~6.6), then
+    // brake-settle EASTWARD so momentum cancels against the drive
+    // direction. The settle pushes the rider back UP over the mini's
+    // west ridge — sigma peaks 9.96 (the FULL ridge ceiling, crested) —
+    // and it parks on the outside slope at D ~ +0.000016, |c| = 1.78.
+    // No hard-guard firing anywhere: max |c| stays well under 2. The
+    // orbit-around-the-top-mini idea was measured and rejected: the top
+    // mini's shore ring (~0.05 radius) is too small for continuous
+    // tangent drive to accumulate angular sweep — the rider is flung off
+    // before circling. The antenna basin tour + crest is the measured
+    // mini-Mandelbrot story that works.
+    {
+      name: 'tour_antenna_mini',
+      description:
+        'seed inside period-3 mini basin c=(-1.7549, 0) -> tour west shore x150 (t0.4 g1.0) -> brake-settle east x400 (b0.5), crests mini west ridge',
+      initialC: [-1.7549, 0.0],
+      initialV: [0.0, 0.0],
+      actions: [
+        {
+          direction: [-1.0, -0.06],
+          throttle: 0.4,
+          brake: 0.0,
+          grip: 1.0,
+          impulse: 0.0,
+          frames: 150,
+        },
+        {
+          direction: [1.0, 0.06],
+          throttle: 0.0,
+          brake: 0.5,
+          grip: 1.0,
+          impulse: 0.0,
+          frames: 400,
+        },
+      ],
+    },
   ];
 }

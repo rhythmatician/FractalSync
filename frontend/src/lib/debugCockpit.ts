@@ -180,7 +180,7 @@ export function sampleTerrainPatch(
   n: number = DEFAULT_TERRAIN_GRID
 ): TerrainPatch {
   const m = getWasmModule() as unknown as {
-    ManifoldConfig: new (d: number, e: number, l: number, k: number) => unknown;
+    ManifoldConfig: new (d: number, e: number, l: number, k: number, mu: number) => unknown;
     debugTerrainPatch: (
       cx: number,
       cy: number,
@@ -194,8 +194,9 @@ export function sampleTerrainPatch(
       '[debugCockpit] wasm build has no debugTerrainPatch binding; rebuild wasm-orbit'
     );
   }
-  // Controller-default manifold config (kappa=1.0, lambda^2=1.0, eps=1e-4).
-  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0);
+  // Controller-default manifold config (kappa=1.0, lambda^2=1.0, eps=1e-4,
+  // mu=1/pi for the p=8 secant wall — must mirror Rust ManifoldConfig::default()).
+  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0, 1.0 / Math.PI);
   return m.debugTerrainPatch(cx, cy, half, n, config);
 }
 
@@ -212,7 +213,7 @@ export function sampleTerrainPatch(
  */
 export function riderSurfaceHeight(snap: DebugSnapshot, x: number, y: number): number {
   const m = getWasmModule() as unknown as {
-    ManifoldConfig: new (d: number, e: number, l: number, k: number) => unknown;
+    ManifoldConfig: new (d: number, e: number, l: number, k: number, mu: number) => unknown;
     manifold_embedding: (re: number, im: number, config: unknown) => [number, number, number];
   };
   if (typeof m.manifold_embedding !== 'function') {
@@ -220,7 +221,7 @@ export function riderSurfaceHeight(snap: DebugSnapshot, x: number, y: number): n
     // position height), which keeps vitest honest about the seam shape.
     return snap.physics.sigma;
   }
-  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0);
+  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0, 1.0 / Math.PI);
   const [, , sigma] = m.manifold_embedding(x, y, config);
   return sigma;
 }

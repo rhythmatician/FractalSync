@@ -444,9 +444,9 @@ export default {
     return { version: 'debug-snapshot/1', canonicalDt: 1024 / 48000 };
   },
   ManifoldConfig: class MockManifoldConfig {
-    d_ref: number; epsilon: number; lambda_sq: number; kappa: number;
-    constructor(d: number, e: number, l: number, k: number) {
-      this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k;
+    d_ref: number; epsilon: number; lambda_sq: number; kappa: number; mu: number;
+    constructor(d: number, e: number, l: number, k: number, mu: number) {
+      this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k; this.mu = mu;
     }
   },
   manifold_embedding(re: number, im: number) {

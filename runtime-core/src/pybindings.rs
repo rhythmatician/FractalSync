@@ -47,6 +47,8 @@ use crate::manifold::{
     christoffel_symbols as rust_christoffel_symbols,
     geodesic_acceleration as rust_geodesic_acceleration,
     potential_force as rust_potential_force,
+    wall_potential as rust_wall_potential,
+    wall_force as rust_wall_force,
     apply_generalized_force as rust_apply_generalized_force,
     drag_force as rust_drag_force,
     integrate_step as rust_integrate_step,
@@ -127,18 +129,21 @@ pub struct ManifoldConfig {
     pub lambda_sq: f64,
     #[pyo3(get, set)]
     pub kappa: f64,
+    #[pyo3(get, set)]
+    pub mu: f64,
 }
 
 #[pymethods]
 impl ManifoldConfig {
     #[new]
-    #[pyo3(signature = (d_ref=0.1, epsilon=1e-4, lambda_sq=1.0, kappa=1.0))]
-    fn py_new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> Self {
+    #[pyo3(signature = (d_ref=0.1, epsilon=1e-4, lambda_sq=1.0, kappa=1.0, mu=std::f64::consts::FRAC_1_PI))]
+    fn py_new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> Self {
         Self {
             d_ref,
             epsilon,
             lambda_sq,
             kappa,
+            mu,
         }
     }
 }
@@ -150,6 +155,7 @@ impl From<RustManifoldConfig> for ManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -161,6 +167,7 @@ impl From<ManifoldConfig> for RustManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -946,6 +953,20 @@ fn manifold_total_energy(
 ) -> PyResult<f64> {
     let cc = num_complex::Complex64::new(c.real(), c.imag());
     rust_total_energy((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Wall (secant bowl) potential U_wall = mu * [sec(π/2 * s^4) - 1], s = |c|^2/4.
+#[pyfunction]
+fn manifold_wall_potential(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_wall_potential(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Wall force covector: Q_wall = -mu π s^3 sec φ tan φ (x, y), φ = π/2 s^4.
+#[pyfunction]
+fn manifold_wall_force(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_wall_force(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Christoffel symbols Gamma^i_jk of the Levi-Civita connection.
@@ -2291,6 +2312,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_kinetic_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_total_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_wall_potential, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_wall_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_christoffel_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_geodesic_acceleration, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_force, m)?)?;

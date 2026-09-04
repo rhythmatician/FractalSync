@@ -43,6 +43,12 @@ pub struct ManifoldConfig {
     pub lambda_sq: f64,
     /// Potential scale kappa in U = kappa*sigma
     pub kappa: f64,
+    /// Barrier strength mu in the p=8 secant bowl
+    /// U_wall = mu * [sec(π/2 * s^4) - 1], s = |c|^2 / 4.
+    /// Essentially zero through the central region, noticeable around
+    /// |c| ~ 1.4-1.6, and a stiff wall near |c| = 2. Default 1/π chosen so
+    /// the π factor cancels in the force: Q_wall = -s^3 sec φ tan φ (x, y).
+    pub mu: f64,
 }
 
 impl Default for ManifoldConfig {
@@ -52,6 +58,7 @@ impl Default for ManifoldConfig {
             epsilon: 1e-4,
             lambda_sq: 1.0,
             kappa: 1.0,
+            mu: std::f64::consts::FRAC_1_PI,
         }
     }
 }
@@ -307,13 +314,52 @@ pub fn potential_energy(c: Complex64, config: &ManifoldConfig) -> Result<f64, St
     Ok(config.kappa * sigma)
 }
 
-/// Total mechanical energy E = K + U
+/// Wall (secant bowl) potential U_wall(c) = mu * [sec(π/2 * s^4) - 1]
+/// where s = |c|^2 / 4 = (x^2 + y^2) / 4, so s^4 = (|c|/2)^8 (p = 8).
+///
+/// With the default mu = 1/π the potential is exactly
+///   U_wall = (1/π) [sec(π/2 * s^4) - 1]
+/// and the force loses its π factor entirely (see [`wall_force`]).
+///
+/// Properties:
+/// - finite and smooth throughout the valid disk |c| < 2 (sec is finite for |c| < 2);
+/// - bowl-like near the interior (effectively r^16 behavior near center);
+/// - rises increasingly rapidly outward;
+/// - tends to +infinity as |c| -> 2 (sec(π/2) → ∞);
+/// - rotationally symmetric;
+/// - completely independent of Mandelbrot scale sigma.
+///
+/// Per-evaluation cost: one cos, some multiplies/divisions. No square root
+/// or arbitrary exponentiation; kept exact for a clean energy ledger.
+pub fn wall_potential(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
+    let x = c.re;
+    let y = c.im;
+    let r2 = x * x + y * y;
+    let s = r2 * 0.25; // s = |c|^2 / 4
+
+    // s^4 = (|c|/2)^8, compute via repeated multiplication
+    let s2 = s * s;
+    let s4 = s2 * s2;
+
+    let phi = (std::f64::consts::PI / 2.0) * s4;
+    let cos_phi = phi.cos();
+
+    // sec(phi) = 1/cos(phi). If cos_phi is near zero, we're near the wall.
+    if cos_phi.abs() < 1e-12 {
+        return Err("|c| too close to 2: wall potential unstable".to_string());
+    }
+
+    let sec_phi = 1.0 / cos_phi;
+    Ok(config.mu * (sec_phi - 1.0))
+}
+
+/// Total mechanical energy E = K + U_sigma + U_wall
 pub fn total_energy(
     v: (f64, f64),
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<f64, String> {
-    Ok(kinetic_energy(v, c, config)? + potential_energy(c, config)?)
+    Ok(kinetic_energy(v, c, config)? + potential_energy(c, config)? + wall_potential(c, config)?)
 }
 
 /// Christoffel symbols Gamma^i_jk of the Levi-Civita connection.
@@ -404,6 +450,55 @@ pub fn geodesic_acceleration(
 pub fn potential_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
     let (grad_x, grad_y) = scale_gradient(c, config)?;
     Ok((-config.kappa * grad_x, -config.kappa * grad_y))
+}
+
+/// Wall (secant bowl) force covector: Q_wall = -grad U_wall.
+///
+/// U_wall(c) = mu * [sec(π/2 * s^4) - 1] where s = |c|^2 / 4 (p = 8).
+///
+/// The gradient is:
+///
+///   dU_wall/dx = mu * sec(φ)tan(φ) * dφ/dx
+///   where φ = π/2 * s^4 and s = (x^2+y^2)/4
+///   dφ/dx = π * s^3 * x
+///   therefore Q_wall_x = -mu * π * s^3 * sec(φ)tan(φ) * x
+///
+/// With the default mu = 1/π the π cancels completely:
+///
+///   Q_wall = -s^3 sec(φ)tan(φ) (x, y)
+///
+/// This is a generalized force COVECTOR (lower index), not a coordinate
+/// acceleration. It is summed with other covectors and converted to
+/// acceleration by [`apply_generalized_force`] (the single G^{-1} path).
+pub fn wall_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
+    let x = c.re;
+    let y = c.im;
+    let r2 = x * x + y * y;
+    let s = r2 * 0.25; // s = |c|^2 / 4
+
+    // s^4 = (|c|/2)^8, compute via repeated multiplication
+    let s2 = s * s;
+    let s3 = s2 * s;
+    let s4 = s2 * s2;
+
+    let phi = (std::f64::consts::PI / 2.0) * s4;
+    let (sin_phi, cos_phi) = phi.sin_cos();
+
+    // Avoid division by zero near the wall
+    if cos_phi.abs() < 1e-12 {
+        return Err("|c| too close to 2: wall force unstable".to_string());
+    }
+
+    let sec_phi = 1.0 / cos_phi;
+    let tan_phi = sin_phi / cos_phi;
+
+    // Q_wall_x = -mu * π * s^3 * sec(φ)tan(φ) * x
+    let force_factor = -config.mu * std::f64::consts::PI * s3 * sec_phi * tan_phi;
+
+    let qx = force_factor * x;
+    let qy = force_factor * y;
+
+    Ok((qx, qy))
 }
 
 /// Convert a generalized force covector to coordinate acceleration: a = G^{-1} Q.
@@ -524,6 +619,17 @@ pub fn integrate_step(
     // Semi-implicit update: continuous force integrated exactly once.
     let v_new = (v.0 + a_total.0 * dt, v.1 + a_total.1 * dt);
     let c_new = Complex64::new(c.re + v_new.0 * dt, c.im + v_new.1 * dt);
+
+    // Hard invariant: authoritative state must remain inside |c| < 2.
+    // If the proposed result is non-finite or has |c_new| >= 2, return an
+    // integrator error and DO NOT emit the invalid state.
+    let c_abs_sq = c_new.re * c_new.re + c_new.im * c_new.im;
+    if !c_abs_sq.is_finite() || c_abs_sq >= 4.0 {
+        return Err(format!(
+            "Hard invariant violated: |c_new|^2 = {} >= 4.0; rejecting invalid state",
+            c_abs_sq
+        ));
+    }
 
     // Energy accounting
     let e_old = total_energy(v, c, config)?;
@@ -754,7 +860,7 @@ mod tests {
         // This test uses the destination seam `integrate_motion_controls`
         // (ControlsV2 -> G, Γ, U) and checks that a driven rollout crosses
         // while an undriven rollout from the same start remains inside.
-        let config = ManifoldConfig { d_ref: 0.1, epsilon: 1e-4, lambda_sq: 1.0, kappa: 0.5 };
+        let config = ManifoldConfig { d_ref: 0.1, epsilon: 1e-4, lambda_sq: 1.0, kappa: 0.5, mu: std::f64::consts::FRAC_1_PI };
         let c0 = Complex64::new(0.23, 0.0);
         let v0 = (0.0, 0.0);
         let dt = 0.02;

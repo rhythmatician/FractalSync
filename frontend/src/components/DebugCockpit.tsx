@@ -220,6 +220,9 @@ export function DebugCockpit(): JSX.Element {
         await initOrbitSynth();
         const recorder = new CockpitRecorder();
         const all = variants.map((v) => recorder.recordVariant(v));
+        // Debug hook (read-only): lets external tooling inspect the
+        // recorded snapshots without mutating any runtime state.
+        (window as unknown as { __cockpitRuns?: CockpitTrajectory[] }).__cockpitRuns = all;
         setRuns(all);
         setReady(true);
       } catch (e) {

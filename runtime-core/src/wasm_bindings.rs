@@ -64,6 +64,7 @@ pub struct ManifoldConfig {
     epsilon: f64,
     lambda_sq: f64,
     kappa: f64,
+    mu: f64,
 }
 
 impl From<&ManifoldConfig> for RustManifoldConfig {
@@ -73,6 +74,7 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -80,12 +82,13 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
 #[wasm_bindgen]
 impl ManifoldConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> ManifoldConfig {
+    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> ManifoldConfig {
         ManifoldConfig {
             d_ref,
             epsilon,
             lambda_sq,
             kappa,
+            mu,
         }
     }
 
@@ -104,6 +107,10 @@ impl ManifoldConfig {
     #[wasm_bindgen(getter)]
     pub fn kappa(&self) -> f64 {
         self.kappa
+    }
+    #[wasm_bindgen(getter)]
+    pub fn mu(&self) -> f64 {
+        self.mu
     }
 }
 

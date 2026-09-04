@@ -808,6 +808,7 @@ mod tests {
             epsilon: 1e-4,
             lambda_sq: 1.0,
             kappa: 1.0,
+            mu: std::f64::consts::FRAC_1_PI,
         }
     }
 
