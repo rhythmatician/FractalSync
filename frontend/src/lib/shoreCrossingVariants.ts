@@ -333,5 +333,32 @@ export function explorationVariants(): CrossingVariantSpec[] {
         },
       ],
     },
+    // MINI-MANDELBROT SHORELINE TOUR (lower mini at c ~ -0.16 - 1.03i).
+    // The lower mini is the mirror of the top mini and sits at |c| ~ 1.04,
+    // far from the |c| < 2 wall (max |c| here ~ 1.5), so the outer-domain
+    // barrier is never in play. Design notes from measurement: the mini's
+    // west/north crest faces have |grad sigma| ~ 200-800 and are CHAOTIC
+    // under finite dt — trajectories that crest them amplify 1e-4 seed
+    // differences into wall-guard failures (measured in replay). So this
+    // tour deliberately stays OUTSIDE (D > 0.03): dive in from the NE,
+    // round the mini's south tip at close range, ride up its west face,
+    // then brake-settle. Robust across 1e-5..1e-2 seed perturbations.
+    {
+      name: 'tour_mini_shoreline',
+      description:
+        'around the lower mini-Mandelbrot: dive from NE (-0.12, -1.05), round the south tip, up the west face, brake-settle — stays outside, never crests',
+      initialC: [-0.12, -1.05],
+      initialV: [0.0, 0.0],
+      actions: [
+        // Dive southwest toward the mini's south shore.
+        { direction: [-0.98, -0.20], throttle: 0.5, brake: 0.0, grip: 1.0, impulse: 0.0, frames: 45 },
+        // Power around the south tip (reduced grip: more drive, less traction).
+        { direction: [-0.90, -0.44], throttle: 0.5, brake: 0.0, grip: 0.5, impulse: 0.0, frames: 50 },
+        // North up the west face.
+        { direction: [-0.98, 0.20], throttle: 0.5, brake: 0.0, grip: 0.5, impulse: 0.0, frames: 45 },
+        // Long brake-settle: friction absorbs the momentum, rider parks.
+        { direction: [0.10, 0.99], throttle: 0.0, brake: 0.0, grip: 1.0, impulse: 0.0, frames: 120 },
+      ],
+    },
   ];
 }
