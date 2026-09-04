@@ -451,7 +451,9 @@ export function DebugCockpit(): JSX.Element {
           colorHue: 0.58,
           colorSat: 0.75,
           colorBright: 0.6,
-          zoom: 2.5,
+          // zoom=1.0 shows the whole ~2.7-span Julia set; deeper zooms land
+          // the panel inside the connected interior when the seed is inside M.
+          zoom: 1.0,
           speed: 1.0,
         });
         renderer.start();
