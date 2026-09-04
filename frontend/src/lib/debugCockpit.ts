@@ -108,6 +108,16 @@ export interface CockpitTrajectory {
 export class CockpitRecorder {
   recordVariant(spec: CrossingVariantSpec): CockpitTrajectory {
     const synth = new OrbitSynthesizer(6);
+    // Honor non-default starting c/v ("approach from outside" trajectories
+    // that begin at a specific point without paying the launch cost of
+    // crossing the cardioid ridge from c=0). When neither is set the
+    // synth is left at the controller default (c=0, v=0), preserving the
+    // #82 fresh-synth-per-variant discipline for all existing variants.
+    if (spec.initialC || spec.initialV) {
+      const cPair = spec.initialC ? { re: spec.initialC[0], im: spec.initialC[1] } : undefined;
+      const vPair = spec.initialV ? { re: spec.initialV[0], im: spec.initialV[1] } : undefined;
+      synth.seed(cPair, vPair);
+    }
     const actions = expandActions(spec);
     const snapshots: DebugSnapshot[] = [];
     let crossingStep: number | null = null;

@@ -26,7 +26,7 @@ import {
   sampleTerrainPatch,
   type DebugSnapshot,
 } from '../debugCockpit';
-import { baselineVariants, expandActions, explorationVariants } from '../shoreCrossingVariants';
+import { baselineVariants, expandActions, explorationVariants, type CrossingVariantSpec } from '../shoreCrossingVariants';
 
 describe('debug cockpit adapter (issue #111 Phase A)', () => {
   beforeAll(async () => {
@@ -129,6 +129,47 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     expect(trajectories.map((t) => t.spec.name)).toEqual(variants.map((v) => v.name));
   });
 
+  it('honors variant initialC/initialV ("approach from outside" seed)', () => {
+    // Issue #111 follow-up: trajectories can start at a non-default c
+    // (e.g. just outside M near the seahorse basin) without paying the
+    // launch cost of crossing the cardioid ridge from c=0. The recorder
+    // seeds the wasm controller's c and v from the variant spec before
+    // the first action; the first snapshot's c must be at the seed.
+    const seeded: CrossingVariantSpec = {
+      name: 'seeded_test',
+      description: 'one-frame settle from a non-default c',
+      initialC: [0.3, -0.2],
+      initialV: [0, 0],
+      actions: [
+        { direction: [1, 0], throttle: 0.0, brake: 0.6, grip: 1.0, impulse: 0.0, frames: 1 },
+      ],
+    };
+    const trajectory = new CockpitRecorder().recordVariant(seeded);
+    // The first snapshot is the state AFTER step 0, so c may have moved
+    // a hair from the seed; what matters is that it is clearly the
+    // seeded starting region and not c=0.
+    const c0 = trajectory.snapshots[0].physics.c;
+    expect(c0[0]).toBeGreaterThan(0.25);
+    expect(c0[0]).toBeLessThan(0.5);
+    expect(c0[1]).toBeGreaterThan(-0.3);
+    expect(c0[1]).toBeLessThan(-0.05);
+  });
+
+  it('default (no initialC/initialV) starts at c=0 — preserves #82 discipline', () => {
+    // Without initialC/initialV, every variant is fresh at c=0, v=0,
+    // matching the #82 baseline family contract. Variants without
+    // initialC must NOT be affected by the seeding seam.
+    const variant = baselineVariants().find((v) => v.name === 'commit_0.05');
+    expect(variant).toBeDefined();
+    expect(variant!.initialC).toBeUndefined();
+    expect(variant!.initialV).toBeUndefined();
+    const trajectory = new CockpitRecorder().recordVariant(variant!);
+    // First snapshot should be a small step from c=0, NOT 0.3.
+    const c0 = trajectory.snapshots[0].physics.c;
+    expect(Math.abs(c0[0])).toBeLessThan(0.1);
+    expect(Math.abs(c0[1])).toBeLessThan(0.1);
+  });
+
   it('exposes the canonical terrain grid size', () => {
     expect(DEFAULT_TERRAIN_GRID).toBeGreaterThanOrEqual(2);
     expect(DEFAULT_TERRAIN_GRID).toBeLessThanOrEqual(512);
@@ -215,9 +256,15 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     }
   });
 
-  it('baseline crossing family still drives along the real line', () => {
-    // Protect the #82-measured family: directions stay on the axis.
-    for (const variant of baselineVariants()) {
+  it('measured #82 commit family still drives along the real line', () => {
+    // Protect the #82-measured family: the four commit_X entries with
+    // numeric throttle were calibrated on-axis, so their directions must
+    // stay on the axis. Other baseline entries (e.g. commit_seahorse_outside)
+    // reuse the same measured drip cadence but steer off-axis by design
+    // to test "approach from outside" trajectories that start in the dust.
+    const measured = baselineVariants().filter((v) => /^commit_[\d.]+$/.test(v.name));
+    expect(measured.length).toBeGreaterThan(0);
+    for (const variant of measured) {
       for (const a of expandActions(variant)) {
         expect(a.direction[1]).toBe(0);
       }

@@ -74,6 +74,26 @@ class MockOrbitController {
     this.alpha = Math.max(0.0, Math.min(1.0, alpha));
   }
 
+  // Authoritative player c (real, imag) and planar velocity (vx, vy) —
+  // mirrors the wasm OrbitController's c / velocity getters and setC /
+  // setVelocity seed methods so test harnesses and the cockpit recorder
+  // can seed a non-default starting point (e.g. "approach from outside
+  // M" trajectories).
+  get c(): { real: number; imag: number } {
+    return { real: this.c_re, imag: this.c_im };
+  }
+  setC(re: number, im: number): void {
+    this.c_re = re;
+    this.c_im = im;
+  }
+  get velocity(): { real: number; imag: number } {
+    return { real: this.planar_velocity[0], imag: this.planar_velocity[1] };
+  }
+  setVelocity(vx: number, vy: number): void {
+    this.planar_velocity[0] = vx;
+    this.planar_velocity[1] = vy;
+  }
+
   // May's exact mandelbrotBoundary(s, alpha).
   private boundary(): { re: number; im: number } {
     const theta = TWO_PI * this.alpha;

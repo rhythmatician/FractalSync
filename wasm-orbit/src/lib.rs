@@ -851,6 +851,38 @@ impl OrbitController {
         self.inner.manifold_drag
     }
 
+    /// Authoritative player position c in the complex plane.
+    /// Read/write so test harnesses and the debug cockpit can seed a
+    /// non-default starting point (e.g. "approach from outside M" trajectories
+    /// that begin at a seahorse-basin c without paying the launch cost of
+    /// crossing the cardioid ridge).
+    #[wasm_bindgen(getter)]
+    pub fn c(&self) -> Complex {
+        Complex { real: self.inner.c.re, imag: self.inner.c.im }
+    }
+
+    /// Seed the authoritative player position from (re, im) parts. The next
+    /// step_with_controls call advances from this point. Parts (not a
+    /// Complex instance) so callers never need to construct wasm objects.
+    #[wasm_bindgen(js_name = "setC")]
+    pub fn set_c(&mut self, re: f64, im: f64) {
+        self.inner.c = RustComplex::new(re, im);
+    }
+
+    /// Authoritative planar velocity (vx, vy) used by the destination
+    /// manifold integrator.
+    #[wasm_bindgen(getter)]
+    pub fn velocity(&self) -> Complex {
+        Complex { real: self.inner.velocity.re, imag: self.inner.velocity.im }
+    }
+
+    /// Seed the planar velocity from (vx, vy) parts. The next
+    /// step_with_controls call applies Q_drive and drag from this velocity.
+    #[wasm_bindgen(js_name = "setVelocity")]
+    pub fn set_velocity(&mut self, vx: f64, vy: f64) {
+        self.inner.velocity = RustComplex::new(vx, vy);
+    }
+
     /// Destination manifold step driven by Controls v2 (issue #107/#106).
     #[wasm_bindgen(js_name = "stepWithControls")]
     pub fn step_with_controls(&mut self, dt: f64, motion: &MotionControls) -> Complex {

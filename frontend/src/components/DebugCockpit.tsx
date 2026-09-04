@@ -525,7 +525,11 @@ export function DebugCockpit(): JSX.Element {
               >
                 <strong>{r.spec.name}</strong>{' '}
                 <span style={{ color: r.crossed ? '#7f7' : '#f96' }}>
-                  {r.crossed ? `crossed @ ${r.crossingStep}` : 'no crossing'}
+                  {r.crossed
+                    ? r.crossingStep === 0
+                      ? 'starts outside'
+                      : `crossed @ ${r.crossingStep}`
+                    : 'no crossing'}
                 </span>
                 <br />
                 <span style={{ color: '#667', fontSize: 10 }}>

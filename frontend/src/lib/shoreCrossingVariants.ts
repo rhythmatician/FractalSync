@@ -31,6 +31,16 @@ export interface CrossingVariantSpec {
   name: string;
   description: string;
   actions: HandAuthoredAction[];
+  /**
+   * Optional non-default starting point for the destination physics
+   * integrator. When set, the recorder seeds the wasm controller's c
+   * and planar velocity to these values before applying the first action,
+   * so a trajectory can begin at a specific c without paying the launch
+   * cost of crossing the cardioid ridge from c=0. Defaults to [0, 0].
+   */
+  initialC?: [number, number];
+  /** Optional initial planar velocity (vx, vy). Defaults to [0, 0]. */
+  initialV?: [number, number];
 }
 
 function buildAction(frames: number): HandAuthoredAction {
@@ -87,6 +97,29 @@ export function baselineVariants(): CrossingVariantSpec[] {
     make(0.4, 400, 300),
     make(0.8, 400, 300),
     make(1.0, 400, 300),
+    // "Approach from outside" (issue #111 follow-up): seed the rider in
+    // the seahorse-valley dust at c = -0.744 + 0.132i (just outside M,
+    // D ~ 0.004) with the MOMENTUM VECTOR pointing deeper into the
+    // valley (toward the valley tip at ~-0.75 + 0i, i.e. mostly -i),
+    // then coast. No drive at all: the Shore's repulsive potential
+    // (|grad sigma| ~ 289 at the seed) is the only thing that can stop
+    // the inbound momentum, so the trajectory directly measures whether
+    // the ridge barrier deflects, bounces, or traps a dust-side approach.
+    // Driving inward instead (throttle > 0) loses: the repulsion crushes
+    // the drive near D~0 and the deflected momentum drifts to deep space.
+    {
+      name: 'seed_seahorse_coast',
+      description: 'seed c=(-0.744, 0.132), v=(0,-0.02) toward valley tip -> coast grip x520 -> brake-settle x200',
+      initialC: [-0.744, 0.132],
+      initialV: [-0.0009, -0.02],
+      actions: [
+        // Pure momentum: zero throttle, traction on, mild brake so the
+        // Shore repulsion (not the drive) does the stopping.
+        { direction: [-0.045, -0.999], throttle: 0.0, brake: 0.2, grip: 1.0, impulse: 0.0, frames: 520 },
+        // Park wherever the physics leaves us.
+        { direction: [-0.045, -0.999], throttle: 0.0, brake: 0.8, grip: 1.0, impulse: 0.0, frames: 200 },
+      ],
+    },
   ];
 }
 
