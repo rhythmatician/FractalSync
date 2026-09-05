@@ -840,6 +840,56 @@ class ManifoldConfig:
     mu: float = 1.0 / math.pi
 
 
+def manifold_metric_from_scale(
+    sigma: torch.Tensor,
+    grad_sigma: torch.Tensor,
+    config: ManifoldConfig,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Differentiable mirror of the canonical scale-relative metric.
+
+    Returns ``(G, G_inverse)`` for the supplied scale field value and
+    gradient. The inputs may carry arbitrary leading batch dimensions;
+    ``grad_sigma`` must end in the two configuration-space coordinates.
+    """
+    if grad_sigma.shape[-1:] != (2,):
+        raise ValueError("grad_sigma must have shape (..., 2)")
+
+    rho = sigma.new_tensor(config.d_ref) * torch.exp2(-sigma)
+    identity = torch.eye(2, dtype=sigma.dtype, device=sigma.device)
+    metric = rho.reciprocal().square()[..., None, None] * identity
+    metric = metric + config.lambda_sq * torch.einsum(
+        "...i,...j->...ij", grad_sigma, grad_sigma
+    )
+    return metric, torch.linalg.inv(metric)
+
+
+def manifold_christoffel_from_scale(
+    sigma: torch.Tensor,
+    grad_sigma: torch.Tensor,
+    hessian_sigma: torch.Tensor,
+    config: ManifoldConfig,
+) -> torch.Tensor:
+    """Differentiable mirror of the canonical conformal connection."""
+    if hessian_sigma.shape[-2:] != (2, 2):
+        raise ValueError("hessian_sigma must have shape (..., 2, 2)")
+
+    _, metric_inverse = manifold_metric_from_scale(sigma, grad_sigma, config)
+    rho = sigma.new_tensor(config.d_ref) * torch.exp2(-sigma)
+    rho_gradient = -math.log(2.0) * rho[..., None] * grad_sigma
+    identity = torch.eye(2, dtype=sigma.dtype, device=sigma.device)
+
+    # B[l,j,k] is the bracketed lower-index connection term in Eq. 66.
+    conformal = -rho.reciprocal().pow(3)[..., None, None, None] * (
+        torch.einsum("lk,...j->...ljk", identity, rho_gradient)
+        + torch.einsum("lj,...k->...ljk", identity, rho_gradient)
+        - torch.einsum("jk,...l->...ljk", identity, rho_gradient)
+    )
+    graph = config.lambda_sq * torch.einsum(
+        "...l,...jk->...ljk", grad_sigma, hessian_sigma
+    )
+    return torch.einsum("...il,...ljk->...ijk", metric_inverse, conformal + graph)
+
+
 @dataclass
 class ManifoldEnergyInfo:
     """Mirror of ``runtime_core::manifold::EnergyInfo``."""
@@ -910,11 +960,15 @@ def manifold_integrate_step(
     k_old = runtime_core.manifold_kinetic_energy(v_old[0], v_old[1], c_old, rc_config)
     u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
     u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
-    e_new = k_new + u_new
-    e_old = k_old + u_old
+    # The scalar potential binding reports U_sigma. Add the separately exposed
+    # wall term to match integrate_step's complete conservative energy ledger.
+    u_wall_new = runtime_core.manifold_wall_potential(c_new, rc_config)
+    u_wall_old = runtime_core.manifold_wall_potential(c_old, rc_config)
+    e_new = k_new + u_new + u_wall_new
+    e_old = k_old + u_old + u_wall_old
     info = ManifoldEnergyInfo(
         kinetic=k_new,
-        potential=u_new,
+        potential=u_new + u_wall_new,
         total=e_new,
         delta_total=e_new - e_old,
         delta_kinetic=k_new - k_old,
@@ -1194,7 +1248,8 @@ class _ControlsStep(torch.autograd.Function):
     which internally computes:
         Q_drive = throttle * MAX_DRIVE_FORCE * G dir / ||dir||_G
         Q_drag  = -beta(brake,grip) G v
-        Q_total = Q_drive + Q_potential + Q_drag
+        Q_wall  = -grad U_wall (p=8 secant bowl)
+        Q_total = Q_drive + Q_potential + Q_wall + Q_drag
         a = G^{-1} Q_total - Gamma(v,v)
         v' = v + a dt, c' = c + v' dt, v'' = v' + delta_v_impulse
     Backward is a STE surrogate: gradient w.r.t new (c,v) routes back to old

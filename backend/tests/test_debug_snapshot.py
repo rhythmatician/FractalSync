@@ -60,7 +60,15 @@ class TestDebugSnapshotFromState:
         assert p["potential"] == pytest.approx(
             rc.manifold_potential_energy(c, _config(rc)), abs=1e-14
         )
-        assert p["total"] == pytest.approx(p["kinetic"] + p["potential"], abs=1e-12)
+        assert p["total"] == pytest.approx(
+            p["kinetic"]
+            + p["potential"]
+            + rc.manifold_wall_potential(c, _config(rc)),
+            abs=1e-12,
+        )
+        assert p["total"] == pytest.approx(
+            rc.manifold_total_energy(v[0], v[1], c, _config(rc)), abs=1e-12
+        )
 
     def test_realm_follows_signed_distance(self, rc):
         inside = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)

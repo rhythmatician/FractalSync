@@ -1180,7 +1180,8 @@ pub fn manifold_scale_hessian(real: f64, imag: f64, config: &ManifoldConfig) -> 
     Ok(arr)
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 /// Returns a flat JS array [g11, g12, g12, g22].
 #[wasm_bindgen]
 pub fn manifold_induced_metric(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
@@ -1214,7 +1215,7 @@ pub fn manifold_potential_energy(real: f64, imag: f64, config: &ManifoldConfig) 
     rust_potential_energy(c, &config.into()).map_err(|e| JsValue::from_str(&e))
 }
 
-/// Total mechanical energy E = K + U.
+/// Total mechanical energy E = K + U_sigma + U_wall.
 #[wasm_bindgen]
 pub fn manifold_total_energy(
     vx: f64,

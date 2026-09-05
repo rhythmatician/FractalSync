@@ -57,7 +57,7 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q. The adapter fails closed on
 ///       manifold error (no silent flat-physics fallback). This is a
 ///       transitional seam, not destination Controls v2 (issue #107).
-pub const CONTROLLER_VERSION: &str = "orbit-controller/4";
+pub const CONTROLLER_VERSION: &str = "orbit-controller/5";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
 /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are

@@ -8,10 +8,11 @@
 //! Core equations:
 //!   q(c) = (x, y, sigma(c))           -- embedding
 //!   J_q = ∂q/∂(x,y)                   -- Jacobian
+//!   H = diag(rho^-2, rho^-2, lambda^2) -- ambient scale-relative metric
 //!   G(c) = J_q^T H J_q                -- induced metric
 //!   K = 1/2 v^T G v                   -- kinetic energy
-//!   U = kappa * sigma(c)              -- native potential
-//!   E = K + U                         -- mechanical energy
+//!   U = kappa * sigma(c) + U_wall(c)  -- conservative potential
+//!   E = K + U                         -- total mechanical energy
 //!   Gamma^i_jk = connection           -- curvature acceleration
 //!   r_ddot + Gamma(r_dot,r_dot) = -G^{-1}∇U + G^{-1}Q  -- equations of motion
 //!
@@ -39,7 +40,7 @@ pub struct ManifoldConfig {
     /// crossing. It is a capability of the current Map provider, not a
     /// permanent architectural maximum.
     pub epsilon: f64,
-    /// Ambient scale weight lambda^2 in metric H = diag(1,1,lambda^2)
+    /// Ambient scale weight lambda^2 in H = diag(rho^-2,rho^-2,lambda^2)
     pub lambda_sq: f64,
     /// Potential scale kappa in U = kappa*sigma
     pub kappa: f64,
@@ -132,8 +133,9 @@ const DEFAULT_DERIVATIVE_STEP: f64 = 1e-4;
 /// Smooth finite-resolution distance using regularization.
 /// rho(c) = sqrt(D(c)^2 + epsilon^2)
 ///
-/// This gives finite derivatives through Shore crossing and symmetric
-/// treatment of inside/outside regions.
+/// This removes the `rho = 0` singularity and treats inside/outside regions
+/// symmetrically. It does not make a nonsmooth signed-distance field globally
+/// twice differentiable; cut loci still limit Hessian and connection validity.
 pub fn regularized_distance(c: Complex64, epsilon: f64) -> Result<f64, String> {
     let d = signed_distance(c)?;
     Ok((d * d + epsilon * epsilon).sqrt())
@@ -153,9 +155,9 @@ pub fn unsigned_distance(c: Complex64) -> Result<f64, String> {
 /// regularization `rho = sqrt(D^2 + epsilon^2)`. There is no independent
 /// Mandelbrot scale-control axis; `sigma` is not state and has no independent
 /// velocity `v_sigma` — see [`sigma_dot`] and [`embedding`].
-/// `epsilon` is a capability of the current Map provider (distance-field
-/// resolution/regularization floor), not a permanent architectural maximum.
-/// A deeper/adaptive provider may lower it without changing the Physics contract.
+/// `epsilon` is a versioned physical parameter: it fixes the minimum local
+/// ruler and finite Shore summit. Changing it changes the Physics contract and
+/// requires the corresponding controller/version and parity updates.
 pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
     let rho = regularized_distance(c, config.epsilon)?;
     Ok((config.d_ref / rho).log2())
@@ -268,17 +270,22 @@ pub fn sigma_dot(
     Ok(gx * v.0 + gy * v.1)
 }
 
-/// Induced metric G(c) = J_q(c)^T H J_q(c) = I + lambda^2 * grad_sigma * grad_sigma^T
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 ///
-/// Derived from the embedding Jacobian and ambient metric H = diag(1,1,lambda^2).
+/// Derived from the embedding Jacobian and ambient metric
+/// H = diag(rho^-2, rho^-2, lambda^2).
 /// Returns 2x2 symmetric positive-definite matrix as [[g11, g12], [g12, g22]]
 pub fn induced_metric(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
     let (gx, gy) = scale_gradient(c, config)?;
+    let sigma = mandelbrot_scale(c, config)?;
+    let rho = config.d_ref * 2.0_f64.powf(-sigma);
+    let rho_inv_sq = 1.0 / (rho * rho);
     let lsq = config.lambda_sq;
     
-    let g11 = 1.0 + lsq * gx * gx;
+    let g11 = rho_inv_sq + lsq * gx * gx;
     let g12 = lsq * gx * gy;
-    let g22 = 1.0 + lsq * gy * gy;
+    let g22 = rho_inv_sq + lsq * gy * gy;
     
     Ok([[g11, g12], [g12, g22]])
 }
@@ -367,47 +374,49 @@ pub fn total_energy(
 /// Returns Gamma as [[[Gamma^0_00, Gamma^0_01], [Gamma^0_10, Gamma^0_11]],
 ///                    [[Gamma^1_00, Gamma^1_01], [Gamma^1_10, Gamma^1_11]]]
 ///
-/// For the graph metric G = I + lambda^2 grad(sigma) grad(sigma)^T, the
-/// connection has a closed form that avoids finite-differencing an already
-/// finite-differenced metric:
+/// The compact form for `G = rho^-2 h`, with
+/// `h = I + a^2 grad(rho) grad(rho)^T`, is
 ///
-///   Gamma^i_jk = lambda^2 * sigma_i * sigma_jk / (1 + lambda^2 ||grad sigma||^2)
+/// Gamma^i_jk = a^2 rho_i rho_jk / W
+///              - (delta^i_j rho_k + delta^i_k rho_j) / rho
+///              + h_jk rho_i / (rho W),
 ///
-/// where sigma_i = ∂_i sigma and sigma_jk = ∂_j ∂_k sigma (the Hessian).
-/// This uses the same gradient/Hessian authority as the metric and reduces
-/// nested finite-difference noise. (Derivation: ∂_j G_{kl} + ∂_k G_{jl} -
-/// ∂_l G_{jk} = 2 lambda^2 sigma_jk sigma_l, and G^{-1} grad sigma =
-/// grad sigma / (1 + lambda^2 ||grad sigma||^2) by Sherman-Morrison.)
+/// where `a^2 = lambda^2 / ln(2)^2` and
+/// `W = 1 + a^2 |grad(rho)|^2`.
 pub fn christoffel_symbols(c: Complex64, config: &ManifoldConfig) -> Result<[[[f64; 2]; 2]; 2], String> {
     let (gx, gy) = scale_gradient(c, config)?;
     let hess = scale_hessian(c, config)?;
-    let lsq = config.lambda_sq;
-
-    // Denominator: 1 + lambda^2 ||grad sigma||^2
-    let grad_sq = gx * gx + gy * gy;
-    let denom = 1.0 + lsq * grad_sq;
-    if !denom.is_finite() || denom.abs() < 1e-30 {
-        return Err("Christoffel denominator singular".to_string());
+    let sigma = mandelbrot_scale(c, config)?;
+    let rho = config.d_ref * 2.0_f64.powf(-sigma);
+    let ln2 = std::f64::consts::LN_2;
+    let rho_grad = [-ln2 * rho * gx, -ln2 * rho * gy];
+    let sigma_grad = [gx, gy];
+    let mut rho_hess = [[0.0; 2]; 2];
+    for j in 0..2 {
+        for k in 0..2 {
+            rho_hess[j][k] = rho
+                * (ln2 * ln2 * sigma_grad[j] * sigma_grad[k] - ln2 * hess[j][k]);
+        }
     }
-
-    // grad sigma components (sigma_0 = gx, sigma_1 = gy)
-    let sig = [gx, gy];
-    // Hessian components sigma_jk (symmetric)
-    let hxx = hess[0][0];
-    let hxy = hess[0][1];
-    let hyy = hess[1][1];
+    let a_sq = config.lambda_sq / (ln2 * ln2);
+    let w = 1.0 + a_sq * (rho_grad[0] * rho_grad[0] + rho_grad[1] * rho_grad[1]);
+    if !rho.is_finite() || rho <= 0.0 || !w.is_finite() || w <= 0.0 {
+        return Err("scale-relative connection is singular".to_string());
+    }
+    let h = [
+        [1.0 + a_sq * rho_grad[0] * rho_grad[0], a_sq * rho_grad[0] * rho_grad[1]],
+        [a_sq * rho_grad[1] * rho_grad[0], 1.0 + a_sq * rho_grad[1] * rho_grad[1]],
+    ];
 
     let mut gamma = [[[0.0; 2]; 2]; 2];
     for i in 0..2 {
         for j in 0..2 {
             for k in 0..2 {
-                let sigma_jk = match (j, k) {
-                    (0, 0) => hxx,
-                    (0, 1) | (1, 0) => hxy,
-                    (1, 1) => hyy,
-                    _ => unreachable!(),
-                };
-                gamma[i][j][k] = lsq * sig[i] * sigma_jk / denom;
+                let delta_ij = if i == j { 1.0 } else { 0.0 };
+                let delta_ik = if i == k { 1.0 } else { 0.0 };
+                gamma[i][j][k] = a_sq * rho_grad[i] * rho_hess[j][k] / w
+                    - (delta_ij * rho_grad[k] + delta_ik * rho_grad[j]) / rho
+                    + h[j][k] * rho_grad[i] / (rho * w);
             }
         }
     }
@@ -575,9 +584,11 @@ pub fn drag_force(
 /// Generalized forces are summed as COVECTORS and converted to coordinate
 /// acceleration exactly once via G^{-1}:
 ///
-///   Q_potential = -grad U
+///   Q_potential = -grad U_sigma
+///   Q_wall      = -grad U_wall (p=8 secant bowl; the outer-domain barrier
+///                 participates in the dynamics, not just the energy ledger)
 ///   Q_drag      = -beta G v
-///   Q_total     = Q_potential + Q_control + Q_drag
+///   Q_total     = Q_potential + Q_wall + Q_control + Q_drag
 ///   a_force     = G^{-1} Q_total
 ///   a_total     = -Gamma(v,v) + a_force
 ///
@@ -596,15 +607,24 @@ pub fn integrate_step(
     dt: f64,
     config: &ManifoldConfig,
 ) -> Result<(Complex64, (f64, f64), EnergyInfo), String> {
+    let c_abs_sq = c.re * c.re + c.im * c.im;
+    if !c_abs_sq.is_finite() || c_abs_sq >= 4.0 {
+        return Err(format!(
+            "Hard invariant violated: initial |c|^2 = {} >= 4.0",
+            c_abs_sq
+        ));
+    }
+
     // Geodesic (curvature) acceleration: -Gamma(v, v).
     let a_geodesic = geodesic_acceleration(v, c, config)?;
 
-    // Sum generalized force covectors: potential + control + drag.
+    // Sum generalized force covectors: potential + wall + control + drag.
     let q_potential = potential_force(c, config)?;
+    let q_wall = wall_force(c, config)?;
     let q_drag = drag_force(v, c, beta, config)?;
     let q_total = (
-        q_potential.0 + q_control.0 + q_drag.0,
-        q_potential.1 + q_control.1 + q_drag.1,
+        q_potential.0 + q_wall.0 + q_control.0 + q_drag.0,
+        q_potential.1 + q_wall.1 + q_control.1 + q_drag.1,
     );
 
     // Single G^{-1} conversion of the summed covector into acceleration.
@@ -727,15 +747,86 @@ mod tests {
         assert!((qd.1 - v.1).abs() < 1e-12);
         assert!((qd.2 - sd).abs() < 1e-12);
         // No independent v_sigma: q_dot.2 is exactly sigma_dot, not a separate state.
-        // Metric derived from Jacobian must match induced_metric.
+        // Metric derived from the scale-relative ambient metric must match.
         let g = induced_metric(c, &config).unwrap();
         let lsq = config.lambda_sq;
-        let g11_expect = 1.0 + lsq * gx * gx;
+        let rho = config.d_ref * 2.0_f64.powf(-s);
+        let rho_inv_sq = 1.0 / (rho * rho);
+        let g11_expect = rho_inv_sq + lsq * gx * gx;
         let g12_expect = lsq * gx * gy;
-        let g22_expect = 1.0 + lsq * gy * gy;
+        let g22_expect = rho_inv_sq + lsq * gy * gy;
         assert!((g[0][0] - g11_expect).abs() < 1e-12);
         assert!((g[0][1] - g12_expect).abs() < 1e-12);
         assert!((g[1][1] - g22_expect).abs() < 1e-12);
+    }
+
+    #[test]
+    fn scale_relative_metric_inverse_is_identity() {
+        let _lock =
+            crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(-0.31, 0.47);
+        let g = induced_metric(c, &config).unwrap();
+        let g_inv = inverse_2x2(g).unwrap();
+        for i in 0..2 {
+            for j in 0..2 {
+                let product = g[i][0] * g_inv[0][j] + g[i][1] * g_inv[1][j];
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert!((product - expected).abs() < 1e-9, "G G^-1 [{i},{j}] = {product}");
+            }
+        }
+    }
+
+    #[test]
+    fn compact_connection_matches_metric_derivative_definition() {
+        let _lock =
+            crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(-0.31, 0.47);
+        let gamma = christoffel_symbols(c, &config).unwrap();
+        let g = induced_metric(c, &config).unwrap();
+        let g_inv = inverse_2x2(g).unwrap();
+        let sigma = mandelbrot_scale(c, &config).unwrap();
+        let rho = config.d_ref * 2.0_f64.powf(-sigma);
+        let sigma_grad_tuple = scale_gradient(c, &config).unwrap();
+        let sigma_grad = [sigma_grad_tuple.0, sigma_grad_tuple.1];
+        let sigma_hess = scale_hessian(c, &config).unwrap();
+        let ln2 = std::f64::consts::LN_2;
+        let rho_grad = [-ln2 * rho * sigma_grad[0], -ln2 * rho * sigma_grad[1]];
+        let mut rho_hess = [[0.0; 2]; 2];
+        for j in 0..2 {
+            for k in 0..2 {
+                rho_hess[j][k] = rho
+                    * (ln2 * ln2 * sigma_grad[j] * sigma_grad[k]
+                        - ln2 * sigma_hess[j][k]);
+            }
+        }
+        let mut dg = [[[0.0; 2]; 2]; 2];
+        for axis in 0..2 {
+            for j in 0..2 {
+                for k in 0..2 {
+                    let delta_jk = if j == k { 1.0 } else { 0.0 };
+                    dg[axis][j][k] = -2.0 * rho_grad[axis] * delta_jk / rho.powi(3)
+                        + config.lambda_sq
+                            * (sigma_hess[j][axis] * sigma_grad[k]
+                                + sigma_grad[j] * sigma_hess[k][axis]);
+                }
+            }
+        }
+        for i in 0..2 {
+            for j in 0..2 {
+                for k in 0..2 {
+                    let expected = (0..2).map(|ell| {
+                        0.5 * g_inv[i][ell]
+                            * (dg[j][k][ell] + dg[k][j][ell] - dg[ell][j][k])
+                    }).sum::<f64>();
+                    assert!(
+                        (gamma[i][j][k] - expected).abs() < 1e-9,
+                        "Gamma[{i}][{j}][{k}]={} expected {expected}", gamma[i][j][k]
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -890,5 +981,20 @@ mod tests {
         assert!(crossed_driven, "driven rollout should crest the finite ridge without any wall gate; final c={:?} D={}", final_c, signed_distance(final_c).unwrap());
         // Also verify that no musical signal (h, energy) was involved: the
         // destination seam takes only MotionControls, dt, and ManifoldConfig.
+    }
+
+    #[test]
+    fn integrate_step_rejects_initial_state_outside_open_disk() {
+        let config = ManifoldConfig::default();
+        let result = integrate_step(
+            Complex64::new(2.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.0),
+            0.0,
+            0.01,
+            &config,
+        );
+        let error = result.expect_err("|c| = 2 must be rejected before force evaluation");
+        assert!(error.contains("initial |c|^2"));
     }
 }

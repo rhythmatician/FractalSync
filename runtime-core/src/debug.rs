@@ -95,23 +95,23 @@ pub struct PhysicsSnapshot {
     pub sigma_dot: f64,
     /// Scale gradient grad(sigma) = (gx, gy).
     pub scale_gradient: [f64; 2],
-    /// Induced metric G = I + lambda^2 grad(sigma) grad(sigma)^T, flat [g11, g12, g22].
+    /// Induced metric G = rho^-2 I + lambda^2 grad(sigma) grad(sigma)^T, flat [g11, g12, g22].
     pub metric: [f64; 3],
     /// Metric speed sqrt(v^T G v).
     pub metric_speed: f64,
     /// Kinetic energy K = 1/2 v^T G v.
     pub kinetic: f64,
-    /// Native potential U = kappa * sigma(c).
+    /// Shore potential U_sigma = kappa * sigma(c), used for crest diagnostics.
     pub potential: f64,
-    /// Total mechanical energy E = K + U.
+    /// Total mechanical energy E = K + U_sigma + U_wall.
     pub total: f64,
     /// Geodesic (curvature) acceleration -Gamma(v,v) as coordinate acceleration.
     pub geodesic_accel: [f64; 2],
-    /// Potential force covector Q_potential = -kappa grad(sigma).
+    /// Shore force covector Q_sigma = -kappa grad(sigma).
     pub potential_force: [f64; 2],
     /// Net coordinate acceleration applied last step (diagnostic).
     pub net_accel: [f64; 2],
-    /// Derivative validity: all sampled derivatives finite at c.
+    /// Physics validity: sampled derivatives and displayed dynamics are finite at c.
     pub derivative_valid: bool,
 }
 
@@ -226,12 +226,15 @@ pub fn snapshot_from_state(
     let metric_speed = (v.0 * gv0 + v.1 * gv1).sqrt();
     let kinetic = crate::manifold::kinetic_energy(v, c, config)?;
     let potential = crate::manifold::potential_energy(c, config)?;
-    let total = kinetic + potential;
+    let total = crate::manifold::total_energy(v, c, config)?;
     let geodesic = crate::manifold::geodesic_acceleration(v, c, config)?;
     let q_potential = crate::manifold::potential_force(c, config)?;
+    let q_wall = crate::manifold::wall_force(c, config)?;
 
     // Net coordinate acceleration of the last step, reconstructed from the
-    // same covector sum the kernel uses (potential + drive + drag -> G^-1).
+    // same covector sum the kernel uses (potential + wall + drive + drag ->
+    // G^-1). MUST mirror manifold::integrate_step's force sum exactly — if
+    // the kernel gains a term, this reconstruction gains it too.
     let (q_drive, beta_used) = match last_action {
         Some(a) => {
             let q = a.raw.clamped().drive_covector(c, config)?;
@@ -241,22 +244,35 @@ pub fn snapshot_from_state(
     };
     let q_drag = crate::manifold::drag_force(v, c, beta_used, config)?;
     let q_total = (
-        q_potential.0 + q_drive.0 + q_drag.0,
-        q_potential.1 + q_drive.1 + q_drag.1,
+        q_potential.0 + q_wall.0 + q_drive.0 + q_drag.0,
+        q_potential.1 + q_wall.1 + q_drive.1 + q_drag.1,
     );
     let a_force = crate::manifold::apply_generalized_force(q_total, c, config)?;
     let net_accel = (-geodesic.0 + a_force.0, -geodesic.1 + a_force.1);
 
-    // Derivative validity: every sampled derivative must be finite.
+    // Physics validity: every sampled derivative and displayed dynamic must be finite.
     let hess = crate::manifold::scale_hessian(c, config)?;
-    let derivative_valid = gx.is_finite()
+    let derivative_valid = c.re.is_finite()
+        && c.im.is_finite()
+        && v.0.is_finite()
+        && v.1.is_finite()
+        && signed_distance.is_finite()
+        && rho.is_finite()
+        && sigma.is_finite()
+        && gx.is_finite()
         && gy.is_finite()
         && sigma_dot.is_finite()
+        && g.iter().all(|row| row.iter().all(|x| x.is_finite()))
         && metric_speed.is_finite()
         && kinetic.is_finite()
         && potential.is_finite()
+        && total.is_finite()
         && geodesic.0.is_finite()
         && geodesic.1.is_finite()
+        && q_potential.0.is_finite()
+        && q_potential.1.is_finite()
+        && net_accel.0.is_finite()
+        && net_accel.1.is_finite()
         && hess.iter().all(|row| row.iter().all(|x| x.is_finite()));
 
     let physics = PhysicsSnapshot {
@@ -344,9 +360,9 @@ pub fn snapshot_from_state(
 
 /// A sampled terrain patch of the canonical embedding Q(c) = (x, y, lambda*sigma(c)).
 ///
-/// The induced metric of this Euclidean surface is EXACTLY the candidate G
-/// (issue #111 mathematical basis), so the 3D skate park visualizes the same
-/// geometry Physics uses. No invented heightfield.
+/// The height visualizes canonical scale. The full Physics metric also weights
+/// horizontal motion by rho^-2, so this Euclidean patch is a diagnostic view of
+/// the graph rather than an isometric embedding of the scale-relative manifold.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TerrainPatch {
     /// Grid dimension (n x n vertices).
@@ -432,5 +448,42 @@ mod tests {
     #[test]
     fn canonical_dt_matches_hop_cadence() {
         assert!((CANONICAL_DT - 1024.0 / 48000.0).abs() < 1e-15);
+    }
+
+    #[test]
+    fn snapshot_total_includes_wall_while_potential_remains_shore_specific() {
+        let _lock = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let config = crate::manifold::ManifoldConfig::default();
+        let c = Complex64::new(1.5, 0.0);
+        let v = (0.03, -0.02);
+        let snapshot = snapshot_from_state(c, v, None, None, &config, None).unwrap();
+        let wall = crate::manifold::wall_potential(c, &config).unwrap();
+
+        assert!(wall > 0.0);
+        assert!((snapshot.physics.total
+            - (snapshot.physics.kinetic + snapshot.physics.potential + wall))
+            .abs()
+            < 1e-10);
+        assert!(snapshot.physics.potential < snapshot.physics.total);
+    }
+
+    #[test]
+    fn snapshot_fails_closed_when_wall_energy_is_not_finite() {
+        let _lock = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let config = crate::manifold::ManifoldConfig::default();
+        let error = snapshot_from_state(
+            Complex64::new(2.0, 0.0),
+            (0.0, 0.0),
+            None,
+            None,
+            &config,
+            None,
+        )
+        .expect_err("a state on the open-disk wall must not produce a valid snapshot");
+        assert!(error.contains("wall potential unstable"));
     }
 }

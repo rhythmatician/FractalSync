@@ -875,7 +875,8 @@ fn manifold_scale_hessian(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> P
     Ok(vec![vec![h[0][0], h[0][1]], vec![h[1][0], h[1][1]]])
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 /// Returns [[g11, g12], [g12, g22]].
 #[pyfunction]
 fn manifold_induced_metric(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<f64>>> {
@@ -942,7 +943,7 @@ fn manifold_potential_energy(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -
     rust_potential_energy(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
-/// Total mechanical energy E = K + U.
+/// Total mechanical energy E = K + U_sigma + U_wall.
 #[pyfunction]
 #[pyo3(signature = (vx, vy, c, config))]
 fn manifold_total_energy(

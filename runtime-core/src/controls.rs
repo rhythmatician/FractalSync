@@ -746,8 +746,9 @@ impl ControlsV2 {
 /// Procedure (all deterministic):
 ///   Q_drive   = drive_covector(c)                // metric-consistent, bounded
 ///   Q_potential = -kappa ∇sigma                  // native potential (#106)
+///   Q_wall  = -∇U_wall                           // outer-domain barrier
 ///   Q_drag  = -beta(brake,grip) G v             // PSD, non-energy-injecting
-///   Q_total = Q_drive + Q_potential + Q_drag    // summed as covectors
+///   Q_total = Q_drive + Q_potential + Q_wall + Q_drag // summed as covectors
 ///   a       = G^{-1} Q_total - Γ(v,v)           // single G^{-1} mapping
 ///   v'      = v + a dt                          // semi-implicit Euler
 ///   c'      = c + v' dt
@@ -762,7 +763,8 @@ pub fn integrate_motion_controls(
     let m = controls.clamped();
     let q_drive = m.drive_covector(c, config)?;
     // Reuse manifold's single G^{-1} path for the summed covector:
-    // compute Q_total = Q_drive + Q_potential + Q_drag, then a = G^{-1} Q_total - Γ.
+    // compute Q_total = Q_drive + Q_potential + Q_wall + Q_drag, then
+    // a = G^{-1} Q_total - Γ.
     // We call `manifold::integrate_step` for the continuous-force portion and
     // then layer the impulse as Δv.
     let beta = m.friction_beta();
@@ -867,8 +869,7 @@ mod tests {
     #[test]
     fn drive_covector_metric_consistent_norm() {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-        // G = I + lambda^2 grad grad^T; at a flat region grad~0 so G~I, but
-        // near the shore G is anisotropic. The covector's G^{-1} norm should be
+        // G = rho^-2 I + lambda^2 grad grad^T. The covector's G^-1 norm should be
         // ||Q||_{G^{-1}} = throttle * MAX_DRIVE_FORCE independent of position/direction.
         // We test that at any c, ||Q||_{G^{-1}} ≈ throttle*MAX_DRIVE_FORCE within tolerance
         // for unit throttle in two different directions.

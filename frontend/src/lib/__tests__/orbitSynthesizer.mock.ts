@@ -434,7 +434,7 @@ export default {
       default_residual_omega_scale: 2.0,
       default_base_omega: 1.0,
       default_orbit_seed: 1337,
-      controller_version: 'orbit-controller/4',
+      controller_version: 'orbit-controller/5',
       feature_version: 'features/2',
       analysis_pipeline_version: 'analysis-pipeline/1',
       controls_version: 'controls/2',

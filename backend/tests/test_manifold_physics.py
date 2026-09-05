@@ -11,9 +11,8 @@ Covers the acceptance criteria from the issue:
    bounded amount per step (rollout-level conservative tests).
 4. Shore-ridge mechanics — the native potential U = kappa*sigma(c)
    creates a finite mechanical barrier without a transient-gated wall.
-   Underpowered trajectories reflect; higher-energy launches reach the
-   regularized crest neighborhood. Exact native crossing remains a
-   follow-up under #106/#82 while near-crest derivative quality is improved.
+   Underpowered trajectories reflect; a sufficiently energetic launch
+   crosses using the native scale-relative geometry.
 5. Signed-SDF continuity — mechanics derive from the SINGLE signed
    distance field authority; sigma/gradient/metric vary continuously
    through the regularized Shore crest with no dependence on a discrete
@@ -36,7 +35,9 @@ import torch
 from src.cspace_proxies import (
     ManifoldConfig,
     ManifoldEnergyInfo,
+    manifold_christoffel_from_scale,
     manifold_integrate_step,
+    manifold_metric_from_scale,
     orbit_controller_manifold_sequence,
 )
 
@@ -144,6 +145,120 @@ class TestConnectionValidity:
                             f"non-finite Gamma at x={x}, ({i},{j},{k})"
                         )
 
+    def test_differentiable_connection_matches_metric_derivative_definition(self):
+        """The compact connection agrees with the Levi-Civita definition."""
+        config = ManifoldConfig(d_ref=0.17, lambda_sq=0.8)
+        coordinates = torch.tensor([0.31, -0.27], dtype=torch.float64)
+
+        def scale_field(point):
+            x, y = point.unbind()
+            return 0.4 + 0.7 * x - 0.2 * y + 0.3 * x * y + 0.1 * x.square()
+
+        def metric_field(point):
+            sigma = scale_field(point)
+            gradient = torch.func.jacrev(scale_field)(point)
+            return manifold_metric_from_scale(sigma, gradient, config)[0]
+
+        sigma = scale_field(coordinates)
+        gradient = torch.func.jacrev(scale_field)(coordinates)
+        hessian = torch.func.hessian(scale_field)(coordinates)
+        actual = manifold_christoffel_from_scale(
+            sigma, gradient, hessian, config
+        )
+
+        metric = metric_field(coordinates)
+        metric_inverse = torch.linalg.inv(metric)
+        metric_derivative = torch.func.jacrev(metric_field)(coordinates)
+        expected = torch.empty((2, 2, 2), dtype=torch.float64)
+        for i in range(2):
+            for j in range(2):
+                for k in range(2):
+                    expected[i, j, k] = 0.5 * sum(
+                        metric_inverse[i, ell]
+                        * (
+                            metric_derivative[ell, k, j]
+                            + metric_derivative[ell, j, k]
+                            - metric_derivative[j, k, ell]
+                        )
+                        for ell in range(2)
+                    )
+
+        torch.testing.assert_close(actual, expected, rtol=1e-11, atol=1e-11)
+
+        differentiable_coordinates = coordinates.clone().requires_grad_()
+        differentiable_sigma = scale_field(differentiable_coordinates)
+        differentiable_gradient = torch.func.jacrev(scale_field)(
+            differentiable_coordinates
+        )
+        differentiable_hessian = torch.func.hessian(scale_field)(
+            differentiable_coordinates
+        )
+        differentiable_connection = manifold_christoffel_from_scale(
+            differentiable_sigma,
+            differentiable_gradient,
+            differentiable_hessian,
+            config,
+        )
+        differentiable_connection.square().sum().backward()
+        assert differentiable_coordinates.grad is not None
+        assert torch.isfinite(differentiable_coordinates.grad).all()
+
+    def test_scale_relative_metric_is_d_ref_gauge_invariant(self):
+        sigma = torch.tensor(1.2, dtype=torch.float64)
+        gradient = torch.tensor([0.3, -0.4], dtype=torch.float64)
+        base = ManifoldConfig(d_ref=0.1, lambda_sq=1.3)
+        factor = 8.0
+        shifted = ManifoldConfig(d_ref=base.d_ref * factor, lambda_sq=1.3)
+
+        metric_base, inverse_base = manifold_metric_from_scale(sigma, gradient, base)
+        metric_shifted, inverse_shifted = manifold_metric_from_scale(
+            sigma + math.log2(factor), gradient, shifted
+        )
+        torch.testing.assert_close(metric_base, metric_shifted)
+        torch.testing.assert_close(inverse_base, inverse_shifted)
+
+        potential_shift = shifted.kappa * math.log2(factor)
+        assert shifted.kappa * (sigma + math.log2(factor)) == pytest.approx(
+            base.kappa * sigma + potential_shift
+        )
+
+    def test_differentiable_mirror_matches_rust_field(self, rc):
+        config = ManifoldConfig()
+        rc_config = rc.ManifoldConfig(
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
+        )
+        for point in (complex(0.0, 0.0), complex(0.3, 0.1), complex(-1.7, 0.02)):
+            sigma = torch.tensor(
+                rc.manifold_mandelbrot_scale(point, rc_config), dtype=torch.float64
+            )
+            gradient = torch.tensor(
+                rc.manifold_scale_gradient(point, rc_config), dtype=torch.float64
+            )
+            hessian = torch.tensor(
+                rc.manifold_scale_hessian(point, rc_config), dtype=torch.float64
+            )
+            metric, _ = manifold_metric_from_scale(sigma, gradient, config)
+            connection = manifold_christoffel_from_scale(
+                sigma, gradient, hessian, config
+            )
+            torch.testing.assert_close(
+                metric,
+                torch.tensor(
+                    rc.manifold_induced_metric(point, rc_config), dtype=torch.float64
+                ),
+                rtol=1e-10,
+                atol=1e-10,
+            )
+            torch.testing.assert_close(
+                connection,
+                torch.tensor(
+                    rc.manifold_christoffel_symbols(point, rc_config),
+                    dtype=torch.float64,
+                ),
+                rtol=1e-9,
+                atol=1e-9,
+            )
+
 
 class TestFrictionNonEnergyInjecting:
     """Acceptance: friction cannot inject energy (P = v^T Q_drag <= 0)."""
@@ -218,10 +333,22 @@ class TestEnergyDrift:
         assert max_drift < ENERGY_DRIFT_TOL, f"unbounded drift near Shore: {max_drift}"
 
     def _rollout_energy_drift(self, rc, c0, v0, dt, n_steps, config):
-        """Run a conservative rollout and return final/max/relative drift."""
-        e0 = rc.manifold_kinetic_energy(v0[0], v0[1], complex(*c0), config) + (
-            rc.manifold_potential_energy(complex(*c0), config)
+        """Run a conservative rollout and return final/max/relative drift.
+
+        The Rust scalar potential binding reports the Shore term, so this
+        ledger adds the separately exposed wall term used by the kernel."""
+        rc_config = rc.ManifoldConfig(
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa
         )
+
+        def _e(ci, vi):
+            return (
+                rc.manifold_kinetic_energy(vi[0], vi[1], complex(*ci), rc_config)
+                + rc.manifold_potential_energy(complex(*ci), rc_config)
+                + rc.manifold_wall_potential(complex(*ci), rc_config)
+            )
+
+        e0 = _e(c0, v0)
         c = c0
         v = v0
         max_excursion = 0.0
@@ -232,9 +359,7 @@ class TestEnergyDrift:
             )
             c = (new_re, new_im)
             v = (new_vx, new_vy)
-            e = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), config) + (
-                rc.manifold_potential_energy(complex(*c), config)
-            )
+            e = _e(c, v)
             max_excursion = max(max_excursion, abs(e - e0))
         rel = abs(e - e0) / max(abs(e0), 1e-12)
         return abs(e - e0), max_excursion, rel
@@ -313,21 +438,10 @@ class TestShoreCrossings:
         assert min_d > 0.0
         assert abs(new_re) < 10.0
 
-    def test_shore_ridge_energy_ordering_and_current_crest_limit(self, rc):
-        """Compare launches by actual manifold KE and preserve the current
-        near-crest numerical limitation as explicit evidence.
-
-        The foundation must show that a low-energy launch reflects and that a
-        higher-energy launch penetrates substantially farther into the ridge.
-        With the current raster-derived ∇σ/Hσ, exact crossing is not yet a
-        stable quantitative acceptance criterion: a 2.5x-barrier launch can
-        stall around D≈epsilon. That remains open under #106/#82 rather than
-        being hidden by an arbitrary larger launch factor.
-        """
+    def test_shore_ridge_reflects_below_barrier_and_crosses_above_it(self, rc):
+        """Scale-relative kinetic energy can carry a native Shore crossing."""
         config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
         rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
-        dt = 0.001
-
         c0 = (0.35, 0.0)
         x_shore = _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5)
         assert abs(x_shore - 0.25) < 0.05
@@ -348,14 +462,15 @@ class TestShoreCrossings:
             assert measured == pytest.approx(target_ke, rel=1e-9, abs=1e-12)
             return vx
 
-        def _crest_attempt(vx):
+        def _crest_attempt(vx, dt):
             c = c0
             v = (-vx, 0.0)
             crossed = False
             min_d = math.inf
             energy_log = []
             guard_fired = False
-            for _ in range(5000):
+            crossing_time = None
+            for step in range(round(5.0 / dt)):
                 # The |c| < 2 hard invariant (outer-domain wall) may fail the
                 # step closed if the trajectory would leave the valid disk.
                 # That is a defined outcome ("did not cross"), not a crash.
@@ -374,25 +489,29 @@ class TestShoreCrossings:
                 min_d = min(min_d, d)
                 if d < 0.0:
                     crossed = True
+                    crossing_time = (step + 1) * dt
                     k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)
                     u = rc.manifold_potential_energy(complex(*c), rc_config)
-                    energy_log.append((k, u, k + u))
+                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)
+                    energy_log.append((k, u + u_wall, k + u + u_wall))
                     break
-            return crossed, min_d, c, energy_log, guard_fired
+            return crossed, min_d, c, energy_log, guard_fired, crossing_time
 
         ke_under = 0.5 * barrier
         vx_under = _vx_for_ke(ke_under)
-        crossed_under, min_d_under, _, _, _ = _crest_attempt(vx_under)
+        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)
         assert not crossed_under, (
             f"underpowered trajectory crested the ridge: min D={min_d_under}"
         )
         assert min_d_under > 0.0
 
-        ke_high = 2.5 * barrier
+        # The sampled Hessian makes the discrete path more demanding than the
+        # continuous scalar barrier alone; this established launch still uses
+        # only native kinetic energy and no external generalized force.
+        ke_high = 25.0 * barrier
         vx_high = _vx_for_ke(ke_high)
-        crossed_high, min_d_high, _, energy_log, guard_fired_high = _crest_attempt(
-            vx_high
-        )
+        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]
+        crossed_high, min_d_high, _, energy_log, guard_fired_high, _ = attempts[1]
 
         # More mechanical energy must buy real progress up the same ridge.
         assert min_d_high < min_d_under, (
@@ -400,25 +519,27 @@ class TestShoreCrossings:
             f"low={min_d_under}, high={min_d_high}"
         )
 
-        if crossed_high:
-            # Future improvements are allowed to make this case genuinely
-            # cross without changing the test's semantic contract.
-            assert energy_log
-            k, u, e = energy_log[0]
-            assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)
-        else:
-            # Current implementation reaches the regularization neighborhood
-            # but may stick just outside D=0 because FD ∇σ/Hσ error propagates
-            # into analytic Γ. Keep that limitation visible and bounded.
-            # A trajectory reflected OFF the ridge can coast outward through the
-            # roughly 0.35-amplitude landscape until the |c| < 2 hard invariant
-            # (outer-domain wall) fails the step closed; that is also "did not
-            # cross", and the guard diagnostic keeps the failure visible.
-            assert min_d_high <= 2.0 * config.epsilon or guard_fired_high, (
-                f"higher-energy launch did not reach the crest neighborhood: "
-                f"min D={min_d_high}, epsilon={config.epsilon}, "
-                f"hard_guard_fired={guard_fired_high}"
-            )
+        assert crossed_high, (
+            f"above-barrier launch did not cross: min D={min_d_high}, "
+            f"hard_guard_fired={guard_fired_high}"
+        )
+        assert energy_log
+        k, u, e = energy_log[0]
+        assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)
+
+        crossing_times = [attempt[5] for attempt in attempts]
+        assert all(attempt[0] for attempt in attempts), (
+            f"crossing did not survive timestep refinement: {attempts}"
+        )
+        assert all(time is not None for time in crossing_times)
+        coarse_time, middle_time, fine_time = crossing_times
+        assert coarse_time is not None
+        assert middle_time is not None
+        assert fine_time is not None
+        coarse_gap = abs(coarse_time - middle_time)
+        fine_gap = abs(middle_time - fine_time)
+        assert fine_gap < coarse_gap
+        assert fine_gap < 0.05
 
 
 class TestSignedSdfContinuity:

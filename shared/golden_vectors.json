@@ -1,7 +1,7 @@
 {
   "generator": "runtime_core 0.1.0",
   "authority": "docs/adr/0001-rust-first-parity.md",
-  "controller_version": "orbit-controller/4",
+  "controller_version": "orbit-controller/5",
   "feature_version": "features/2",
   "carrier_cases": [
     {
