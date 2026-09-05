@@ -16,6 +16,8 @@ Supports two encoder modes:
 import torch
 import torch.nn as nn
 
+from .model_schema import apply_named_schema, output_schema
+
 class AudioToControlModel(nn.Module):
     """
     Neural network that predicts orbit control signals from audio features.
@@ -76,16 +78,9 @@ class AudioToControlModel(nn.Module):
         self.input_dim = self.features_per_frame * window_frames
 
         self.controls_version = controls_version
-        # Output dimension: Controls v2 (13) vs legacy orbit_control (3 + k_bands)
-        if controls_version == "controls/2":
-            # Canonical 13-channel: directionX,Y,throttle,brake,grip,impulse + 7 Julia deltas; Rust owns order/ranges
-            try:
-                import runtime_core
-                self.output_dim = len(runtime_core.ControlsV2.model_output_order())
-            except Exception:
-                self.output_dim = 13
-        else:
-            self.output_dim = 3 + k_bands
+        schema_kind = "controls_v2" if controls_version == "controls/2" else "orbit_control"
+        self.output_schema = output_schema(schema_kind, k_bands)
+        self.output_dim = len(self.output_schema)
 
         if recurrent:
             # Shared per-frame encoder → GRU → heads.
@@ -142,25 +137,21 @@ class AudioToControlModel(nn.Module):
                 nn.Linear(head_input_dim, 32),
                 nn.ReLU(),
                 nn.Linear(32, 1),
-                nn.Sigmoid(),
             )
             self.brake_head = nn.Sequential(
                 nn.Linear(head_input_dim, 32),
                 nn.ReLU(),
                 nn.Linear(32, 1),
-                nn.Sigmoid(),
             )
             self.grip_head = nn.Sequential(
                 nn.Linear(head_input_dim, 32),
                 nn.ReLU(),
                 nn.Linear(32, 1),
-                nn.Sigmoid(),
             )
             self.impulse_head = nn.Sequential(
                 nn.Linear(head_input_dim, 32),
                 nn.ReLU(),
                 nn.Linear(32, 1),
-                nn.Sigmoid(),
             )
             self.view_head = nn.Sequential(
                 nn.Linear(head_input_dim, 32),
@@ -178,7 +169,6 @@ class AudioToControlModel(nn.Module):
             nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
-            nn.Sigmoid(),  # Alpha in [0, 1], rescaled below
 
         )
 
@@ -192,7 +182,6 @@ class AudioToControlModel(nn.Module):
             nn.Linear(head_input_dim, 32),
             nn.ReLU(),
             nn.Linear(32, k_bands),
-            nn.Sigmoid(),  # Gates in [0, 1]
 
         )
 
@@ -251,14 +240,22 @@ class AudioToControlModel(nn.Module):
 
         if self.controls_version == "controls/2":
             # 13-channel ControlsV2: directionX,Y (tanh), throttle/brake/grip/impulse (sigmoid), 7 view deltas (tanh)
-            direction = torch.tanh(self.direction_head(encoded))  # (B,2) in [-1,1]
-            throttle = self.throttle_head(encoded)  # (B,1) sigmoid already
+            direction = self.direction_head(encoded)
+            throttle = self.throttle_head(encoded)
             brake = self.brake_head(encoded)
             grip = self.grip_head(encoded)
             impulse = self.impulse_head(encoded)
-            view_deltas = torch.tanh(self.view_head(encoded))  # (B,7) in [-1,1]
-            output = torch.cat([direction, throttle, brake, grip, impulse, view_deltas], dim=1)
-            return output
+            view_deltas = self.view_head(encoded)
+            raw_by_name = {
+                "directionX": direction[:, 0], "directionY": direction[:, 1],
+                "throttle": throttle[:, 0], "brake": brake[:, 0],
+                "grip": grip[:, 0], "impulse": impulse[:, 0],
+                "zoomDelta": view_deltas[:, 0], "rotationDelta": view_deltas[:, 1],
+                "hueDelta": view_deltas[:, 2], "chromaDelta": view_deltas[:, 3],
+                "lightnessDelta": view_deltas[:, 4], "accentDelta": view_deltas[:, 5],
+                "harmonyShift": view_deltas[:, 6],
+            }
+            return apply_named_schema(raw_by_name, self.output_schema)
 
         # Legacy orbit_control: s_target, alpha, omega_scale, band_gates
         s_raw = self.s_head(encoded)  # (batch_size, 1)
@@ -266,42 +263,28 @@ class AudioToControlModel(nn.Module):
         omega_raw = self.omega_head(encoded)  # (batch_size, 1)
         band_gates = self.band_gates_head(encoded)  # (batch_size, k_bands)
 
-        # Apply activation functions to constrain outputs
-        s_target = 0.2 + 2.8 * torch.sigmoid(s_raw)  # [0.2, 3.0]
-        alpha = 0.05 + 0.90 * alpha  # [0.05, 0.95]
-        omega_scale = 0.1 + torch.nn.functional.softplus(omega_raw) * 0.5  # ~[0.1, 5.0]
-        omega_scale = torch.clamp(omega_scale, 0.1, 5.0)
-        output = torch.cat([s_target, alpha, omega_scale, band_gates], dim=1)
-        return output
+        raw_by_name = {
+            "s_target": s_raw[:, 0],
+            "alpha": alpha[:, 0],
+            "omega_scale": omega_raw[:, 0],
+        }
+        raw_by_name.update(
+            {f"band_gate_{index}": band_gates[:, index] for index in range(self.k_bands)}
+        )
+        return apply_named_schema(raw_by_name, self.output_schema)
 
-    def get_parameter_ranges(self) -> dict:
+    def get_parameter_ranges(self) -> dict[str, tuple[float, float]]:
         """
         Get expected ranges for each output parameter.
 
         Returns:
             Dictionary mapping parameter names to (min, max) tuples
         """
-        if self.controls_version == "controls/2":
-            # Canonical ControlsV2 ranges from Rust — single authority per ADR 0001.
-            # Fail closed if Rust contract is unavailable; do not maintain a fallback copy.
-            import runtime_core  # type: ignore[import-not-found]
-
-            try:
-                raw = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
-            except AttributeError as exc:
-                raise RuntimeError(
-                    "ControlsV2::parameter_ranges() not available from Rust; "
-                    f"failing closed for controls/2: {exc}"
-                ) from exc
-            # Rust returns {name: [min, max]}; normalize to {name: (min, max)}
-            return {k: (float(v[0]), float(v[1])) for k, v in raw.items()}
-        ranges = {
-            "s_target": (0.2, 3.0),
-            "alpha": (0.05, 0.95),
-            "omega_scale": (0.1, 5.0),
-        }
-        for k in range(self.k_bands):
-            ranges[f"band_gate_{k}"] = (0.0, 1.0)
+        ranges: dict[str, tuple[float, float]] = {}
+        for descriptor in self.output_schema:
+            if descriptor.minimum is None or descriptor.maximum is None:
+                raise RuntimeError(f"{descriptor.name} has no bounded training range")
+            ranges[descriptor.name] = (descriptor.minimum, descriptor.maximum)
         return ranges
 
     def parse_output(self, output: torch.Tensor) -> dict:
@@ -317,24 +300,23 @@ class AudioToControlModel(nn.Module):
               orbit_control -> s_target, alpha, omega_scale, band_gates
         """
         if self.controls_version == "controls/2":
-            return {
-                "directionX": output[:, 0],
-                "directionY": output[:, 1],
-                "throttle": output[:, 2],
-                "brake": output[:, 3],
-                "grip": output[:, 4],
-                "impulse": output[:, 5],
-                "zoomDelta": output[:, 6],
-                "rotationDelta": output[:, 7],
-                "hueDelta": output[:, 8],
-                "chromaDelta": output[:, 9],
-                "lightnessDelta": output[:, 10],
-                "accentDelta": output[:, 11],
-                "harmonyShift": output[:, 12],
+            parsed = {
+                descriptor.name: output[:, index]
+                for index, descriptor in enumerate(self.output_schema)
             }
-        return {
-            "s_target": output[:, 0],
-            "alpha": output[:, 1],
-            "omega_scale": output[:, 2],
-            "band_gates": output[:, 3:],
-        }
+        else:
+            orbit_indices = [
+                index for index, descriptor in enumerate(self.output_schema)
+                if descriptor.group == "orbit"
+            ]
+            gate_indices = [
+                index for index, descriptor in enumerate(self.output_schema)
+                if descriptor.group == "band_gates"
+            ]
+            parsed = {
+                descriptor.name: output[:, index]
+                for index, descriptor in enumerate(self.output_schema)
+                if index in orbit_indices
+            }
+            parsed["band_gates"] = output[:, gate_indices]
+        return parsed

@@ -251,13 +251,13 @@ pack observation in this particular ordering
 interpret output index 3 as ...
 ```
 
-All of those are product semantics. The current
-`frontend/src/lib/modelInference.ts` still contains too much of exactly
-that class of behavior; PR #93 improves its timing, but the file is a
-**transitional layer, not the destination**. It is registered in
-`shared/architecture_mirrors.json` as `transitional_mirror` (see the
-`kinds` amendment below) so the debt is visible and mechanically tracked.
-Eliminating it is a follow-up ADR.
+All of those are product semantics. This list records the split authority
+found during PR #93: `frontend/src/lib/modelInference.ts` still contained
+those decisions at that time. The later model-I/O consolidation resolved
+that finding by moving schemas, decoding, audio summaries, and visual/drive
+projections into `runtime-core/src/model_io.rs`. The TypeScript file now owns
+ONNX transport and delegates product interpretation through the generated
+WASM bindings.
 
 ### What Python must not independently decide
 
@@ -449,23 +449,24 @@ deliberate one, which is exactly what the manifest exists to make visible.
 | Mirror | Kind | Authority | `why_outside_rust` | Parity |
 |---|---|---|---|---|
 | `backend/src/cspace_proxies.py` | differentiable_mirror | `controller.rs`, `proxies.rs` | `python:autograd` | preflight (b)(e)(e3)(e4), golden tests |
-| `backend/src/python_feature_extractor.py` | behavioral_mirror | `features.rs` | `python:experiment_orchestration` | preflight (g)(h) |
+| `backend/src/python_feature_extractor.py` | diagnostic | `features.rs` | `python:diagnostics` | preflight (g)(h) |
 | `frontend/src/lib/__tests__/orbitSynthesizer.mock.ts` | behavioral_mirror | `controller.rs` | `typescript:binding_adapter` | vitest goldenParity |
 | `backend/src/visual_metrics.py` | behavioral_mirror | `visual_metrics.rs` | `python:training` | test_visual_metrics* |
 | `backend/src/julia_gpu.py` | behavioral_mirror | `visual_metrics.rs` | `python:training` | test_visual_metrics* |
 | `backend/src/c_trace_plot.py` | diagnostic | minimap geometry | `python:diagnostics` | none (diagnostic-only) |
 | `backend/src/live_controller.py` | experimental | `features.rs` | `python:experiment_orchestration` | none — must not be promoted to training/runtime without delegating to `runtime_core.FeatureExtractor` or adding a real parity check |
-| `frontend/src/lib/modelInference.ts` | **transitional_mirror** (sunset by 2026-12-31, follow-up ADR proposed) | `controller.rs` + `features.rs` + model I/O schema | `typescript:onnx_transport` | vitest goldenParity (controller/feature version refusal), preflight (f) |
+| `frontend/src/lib/modelInference.ts` | adapter | `model_io.rs` + `controller.rs` + `features.rs` | `typescript:onnx_transport` | modelOutputWasmParity, modelInferenceWasm, preflight (f) |
 
 Clean adapters (verified, no formulas): `frontend/src/lib/orbitSynthesizer.ts`,
 `frontend/src/lib/canonicalFeatures.ts`, `backend/src/distance_utils.py`,
-`backend/src/runtime_core_bridge.py`.
+`backend/src/runtime_core_bridge.py`, `frontend/src/lib/modelInference.ts`.
 
-> Note: `modelInference.ts` was previously listed as a clean adapter. The
-> 2026-08-29 amendment demoted it to `transitional_mirror` because PR #93
-> fixed its sample-clock timing but the file still contains product
-> semantics (parameter range interpretation, observation unpacking,
-> output-to-controls mapping) that belong in Rust per the decision test.
+> Historical note: the 2026-08-29 amendment temporarily classified
+> `modelInference.ts` as a `transitional_mirror` after PR #93 fixed its
+> sample-clock timing but left product interpretation in TypeScript. The
+> model-I/O consolidation subsequently moved that interpretation to Rust and
+> restored the file's adapter classification. The manifest and compiled-WASM
+> tests now enforce that boundary.
 
 
 ## Amendment: canonical pipeline boundary and analysis-pipeline version (2026-08-30, issue #93)

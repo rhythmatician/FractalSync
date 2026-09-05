@@ -80,31 +80,34 @@ class FeatureExtractorProxy:
         self.feature_std: Optional[NDArray[np.float64]] = None
 
     def num_features_per_frame(self) -> int:
-        attr = getattr(self._fe, "num_features_per_frame", None)
-        if callable(attr):
-            return int(attr())
-        # In production the rust binding exposes a method; handle ints defensively
-        if attr is None:
-            raise RuntimeError("FeatureExtractor missing num_features_per_frame")
-        return int(attr)
+        return self._fe.num_features_per_frame()
 
-    def extract_windowed_features(self, audio, window_frames: int):
+    def extract_windowed_features(
+        self,
+        audio: Sequence[float] | NDArray[np.floating],
+        window_frames: int,
+    ) -> NDArray[np.float64]:
         result = self._fe.extract_windowed_features(list(audio), window_frames)
         return np.array(result, dtype=np.float64)
 
     # Provide normalization helpers matching the old bridge API so callers
     # don't need to change during migration.
-    def compute_normalization_stats(self, all_features: list):
+    def compute_normalization_stats(
+        self, all_features: list[NDArray[np.float64]]
+    ) -> None:
         if not all_features:
             return
         concatenated = np.concatenate(all_features, axis=0)
         self.feature_mean = np.mean(concatenated, axis=0)
         self.feature_std = np.std(concatenated, axis=0) + 1e-8
 
-    def normalize_features(self, features):
+    def normalize_features(
+        self, features: Sequence[float] | NDArray[np.floating]
+    ) -> NDArray[np.float64]:
+        array = np.asarray(features, dtype=np.float64)
         if self.feature_mean is None or self.feature_std is None:
-            return features
-        return (features - self.feature_mean) / self.feature_std
+            return array
+        return (array - self.feature_mean) / self.feature_std
 
 
 def make_feature_extractor(

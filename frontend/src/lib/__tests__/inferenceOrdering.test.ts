@@ -11,6 +11,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { ModelInference } from '../modelInference';
+import { initOrbitSynth } from '../orbitSynthesizer';
+
+(globalThis as { __vitest?: boolean }).__vitest = true;
 import type { AnalysisTick } from '../analysisTimebase';
 
 /** Build a minimal legacy-model tick (7 outputs, no orbit synthesizer). */
@@ -55,6 +58,7 @@ function installFakeSession(
 
 describe('ModelInference tick ordering (invariant 7)', () => {
   it('applies ticks in arrival order despite varying inference latency', async () => {
+    await initOrbitSynth();
     const mi = new ModelInference();
 
     // First inference is SLOW, later ones FAST — without ordering, tick 1
@@ -87,6 +91,7 @@ describe('ModelInference tick ordering (invariant 7)', () => {
   });
 
   it('serializes concurrent inferTick calls (no interleaving)', async () => {
+    await initOrbitSynth();
     const mi = new ModelInference();
     let active = 0;
     let maxActive = 0;

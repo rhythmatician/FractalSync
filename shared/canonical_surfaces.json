@@ -59,6 +59,20 @@
                 "backend/tests/test_julia_view_parity.py"
             ]
         },
+        "model_io": {
+            "authority": "runtime-core/src/model_io.rs (model-io/1 schemas, routing, decoders, and visual/drive projections)",
+            "description": "Canonical interpretation of post-activation model outputs. Rust owns output ordering, head activation descriptors, legacy orbit and visual decoding, audio summary slots, runtime routing, and the product-level visual/drive projections used after ONNX inference.",
+            "surfaces": {
+                "rust_authority": "runtime-core/src/model_io.rs",
+                "runtime_surface": "wasm-orbit/src/lib.rs compiled model_io JSON bindings consumed by frontend/src/lib/modelInference.ts",
+                "training_surface": "runtime-core/src/pybindings.rs model_io JSON bindings consumed by backend/src/control_model.py and backend/src/export_model.py"
+            },
+            "required_tests": [
+                "runtime-core/tests/model_io.rs",
+                "backend/tests/test_model_schema.py",
+                "frontend/src/lib/__tests__/modelOutputWasmParity.test.ts"
+            ]
+        },
         "manifold_physics": {
             "authority": "runtime-core/src/manifold.rs (ManifoldConfig, induced_metric, Christoffel, integrate_step, EnergyInfo; embedding/Jacobian/q_dot/sigma_dot)",
             "description": "Mandelbrot-native manifold Physics (issue #106): embedding q(c)=(x,y,sigma(c)), Jacobian, metric G, potential U=kappa*sigma, Levi-Civita connection, energy ledger, musically-ignorant generalized-force integration. D/d/S distinct, no v_sigma.",

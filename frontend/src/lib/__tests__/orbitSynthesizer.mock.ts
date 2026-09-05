@@ -423,6 +423,50 @@ export default {
   ControlsV2: class MockControlsV2 {
     constructor(public motion: unknown, public view: unknown) {}
   },
+  modelOutputKind(modelType?: string, controlsVersion?: string) {
+    if (controlsVersion === 'controls/2' || modelType === 'controls_v2') return 'controls_v2';
+    return modelType === 'orbit_control' ? 'orbit_control' : 'legacy_visual';
+  },
+  decodeOrbitControlJson(values: Float64Array, kBands: number) {
+    return JSON.stringify({ sTarget: values[0], alpha: values[1], omegaScale: values[2], bandGates: Array.from(values.slice(3, 3 + kBands)) });
+  },
+  decodeControlsV2Json(values: Float64Array) {
+    return JSON.stringify({
+      motion: { direction: [values[0], values[1]], throttle: values[2], brake: values[3], grip: values[4], impulse: values[5] },
+      view: { zoomDelta: values[6], rotationDelta: values[7], hueDelta: values[8], chromaDelta: values[9], lightnessDelta: values[10], accentDelta: values[11], harmonyShift: values[12] },
+    });
+  },
+  audioFeatureAveragesJson(values: Float64Array, featuresPerFrame: number) {
+    const frames = Math.floor(values.length / featuresPerFrame);
+    let rms = 0; let onset = 0;
+    for (let i = 0; i < frames; i++) { rms += values[i * featuresPerFrame + 2]; onset += values[i * featuresPerFrame + 4]; }
+    return JSON.stringify({ rms: rms / frames, onset: onset / frames });
+  },
+  decodeLegacyVisualJson(values: Float64Array) {
+    return JSON.stringify({
+      juliaSeed: { real: (values[0] * 0.6) % 1.4 - 0.7, imag: (values[1] * 0.6) % 1.4 - 0.7 },
+      colorHue: values[2] % 1,
+      colorSat: Math.max(0.5, Math.min(1, values[3] * 0.8 + 0.5)),
+      colorBright: Math.max(0.6, Math.min(0.9, values[4] * 0.5 + 0.5)),
+      zoom: Math.max(1.5, Math.min(4, values[5] * 2 + 1.5)),
+      speed: Math.max(0.3, Math.min(0.7, values[6])),
+    });
+  },
+  orbitVisualParametersJson(cRe: number, cIm: number, _controls: string, rms: number, onset: number) {
+    return JSON.stringify({ juliaSeed: { real: cRe, imag: cIm }, colorHue: (rms * 2) % 1, colorSat: 0.7 + onset * 0.3, colorBright: 0.6 + rms * 0.3, zoom: 2.5, speed: 0.5 });
+  },
+  legacyOrbitDriveInputsJson(rms: number, onset: number) {
+    const energy = 1 / (1 + Math.exp(-rms));
+    return JSON.stringify({ transient: Math.max(0, Math.min(1, onset)), energy, thrust: energy * 0.06 });
+  },
+  controlsV2VisualParametersJson(cRe: number, cIm: number, controlsJson: string, presentationJson?: string) {
+    const controls = JSON.parse(controlsJson);
+    const p = presentationJson ? JSON.parse(presentationJson) : [0, 0.6, 0.6, 2.5];
+    return JSON.stringify({ juliaSeed: { real: cRe, imag: cIm }, colorHue: p[0] % 1, colorSat: p[1], colorBright: p[2], zoom: p[3], speed: Math.hypot(...controls.motion.direction) * controls.motion.throttle });
+  },
+  legacyAudioFeatureAveragesJson(values: Float64Array) {
+    return this.audioFeatureAveragesJson(values, 6);
+  },
   constants() {
     return {
       sample_rate: 48000,

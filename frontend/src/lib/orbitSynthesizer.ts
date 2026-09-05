@@ -81,6 +81,15 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  decodeOrbitControlJson(values: Float64Array, kBands: number): string;
+  decodeControlsV2Json(values: Float64Array): string;
+  decodeLegacyVisualJson(values: Float64Array, audioReactive: boolean, rms: number, onset: number): string;
+  audioFeatureAveragesJson(values: Float64Array, featuresPerFrame: number): string;
+  orbitVisualParametersJson(cRe: number, cIm: number, controlsJson: string, rms: number, onset: number): string;
+  modelOutputKind(modelType?: string, controlsVersion?: string): string;
+  legacyOrbitDriveInputsJson(rms: number, onset: number): string;
+  controlsV2VisualParametersJson(cRe: number, cIm: number, controlsJson: string, presentationJson?: string): string;
+  legacyAudioFeatureAveragesJson(values: Float64Array): string;
   OrbitController: new (
     s: number,
     alpha: number,
@@ -163,6 +172,48 @@ interface WasmModule {
     default_base_omega: number;
     default_orbit_seed: number;
   };
+}
+
+export interface AudioFeatureAverages { rms: number; onset: number }
+export interface DecodedControlsV2 {
+  motion: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number };
+  view: { zoomDelta: number; rotationDelta: number; hueDelta: number; chromaDelta: number; lightnessDelta: number; accentDelta: number; harmonyShift: number };
+}
+
+export function decodeOrbitControl(values: number[], kBands: number): ControlSignals {
+  return JSON.parse(getWasmModule().decodeOrbitControlJson(new Float64Array(values), kBands)) as ControlSignals;
+}
+
+export function decodeControlsV2(values: number[]): DecodedControlsV2 {
+  return JSON.parse(getWasmModule().decodeControlsV2Json(new Float64Array(values))) as DecodedControlsV2;
+}
+
+export function audioFeatureAverages(values: ArrayLike<number>, featuresPerFrame: number): AudioFeatureAverages {
+  return JSON.parse(getWasmModule().audioFeatureAveragesJson(Float64Array.from(values), featuresPerFrame)) as AudioFeatureAverages;
+}
+export function legacyAudioFeatureAverages(values: ArrayLike<number>): AudioFeatureAverages {
+  return JSON.parse(getWasmModule().legacyAudioFeatureAveragesJson(Float64Array.from(values))) as AudioFeatureAverages;
+}
+
+export function decodeLegacyVisual(values: number[], audio: AudioFeatureAverages | null): string {
+  return getWasmModule().decodeLegacyVisualJson(new Float64Array(values), audio !== null, audio?.rms ?? 0, audio?.onset ?? 0);
+}
+
+export function orbitVisualParameters(c: Complex, controls: ControlSignals, audio: AudioFeatureAverages): string {
+  return getWasmModule().orbitVisualParametersJson(c.real, c.imag, JSON.stringify(controls), audio.rms, audio.onset);
+}
+
+export function modelOutputKind(modelType?: string, controlsVersion?: string): string {
+  return getWasmModule().modelOutputKind(modelType, controlsVersion);
+}
+
+export interface OrbitDriveInputs { transient: number; energy: number; thrust: number }
+export function legacyOrbitDriveInputs(rms: number, onset: number): OrbitDriveInputs {
+  return JSON.parse(getWasmModule().legacyOrbitDriveInputsJson(rms, onset)) as OrbitDriveInputs;
+}
+
+export function controlsV2VisualParameters(c: Complex, controls: DecodedControlsV2, presentation?: number[]): string {
+  return getWasmModule().controlsV2VisualParametersJson(c.real, c.imag, JSON.stringify(controls), presentation === undefined ? undefined : JSON.stringify(presentation));
 }
 
 // Shape of the wasm-bindgen PlayerState export (c-space integrator).

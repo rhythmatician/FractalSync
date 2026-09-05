@@ -63,6 +63,135 @@ use crate::controls::{
     CONTROLS_VERSION,
 };
 
+#[pyfunction]
+fn orbit_control_schema_json(k_bands: usize) -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::orbit_control_schema(k_bands))
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn controls_v2_schema_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::controls_v2_schema())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> PyResult<String> {
+    let averages = crate::model_io::audio_feature_averages(&values, features_per_frame)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&averages)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_audio_feature_averages_json(values: Vec<f64>) -> PyResult<String> {
+    let averages = crate::model_io::legacy_audio_feature_averages(&values)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&averages)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_visual_schema_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::legacy_visual_schema())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_visual_export_ranges_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::legacy_visual_export_ranges())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<String> {
+    let decoded = crate::model_io::decode_orbit_control(&values, k_bands)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn decode_controls_v2_json(values: Vec<f64>) -> PyResult<String> {
+    let decoded = crate::model_io::decode_controls_v2(&values)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, rms=None, onset=None))]
+fn decode_legacy_visual_json(
+    values: Vec<f64>,
+    rms: Option<f64>,
+    onset: Option<f64>,
+) -> PyResult<String> {
+    let audio = match (rms, onset) {
+        (Some(rms), Some(onset)) => Some(crate::model_io::AudioFeatureAverages { rms, onset }),
+        (None, None) => None,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err("rms and onset must be supplied together")),
+    };
+    let decoded = crate::model_io::decode_legacy_visual(&values, audio)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn orbit_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: String,
+    rms: f64,
+    onset: f64,
+) -> PyResult<String> {
+    let controls: crate::model_io::OrbitControlOutput = serde_json::from_str(&controls_json)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let visual = crate::model_io::orbit_visual_parameters(
+        [c_re, c_im],
+        &controls,
+        crate::model_io::AudioFeatureAverages { rms, onset },
+    )
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&visual)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_orbit_drive_inputs_json(rms: f64, onset: f64) -> PyResult<String> {
+    let inputs = crate::model_io::legacy_orbit_drive_inputs(
+        crate::model_io::AudioFeatureAverages { rms, onset },
+    )
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&inputs)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, controls_json, presentation=None))]
+fn controls_v2_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: String,
+    presentation: Option<[f64; 4]>,
+) -> PyResult<String> {
+    let controls: RustControlsV2 = serde_json::from_str(&controls_json)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let visual = crate::model_io::controls_v2_visual_parameters(
+        [c_re, c_im], &controls, presentation,
+    ).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&visual)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (model_type=None, controls_version=None))]
+fn model_output_kind(model_type: Option<String>, controls_version: Option<String>) -> String {
+    serde_json::to_value(crate::model_io::model_output_kind(
+        model_type.as_deref(), controls_version.as_deref(),
+    )).expect("enum serialization cannot fail").as_str().expect("enum serializes as string").to_string()
+}
+
 
 /// Python wrapper for `ResidualParams`.
 #[pyclass]
@@ -2272,6 +2401,20 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<JuliaViewState>()?;
 
     m.add_class::<RuntimeVisualMetrics>()?;
+
+    m.add_function(wrap_pyfunction!(orbit_control_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(controls_v2_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(audio_feature_averages_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_audio_feature_averages_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_visual_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_visual_export_ranges_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_orbit_control_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_controls_v2_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_legacy_visual_json, m)?)?;
+    m.add_function(wrap_pyfunction!(orbit_visual_parameters_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_orbit_drive_inputs_json, m)?)?;
+    m.add_function(wrap_pyfunction!(controls_v2_visual_parameters_json, m)?)?;
+    m.add_function(wrap_pyfunction!(model_output_kind, m)?)?;
 
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
