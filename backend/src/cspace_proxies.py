@@ -835,6 +835,59 @@ class ManifoldConfig:
     epsilon: float = 1e-4
     lambda_sq: float = 1.0
     kappa: float = 1.0
+    # p=8 secant bowl: U_wall = mu * [sec(pi/2 * s^4) - 1], s = |c|^2/4.
+    # mu = 1/pi cancels the pi factor in the force entirely.
+    mu: float = 1.0 / math.pi
+
+
+def manifold_metric_from_scale(
+    sigma: torch.Tensor,
+    grad_sigma: torch.Tensor,
+    config: ManifoldConfig,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Differentiable mirror of the canonical scale-relative metric.
+
+    Returns ``(G, G_inverse)`` for the supplied scale field value and
+    gradient. The inputs may carry arbitrary leading batch dimensions;
+    ``grad_sigma`` must end in the two configuration-space coordinates.
+    """
+    if grad_sigma.shape[-1:] != (2,):
+        raise ValueError("grad_sigma must have shape (..., 2)")
+
+    rho = sigma.new_tensor(config.d_ref) * torch.exp2(-sigma)
+    identity = torch.eye(2, dtype=sigma.dtype, device=sigma.device)
+    metric = rho.reciprocal().square()[..., None, None] * identity
+    metric = metric + config.lambda_sq * torch.einsum(
+        "...i,...j->...ij", grad_sigma, grad_sigma
+    )
+    return metric, torch.linalg.inv(metric)
+
+
+def manifold_christoffel_from_scale(
+    sigma: torch.Tensor,
+    grad_sigma: torch.Tensor,
+    hessian_sigma: torch.Tensor,
+    config: ManifoldConfig,
+) -> torch.Tensor:
+    """Differentiable mirror of the canonical conformal connection."""
+    if hessian_sigma.shape[-2:] != (2, 2):
+        raise ValueError("hessian_sigma must have shape (..., 2, 2)")
+
+    _, metric_inverse = manifold_metric_from_scale(sigma, grad_sigma, config)
+    rho = sigma.new_tensor(config.d_ref) * torch.exp2(-sigma)
+    rho_gradient = -math.log(2.0) * rho[..., None] * grad_sigma
+    identity = torch.eye(2, dtype=sigma.dtype, device=sigma.device)
+
+    # B[l,j,k] is the bracketed lower-index connection term in Eq. 66.
+    conformal = -rho.reciprocal().pow(3)[..., None, None, None] * (
+        torch.einsum("lk,...j->...ljk", identity, rho_gradient)
+        + torch.einsum("lj,...k->...ljk", identity, rho_gradient)
+        - torch.einsum("jk,...l->...ljk", identity, rho_gradient)
+    )
+    graph = config.lambda_sq * torch.einsum(
+        "...l,...jk->...ljk", grad_sigma, hessian_sigma
+    )
+    return torch.einsum("...il,...ljk->...ijk", metric_inverse, conformal + graph)
 
 
 @dataclass
@@ -897,7 +950,7 @@ def manifold_integrate_step(
     import runtime_core
 
     rc_config = runtime_core.ManifoldConfig(
-        config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+        config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
     )
     c_new = complex(new_re.detach().item(), new_im.detach().item())
     c_old = complex(float(c_re.detach()), float(c_im.detach()))
@@ -907,11 +960,15 @@ def manifold_integrate_step(
     k_old = runtime_core.manifold_kinetic_energy(v_old[0], v_old[1], c_old, rc_config)
     u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
     u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
-    e_new = k_new + u_new
-    e_old = k_old + u_old
+    # The scalar potential binding reports U_sigma. Add the separately exposed
+    # wall term to match integrate_step's complete conservative energy ledger.
+    u_wall_new = runtime_core.manifold_wall_potential(c_new, rc_config)
+    u_wall_old = runtime_core.manifold_wall_potential(c_old, rc_config)
+    e_new = k_new + u_new + u_wall_new
+    e_old = k_old + u_old + u_wall_old
     info = ManifoldEnergyInfo(
         kinetic=k_new,
-        potential=u_new,
+        potential=u_new + u_wall_new,
         total=e_new,
         delta_total=e_new - e_old,
         delta_kinetic=k_new - k_old,
@@ -958,7 +1015,7 @@ class _ManifoldStep(torch.autograd.Function):
                 "to substitute flat-physics fallback in the manifold mirror."
             )
         rc_config = runtime_core.ManifoldConfig(
-            config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
         )
         new_re, new_im, new_vx, new_vy, rc_info = rust_step(
             float(c_re.item()),
@@ -1169,6 +1226,8 @@ def orbit_controller_manifold_sequence(
         c_im[i] = cur_im
 
     return torch.complex(c_re, c_im), infos
+
+
 # ---------------------------------------------------------------------------
 # Controls v2 -> manifold Physics rollout (issue #107)
 # Mirrors ``runtime_core::controls::integrate_motion_controls`` so the trainer
@@ -1189,7 +1248,8 @@ class _ControlsStep(torch.autograd.Function):
     which internally computes:
         Q_drive = throttle * MAX_DRIVE_FORCE * G dir / ||dir||_G
         Q_drag  = -beta(brake,grip) G v
-        Q_total = Q_drive + Q_potential + Q_drag
+        Q_wall  = -grad U_wall (p=8 secant bowl)
+        Q_total = Q_drive + Q_potential + Q_wall + Q_drag
         a = G^{-1} Q_total - Gamma(v,v)
         v' = v + a dt, c' = c + v' dt, v'' = v' + delta_v_impulse
     Backward is a STE surrogate: gradient w.r.t new (c,v) routes back to old
@@ -1199,7 +1259,21 @@ class _ControlsStep(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse, dt, config):
+    def forward(
+        ctx,
+        c_re,
+        c_im,
+        vx,
+        vy,
+        dir_x,
+        dir_y,
+        throttle,
+        brake,
+        grip,
+        impulse,
+        dt,
+        config,
+    ):
         import runtime_core
 
         # Fail closed if the destination binding is absent (no flat fallback)
@@ -1210,7 +1284,7 @@ class _ControlsStep(torch.autograd.Function):
                 "Rebuild runtime_core wheel (maturin develop --release)."
             )
         rc_config = runtime_core.ManifoldConfig(
-            config.d_ref, config.epsilon, config.lambda_sq, config.kappa
+            config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
         )
         motion = runtime_core.MotionControls(
             direction_x=float(dir_x.item()),
@@ -1232,7 +1306,9 @@ class _ControlsStep(torch.autograd.Function):
         device = c_re.device
         dtype = c_re.dtype
         # Stash for backward (not needed for this STE)
-        ctx.save_for_backward(c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse)
+        ctx.save_for_backward(
+            c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse
+        )
         return (
             torch.tensor(new_re, device=device, dtype=dtype),
             torch.tensor(new_im, device=device, dtype=dtype),
@@ -1248,7 +1324,9 @@ class _ControlsStep(torch.autograd.Function):
         # connected so the model learns to steer/drive/brake/grip/tap.
         # Motion gradients are approximated as projections of grad_c onto the
         # control axes; brake/grip/impulse receive the mean magnitude.
-        c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse = ctx.saved_tensors
+        c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse = (
+            ctx.saved_tensors
+        )
         # Base gradient magnitude
         g_mag = (grad_re.abs() + grad_im.abs() + grad_vx.abs() + grad_vy.abs()) / 4.0
         # Direction gradients: project grad_c onto direction axes, scaled by throttle
@@ -1261,7 +1339,20 @@ class _ControlsStep(torch.autograd.Function):
         grad_brake = -g_mag * 0.1
         grad_grip = -g_mag * 0.1
         # c/v gradients pass through
-        return grad_re, grad_im, grad_vx, grad_vy, grad_dir_x, grad_dir_y, grad_throttle, grad_brake, grad_grip, grad_impulse, None, None
+        return (
+            grad_re,
+            grad_im,
+            grad_vx,
+            grad_vy,
+            grad_dir_x,
+            grad_dir_y,
+            grad_throttle,
+            grad_brake,
+            grad_grip,
+            grad_impulse,
+            None,
+            None,
+        )
 
 
 def controls_v2_sequence(
@@ -1309,7 +1400,11 @@ def controls_v2_sequence(
 
     state_dtype = torch.float64
     # Initial c
-    if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.numel() > 0:
+    if (
+        initial_c is not None
+        and isinstance(initial_c, torch.Tensor)
+        and initial_c.numel() > 0
+    ):
         ic = initial_c
         if ic.is_complex() and ic.numel() == n:
             cur_re = ic[0].real.to(state_dtype)
@@ -1334,7 +1429,12 @@ def controls_v2_sequence(
         if seg_boundary[i]:
             v_re = torch.zeros_like(v_re)
             v_im = torch.zeros_like(v_im)
-            if initial_c is not None and isinstance(initial_c, torch.Tensor) and initial_c.is_complex() and initial_c.numel() == n:
+            if (
+                initial_c is not None
+                and isinstance(initial_c, torch.Tensor)
+                and initial_c.is_complex()
+                and initial_c.numel() == n
+            ):
                 cur_re = initial_c[i].real.to(state_dtype)
                 cur_im = initial_c[i].imag.to(state_dtype)
 
@@ -1358,20 +1458,34 @@ def controls_v2_sequence(
             cur_re, cur_im, v_re, v_im, dx, dy, th, br, gr, imp, dt_t, cfg
         )
         # Energy diagnostics (detached, via Rust bindings for the new state)
-        rc_config = runtime_core.ManifoldConfig(cfg.d_ref, cfg.epsilon, cfg.lambda_sq, cfg.kappa)
+        rc_config = runtime_core.ManifoldConfig(
+            cfg.d_ref, cfg.epsilon, cfg.lambda_sq, cfg.kappa, cfg.mu
+        )
         c_new = complex(float(new_re.detach()), float(new_im.detach()))
         c_old = complex(float(cur_re.detach()), float(cur_im.detach()))
         v_new = (float(v_re.detach()), float(v_im.detach()))
         v_old = (v_old_re, v_old_im)
         # For info, compute KE at new/old via Rust
         try:
-            k_new = runtime_core.manifold_kinetic_energy(v_new[0], v_new[1], c_new, rc_config)
+            k_new = runtime_core.manifold_kinetic_energy(
+                v_new[0], v_new[1], c_new, rc_config
+            )
             u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
-            k_old = runtime_core.manifold_kinetic_energy(v_old[0], v_old[1], c_old, rc_config)
+            k_old = runtime_core.manifold_kinetic_energy(
+                v_old[0], v_old[1], c_old, rc_config
+            )
             u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
         except Exception:
             k_new = u_new = k_old = u_old = 0.0
-        infos.append(ManifoldEnergyInfo(kinetic=k_new, potential=u_new, total=k_new+u_new, delta_total=(k_new+u_new)-(k_old+u_old), delta_kinetic=k_new-k_old))
+        infos.append(
+            ManifoldEnergyInfo(
+                kinetic=k_new,
+                potential=u_new,
+                total=k_new + u_new,
+                delta_total=(k_new + u_new) - (k_old + u_old),
+                delta_kinetic=k_new - k_old,
+            )
+        )
 
         cur_re = new_re
         cur_im = new_im
@@ -1379,4 +1493,3 @@ def controls_v2_sequence(
         c_im[i] = cur_im
 
     return torch.complex(c_re, c_im), infos
-

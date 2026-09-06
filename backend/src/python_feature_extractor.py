@@ -1,9 +1,8 @@
-"""
-Python fallback feature extractor using librosa.
+"""Diagnostic NumPy oracle for the Rust feature extractor.
 
-Mirror of runtime-core/src/features.rs (canonical). Must reproduce the
-Rust extractor's output within tolerance — enforced by preflight check (g)
-against shared/golden_vectors.json feature_cases.
+Production and training extraction use ``runtime_core.FeatureExtractor``.
+This independent formula copy exists only to detect drift in preflight parity
+against Rust-generated golden vectors.
 
 Contract (FEATURE_VERSION = features/2):
   - Causal fixed transforms for energy-like features (flux/rms/onset):
@@ -14,13 +13,12 @@ Contract (FEATURE_VERSION = features/2):
 """
 
 import numpy as np
-import librosa
 from numpy.typing import NDArray
-from typing import Optional, cast
+from typing import cast
 
 
-class PythonFeatureExtractor:
-    """Python implementation of feature extraction using librosa."""
+class DiagnosticFeatureParityOracle:
+    """Independent NumPy oracle; never use for production extraction."""
 
     def __init__(
         self,
@@ -35,8 +33,6 @@ class PythonFeatureExtractor:
         self.n_fft = n_fft
         self.include_delta = include_delta
         self.include_delta_delta = include_delta_delta
-        self.feature_mean: Optional[NDArray[np.float64]] = None
-        self.feature_std: Optional[NDArray[np.float64]] = None
 
     def num_features_per_frame(self) -> int:
         """Return number of features per frame."""
@@ -98,11 +94,11 @@ class PythonFeatureExtractor:
     def _extract_features(self, audio: NDArray[np.float32]) -> NDArray[np.float64]:
         """Extract base features from audio.
 
-        Literal numpy port of Rust FeatureExtractor::extract_features
+        Diagnostic numpy port of Rust FeatureExtractor::extract_features
         (runtime-core/src/features.rs) — same STFT (Hann window, RMS-
         normalized, no centering), same feature formulas, same frame
-        indexing. This is a FALLBACK only; the canonical extractor is the
-        Rust one via runtime_core_helpers.make_feature_extractor.
+        indexing. The canonical production extractor is Rust and is exposed
+        through runtime_core_helpers.make_feature_extractor.
 
         Returns:
             Array of shape (num_features_per_frame, n_frames)
@@ -273,18 +269,3 @@ class PythonFeatureExtractor:
         delta = np.zeros_like(series)
         delta[1:] = np.diff(series)
         return delta
-
-    def compute_normalization_stats(self, all_features: list[NDArray[np.float64]]):
-        """Compute mean and std for normalization across dataset."""
-        if not all_features:
-            return
-
-        concatenated = np.concatenate(all_features, axis=0)
-        self.feature_mean = np.mean(concatenated, axis=0)
-        self.feature_std = np.std(concatenated, axis=0) + 1e-8
-
-    def normalize_features(self, features: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Normalize features using computed stats."""
-        if self.feature_mean is None or self.feature_std is None:
-            return features
-        return (features - self.feature_mean) / self.feature_std

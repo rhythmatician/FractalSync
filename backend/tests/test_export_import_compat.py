@@ -45,6 +45,17 @@ def test_export_writes_model_and_metadata(tmp_path):
     for key in ("input_shape", "output_dim", "parameter_names", "parameter_ranges"):
         assert key in md, f"Expected metadata to contain key '{key}'"
 
+    # Legacy visual outputs remain raw identity values at runtime, while their
+    # historical browser metadata ranges come from runtime-core's compatibility
+    # contract rather than a Python copy.
+    import runtime_core
+
+    compatibility = json.loads(runtime_core.legacy_visual_export_ranges_json())
+    assert md["parameter_names"] == [field["name"] for field in compatibility]
+    assert md["parameter_ranges"] == {
+        field["name"]: [field["min"], field["max"]] for field in compatibility
+    }
+
     # Try to load the ONNX model. If it references external data, ensure the data file exists.
     try:
         m = onnx.load(str(out_onnx))

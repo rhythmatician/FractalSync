@@ -47,14 +47,12 @@
         },
         {
             "path": "backend/src/python_feature_extractor.py",
-            "kind": "behavioral_mirror",
+            "kind": "diagnostic",
             "rust_authority": "runtime-core/src/features.rs (FeatureExtractor, FEATURE_VERSION features/2)",
-            "why_outside_rust": "python:experiment_orchestration",
-            "reason": "Fallback extractor used when the Rust extractor fails its subprocess sanity check, and for computing dataset normalization stats. Literal numpy port of the Rust formulas. Fallback is required because dataset-wide normalization stats depend on iterating the entire training corpus, which the Rust per-window binding does not expose. NOTE: primary training ingestion now routes through the canonical AnalysisTimebase (see shared/canonical_surfaces.json audio_analysis), not this mirror.",
+            "why_outside_rust": "python:diagnostics",
+            "reason": "Independent NumPy formula oracle used only by preflight to detect drift against Rust-generated feature vectors. Production and training extraction call runtime_core.FeatureExtractor through runtime_core_helpers; dataset-wide normalization aggregation remains Python-owned there and does not recompute feature semantics.",
             "parity": [
-                "scripts/preflight_parity.py check (g) feature golden parity",
-                "scripts/preflight_parity.py check (h) feature golden version",
-                "backend/tests/test_audio_pipeline_parity.py (production-path: timebase ingestion parity)"
+                "none (diagnostic-only; scripts/preflight_parity.py check (g) compares this oracle with Rust-generated golden vectors)"
             ]
         },
         {
@@ -107,25 +105,13 @@
             "parity": [
                 "none (experimental; see reason \u00e2\u20ac\u201d do not promote without parity)"
             ]
-        },
-        {
-            "path": "frontend/src/lib/modelInference.ts",
-            "kind": "transitional_mirror",
-            "rust_authority": "runtime-core/src/controller.rs (OrbitController step, CONTROLLER_VERSION) + runtime-core/src/features.rs (FEATURE_VERSION) + runtime-core/src/model_io (model input/output schema, parameter_ranges)",
-            "why_outside_rust": "typescript:onnx_transport",
-            "reason": "Currently contains model + metadata IO AND residual onnxruntime-web glue for product semantics that should eventually live in Rust (parameter range interpretation, observation unpacking, output-to-controls mapping). PR #93 tightened the sample-clock timing; semantic elimination is the sunset work below.",
-            "parity": [
-                "frontend/src/lib/__tests__/goldenParity.test.ts (controller_version / feature_version refusal)",
-                "scripts/preflight_parity.py check (f) controller_version parity"
-            ],
-            "sunset": "ADR 0004 (proposed): eliminate modelInference.ts mirror by exposing a Rust-owned control-interpretation pipeline consumed via wasm-orbit; the onnx_transport adapter role collapses to fetch/load/run.",
-            "sunset_required_by": "2026-12-31"
         }
     ],
     "adapters": [
         "frontend/src/lib/orbitSynthesizer.ts",
         "frontend/src/lib/canonicalFeatures.ts",
         "frontend/src/lib/analysisTimebase.ts",
+        "frontend/src/lib/modelInference.ts",
         "backend/src/distance_utils.py",
         "backend/src/runtime_core_bridge.py"
     ]

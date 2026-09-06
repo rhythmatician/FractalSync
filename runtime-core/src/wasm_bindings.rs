@@ -64,6 +64,7 @@ pub struct ManifoldConfig {
     epsilon: f64,
     lambda_sq: f64,
     kappa: f64,
+    mu: f64,
 }
 
 impl From<&ManifoldConfig> for RustManifoldConfig {
@@ -73,6 +74,7 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -80,12 +82,13 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
 #[wasm_bindgen]
 impl ManifoldConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> ManifoldConfig {
+    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> ManifoldConfig {
         ManifoldConfig {
             d_ref,
             epsilon,
             lambda_sq,
             kappa,
+            mu,
         }
     }
 
@@ -104,6 +107,10 @@ impl ManifoldConfig {
     #[wasm_bindgen(getter)]
     pub fn kappa(&self) -> f64 {
         self.kappa
+    }
+    #[wasm_bindgen(getter)]
+    pub fn mu(&self) -> f64 {
+        self.mu
     }
 }
 
@@ -676,7 +683,8 @@ pub fn manifold_scale_hessian(real: f64, imag: f64, config: &ManifoldConfig) -> 
     Ok(outer)
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 /// Returns [[g11, g12], [g12, g22]].
 #[wasm_bindgen]
 pub fn manifold_induced_metric(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
@@ -714,7 +722,7 @@ pub fn manifold_potential_energy(real: f64, imag: f64, config: &ManifoldConfig) 
     rust_potential_energy(c, &config.into()).map_err(|e| JsValue::from_str(&e))
 }
 
-/// Total mechanical energy E = K + U.
+/// Total mechanical energy E = K + U_sigma + U_wall.
 #[wasm_bindgen]
 pub fn manifold_total_energy(
     vx: f64,

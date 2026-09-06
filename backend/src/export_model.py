@@ -158,73 +158,29 @@ def export_to_onnx(
         # Be conservative: if ONNX runtime or helper isn't available, skip and keep original behavior
         pass
 
-    # Determine parameter names and ranges based on metadata
-    if metadata and metadata.get("controls_version") == "controls/2":
-        # Unified Controls v2 (issue #107): Rust is single authority per ADR 0001.
-        # Fail closed if Rust contract is unavailable — no Python fallback copy.
-        import runtime_core  # type: ignore[import-not-found]
+    import runtime_core
+    from .model_schema import legacy_visual_export_schema, output_schema
 
-        try:
-            parameter_names = list(runtime_core.ControlsV2.model_output_order())  # type: ignore[attr-defined]
-        except AttributeError as exc:
-            raise RuntimeError(
-                "ControlsV2::model_output_order() not available from Rust; "
-                f"failing closed for controls/2: {exc}"
-            ) from exc
-        try:
-            raw_ranges = runtime_core.ControlsV2.parameter_ranges()  # type: ignore[attr-defined]
-            parameter_ranges = {k: [float(v[0]), float(v[1])] for k, v in raw_ranges.items()}
-        except AttributeError as exc:
-            raise RuntimeError(
-                "ControlsV2::parameter_ranges() not available from Rust; "
-                f"failing closed for controls/2: {exc}"
-            ) from exc
-        output_dim = len(parameter_names)
-        if metadata and "output_dim" in metadata:
-            # Enforce boxed invariant: model output tensor length must exactly match Rust authority
-            expected = len(parameter_names)
-            actual = int(metadata["output_dim"])
-            if actual != expected:
-                raise ValueError(
-                    f"controls/2 output_dim {actual} != ControlsV2.model_output_order() length {expected} ({parameter_names}); "
-                    "model head and Rust schema must share the frozen 13-channel contract"
-                )
-            output_dim = actual
-    elif metadata and metadata.get("model_type") == "orbit_control":
-        # Orbit-based control model outputs: s_target, alpha, omega_scale, band_gates[k]
-        k_bands = metadata.get("k_bands", 6)
-        output_dim = metadata.get("output_dim", 3 + k_bands)
-        parameter_names = ["s_target", "alpha", "omega_scale"] + [
-            f"band_gate_{i}" for i in range(k_bands)
-        ]
-        parameter_ranges = {
-            "s_target": [0.2, 3.0],
-            "alpha": [0.0, 1.0],
-            "omega_scale": [0.1, 5.0],
-        }
-        for i in range(k_bands):
-            parameter_ranges[f"band_gate_{i}"] = [0.0, 1.0]
-    else:
-        # Default: physics/visual parameter model (legacy)
-        output_dim = 7
-        parameter_names = [
-            "julia_real",
-            "julia_imag",
-            "color_hue",
-            "color_sat",
-            "color_bright",
-            "zoom",
-            "speed",
-        ]
-        parameter_ranges = {
-            "julia_real": [-2.0, 2.0],
-            "julia_imag": [-2.0, 2.0],
-            "color_hue": [0.0, 1.0],
-            "color_sat": [0.0, 1.0],
-            "color_bright": [0.0, 1.0],
-            "zoom": [0.1, 10.0],
-            "speed": [0.0, 1.0],
-        }
+    model_type = None if metadata is None else metadata.get("model_type")
+    controls_version = None if metadata is None else metadata.get("controls_version")
+    kind = runtime_core.model_output_kind(model_type, controls_version)
+    k_bands = 6 if metadata is None else int(metadata.get("k_bands", 6))
+    schema = output_schema(kind, k_bands)
+    metadata_schema = (
+        legacy_visual_export_schema() if kind == "legacy_visual" else schema
+    )
+    parameter_names = [descriptor.name for descriptor in metadata_schema]
+    parameter_ranges = {
+        descriptor.name: [descriptor.minimum, descriptor.maximum]
+        for descriptor in metadata_schema
+    }
+    output_dim = len(schema)
+    if metadata is not None and "output_dim" in metadata:
+        actual = int(metadata["output_dim"])
+        if actual != output_dim:
+            raise ValueError(
+                f"output_dim {actual} does not match Rust {kind} schema length {output_dim}"
+            )
 
     metadata_dict = {
         "input_shape": (
@@ -242,6 +198,11 @@ def export_to_onnx(
 
     if metadata:
         metadata_dict.update(metadata)
+    # Rust schema fields remain authoritative even when a caller supplies stale
+    # copies in otherwise valid auxiliary metadata.
+    metadata_dict["output_dim"] = output_dim
+    metadata_dict["parameter_names"] = parameter_names
+    metadata_dict["parameter_ranges"] = parameter_ranges
 
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)
