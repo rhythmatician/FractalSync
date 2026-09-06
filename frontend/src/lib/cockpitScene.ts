@@ -21,14 +21,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from './debugCockpit';
 
-/** Camera presentation modes (issue #111). */
-export type CameraMode = 'physical' | 'scale-follow' | 'treadmill';
+/** Camera presentation modes (issue #111 + hyperbolic camera). */
+export type CameraMode = 'physical' | 'scale-follow' | 'treadmill' | 'hyperbolic';
 
 /**
- * Terrain-mesh build mode: 'physical' and 'scale-follow' render y =
+ * Terrain-mesh build mode: 'physical', 'scale-follow', and 'hyperbolic' render y =
  * surfaceY(z) (the asinh-compressed physical embedding) — scale-follow
  * deliberately keeps the physical vertical presentation and only changes
- * the horizontal ruler at presentation time; 'treadmill' renders y =
+ * the horizontal ruler at presentation time; 'hyperbolic' uses the hyperbolic
+ * isometry + Poincaré ball projection to place vertices; 'treadmill' renders y =
  * SCENE_SCALE * z so the chart Y is the exact relative embedding height,
  * with NO nonlinear compression. All modes share the same Rust patch
  * input — only the Y mapping differs.
@@ -49,11 +50,11 @@ export function isPhysicalYMode(mode: CameraMode): boolean {
  * Horizontal magnification factor for a presentation mode at a given rho.
  * Single authority for "is this mode horizontally magnified, and by how
  * much": scale-follow and treadmill both use the local Mandelbrot ruler
- * 1/rho; physical uses none. Used by the transforms AND by the LOD/fog
- * render-distance planner so the fog wall tracks the magnified footprint.
+ * 1/rho; physical and hyperbolic use 1.0 (hyperbolic maps into the Poincaré ball).
  */
 export function horizontalMagnification(mode: CameraMode, rho: number): number {
-  return mode === 'physical' ? 1.0 : 1.0 / Math.max(rho, 1e-9);
+  if (mode === 'physical' || mode === 'hyperbolic') return 1.0;
+  return 1.0 / Math.max(rho, 1e-9);
 }
 
 /** Scene scale: world units per c-space unit (visual magnification).
@@ -834,6 +835,10 @@ export function scaleFollowTrailTransform(trail: THREE.Line, snap: DebugSnapshot
 // Persistent smoothed heading for the camera so it stays smoothly behind without whipping
 let smoothedCamHeading: number | null = null;
 
+export function getSmoothedCamHeading(): number | null {
+  return smoothedCamHeading;
+}
+
 export function resetCameraSmoothing(): void {
   smoothedCamHeading = null;
 }
@@ -862,6 +867,14 @@ export function updateCamera(
     rx = 0;
     rz = 0;
     followSurface = true;
+  } else if (mode === 'hyperbolic') {
+    // Hyperbolic camera: the terrain and trail vertices are projected into the
+    // camera-centered Poincaré ball (origin = (0, 0, 0)), with inverse camera
+    // orientation already applied. The Three.js camera sits at (0, 0, 0) with
+    // default orientation (looking down -Z with +Y up).
+    camera.position.set(0, 0, 0);
+    camera.quaternion.set(0, 0, 0, 1);
+    return;
   } else {
     // Treadmill: the rider is pinned at the chart origin; the terrain mesh
     // carries the (x-x0)/rho0 transform (see treadmillTransform).
@@ -1016,6 +1029,19 @@ export function applyRenderDistance(
   rho: number,
   half: number
 ): void {
+  if (mode === 'hyperbolic') {
+    // In hyperbolic mode, coordinates live in the scaled Poincaré ball
+    // with radius ~HYPERBOLIC_VISUAL_SCALE (20 units).
+    camera.near = 0.1;
+    camera.far = 100.0;
+    camera.updateProjectionMatrix();
+    const fog = scene.fog;
+    if (fog && 'near' in fog && 'far' in fog) {
+      (fog as THREE.Fog).near = 30.0;
+      (fog as THREE.Fog).far = 60.0;
+    }
+    return;
+  }
   const r = Math.max(rho, 1e-9);
   const magnify = horizontalMagnification(mode, r);
   const patchScene = half * 2 * SCENE_SCALE * magnify;
