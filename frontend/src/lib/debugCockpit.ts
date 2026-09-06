@@ -25,8 +25,8 @@ import { expandActions } from './shoreCrossingVariants';
 /** Canonical physics timestep (HOP_LENGTH / SAMPLE_RATE, Rust timebase). */
 export const CANONICAL_DT = 1024 / 48000;
 
-/** Terrain patch grid resolution for the 3D skate park (n x n vertices). */
-export const DEFAULT_TERRAIN_GRID = 65;
+/** Terrain patch grid resolution for the 3D skate park (n x n vertices). High fidelity default. */
+export const DEFAULT_TERRAIN_GRID = 129;
 
 /** Terrain patch half-extent in c-space units around the rider. */
 export const DEFAULT_TERRAIN_HALF = 0.5;
@@ -283,7 +283,7 @@ export function planTerrainLod(rho: number, planarSpeed = 0): TerrainLod {
   const grid = Math.round(
     Math.min(
       LOD_GRID_MAX,
-      Math.max(LOD_GRID_MIN, 65 * Math.sqrt(0.5 / half), LOD_GRID_MIN)
+      Math.max(LOD_GRID_MIN, 129 * Math.sqrt(0.5 / half), LOD_GRID_MIN)
     )
   );
   // Render distance: the patch diagonal in scene units, padded so the far

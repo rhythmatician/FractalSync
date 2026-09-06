@@ -443,7 +443,7 @@ export function DebugCockpit(): JSX.Element {
   // Per-frame updates: rider, trail, camera.
   useEffect(() => {
     const refs = sceneRefs.current;
-    const trajectory = runs?.[selected];
+    const trajectory = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
     if (!refs.scene || !refs.rider || !refs.camera || !trajectory || !frame) return;
 
     // Rider height: sampled per-position through the authoritative Rust
@@ -495,12 +495,12 @@ export function DebugCockpit(): JSX.Element {
       physicalTrailTransform(refs.trail);
     }
     updateCamera(refs.camera, frame, cameraMode);
-  }, [runs, selected, frameIdx, frame, cameraMode]);
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, cameraMode]);
 
   // Minimap panel: repaint from the canonical pyramid when the frame moves.
   useEffect(() => {
     const canvas = minimapRef.current;
-    const trajectory = runs?.[selected];
+    const trajectory = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
     if (!canvas || !trajectory || !frame) return;
     // Trail window: last 200 steps for panel legibility.
     const from = Math.max(0, frameIdx - 200);
@@ -521,7 +521,7 @@ export function DebugCockpit(): JSX.Element {
       fovDeg: 55,
     };
     paintMinimap(canvas, input);
-  }, [runs, selected, frameIdx, frame]);
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame]);
 
   // Julia panel: the ACTUAL audience-facing view (issue #111). The existing
   // JuliaRenderer stays the authoritative presentation surface.
@@ -897,7 +897,13 @@ export function DebugCockpit(): JSX.Element {
         <button
           onClick={() => {
             setPlaying(false);
-            setFrameIdx(0);
+            if (cockpitMode === 'MANUAL' && manualDriverRef.current) {
+              manualDriverRef.current.reset();
+              setManualRun(manualDriverRef.current.trajectory);
+              setFrameIdx(0);
+            } else {
+              setFrameIdx(0);
+            }
           }}
           disabled={!run}
           style={{ background: '#20203a', color: '#dde', border: '1px solid #2c2c48', borderRadius: 6, padding: '6px 14px', cursor: 'pointer' }}

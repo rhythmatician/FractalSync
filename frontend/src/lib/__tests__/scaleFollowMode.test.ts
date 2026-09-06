@@ -29,6 +29,8 @@ import {
   horizontalMagnification,
   isPhysicalYMode,
   applyRenderDistance,
+  CAMERA_BACK_DISTANCE,
+  CAMERA_UP_DISTANCE,
 } from '../cockpitScene';
 import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from '../debugCockpit';
 
@@ -270,7 +272,7 @@ describe('updateCamera in scale-follow: rider at X/Z origin, physical height', (
 
     // Rider is at rx = 0, rz = 0; camera is behind/above.
     // Heading ~ atan2(0, 0.1) = 0 (faces +X).
-    const back = 3.2;
+    const back = CAMERA_BACK_DISTANCE;
     expect(camera.position.x).toBeCloseTo(-back, 2);
     expect(camera.position.z).toBeCloseTo(0, 2);
   });
@@ -280,7 +282,7 @@ describe('updateCamera in scale-follow: rider at X/Z origin, physical height', (
     const camera = new THREE.PerspectiveCamera();
     updateCamera(camera, snap, 'scale-follow');
 
-    const up = 2.2;
+    const up = CAMERA_UP_DISTANCE;
     const expectedY = surfaceY(5.5) + up;
     expect(camera.position.y).toBeCloseTo(expectedY, 3);
   });
@@ -293,10 +295,10 @@ describe('updateCamera in scale-follow: rider at X/Z origin, physical height', (
     updateCamera(cameraScale, snap, 'scale-follow');
     updateCamera(cameraTread, snap, 'treadmill');
 
-    // Scale-follow: camera Y ~ surfaceY(6.0) + 2.2
-    expect(cameraScale.position.y).toBeCloseTo(surfaceY(6.0) + 2.2, 2);
-    // Treadmill: camera Y ~ 0 + 2.2 (chart recenters at Y=0).
-    expect(cameraTread.position.y).toBeCloseTo(2.2, 2);
+    // Scale-follow: camera Y ~ surfaceY(6.0) + CAMERA_UP_DISTANCE
+    expect(cameraScale.position.y).toBeCloseTo(surfaceY(6.0) + CAMERA_UP_DISTANCE, 2);
+    // Treadmill: camera Y ~ 0 + CAMERA_UP_DISTANCE (chart recenters at Y=0).
+    expect(cameraTread.position.y).toBeCloseTo(CAMERA_UP_DISTANCE, 2);
     // They differ significantly.
     expect(Math.abs(cameraScale.position.y - cameraTread.position.y)).toBeGreaterThan(5);
   });
