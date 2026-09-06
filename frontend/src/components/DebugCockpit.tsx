@@ -207,6 +207,8 @@ export function DebugCockpit(): JSX.Element {
     terrainPatch?: ReturnType<typeof sampleTerrainPatch>;
     /** Latest authoritative metric speed, consumed by the rAF loop. */
     lastMetricSpeed?: number;
+    /** Latest effective throttle (0..1), consumed by the rAF loop to drive PushOff blending. */
+    lastThrottle?: number;
     /** Half-extent of the currently built terrain patch (LOD tracking). */
     lodHalf?: number;
     /** Camera mode the current terrain mesh was built for. */
@@ -280,7 +282,8 @@ export function DebugCockpit(): JSX.Element {
       const rider = sceneRefs.current.rider;
       if (rider) {
         const speed = sceneRefs.current.lastMetricSpeed ?? 0;
-        updateRiderAnimation(rider, dt, speed);
+        const throttle = sceneRefs.current.lastThrottle ?? 0;
+        updateRiderAnimation(rider, dt, speed, throttle);
       }
       renderer.render(scene, camera);
     };
@@ -359,8 +362,9 @@ export function DebugCockpit(): JSX.Element {
       surfaceY(riderSurfaceHeight(frame, x, y));
 
     placeRider(refs.rider, frame, heightAt, cameraMode);
-    // Feed the animation gait from authoritative metric speed.
+    // Feed the animation gait from authoritative metric speed and forward throttle.
     refs.lastMetricSpeed = frame.physics.metricSpeed;
+    refs.lastThrottle = frame.action?.effective.throttle ?? frame.action?.raw.throttle ?? 0;
 
     if (refs.trail) {
       refs.scene.remove(refs.trail);

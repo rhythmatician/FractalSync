@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from './debugCockpit';
 
 /** Camera presentation modes (issue #111). */
@@ -314,52 +315,119 @@ export function applyOverlays(mesh: THREE.Mesh, patch: TerrainPatch, overlays: T
 }
 
 /**
- * Load the animated rider (Meshy "Ant man" biped GLB) standing on the Meshy
+ * Load the animated rider (Meshy "Tiny Titan" biped GLB) standing on the Meshy
  * skateboard GLB. Returns a group whose +X axis is the heading direction;
  * falls back to a capsule body if a model fails to load so the cockpit
  * degrades honestly instead of losing the rider.
  *
- * The rider GLB's Running animation is played through an AnimationMixer
- * owned by this module (see updateRiderAnimation) — the component only
- * advances time.
+ * The rider plays a Mixamo skateboarding animation retargeted onto the Meshy
+ * biped skeleton via an AnimationMixer owned by this module (see updateRiderAnimation).
  */
 
-/** Rider yaw: the GLB faces +Z in T-pose; +PI/2 turns it to face +X. */
+/** Rider yaw: +PI/2 aligns the Mixamo skateboarding animation forward (+X) with feet spread along deck length. */
 const RIDER_MODEL_YAW = Math.PI / 2;
 
 /** Rider scale: the GLB is ~1.6 units tall; the scene rider reads best ~1.4. */
 const RIDER_MODEL_SCALE = 0.9;
 
-/** Rider lift: feet rest on the skateboard deck top (deck spans y 0..0.15). */
-const RIDER_MODEL_LIFT = 0.15;
+/** Rider lift: calibrated so shoe soles rest squarely and flush on the skateboard deck. */
+const RIDER_MODEL_LIFT = -0.230;
 
-/** Skateboard scale: the GLB deck is ~1.9 long; the scene board reads best ~1.3. */
-const SKATEBOARD_SCALE = 0.7;
+/** Skateboard scale: scaled down to 0.38 (~0.72 long, ~0.22 wide) to fit Tiny Titan's smaller body/leg proportions. */
+const SKATEBOARD_SCALE = 0.4;
 
-const riderMixers = new WeakMap<THREE.Group, THREE.AnimationMixer>();
+interface RiderAnimationState {
+  mixer: THREE.AnimationMixer;
+  actionCoast: THREE.AnimationAction | null;
+  actionPush: THREE.AnimationAction | null;
+}
+
+const riderAnimationStates = new WeakMap<THREE.Group, RiderAnimationState>();
 
 /**
- * Advance the rider's animation mixer by dt, scaling playback speed with
- * the authoritative metric speed (clamped so slow rolls amble and fast
- * ones sprint). No-op for the fallback-capsule rider.
+ * Retarget Mixamo animation tracks onto the Meshy biped skeleton.
+ * Mixamo bone names start with 'mixamorig'; Meshy biped uses plain names
+ * ('Hips', 'Spine', 'Spine01', 'Spine02', 'neck', 'Head', etc.).
+ * Root motion on X/Z is locked so the character rides in place on the board.
  */
-export function updateRiderAnimation(rider: THREE.Group, dt: number, metricSpeed: number): void {
-  const mixer = riderMixers.get(rider);
-  if (!mixer) return;
-  // Map metric speed to a legible gait: ~0.6x at a crawl, ~1.8x flat-out.
+function retargetMixamoToMeshy(
+  sourceClip: THREE.AnimationClip,
+  targetName: string,
+  targetSkeletonBones: Set<string>
+): THREE.AnimationClip {
+  const tracks: THREE.KeyframeTrack[] = [];
+  for (const track of sourceClip.tracks) {
+    const dotIdx = track.name.indexOf('.');
+    if (dotIdx === -1) continue;
+    const boneRaw = track.name.slice(0, dotIdx);
+    const prop = track.name.slice(dotIdx);
+
+    let targetBone = boneRaw.replace(/^mixamorig/, '');
+    if (targetBone === 'Spine1') targetBone = 'Spine01';
+    else if (targetBone === 'Spine2') targetBone = 'Spine02';
+    else if (targetBone === 'Neck') targetBone = 'neck';
+
+    if (targetSkeletonBones.has(targetBone)) {
+      const cloned = track.clone();
+      cloned.name = targetBone + prop;
+      // Lock root horizontal motion so the skater stays planted on the deck
+      if (cloned.name === 'Hips.position') {
+        const x0 = cloned.values[0];
+        const z0 = cloned.values[2];
+        for (let i = 0; i < cloned.values.length; i += 3) {
+          cloned.values[i] = x0;
+          cloned.values[i + 2] = z0;
+        }
+      }
+      tracks.push(cloned);
+    }
+  }
+  return new THREE.AnimationClip(targetName, sourceClip.duration, tracks);
+}
+
+/**
+ * Advance the rider's animation mixer by dt, blending between Skateboarding
+ * (coasting / cruising) and PushOff (accelerating forward) according to
+ * throttle / forward driving effort, and scaling cadence with metric speed.
+ */
+export function updateRiderAnimation(
+  rider: THREE.Group,
+  dt: number,
+  metricSpeed: number,
+  throttle: number = 0
+): void {
+  const state = riderAnimationStates.get(rider);
+  if (!state) return;
+
+  const { mixer, actionCoast, actionPush } = state;
+
+  if (actionCoast && actionPush) {
+    // When throttle > 0, blend in the PushOff animation; otherwise coast.
+    const pushWeight = Math.min(1.0, Math.max(0.0, throttle));
+    const coastWeight = 1.0 - pushWeight;
+    actionCoast.setEffectiveWeight(coastWeight);
+    actionPush.setEffectiveWeight(pushWeight);
+  } else if (actionCoast) {
+    actionCoast.setEffectiveWeight(1.0);
+  } else if (actionPush) {
+    actionPush.setEffectiveWeight(1.0);
+  }
+
+  // Map metric speed to a legible cadence: ~0.6x at a crawl, ~1.8x flat-out.
   mixer.timeScale = Math.max(0.6, Math.min(1.8, 0.6 + metricSpeed * 8.0));
   mixer.update(dt);
 }
 
 export async function buildRider(): Promise<THREE.Group> {
   const group = new THREE.Group();
-  const loader = new GLTFLoader();
+  const gltfLoader = new GLTFLoader();
+  const fbxLoader = new FBXLoader();
 
   // Skateboard GLB: already X-aligned (deck ~1.9 long on X, wheels at
   // y ~ -0.155), so it needs only scaling and a lift to put the wheels'
   // contact plane at y=0.
   try {
-    const boardGltf = await loader.loadAsync('/models/skateboard.glb');
+    const boardGltf = await gltfLoader.loadAsync('/models/skateboard.glb');
     const board = boardGltf.scene;
     board.scale.setScalar(SKATEBOARD_SCALE);
     // Wheels bottom at -0.155 * scale; lift so contact plane sits at y=0.
@@ -375,7 +443,9 @@ export async function buildRider(): Promise<THREE.Group> {
   }
 
   try {
-    const gltf = await loader.loadAsync('/models/rider.glb');
+    // New player character without integrated duplicate skateboard/pedestal: Tiny Titan biped
+    const titanPath = '/models/Meshy_AI_Tiny_Titan_biped/Meshy_AI_Tiny_Titan_biped_Character_output.glb';
+    const gltf = await gltfLoader.loadAsync(titanPath);
     const model = gltf.scene;
 
     model.scale.setScalar(RIDER_MODEL_SCALE);
@@ -383,13 +453,47 @@ export async function buildRider(): Promise<THREE.Group> {
     model.rotation.y = RIDER_MODEL_YAW;
     group.add(model);
 
-    const clip =
-      gltf.animations.find((a) => /run/i.test(a.name)) ?? gltf.animations[0];
-    if (clip) {
-      const mixer = new THREE.AnimationMixer(model);
-      mixer.clipAction(clip).play();
-      riderMixers.set(group, mixer);
+    // Collect skeleton bone names for retargeting
+    const boneNames = new Set<string>();
+    model.traverse((o) => {
+      if ((o as THREE.Bone).isBone) boneNames.add(o.name);
+    });
+
+    const mixer = new THREE.AnimationMixer(model);
+    let actionCoast: THREE.AnimationAction | null = null;
+    let actionPush: THREE.AnimationAction | null = null;
+
+    // Load authentic skateboarding and push-off animations from Mixamo FBX
+    try {
+      const fbxSkate = await fbxLoader.loadAsync('/animations/Skateboarding.fbx');
+      if (fbxSkate.animations.length > 0) {
+        const skateClip = retargetMixamoToMeshy(fbxSkate.animations[0], 'Skateboarding', boneNames);
+        actionCoast = mixer.clipAction(skateClip);
+        actionCoast.play();
+      }
+    } catch (animError) {
+      console.warn('[cockpitScene] skateboarding animation unavailable:', animError);
     }
+
+    try {
+      const fbxPush = await fbxLoader.loadAsync('/animations/PushOff.fbx');
+      if (fbxPush.animations.length > 0) {
+        const pushClip = retargetMixamoToMeshy(fbxPush.animations[0], 'PushOff', boneNames);
+        actionPush = mixer.clipAction(pushClip);
+        actionPush.play();
+      }
+    } catch (pushError) {
+      console.warn('[cockpitScene] push-off animation unavailable:', pushError);
+    }
+
+    // Fallback if FBX animations fail
+    if (!actionCoast && !actionPush && gltf.animations.length > 0) {
+      const fallbackClip = gltf.animations[0];
+      actionCoast = mixer.clipAction(fallbackClip);
+      actionCoast.play();
+    }
+
+    riderAnimationStates.set(group, { mixer, actionCoast, actionPush });
   } catch (error) {
     console.warn('[cockpitScene] rider GLB unavailable, using capsule fallback:', error);
     const bodyGeometry = new THREE.CapsuleGeometry(0.18, 0.5, 4, 8);
