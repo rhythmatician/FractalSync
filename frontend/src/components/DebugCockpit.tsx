@@ -27,6 +27,10 @@ import {
   sampleTerrainPatch,
   type CockpitTrajectory,
 } from '../lib/debugCockpit';
+import {
+  ManualDriver,
+  type KeyboardState,
+} from '../lib/manualDriving';
 import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
@@ -188,9 +192,23 @@ export function DebugCockpit(): JSX.Element {
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>('scale-follow');
+  const [cockpitMode, setCockpitMode] = useState<'REPLAY' | 'MANUAL'>('REPLAY');
+  const cockpitModeRef = useRef<'REPLAY' | 'MANUAL'>('REPLAY');
+  cockpitModeRef.current = cockpitMode;
   const [playerView, setPlayerView] = useState(false);
   const [overlays, setOverlays] = useState<TerrainOverlays>(DEFAULT_OVERLAYS);
   const [runs, setRuns] = useState<CockpitTrajectory[] | null>(null);
+  const [manualRun, setManualRun] = useState<CockpitTrajectory | null>(null);
+
+  const manualDriverRef = useRef<ManualDriver | null>(null);
+  const keysRef = useRef<KeyboardState>({
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    drift: false,
+    impulse: false,
+  });
 
   const variants = useMemo(
     () => [...baselineVariants(), ...explorationVariants()],
@@ -274,11 +292,27 @@ export function DebugCockpit(): JSX.Element {
     // Animation clock: advances the rider's GLB mixer every frame (rAF runs
     // continuously, so the gait plays even while the timeline is paused).
     let last = performance.now();
+    let animId: number;
     const loop = () => {
-      requestAnimationFrame(loop);
+      animId = requestAnimationFrame(loop);
       const now = performance.now();
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
+
+      // In MANUAL mode, advance the authoritative driver on canonical ticks
+      const driver = manualDriverRef.current;
+      if (cockpitModeRef.current === 'MANUAL' && driver) {
+        const steps = driver.update(dt, keysRef.current);
+        if (steps > 0) {
+          const snaps = driver.trajectory.snapshots;
+          const latestSnap = snaps[snaps.length - 1];
+          sceneRefs.current.lastMetricSpeed = latestSnap.physics.metricSpeed;
+          sceneRefs.current.lastThrottle = latestSnap.action?.effective.throttle ?? 0;
+          setManualRun(driver.trajectory);
+          setFrameIdx(snaps.length - 1);
+        }
+      }
+
       const rider = sceneRefs.current.rider;
       if (rider) {
         const speed = sceneRefs.current.lastMetricSpeed ?? 0;
@@ -291,6 +325,7 @@ export function DebugCockpit(): JSX.Element {
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(animId);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
       mount.removeChild(renderer.domElement);
@@ -298,10 +333,68 @@ export function DebugCockpit(): JSX.Element {
     };
   }, [ready]);
 
+  // Keyboard input listeners for standard PC controls in MANUAL mode (#121).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Ignore when focused inside text inputs
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+
+      if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keysRef.current.up = true;
+      if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keysRef.current.down = true;
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keysRef.current.left = true;
+      if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keysRef.current.right = true;
+      if (e.key === 'Shift') keysRef.current.drift = true;
+      if (e.key === ' ' || e.code === 'Space') {
+        keysRef.current.impulse = true;
+        e.preventDefault();
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        if (cockpitMode === 'MANUAL' && manualDriverRef.current) {
+          manualDriverRef.current.reset();
+          setManualRun({ ...manualDriverRef.current.trajectory });
+          setFrameIdx(0);
+        }
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') keysRef.current.up = false;
+      if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') keysRef.current.down = false;
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keysRef.current.left = false;
+      if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keysRef.current.right = false;
+      if (e.key === 'Shift') keysRef.current.drift = false;
+      if (e.key === ' ' || e.code === 'Space') keysRef.current.impulse = false;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [cockpitMode]);
+
+  // Handle switching into MANUAL mode: initialize a fresh ManualDriver
+  useEffect(() => {
+    if (cockpitMode === 'MANUAL') {
+      // Use selected variant start or [0, 0] as seed
+      const currentSelectedRun = runs?.[selected];
+      const startC = currentSelectedRun?.spec.initialC ?? [0, 0];
+      const startV = currentSelectedRun?.spec.initialV ?? [0, 0];
+      const driver = new ManualDriver(startC, startV);
+      manualDriverRef.current = driver;
+      setManualRun({ ...driver.trajectory });
+      setFrameIdx(0);
+      setPlaying(false);
+    } else {
+      manualDriverRef.current = null;
+    }
+  }, [cockpitMode, runs, selected]);
+
   // Rebuild terrain when the selected frame's patch center moves far from
   // the current mesh center (terrain follows the rider), and when the LOD
   // plan changes (scale shifted enough to re-plan fidelity vs performance).
-  const run = runs?.[selected];
+  const run = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
   const frame = run?.snapshots[Math.min(frameIdx, (run?.snapshots.length ?? 1) - 1)];
 
   useEffect(() => {
@@ -640,8 +733,39 @@ export function DebugCockpit(): JSX.Element {
           </div>
         )}
 
-        {/* Camera + Player View controls */}
+        {/* Mode Toggle (REPLAY vs MANUAL per #121), Camera + Player View controls */}
         <div style={{ position: 'absolute', top: 10, right: 12, display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #2c2c48' }}>
+            <button
+              onClick={() => setCockpitMode('REPLAY')}
+              style={{
+                background: cockpitMode === 'REPLAY' ? '#3d3d6b' : '#141424',
+                color: '#dde',
+                border: 'none',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: cockpitMode === 'REPLAY' ? 'bold' : 'normal',
+              }}
+            >
+              REPLAY
+            </button>
+            <button
+              onClick={() => setCockpitMode('MANUAL')}
+              style={{
+                background: cockpitMode === 'MANUAL' ? '#2e6b3e' : '#141424',
+                color: '#dde',
+                border: 'none',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: cockpitMode === 'MANUAL' ? 'bold' : 'normal',
+              }}
+            >
+              MANUAL (WASD)
+            </button>
+          </div>
+
           <button
             onClick={() =>
               setCameraMode((m) =>
@@ -672,6 +796,32 @@ export function DebugCockpit(): JSX.Element {
             {playerView ? 'player view: ON' : 'player view'}
           </button>
         </div>
+
+        {/* Controls HUD for MANUAL mode */}
+        {cockpitMode === 'MANUAL' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 56,
+              left: 12,
+              padding: '8px 12px',
+              borderRadius: 6,
+              background: 'rgba(0,0,0,0.7)',
+              fontSize: 11,
+              border: '1px solid #335',
+              lineHeight: 1.6,
+              color: '#aab',
+            }}
+          >
+            <strong style={{ color: '#7f7' }}>MANUAL DRIVING (Controls v2)</strong>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>W</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↑</kbd> : Throttle</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>S</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↓</kbd> : Brake</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>A</kbd>/<kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>D</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>←</kbd>/<kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>→</kbd> : Steer Direction</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Shift</kbd> : Drift (reduce grip)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Space</kbd> : Impulse (edge-triggered)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>R</kbd> : Reset trajectory</div>
+          </div>
+        )}
 
         {/* RIGHT: ACTION panel (Controls v2) */}
         {frame?.action && (
@@ -768,7 +918,7 @@ export function DebugCockpit(): JSX.Element {
         />
         {!playerView && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <EnergySparkline trajectory={run} frameIdx={frameIdx} />
+            <EnergySparkline trajectory={run ?? undefined} frameIdx={frameIdx} />
             <span style={{ fontSize: 9, color: '#667', lineHeight: 1.4 }}>
               <span style={{ color: '#ffd479' }}>K</span> ·{' '}
               <span style={{ color: '#7fb0ff' }}>U</span> ·{' '}
