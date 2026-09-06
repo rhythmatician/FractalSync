@@ -445,14 +445,14 @@ def check_golden_version(rc) -> tuple[bool, float]:
 def check_feature_golden_parity(rc) -> tuple[bool, float]:
     """(g) Python feature mirror vs Rust golden feature windows.
 
-    The Python fallback extractor must reproduce the canonical Rust
+    The diagnostic NumPy oracle must reproduce the canonical Rust
     extractor's output on the deterministic synthetic audio recorded in
     shared/golden_vectors.json feature_cases. Catches any drift in feature
     definitions, causal transforms, or window layout.
     """
     import numpy as np
 
-    from src.python_feature_extractor import PythonFeatureExtractor
+    from src.python_feature_extractor import DiagnosticFeatureParityOracle
 
     golden = _load_golden()
     cases = golden.get("feature_cases") or []
@@ -490,10 +490,10 @@ def check_feature_golden_parity(rc) -> tuple[bool, float]:
             ) * 0.05
         audio = np.clip(audio + noise, -1.0, 1.0).astype(np.float32)
 
-        fe = PythonFeatureExtractor()
+        fe = DiagnosticFeatureParityOracle()
         windows = fe.extract_windowed_features(audio.tolist(), window_frames)  # type: ignore[arg-type]
         if len(windows) == 0:
-            raise RuntimeError(f"Python extractor produced no window for seed {seed}")
+            raise RuntimeError(f"Diagnostic feature oracle produced no window for seed {seed}")
         got = np.asarray(windows[0], dtype=np.float64)
         if got.shape != expected.shape:
             raise RuntimeError(

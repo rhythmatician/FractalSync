@@ -47,6 +47,8 @@ use crate::manifold::{
     christoffel_symbols as rust_christoffel_symbols,
     geodesic_acceleration as rust_geodesic_acceleration,
     potential_force as rust_potential_force,
+    wall_potential as rust_wall_potential,
+    wall_force as rust_wall_force,
     apply_generalized_force as rust_apply_generalized_force,
     drag_force as rust_drag_force,
     integrate_step as rust_integrate_step,
@@ -60,6 +62,135 @@ use crate::controls::{
     Harmony as RustHarmony,
     CONTROLS_VERSION,
 };
+
+#[pyfunction]
+fn orbit_control_schema_json(k_bands: usize) -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::orbit_control_schema(k_bands))
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn controls_v2_schema_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::controls_v2_schema())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> PyResult<String> {
+    let averages = crate::model_io::audio_feature_averages(&values, features_per_frame)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&averages)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_audio_feature_averages_json(values: Vec<f64>) -> PyResult<String> {
+    let averages = crate::model_io::legacy_audio_feature_averages(&values)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&averages)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_visual_schema_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::legacy_visual_schema())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_visual_export_ranges_json() -> PyResult<String> {
+    serde_json::to_string(&crate::model_io::legacy_visual_export_ranges())
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<String> {
+    let decoded = crate::model_io::decode_orbit_control(&values, k_bands)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn decode_controls_v2_json(values: Vec<f64>) -> PyResult<String> {
+    let decoded = crate::model_io::decode_controls_v2(&values)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, rms=None, onset=None))]
+fn decode_legacy_visual_json(
+    values: Vec<f64>,
+    rms: Option<f64>,
+    onset: Option<f64>,
+) -> PyResult<String> {
+    let audio = match (rms, onset) {
+        (Some(rms), Some(onset)) => Some(crate::model_io::AudioFeatureAverages { rms, onset }),
+        (None, None) => None,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err("rms and onset must be supplied together")),
+    };
+    let decoded = crate::model_io::decode_legacy_visual(&values, audio)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&decoded)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn orbit_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: String,
+    rms: f64,
+    onset: f64,
+) -> PyResult<String> {
+    let controls: crate::model_io::OrbitControlOutput = serde_json::from_str(&controls_json)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let visual = crate::model_io::orbit_visual_parameters(
+        [c_re, c_im],
+        &controls,
+        crate::model_io::AudioFeatureAverages { rms, onset },
+    )
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&visual)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+fn legacy_orbit_drive_inputs_json(rms: f64, onset: f64) -> PyResult<String> {
+    let inputs = crate::model_io::legacy_orbit_drive_inputs(
+        crate::model_io::AudioFeatureAverages { rms, onset },
+    )
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&inputs)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (c_re, c_im, controls_json, presentation=None))]
+fn controls_v2_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: String,
+    presentation: Option<[f64; 4]>,
+) -> PyResult<String> {
+    let controls: RustControlsV2 = serde_json::from_str(&controls_json)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let visual = crate::model_io::controls_v2_visual_parameters(
+        [c_re, c_im], &controls, presentation,
+    ).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&visual)
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (model_type=None, controls_version=None))]
+fn model_output_kind(model_type: Option<String>, controls_version: Option<String>) -> String {
+    serde_json::to_value(crate::model_io::model_output_kind(
+        model_type.as_deref(), controls_version.as_deref(),
+    )).expect("enum serialization cannot fail").as_str().expect("enum serializes as string").to_string()
+}
 
 
 /// Python wrapper for `ResidualParams`.
@@ -127,18 +258,21 @@ pub struct ManifoldConfig {
     pub lambda_sq: f64,
     #[pyo3(get, set)]
     pub kappa: f64,
+    #[pyo3(get, set)]
+    pub mu: f64,
 }
 
 #[pymethods]
 impl ManifoldConfig {
     #[new]
-    #[pyo3(signature = (d_ref=0.1, epsilon=1e-4, lambda_sq=1.0, kappa=1.0))]
-    fn py_new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> Self {
+    #[pyo3(signature = (d_ref=0.1, epsilon=1e-4, lambda_sq=1.0, kappa=1.0, mu=std::f64::consts::FRAC_1_PI))]
+    fn py_new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> Self {
         Self {
             d_ref,
             epsilon,
             lambda_sq,
             kappa,
+            mu,
         }
     }
 }
@@ -150,6 +284,7 @@ impl From<RustManifoldConfig> for ManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -161,6 +296,7 @@ impl From<ManifoldConfig> for RustManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -859,7 +995,8 @@ fn manifold_scale_hessian(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> P
     Ok(vec![vec![h[0][0], h[0][1]], vec![h[1][0], h[1][1]]])
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 /// Returns [[g11, g12], [g12, g22]].
 #[pyfunction]
 fn manifold_induced_metric(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<Vec<Vec<f64>>> {
@@ -926,7 +1063,7 @@ fn manifold_potential_energy(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -
     rust_potential_energy(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
-/// Total mechanical energy E = K + U.
+/// Total mechanical energy E = K + U_sigma + U_wall.
 #[pyfunction]
 #[pyo3(signature = (vx, vy, c, config))]
 fn manifold_total_energy(
@@ -937,6 +1074,20 @@ fn manifold_total_energy(
 ) -> PyResult<f64> {
     let cc = num_complex::Complex64::new(c.real(), c.imag());
     rust_total_energy((vx, vy), cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Wall (secant bowl) potential U_wall = mu * [sec(π/2 * s^4) - 1], s = |c|^2/4.
+#[pyfunction]
+fn manifold_wall_potential(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<f64> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_wall_potential(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+}
+
+/// Wall force covector: Q_wall = -mu π s^3 sec φ tan φ (x, y), φ = π/2 s^4.
+#[pyfunction]
+fn manifold_wall_force(c: &Bound<'_, PyComplex>, config: ManifoldConfig) -> PyResult<(f64, f64)> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    rust_wall_force(cc, &config.into()).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Christoffel symbols Gamma^i_jk of the Levi-Civita connection.
@@ -1297,6 +1448,7 @@ fn controls_integrate_step(
     let (c_new, v_new, info) = crate::controls::integrate_motion_controls(c, (vx, vy), &motion.into(), dt, &config.into()).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
     Ok((c_new.re, c_new.im, v_new.0, v_new.1, info.into()))
 }
+
 
 /// Compute drive covector for inspection/diagnostics.
 #[pyfunction]
@@ -2140,6 +2292,20 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<RuntimeVisualMetrics>()?;
 
+    m.add_function(wrap_pyfunction!(orbit_control_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(controls_v2_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(audio_feature_averages_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_audio_feature_averages_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_visual_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_visual_export_ranges_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_orbit_control_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_controls_v2_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_legacy_visual_json, m)?)?;
+    m.add_function(wrap_pyfunction!(orbit_visual_parameters_json, m)?)?;
+    m.add_function(wrap_pyfunction!(legacy_orbit_drive_inputs_json, m)?)?;
+    m.add_function(wrap_pyfunction!(controls_v2_visual_parameters_json, m)?)?;
+    m.add_function(wrap_pyfunction!(model_output_kind, m)?)?;
+
     m.add_function(wrap_pyfunction!(lobe_point_at_angle, m)?)?;
     m.add_function(wrap_pyfunction!(compute_runtime_visual_metrics, m)?)?;
     // CycleBank tick-seam evidence accessor (issue #92): newest-frame channel
@@ -2180,6 +2346,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_kinetic_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_energy, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_total_energy, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_wall_potential, m)?)?;
+    m.add_function(wrap_pyfunction!(manifold_wall_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_christoffel_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_geodesic_acceleration, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_force, m)?)?;

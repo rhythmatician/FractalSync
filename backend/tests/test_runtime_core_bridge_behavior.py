@@ -163,19 +163,13 @@ from src.control_trainer import ControlTrainer
 from src.control_model import AudioToControlModel
 
 
-def test_num_features_per_frame_callable_and_attr():
+def test_num_features_per_frame_uses_binding_method():
     class FakeRustMethod:
         def num_features_per_frame(self):
             return 6
 
     be = FeatureExtractorProxy(FakeRustMethod())
     assert be.num_features_per_frame() == 6
-
-    class FakeRustAttr:
-        num_features_per_frame = 12
-
-    be2 = FeatureExtractorProxy(FakeRustAttr())
-    assert be2.num_features_per_frame() == 12
 
 
 class DummyVisualMetrics:

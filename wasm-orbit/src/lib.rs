@@ -25,6 +25,123 @@ use runtime_core::controller::{
 };
 use runtime_core::features::{FEATURE_VERSION, NORM_EPS};
 use runtime_core::features::FeatureExtractor as RustFeatureExtractor;
+
+fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
+    serde_json::to_string(value).map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
+#[wasm_bindgen(js_name = "orbitControlSchemaJson")]
+pub fn orbit_control_schema_json(k_bands: usize) -> Result<String, JsValue> {
+    model_io_json(&runtime_core::model_io::orbit_control_schema(k_bands))
+}
+
+#[wasm_bindgen(js_name = "controlsV2SchemaJson")]
+pub fn controls_v2_schema_json() -> Result<String, JsValue> {
+    model_io_json(&runtime_core::model_io::controls_v2_schema())
+}
+
+#[wasm_bindgen(js_name = "audioFeatureAveragesJson")]
+pub fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> Result<String, JsValue> {
+    let averages = runtime_core::model_io::audio_feature_averages(&values, features_per_frame)
+        .map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&averages)
+}
+
+#[wasm_bindgen(js_name = "legacyAudioFeatureAveragesJson")]
+pub fn legacy_audio_feature_averages_json(values: Vec<f64>) -> Result<String, JsValue> {
+    let averages = runtime_core::model_io::legacy_audio_feature_averages(&values)
+        .map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&averages)
+}
+
+#[wasm_bindgen(js_name = "legacyVisualSchemaJson")]
+pub fn legacy_visual_schema_json() -> Result<String, JsValue> {
+    model_io_json(&runtime_core::model_io::legacy_visual_schema())
+}
+
+#[wasm_bindgen(js_name = "legacyVisualExportRangesJson")]
+pub fn legacy_visual_export_ranges_json() -> Result<String, JsValue> {
+    model_io_json(&runtime_core::model_io::legacy_visual_export_ranges())
+}
+
+#[wasm_bindgen(js_name = "decodeOrbitControlJson")]
+pub fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> Result<String, JsValue> {
+    let decoded = runtime_core::model_io::decode_orbit_control(&values, k_bands)
+        .map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&decoded)
+}
+
+#[wasm_bindgen(js_name = "decodeControlsV2Json")]
+pub fn decode_controls_v2_json(values: Vec<f64>) -> Result<String, JsValue> {
+    let decoded = runtime_core::model_io::decode_controls_v2(&values)
+        .map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&decoded)
+}
+
+#[wasm_bindgen(js_name = "decodeLegacyVisualJson")]
+pub fn decode_legacy_visual_json(
+    values: Vec<f64>,
+    audio_reactive: bool,
+    rms: f64,
+    onset: f64,
+) -> Result<String, JsValue> {
+    let audio = audio_reactive.then_some(runtime_core::model_io::AudioFeatureAverages { rms, onset });
+    let decoded = runtime_core::model_io::decode_legacy_visual(&values, audio)
+        .map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&decoded)
+}
+
+#[wasm_bindgen(js_name = "orbitVisualParametersJson")]
+pub fn orbit_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: &str,
+    rms: f64,
+    onset: f64,
+) -> Result<String, JsValue> {
+    let controls: runtime_core::model_io::OrbitControlOutput = serde_json::from_str(controls_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let visual = runtime_core::model_io::orbit_visual_parameters(
+        [c_re, c_im], &controls, runtime_core::model_io::AudioFeatureAverages { rms, onset },
+    ).map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&visual)
+}
+
+#[wasm_bindgen(js_name = "legacyOrbitDriveInputsJson")]
+pub fn legacy_orbit_drive_inputs_json(rms: f64, onset: f64) -> Result<String, JsValue> {
+    let inputs = runtime_core::model_io::legacy_orbit_drive_inputs(
+        runtime_core::model_io::AudioFeatureAverages { rms, onset },
+    ).map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&inputs)
+}
+
+#[wasm_bindgen(js_name = "controlsV2VisualParametersJson")]
+pub fn controls_v2_visual_parameters_json(
+    c_re: f64,
+    c_im: f64,
+    controls_json: &str,
+    presentation_json: Option<String>,
+) -> Result<String, JsValue> {
+    let controls: RustControlsV2 = serde_json::from_str(controls_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let presentation = presentation_json
+        .map(|json| serde_json::from_str::<[f64; 4]>(&json))
+        .transpose()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let visual = runtime_core::model_io::controls_v2_visual_parameters(
+        [c_re, c_im], &controls, presentation,
+    ).map_err(|error| JsValue::from_str(&error))?;
+    model_io_json(&visual)
+}
+
+#[wasm_bindgen(js_name = "modelOutputKind")]
+pub fn model_output_kind(model_type: Option<String>, controls_version: Option<String>) -> String {
+    match runtime_core::model_io::model_output_kind(model_type.as_deref(), controls_version.as_deref()) {
+        runtime_core::model_io::ModelOutputKind::ControlsV2 => "controls_v2",
+        runtime_core::model_io::ModelOutputKind::OrbitControl => "orbit_control",
+        runtime_core::model_io::ModelOutputKind::LegacyVisual => "legacy_visual",
+    }.to_string()
+}
 use runtime_core::timebase::{
     cycle_observation_from_tick, AnalysisTimebase as RustAnalysisTimebase,
     AnalysisTick as RustAnalysisTick, ResetReason as RustResetReason,
@@ -832,6 +949,7 @@ impl OrbitController {
             epsilon: self.inner.manifold_config.epsilon,
             lambda_sq: self.inner.manifold_config.lambda_sq,
             kappa: self.inner.manifold_config.kappa,
+            mu: self.inner.manifold_config.mu,
         }
     }
 
@@ -846,6 +964,7 @@ impl OrbitController {
     pub fn manifold_drag(&self) -> f64 {
         self.inner.manifold_drag
     }
+
 
     /// Destination manifold step driven by Controls v2 (issue #107/#106).
     #[wasm_bindgen(js_name = "stepWithControls")]
@@ -1050,6 +1169,7 @@ pub struct ManifoldConfig {
     epsilon: f64,
     lambda_sq: f64,
     kappa: f64,
+    mu: f64,
 }
 
 impl From<&ManifoldConfig> for RustManifoldConfig {
@@ -1059,6 +1179,7 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
             epsilon: c.epsilon,
             lambda_sq: c.lambda_sq,
             kappa: c.kappa,
+            mu: c.mu,
         }
     }
 }
@@ -1066,12 +1187,13 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
 #[wasm_bindgen]
 impl ManifoldConfig {
     #[wasm_bindgen(constructor)]
-    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64) -> ManifoldConfig {
+    pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> ManifoldConfig {
         ManifoldConfig {
             d_ref,
             epsilon,
             lambda_sq,
             kappa,
+            mu,
         }
     }
 
@@ -1090,6 +1212,10 @@ impl ManifoldConfig {
     #[wasm_bindgen(getter)]
     pub fn kappa(&self) -> f64 {
         self.kappa
+    }
+    #[wasm_bindgen(getter)]
+    pub fn mu(&self) -> f64 {
+        self.mu
     }
 }
 
@@ -1136,7 +1262,8 @@ pub fn manifold_scale_hessian(real: f64, imag: f64, config: &ManifoldConfig) -> 
     Ok(arr)
 }
 
-/// Induced metric G(c) = I + lambda^2 * grad_sigma * grad_sigma^T.
+/// Scale-relative induced metric
+/// G(c) = rho^-2 I + lambda^2 * grad_sigma * grad_sigma^T.
 /// Returns a flat JS array [g11, g12, g12, g22].
 #[wasm_bindgen]
 pub fn manifold_induced_metric(real: f64, imag: f64, config: &ManifoldConfig) -> Result<Array, JsValue> {
@@ -1170,7 +1297,7 @@ pub fn manifold_potential_energy(real: f64, imag: f64, config: &ManifoldConfig) 
     rust_potential_energy(c, &config.into()).map_err(|e| JsValue::from_str(&e))
 }
 
-/// Total mechanical energy E = K + U.
+/// Total mechanical energy E = K + U_sigma + U_wall.
 #[wasm_bindgen]
 pub fn manifold_total_energy(
     vx: f64,

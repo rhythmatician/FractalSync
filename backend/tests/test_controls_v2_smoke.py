@@ -207,6 +207,8 @@ def test_controls_v2_onnx_export_stamps_named_contract(tmp_path, runtime_core_mo
             "k_bands": 6,
             "window_frames": 10,
             "input_dim": model.input_dim,
+            "parameter_names": ["stale"],
+            "parameter_ranges": {"stale": [-99.0, 99.0]},
         },
     )
     import json
@@ -217,3 +219,5 @@ def test_controls_v2_onnx_export_stamps_named_contract(tmp_path, runtime_core_mo
     assert len(meta["parameter_names"]) == 13
     # Browser/trainer must consume the same named contract — no positional drift
     assert meta["parameter_names"][0] == "directionX"
+    assert "stale" not in meta["parameter_ranges"]
+    assert meta["parameter_ranges"]["throttle"] == [0.0, 1.0]

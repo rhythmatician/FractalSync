@@ -1267,9 +1267,14 @@ class ControlTrainer:
                 harmonyShift = parsed["harmonyShift"]
                 # For logging, synthesize s/alpha/omega proxies from motion (not used for physics)
                 s_target = throttle.squeeze(-1) * 2.8 + 0.2
-                alpha = ((torch.atan2(directionY, directionX) / (2 * 3.141592653589793)) % 1.0).squeeze(-1)
+                alpha = (
+                    (torch.atan2(directionY, directionX) / (2 * 3.141592653589793))
+                    % 1.0
+                ).squeeze(-1)
                 omega_scale = (grip.squeeze(-1) * 4.9 + 0.1).clamp(0.1, 5.0)
-                band_gates = torch.ones(batch_size, self.k_residuals, device=self.device) * 0.5
+                band_gates = (
+                    torch.ones(batch_size, self.k_residuals, device=self.device) * 0.5
+                )
                 _is_controls2 = True
             else:
                 s_target = parsed["s_target"]
@@ -1284,27 +1289,50 @@ class ControlTrainer:
                 # so clips remain temporally coherent but not cross-contaminated.
                 try:
                     from .cspace_proxies import controls_v2_sequence, ManifoldConfig
+
                     # Domain-randomized initial c per segment (same scheme as orbit path)
                     _seg = segment_ids.reshape(-1)
                     _uniq2 = torch.unique(_seg)
                     _starts_re2: dict[int, float] = {}
                     _starts_im2: dict[int, float] = {}
                     import math as _math3
+
                     for _sid in _uniq2.tolist():
                         if torch.rand((), device=self.device).item() < 0.10:
-                            _ang = torch.rand((), device=self.device).item() * 2 * 3.141592653589793
-                            _r = 1.8 + torch.rand((), device=self.device).item() * 0.4
+                            _ang = (
+                                torch.rand((), device=self.device).item()
+                                * 2
+                                * 3.141592653589793
+                            )
+                            # Domain randomization must stay inside the |c| < 2
+                            # valid disk (outer-domain wall invariant). Sample
+                            # "far" starts in the 1.5-1.9 band, below the wall.
+                            _r = 1.5 + torch.rand((), device=self.device).item() * 0.4
                             _starts_re2[_sid] = _math3.cos(_ang) * _r
                             _starts_im2[_sid] = _math3.sin(_ang) * _r
                         else:
-                            _t = torch.rand((), device=self.device).item() * 2 * 3.141592653589793
+                            _t = (
+                                torch.rand((), device=self.device).item()
+                                * 2
+                                * 3.141592653589793
+                            )
                             _mu = complex(_math3.cos(_t), _math3.sin(_t))
                             _cb = _mu * 0.5 - _mu * _mu * 0.25
-                            _j = (torch.rand((), device=self.device).item() - 0.5) * 0.30
+                            _j = (
+                                torch.rand((), device=self.device).item() - 0.5
+                            ) * 0.30
                             _starts_re2[_sid] = _cb.real + _j * _mu.real * 0.5
                             _starts_im2[_sid] = _cb.imag + _j * _mu.imag * 0.5
-                    _ic_re2 = torch.tensor([_starts_re2[int(s)] for s in _seg.tolist()], device=self.device, dtype=torch.float32)
-                    _ic_im2 = torch.tensor([_starts_im2[int(s)] for s in _seg.tolist()], device=self.device, dtype=torch.float32)
+                    _ic_re2 = torch.tensor(
+                        [_starts_re2[int(s)] for s in _seg.tolist()],
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                    _ic_im2 = torch.tensor(
+                        [_starts_im2[int(s)] for s in _seg.tolist()],
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
                     _initial_c2 = torch.complex(_ic_re2, _ic_im2)
                     c_complex, _infos2 = controls_v2_sequence(
                         direction_x=directionX.squeeze(-1),
@@ -1315,12 +1343,20 @@ class ControlTrainer:
                         impulse=impulse.squeeze(-1),
                         segment_ids=segment_ids,
                         dt=canonical_hop_dt(),
-                        config=ManifoldConfig(),
+                        config=ManifoldConfig(
+                            d_ref=0.1,
+                            epsilon=1e-4,
+                            lambda_sq=1.0,
+                            kappa=1.0,
+                            mu=0.3183098861837907,
+                        ),
                         initial_c=_initial_c2,
                     )
                 except Exception as _e2:
                     # Fail closed: do not silently fall back to dummy zeros; the test must see the failure.
-                    raise RuntimeError(f"ControlsV2 manifold rollout failed: {_e2}") from _e2
+                    raise RuntimeError(
+                        f"ControlsV2 manifold rollout failed: {_e2}"
+                    ) from _e2
                 # Audio-feature correlations for the new Controls surface (musically informed but Physics-ignorant)
                 try:
                     n_fpf = self.feature_extractor.num_features_per_frame()
@@ -1334,10 +1370,14 @@ class ControlTrainer:
                 spectral_rms = avg_features[:, 2]
                 onset_strength = avg_features[:, 4]
                 # Drive magnitude (throttle * |direction|) correlates with brightness/energy
-                drive_mag = torch.sqrt(directionX.squeeze(-1)**2 + directionY.squeeze(-1)**2) * throttle.squeeze(-1)
+                drive_mag = torch.sqrt(
+                    directionX.squeeze(-1) ** 2 + directionY.squeeze(-1) ** 2
+                ) * throttle.squeeze(-1)
                 timbre_color_loss = self.correlation_loss(spectral_centroid, drive_mag)
                 # Impulse correlates with transient flux (flux -> impulse, not transient-gated wall)
-                transient_impact_loss = self.correlation_loss(spectral_flux, impulse.squeeze(-1))
+                transient_impact_loss = self.correlation_loss(
+                    spectral_flux, impulse.squeeze(-1)
+                )
                 # Loudness -> proximity (same destination invariant: loud audio pushes c toward Shore)
                 proximity = cardioid_proximity(c_complex)
                 loudness_distance_loss = self.correlation_loss(-spectral_rms, proximity)
@@ -1346,7 +1386,15 @@ class ControlTrainer:
                 loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
                 temporal_change_tensor = torch.zeros_like(spectral_flux)
                 # Julia view deltas are part of the 13-channel contract (Rust clamps to MAX_*_DELTA).
-                _ = (zoomDelta, rotationDelta, hueDelta, chromaDelta, lightnessDelta, accentDelta, harmonyShift)
+                _ = (
+                    zoomDelta,
+                    rotationDelta,
+                    hueDelta,
+                    chromaDelta,
+                    lightnessDelta,
+                    accentDelta,
+                    harmonyShift,
+                )
                 _skip_legacy_render = True
             elif self.use_cspace_proxies:
                 # ---- Differentiable c-space supervision (fast path) ----

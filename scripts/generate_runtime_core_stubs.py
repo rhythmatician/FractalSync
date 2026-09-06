@@ -44,6 +44,53 @@ import runtime_core as rc
 RET = "__return__"
 
 FUNCTION_TYPES: dict[str, dict[str, str]] = {
+    "orbit_control_schema_json": {"k_bands": "int", RET: "str"},
+    "controls_v2_schema_json": {RET: "str"},
+    "legacy_visual_schema_json": {RET: "str"},
+    "legacy_visual_export_ranges_json": {RET: "str"},
+    "audio_feature_averages_json": {
+        "values": "Sequence[float]",
+        "features_per_frame": "int",
+        RET: "str",
+    },
+    "legacy_audio_feature_averages_json": {"values": "Sequence[float]", RET: "str"},
+    "decode_orbit_control_json": {
+        "values": "Sequence[float]",
+        "k_bands": "int",
+        RET: "str",
+    },
+    "decode_controls_v2_json": {"values": "Sequence[float]", RET: "str"},
+    "decode_legacy_visual_json": {
+        "values": "Sequence[float]",
+        "rms": "Optional[float]",
+        "onset": "Optional[float]",
+        RET: "str",
+    },
+    "orbit_visual_parameters_json": {
+        "c_re": "float",
+        "c_im": "float",
+        "controls_json": "str",
+        "rms": "float",
+        "onset": "float",
+        RET: "str",
+    },
+    "legacy_orbit_drive_inputs_json": {
+        "rms": "float",
+        "onset": "float",
+        RET: "str",
+    },
+    "controls_v2_visual_parameters_json": {
+        "c_re": "float",
+        "c_im": "float",
+        "controls_json": "str",
+        "presentation": "Optional[tuple[float, float, float, float]]",
+        RET: "str",
+    },
+    "model_output_kind": {
+        "model_type": "Optional[str]",
+        "controls_version": "Optional[str]",
+        RET: "str",
+    },
     "set_distance_field_py": {
         "data": "Sequence[Sequence[float]]",
         "xmin": "float",
@@ -187,6 +234,16 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "c": "complex",
         "config": "ManifoldConfig",
         RET: "float",
+    },
+    "manifold_wall_potential": {
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "float",
+    },
+    "manifold_wall_force": {
+        "c": "complex",
+        "config": "ManifoldConfig",
+        RET: "tuple[float, float]",
     },
     "manifold_total_energy": {
         "vx": "float",
@@ -387,7 +444,6 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
         "set_d_star": {"d_star": "float", RET: "None"},
         "set_max_step": {"max_step": "float", RET: "None"},
         "set_level": {"level": "int", RET: "None"},
-        "set_c": {"re": "float", "im": "float", RET: "None"},
         "set_manifold_physics": {"on": "bool", RET: "None"},
         "set_manifold_config": {"config": "ManifoldConfig", RET: "None"},
         "set_manifold_drag": {"drag": "float", RET: "None"},
@@ -414,6 +470,16 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
         "flush": {RET: "list[dict]"},
         "reset": {RET: "None"},
         "diagnostics": {RET: "dict"},
+    },
+    "ManifoldConfig": {
+        "__init__": {
+            "d_ref": "float",
+            "epsilon": "float",
+            "lambda_sq": "float",
+            "kappa": "float",
+            "mu": "float",
+            RET: "None",
+        },
     },
     "CycleMode": {
         "phase_at": {"delta_seconds": "float", RET: "float"},
@@ -463,6 +529,13 @@ ATTR_TYPES: dict[str, dict[str, str]] = {
         "manifold_config": "ManifoldConfig",
         "manifold_drag": "float",
         "planar_velocity": "tuple[float, float]",
+    },
+    "ManifoldConfig": {
+        "d_ref": "float",
+        "epsilon": "float",
+        "lambda_sq": "float",
+        "kappa": "float",
+        "mu": "float",
     },
     "FeatureExtractor": {
         "feature_mean": "Optional[list[float]]",
@@ -531,6 +604,19 @@ CLASS_ORDER = [
 
 # Functions to document, in stable order.
 FUNCTION_ORDER = [
+    "orbit_control_schema_json",
+    "controls_v2_schema_json",
+    "legacy_visual_schema_json",
+    "legacy_visual_export_ranges_json",
+    "audio_feature_averages_json",
+    "legacy_audio_feature_averages_json",
+    "decode_orbit_control_json",
+    "decode_controls_v2_json",
+    "decode_legacy_visual_json",
+    "orbit_visual_parameters_json",
+    "legacy_orbit_drive_inputs_json",
+    "controls_v2_visual_parameters_json",
+    "model_output_kind",
     "set_distance_field_py",
     "sample_distance_field_py",
     "get_builtin_distance_field_py",
@@ -564,6 +650,8 @@ FUNCTION_ORDER = [
     "manifold_unsigned_distance",
     "manifold_kinetic_energy",
     "manifold_potential_energy",
+    "manifold_wall_potential",
+    "manifold_wall_force",
     "manifold_total_energy",
     "manifold_christoffel_symbols",
     "manifold_geodesic_acceleration",
