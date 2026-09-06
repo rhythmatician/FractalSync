@@ -170,33 +170,71 @@ export function treadmillChart(
  * differs. Both modes go through this one function so there is no
  * parallel mesh builder.
  */
+// Procedural grid texture generator for the fractal manifold terrain
+let proceduralGridTexture: THREE.CanvasTexture | null = null;
+function getGridTexture(): THREE.CanvasTexture | null {
+  if (proceduralGridTexture) return proceduralGridTexture;
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  if (!canvas || typeof canvas.getContext !== 'function') return null;
+  const ctx = canvas.getContext('2d');
+  if (!ctx || typeof ctx.fillRect !== 'function') return null;
+
+  canvas.width = 256;
+  canvas.height = 256;
+  // Clean neutral base that tints with vertexColors
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 256, 256);
+  // Subtle cyber/synthwave grid lines
+  ctx.strokeStyle = 'rgba(150, 160, 190, 0.4)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(0, 0, 256, 256);
+  // Secondary micro-grid
+  ctx.strokeStyle = 'rgba(180, 190, 220, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+  ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(32, 32);
+  proceduralGridTexture = tex;
+  return proceduralGridTexture;
+}
+
 export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'physical'): THREE.Mesh {
   const n = patch.n;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
+  const uvs = new Float32Array(n * n * 2);
 
   for (let i = 0; i < n * n; i++) {
+    const row = Math.floor(i / n);
+    const col = i % n;
     const x = patch.positions[i * 3];
     const y = patch.positions[i * 3 + 1];
     const z = patch.positions[i * 3 + 2]; // Rust-embedded lambda*sigma(c).
     positions[i * 3] = x * SCENE_SCALE;
-    // Treadmill mode consumes z AS the embedding height — re-multiplying
-    // by a TypeScript lambda constant would square it (hidden by lambda^2
-    // = 1 in the controller-default config).
     positions[i * 3 + 1] = isPhysicalYMode(mode) ? surfaceY(z) : SCENE_SCALE * z;
     positions[i * 3 + 2] = -y * SCENE_SCALE;
 
+    uvs[i * 2] = col / (n - 1);
+    uvs[i * 2 + 1] = row / (n - 1);
+
     // Realm coloring from the authoritative signed distance: inside = deep
-    // blue, outside = sand, Shore (|D| tiny) = bright band.
+    // cosmic blue/indigo, outside = warm amber terrace, Shore (|D| tiny) = glowing electric gold.
     const d = patch.signed[i];
     let r: number, g: number, b: number;
     if (Math.abs(d) < 0.002) {
-      r = 1.0; g = 0.95; b = 0.4; // Shore band
+      r = 1.0; g = 0.96; b = 0.45; // Shore band
     } else if (d < 0) {
-      r = 0.12; g = 0.2; b = 0.45; // Inside M
+      r = 0.10; g = 0.18; b = 0.48; // Inside M (cosmic deep basin)
     } else {
-      r = 0.72; g = 0.62; b = 0.42; // Outside M
+      r = 0.68; g = 0.58; b = 0.40; // Outside M (warm sandy terrace)
     }
     // Height shading: higher sigma = slightly lighter.
     const shade = Math.max(0.55, Math.min(1.15, 1.0 + z * 0.045));
@@ -218,10 +256,18 @@ export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'p
 
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const gridTex = getGridTexture();
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    ...(gridTex ? { map: gridTex } : {}),
+    roughness: 0.72,
+    metalness: 0.15,
+    side: THREE.DoubleSide,
+  });
   return new THREE.Mesh(geometry, material);
 }
 
@@ -785,10 +831,21 @@ export function scaleFollowTrailTransform(trail: THREE.Line, snap: DebugSnapshot
  *   feeds physics (guaranteed structurally: the camera only reads the
  *   snapshot, and this module has no path back into the recorder).
  */
+// Persistent smoothed heading for the camera so it stays smoothly behind without whipping
+let smoothedCamHeading: number | null = null;
+
+export function resetCameraSmoothing(): void {
+  smoothedCamHeading = null;
+}
+
+export const CAMERA_BACK_DISTANCE = 4.8;
+export const CAMERA_UP_DISTANCE = 2.8;
+
 export function updateCamera(
   camera: THREE.PerspectiveCamera,
   snap: DebugSnapshot,
-  mode: CameraMode
+  mode: CameraMode,
+  dt: number = 0.016
 ): void {
   const [cx, cy] = snap.physics.c;
   const sigma = snap.physics.sigma;
@@ -813,14 +870,39 @@ export function updateCamera(
     followSurface = false;
   }
 
-  // Behind and above, biased along the rider's heading.
+  // Behind and above, biased along the rider's heading or control direction.
   const [vx, vy] = snap.physics.velocity;
   const speed = Math.hypot(vx, vy);
-  const heading = speed > 1e-7 ? Math.atan2(-vy, vx) : Math.PI / 2;
-  const back = 3.2;
-  const up = 2.2;
+
+  // Target heading in scene space: c-space (vx, vy) -> scene space (vx, -vy)
+  let targetHeading = 0;
+  if (speed > 1e-4) {
+    targetHeading = Math.atan2(-vy, vx);
+  } else if (snap.action) {
+    const [dx, dy] = snap.action.effective.direction;
+    if (Math.hypot(dx, dy) > 1e-6) {
+      targetHeading = Math.atan2(-dy, dx);
+    }
+  }
+
+  if (smoothedCamHeading === null) {
+    smoothedCamHeading = targetHeading;
+  } else {
+    // Smooth angle interpolation handling wrap-around
+    let diff = targetHeading - smoothedCamHeading;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    // Damped follow: ~3.5 rad/s keeps camera behind the board without jarring snaps
+    const blend = Math.min(1.0, Math.max(0.04, 3.5 * dt));
+    smoothedCamHeading += diff * blend;
+  }
+
+  const heading = smoothedCamHeading;
+  // Placed further back and higher up to reveal more forward landscape
+  const back = CAMERA_BACK_DISTANCE;
+  const up = CAMERA_UP_DISTANCE;
   const riderY = followSurface ? surfaceY(sigma) : 0;
-  const targetY = riderY + 0.6;
+  const targetY = riderY + 0.8;
 
   const camX = rx - Math.cos(heading) * back;
   const camZ = rz + Math.sin(heading) * back;
@@ -873,19 +955,46 @@ export function physicalTransform(mesh: THREE.Mesh): void {
   mesh.scale.setScalar(1.0);
 }
 
-/** Lights + backdrop for the late-90s skate-game look. */
+/** Lights + atmospheric backdrop for an immersive game environment. */
 export function buildSceneDressing(scene: THREE.Scene): void {
-  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  const ambient = new THREE.AmbientLight(0xdde8ff, 0.65);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xfff2cc, 0.9);
-  sun.position.set(6, 10, 4);
+  const sun = new THREE.DirectionalLight(0xfff4d6, 1.25);
+  sun.position.set(12, 22, 10);
   scene.add(sun);
 
-  scene.background = new THREE.Color(0x0a0a14);
+  // Rim / fill light for character silhouette
+  const rimLight = new THREE.DirectionalLight(0x66aaff, 0.45);
+  rimLight.position.set(-10, 8, -12);
+  scene.add(rimLight);
+
+  scene.background = new THREE.Color(0x070714);
   // Fog distances are set per-terrain-rebuild by applyRenderDistance so the
   // mesh edge always hides inside the fog wall at every LOD level.
-  scene.fog = new THREE.Fog(0x0a0a14, 18, 42);
+  scene.fog = new THREE.Fog(0x070714, 20, 50);
+
+  // Distant starfield particles for celestial atmosphere
+  const starGeo = new THREE.BufferGeometry();
+  const starCount = 350;
+  const starPositions = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    const r = 80 + Math.random() * 40;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = (Math.random() * 0.4 + 0.1) * Math.PI; // Upper hemisphere
+    starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    starPositions[i * 3 + 1] = r * Math.cos(phi);
+    starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xccddff,
+    size: 1.2,
+    transparent: true,
+    opacity: 0.75,
+  });
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
 }
 
 /**
@@ -911,12 +1020,12 @@ export function applyRenderDistance(
   const magnify = horizontalMagnification(mode, r);
   const patchScene = half * 2 * SCENE_SCALE * magnify;
   const diagonal = patchScene * Math.SQRT2;
-  // updateCamera keeps the camera ~sqrt(3.2^2 + 2.2^2) ~ 3.9 scene units
+  // updateCamera keeps the camera ~sqrt(4.8^2 + 2.8^2) ~ 5.6 scene units
   // from the rider; the fog must start beyond the subject.
-  const cameraDist = 3.9;
+  const cameraDist = 5.6;
   const fogNear = Math.max(cameraDist * 1.15, diagonal * 0.25);
-  const fogFar = Math.max(diagonal * 1.15, cameraDist * 1.9);
-  const far = Math.max(diagonal * 1.6, cameraDist * 2.4);
+  const fogFar = Math.max(diagonal * 1.15, cameraDist * 2.2);
+  const far = Math.max(diagonal * 1.8, cameraDist * 2.8);
 
   if (camera.far !== far) {
     camera.far = far;

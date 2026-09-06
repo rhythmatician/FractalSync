@@ -9,8 +9,8 @@
  * trajectory trail, the current c, and the 3D viewport footprint.
  */
 
-/** Panel canvas size in pixels (square). */
-export const MINIMAP_SIZE = 192;
+/** Panel canvas size in pixels (square). 256 for crisp high-res navigation. */
+export const MINIMAP_SIZE = 256;
 
 /** Input for one minimap paint. */
 export interface MinimapPaintInput {
@@ -91,7 +91,7 @@ export function paintMinimap(
 
   // Render the Mandelbrot set via escape-time iteration.
   const image = ctx.createImageData(size, size);
-  const maxIter = 128;
+  const maxIter = 192;
   const bailout = 4.0;
   for (let row = 0; row < size; row++) {
     const y = imMax - ((imMax - imMin) * row) / (size - 1);
@@ -112,17 +112,17 @@ export function paintMinimap(
       const i = image.data;
       const idx = (row * size + col) * 4;
       if (iter >= maxIter) {
-        // Inside the set: dark blue.
-        i[idx] = 10;
-        i[idx + 1] = 20;
-        i[idx + 2] = 60;
+        // Inside the set: cosmic obsidian / indigo.
+        i[idx] = 8;
+        i[idx + 1] = 14;
+        i[idx + 2] = 36;
       } else {
         // Outside: proximity ramp — brighter near the Shore boundary.
         const proximity = 1.0 - iter / maxIter;
         const v = proximity * proximity;
-        i[idx] = Math.round(30 + 200 * v);
-        i[idx + 1] = Math.round(40 + 190 * v);
-        i[idx + 2] = Math.round(90 + 60 * (1 - v));
+        i[idx] = Math.round(25 + 230 * v);
+        i[idx + 1] = Math.round(35 + 200 * v + 20 * (1 - v));
+        i[idx + 2] = Math.round(80 + 70 * (1 - v) + 105 * v * v);
       }
       i[idx + 3] = 255;
     }
