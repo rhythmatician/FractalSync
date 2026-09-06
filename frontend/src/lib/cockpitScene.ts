@@ -415,32 +415,109 @@ export async function buildRider(): Promise<THREE.Group> {
 export function placeRider(
   rider: THREE.Group,
   snap: DebugSnapshot,
-  terrainHeightAt: (x: number, y: number) => number
+  terrainHeightAt: (x: number, y: number) => number,
+  mode: CameraMode = 'physical'
 ): void {
   const [cx, cy] = snap.physics.c;
   const [vx, vy] = snap.physics.velocity;
 
   rider.position.set(cx * SCENE_SCALE, terrainHeightAt(cx, cy), -cy * SCENE_SCALE);
 
-  // Heading from velocity; when nearly stationary keep last heading and
-  // fall back to drive direction.
+  // Heading direction in c-space.
+  // In the scene: X = cx * SCENE_SCALE, Z = -cy * SCENE_SCALE.
+  // When velocity is (vx, vy), the horizontal direction in scene space is (vx, -vy).
+  // With rider group's forward axis along local +X:
+  // Rotating (1, 0, 0) by theta_y around +Y gives:
+  //   x' = cos(theta_y), z' = -sin(theta_y).
+  // Matching (vx, -vy) requires cos(theta_y) ~ vx and -sin(theta_y) ~ -vy,
+  // which means sin(theta_y) ~ vy.
+  // Thus theta_y = Math.atan2(vy, vx).
   const speed = Math.hypot(vx, vy);
+  let dirX = 1;
+  let dirY = 0;
+  let hasDir = false;
+
   if (speed > 1e-7) {
-    rider.rotation.y = Math.atan2(-vy, vx);
+    dirX = vx / speed;
+    dirY = vy / speed;
+    hasDir = true;
   } else if (snap.action) {
     const [dx, dy] = snap.action.effective.direction;
-    if (Math.hypot(dx, dy) > 1e-6) {
-      rider.rotation.y = Math.atan2(-dy, dx);
+    const dSpeed = Math.hypot(dx, dy);
+    if (dSpeed > 1e-6) {
+      dirX = dx / dSpeed;
+      dirY = dy / dSpeed;
+      hasDir = true;
     }
   }
 
-  // Pitch from the surface slope along the heading (presentation derived
-  // from authoritative geometry): the compressed rise rate ~ sigma_dot *
-  // d(surfaceY)/dsigma evaluated at the current sigma.
-  const pitchGain =
-    (surfaceY(snap.physics.sigma + 0.01) - surfaceY(snap.physics.sigma - 0.01)) / 0.02;
-  const pitch = Math.atan2(snap.physics.sigmaDot * pitchGain, Math.max(speed * SCENE_SCALE, 1e-9));
-  rider.rotation.x = -pitch;
+  // Consistent vertical-vs-horizontal scaling:
+  // The terrain's visual horizontal scale is:
+  //   H_scale = SCENE_SCALE * horizontalMagnification(mode, snap.physics.rho)
+  //
+  // The vertical rise rate in the scene is:
+  // - In physical / scale-follow modes:
+  //     y = surfaceY(sigma)
+  //     dy/dsigma ~ d(surfaceY)/dsigma
+  //     dy/dc = grad(sigma) * (d(surfaceY)/dsigma)
+  // - In treadmill mode:
+  //     y = SCENE_SCALE * sigma
+  //     dy/dsigma = SCENE_SCALE
+  //     dy/dc = grad(sigma) * SCENE_SCALE
+  const magnify = horizontalMagnification(mode, snap.physics.rho);
+  const hScale = SCENE_SCALE * magnify;
+
+  const [gx, gy] = snap.physics.scaleGradient;
+  const dYdSigma = isPhysicalYMode(mode)
+    ? (surfaceY(snap.physics.sigma + 0.01) - surfaceY(snap.physics.sigma - 0.01)) / 0.02
+    : SCENE_SCALE;
+
+  // Scene vertical gradient: d(sceneY)/d(cx) and d(sceneY)/d(cy)
+  const dY_dcx = gx * dYdSigma;
+  const dY_dcy = gy * dYdSigma;
+
+  // Slope along forward direction and lateral right direction (in scene units):
+  // Forward c-space unit vector: (dirX, dirY).
+  // Scene forward displacement: dX_scene = dirX * hScale, dZ_scene = -dirY * hScale.
+  // Forward rise: dY_fwd = (dirX * dY_dcx + dirY * dY_dcy).
+  // Slope forward = dY_fwd / hScale.
+  //
+  // Lateral right unit vector in c-space: (dirY, -dirX).
+  // (In scene: dX_right = dirY * hScale, dZ_right = -(-dirX)*hScale = dirX * hScale,
+  // which is perpendicular to scene forward (dirX, -dirY)).
+  // Lateral rise: dY_lat = (dirY * dY_dcx - dirX * dY_dcy).
+  // Slope lateral = dY_lat / hScale.
+  const slopeFwd = hasDir ? (dirX * dY_dcx + dirY * dY_dcy) / Math.max(hScale, 1e-9) : 0;
+  const slopeLat = hasDir ? (dirY * dY_dcx - dirX * dY_dcy) / Math.max(hScale, 1e-9) : 0;
+
+  if (hasDir) {
+    const thetaY = Math.atan2(dirY, dirX);
+    const pitch = Math.atan(slopeFwd);
+    const roll = Math.atan(slopeLat);
+
+    // Forward tangent vector T (in scene coordinates):
+    const T = new THREE.Vector3(
+      Math.cos(pitch) * Math.cos(thetaY),
+      Math.sin(pitch),
+      -Math.cos(pitch) * Math.sin(thetaY)
+    ).normalize();
+
+    // Lateral right vector R_raw:
+    const R_raw = new THREE.Vector3(
+      Math.cos(roll) * Math.sin(thetaY),
+      Math.sin(roll),
+      Math.cos(roll) * Math.cos(thetaY)
+    );
+
+    // Surface normal N (points UP: R x T in right-handed coords):
+    const N = new THREE.Vector3().crossVectors(R_raw, T).normalize();
+    // Exact orthonormal lateral vector B = T x N:
+    const B = new THREE.Vector3().crossVectors(T, N).normalize();
+
+    // Construct basis matrix: local +X -> T (forward), local +Y -> N (up), local +Z -> B (right):
+    const mat = new THREE.Matrix4().makeBasis(T, N, B);
+    rider.quaternion.setFromRotationMatrix(mat);
+  }
 
   // Velocity arrow visibility scales with speed.
   const arrow = rider.getObjectByName('velocityArrow');
