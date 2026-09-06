@@ -63,31 +63,42 @@ export interface MotionControlsPayload {
  * - -Y is down
  * If no steering keys are pressed, direction defaults to [1, 0] (forward real axis).
  */
+/**
+ * Maps standard PC controls to bounded Controls v2.
+ *
+ * Controls semantics:
+ * - W / Up -> Forward Throttle (accelerate along current heading)
+ * - S / Down -> Dissipative Brake
+ * - A / Left -> Steer Left (counter-clockwise yaw in c-space)
+ * - D / Right -> Steer Right (clockwise yaw in c-space)
+ * - Shift -> Drift (reduces grip to 0.2)
+ * - Space -> Impulse (edge-triggered)
+ *
+ * @param keys Active keyboard state
+ * @param currentHeading Current heading angle theta in c-space radians (atan2(vy, vx))
+ * @param steerAngularRate Radians to turn heading per second when steering key is held (default ~1.5 rad/s)
+ * @param dt Timestep in seconds
+ */
 export function mapKeyboardToMotionControls(
   keys: KeyboardState,
-  headingAngle?: number
+  currentHeading: number = 0,
+  steerAngularRate: number = 2.0,
+  dt: number = CANONICAL_DT
 ): MotionControlsPayload {
-  let throttle = keys.up ? 1.0 : 0.0;
-  let brake = keys.down ? 1.0 : 0.0;
+  const throttle = keys.up ? 1.0 : 0.0;
+  const brake = keys.down ? 1.0 : 0.0;
 
-  // Steering: determine world-aligned planar direction
-  let dx = 0;
-  let dy = 0;
-  if (keys.right) dx += 1;
-  if (keys.left) dx -= 1;
-  if (keys.up && !keys.down) dy += 1;
-  if (keys.down && !keys.up) dy -= 1;
-
-  let direction: [number, number];
-  const mag = Math.hypot(dx, dy);
-
-  if (mag > 1e-6) {
-    direction = [dx / mag, dy / mag];
-  } else if (headingAngle !== undefined) {
-    direction = [Math.cos(headingAngle), Math.sin(headingAngle)];
-  } else {
-    direction = [1.0, 0.0];
+  // Steering adjusts heading angle relative to current heading:
+  // A (steer left in c-space) -> +dTheta
+  // D (steer right in c-space) -> -dTheta
+  let heading = currentHeading;
+  if (keys.left && !keys.right) {
+    heading += steerAngularRate * dt;
+  } else if (keys.right && !keys.left) {
+    heading -= steerAngularRate * dt;
   }
+
+  const direction: [number, number] = [Math.cos(heading), Math.sin(heading)];
 
   // Shift modulates grip: 1.0 (firm) -> 0.2 (drift)
   const grip = keys.drift ? 0.2 : 1.0;
@@ -112,6 +123,8 @@ export class ManualDriver {
   private synth: OrbitSynthesizer;
   private accumulator = 0;
   private lastImpulseState = false;
+  private pendingImpulse = false;
+  private headingAngle = 0;
   private initialC: [number, number] = [0, 0];
   private initialV: [number, number] = [0, 0];
 
@@ -158,6 +171,9 @@ export class ManualDriver {
 
     this.accumulator = 0;
     this.lastImpulseState = false;
+    this.pendingImpulse = false;
+    const initialSpeed = Math.hypot(this.initialV[0], this.initialV[1]);
+    this.headingAngle = initialSpeed > 1e-7 ? Math.atan2(this.initialV[1], this.initialV[0]) : 0;
     this.trajectory = this.createEmptyTrajectory();
 
     // Capture baseline initial snapshot (t=0, step 0)
@@ -172,34 +188,42 @@ export class ManualDriver {
    * Returns the number of canonical steps executed.
    */
   public update(dtSeconds: number, keys: KeyboardState): number {
-    // Edge-triggered impulse: only true on rising edge of key press
-    const isRisingImpulse = keys.impulse && !this.lastImpulseState;
+    // Edge-triggered impulse: register on rising edge, latch until a canonical step consumes it
+    if (keys.impulse && !this.lastImpulseState) {
+      this.pendingImpulse = true;
+    }
     this.lastImpulseState = keys.impulse;
 
     this.accumulator += dtSeconds;
     let stepsRun = 0;
 
-    // Current heading angle from velocity if moving, else previous
+    // Follow velocity heading if actively moving, otherwise retain steerable heading angle
     const lastSnap = this.trajectory.snapshots[this.trajectory.snapshots.length - 1];
-    let headingAngle: number | undefined;
     if (lastSnap) {
       const vx = lastSnap.physics.velocity[0];
       const vy = lastSnap.physics.velocity[1];
-      if (Math.hypot(vx, vy) > 1e-7) {
-        headingAngle = Math.atan2(vy, vx);
+      if (Math.hypot(vx, vy) > 1e-4) {
+        this.headingAngle = Math.atan2(vy, vx);
       }
     }
 
     while (this.accumulator >= CANONICAL_DT) {
-      // Consume impulse only on the first step of the rising edge
-      const stepImpulse = stepsRun === 0 && isRisingImpulse;
+      // Consume edge-triggered impulse on first step of this tick batch
+      const stepImpulse = this.pendingImpulse;
+      this.pendingImpulse = false;
+
       const ctrl = mapKeyboardToMotionControls(
         {
           ...keys,
           impulse: stepImpulse,
         },
-        headingAngle
+        this.headingAngle,
+        2.5,
+        CANONICAL_DT
       );
+
+      // Update internal heading angle to match emitted direction
+      this.headingAngle = Math.atan2(ctrl.direction[1], ctrl.direction[0]);
 
       this.synth.stepWithControls(CANONICAL_DT, ctrl);
       const snap = currentSnapshot(this.synth);

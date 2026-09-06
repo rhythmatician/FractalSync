@@ -814,11 +814,11 @@ export function DebugCockpit(): JSX.Element {
             }}
           >
             <strong style={{ color: '#7f7' }}>MANUAL DRIVING (Controls v2)</strong>
-            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>W</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↑</kbd> : Throttle</div>
-            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>S</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↓</kbd> : Brake</div>
-            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>A</kbd>/<kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>D</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>←</kbd>/<kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>→</kbd> : Steer Direction</div>
-            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Shift</kbd> : Drift (reduce grip)</div>
-            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Space</kbd> : Impulse (edge-triggered)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>W</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↑</kbd> : Forward Throttle (Push)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>S</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>↓</kbd> : Brake (Dissipate)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>A</kbd> / <kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>D</kbd> : Steer Left / Right (Yaw Heading)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Shift</kbd> : Drift (Reduce Grip)</div>
+            <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>Space</kbd> : Impulse (Jump/Pop)</div>
             <div><kbd style={{ background: '#223', padding: '1px 4px', borderRadius: 3 }}>R</kbd> : Reset trajectory</div>
           </div>
         )}

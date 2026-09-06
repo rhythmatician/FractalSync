@@ -51,7 +51,7 @@ describe('manual Controls v2 driving (#121)', () => {
     expect(ctrl.impulse).toBe(0);
   });
 
-  it('maps forward key (W / Up) to full throttle and directional keys to normalized vector', () => {
+  it('maps forward key (W / Up) to full throttle and directional keys to steering vector', () => {
     const keys: KeyboardState = {
       up: true,
       down: false,
@@ -60,12 +60,12 @@ describe('manual Controls v2 driving (#121)', () => {
       drift: false,
       impulse: false,
     };
-    const ctrl = mapKeyboardToMotionControls(keys);
+    const ctrl = mapKeyboardToMotionControls(keys, 0, 2.0, CANONICAL_DT);
     expect(ctrl.throttle).toBe(1.0);
     expect(ctrl.brake).toBe(0);
     expect(ctrl.grip).toBe(1.0);
-    // Heading right: [0, -1] or [1, 1]/sqrt(2) depending on plane definition
-    // For standard top-down/heading plane: +X is right, +Y is up
+    // Steering right from 0 radians turns clockwise: direction has negative Y component
+    expect(ctrl.direction[1]).toBeLessThan(0);
     expect(Math.hypot(ctrl.direction[0], ctrl.direction[1])).toBeCloseTo(1.0, 5);
   });
 
