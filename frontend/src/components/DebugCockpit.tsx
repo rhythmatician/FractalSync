@@ -59,7 +59,13 @@ import {
   DEFAULT_OVERLAYS,
   type CameraMode,
   type TerrainOverlays,
+  getSmoothedCamHeading,
 } from '../lib/cockpitScene';
+import {
+  transformMeshToHyperbolic,
+  transformTrailToHyperbolic,
+  transformRiderToHyperbolic,
+} from '../lib/hyperbolicCamera';
 
 type Badge = 'STATE' | 'ACTION' | 'DIAG';
 
@@ -489,6 +495,15 @@ export function DebugCockpit(): JSX.Element {
       if (refs.terrain) scaleFollowTransform(refs.terrain, frame);
       scaleFollowTrailTransform(refs.trail, frame);
       refs.rider.position.set(0, heightAt(frame.physics.c[0], frame.physics.c[1]), 0);
+    } else if (cameraMode === 'hyperbolic') {
+      // Hyperbolic mode: project terrain mesh and trail into Poincaré ball
+      // centered at the camera in H^3 with orientation applied.
+      const smoothedHeading = getSmoothedCamHeading();
+      if (refs.terrain && refs.terrainPatch) {
+        transformMeshToHyperbolic(refs.terrain, refs.terrainPatch, frame, smoothedHeading);
+      }
+      transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading);
+      transformRiderToHyperbolic(refs.rider, frame, smoothedHeading);
     } else {
       // Physical: no transforms, rider follows c directly.
       if (refs.terrain) physicalTransform(refs.terrain);
@@ -769,7 +784,13 @@ export function DebugCockpit(): JSX.Element {
           <button
             onClick={() =>
               setCameraMode((m) =>
-                m === 'physical' ? 'scale-follow' : m === 'scale-follow' ? 'treadmill' : 'physical'
+                m === 'physical'
+                  ? 'scale-follow'
+                  : m === 'scale-follow'
+                    ? 'treadmill'
+                    : m === 'treadmill'
+                      ? 'hyperbolic'
+                      : 'physical'
               )
             }
             style={{ background: '#20203a', color: '#dde', border: '1px solid #2c2c48', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}
@@ -779,7 +800,9 @@ export function DebugCockpit(): JSX.Element {
               ? 'PHYSICAL (x,y,λσ)'
               : cameraMode === 'scale-follow'
                 ? 'SCALE-FOLLOW (1/ρ X/Z)'
-                : 'TREADMILL (debug chart)'}
+                : cameraMode === 'treadmill'
+                  ? 'TREADMILL (debug chart)'
+                  : 'HYPERBOLIC (Poincaré)'}
           </button>
           <button
             onClick={() => setPlayerView((p) => !p)}
