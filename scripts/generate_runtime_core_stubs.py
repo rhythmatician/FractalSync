@@ -444,6 +444,7 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
         "set_d_star": {"d_star": "float", RET: "None"},
         "set_max_step": {"max_step": "float", RET: "None"},
         "set_level": {"level": "int", RET: "None"},
+        "set_c": {"re": "float", "im": "float", RET: "None"},
         "set_manifold_physics": {"on": "bool", RET: "None"},
         "set_manifold_config": {"config": "ManifoldConfig", RET: "None"},
         "set_manifold_drag": {"drag": "float", RET: "None"},
@@ -458,6 +459,7 @@ CLASS_METHOD_TYPES: dict[str, dict[str, dict[str, str]]] = {
             "controls": "MotionControls",
             RET: "tuple[float, float]",
         },
+        "debug_snapshot": {RET: "dict[str, object]"},
     },
     "AnalysisTimebase": {
         "__init__": {RET: "None"},
@@ -523,6 +525,8 @@ ATTR_TYPES: dict[str, dict[str, str]] = {
     },
     "PlayerState": {"c_re": "float", "c_im": "float", "speed": "float"},
     "OrbitController": {
+        "c_re": "float",
+        "c_im": "float",
         "theta": "float",
         "manifold_physics": "bool",
         "manifold_error": "Optional[str]",

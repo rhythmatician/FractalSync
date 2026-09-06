@@ -2,7 +2,7 @@
 
 ## Adopted mechanics
 
-The runtime now implements the destination geometry settled in
+PR #134 updated the runtime to implement the destination geometry settled in
 `docs/equations.md`:
 
 \[
@@ -21,20 +21,22 @@ older graph-only formula differentiated only the
 local ruler is small, so retaining the old connection with the new metric would
 not be Levi-Civita compatible.
 
-The prototype cockpit used a debug snapshot whose Shore-specific `potential`
-and `potentialForce` fields distinguished `U_sigma` and `Q_sigma` from the
-complete `K + U_sigma + U_wall` energy ledger. That prototype supplied the
-validation evidence below; its debug snapshot and cockpit APIs are deferred
-from this physics and model-I/O candidate.
+This Phase A cockpit PR exposes the corrected mechanics without changing them.
+Its debug snapshot preserves `potential` and `potentialForce` as
+Shore-specific `U_sigma` and `Q_sigma` fields because the cockpit uses them
+to decide whether the trajectory crested the Shore ridge. Its `total` field
+includes `K + U_sigma + U_wall`, and its reconstructed acceleration includes
+the wall force, so both the energy ledger and dynamics match the PR #134
+integration path.
 
 ## Verification evidence
 
-- The Rust runtime library suite passes: 49 tests.
+- At the time of the PR #134 validation, the Rust runtime library suite passed
+  49 tests.
 - Direct regression tests verify `G G^{-1} = I` and compare the compact
   connection with the defining metric-derivative equation component by
   component.
-- The historical prototype's native `tour_antenna_mini` replay completed all
-  550 frames with finite
+- The native `tour_antenna_mini` replay completed all 550 frames with finite
   state, no anomalous acceleration, and no hard-guard rejection. Its largest
   coordinate acceleration magnitude was 0.1120 at tick 51.
 - A native Shore launch with kinetic energy 25 times the scalar ridge height
@@ -78,8 +80,10 @@ before conservation through the Shore can become an acceptance criterion. No
 local smoothing heuristic is adopted here because it would introduce another
 physics authority without settling that model.
 
-The native replay establishes numerical stability for the previously failing
-antenna preset. It does not replace the eyes-on acceptance requested by issue
-#120 for scale-relative travel or by issue #82 for the rendered shore-crossing
+The PR #134 native replay establishes numerical stability for the previously
+failing antenna preset. The Phase A cockpit makes that state inspectable; it
+does not claim to resolve the sampled-field energy-convergence limitation
+documented above, and it does not replace the eyes-on acceptance requested by
+issue #120 for scale-relative travel or by issue #82 for the rendered shore-crossing
 experience. Those checks remain after rebuilt Python and WASM artifacts consume
 the new controller version.

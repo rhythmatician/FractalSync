@@ -29,7 +29,7 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 # Build as a Python extension module (PyO3).
-python = ["pyo3", "pyo3/extension-module"]
+python = ["pyo3", "pyo3/extension-module", "pythonize"]
 
 # Build WebAssembly bindings (wasm-bindgen).
 wasm = ["wasm-bindgen", "js-sys"]
@@ -61,6 +61,7 @@ ndarray = "0.15"
 ndarray-npy = "0.7"
 once_cell = "1.18"
 num-complex = "0.4"
+pythonize = { version = "0.21", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

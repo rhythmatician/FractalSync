@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 import { copyFileSync, existsSync } from 'fs'
 
 // Auto-copy ONNX Runtime WASM file (canonical: single-thread, non-SIMD) on startup
@@ -14,6 +15,16 @@ if (existsSync(preferredWasm)) {
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        // Standalone #111 debug cockpit (no model, no audio; wasm physics +
+        // Three.js third-person manifold view).
+        debugCockpit: resolve(__dirname, 'debugCockpit.html'),
+      },
+    },
+  },
   server: {
     port: 3000,
     headers: {

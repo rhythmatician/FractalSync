@@ -11,14 +11,16 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "onnxruntime-web": "1.18.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "onnxruntime-web": "1.18.0"
+    "three": "^0.169.0"
   },
   "devDependencies": {
     "@testing-library/react": "^14.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^1.0.0",
     "jsdom": "^23.0.0",

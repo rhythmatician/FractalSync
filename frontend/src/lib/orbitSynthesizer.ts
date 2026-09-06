@@ -556,6 +556,22 @@ export class OrbitSynthesizer {
     this.state.apply_controls(signals.sTarget, signals.alpha);
   }
 
+  /**
+   * Seed the authoritative player c and/or planar velocity. Used by the
+   * debug cockpit recorder for "approach from outside" trajectories that
+   * start at a non-default c without paying the launch cost of crossing
+   * the cardioid ridge from c=0. Both arguments are optional; when
+   * omitted, the corresponding state is left untouched.
+   */
+  seed(c?: { re: number; im: number }, v?: { re: number; im: number }): void {
+    const s = this.state as unknown as {
+      setC?: (re: number, im: number) => void;
+      setVelocity?: (vx: number, vy: number) => void;
+    };
+    if (c && typeof s.setC === 'function') s.setC(c.re, c.im);
+    if (v && typeof s.setVelocity === 'function') s.setVelocity(v.re, v.im);
+  }
+
   /** Refinement 1: momentum (persistent velocity + drag). Default OFF. */
   setMomentum(on: boolean, drag = 0.9): void {
     // wasm-bindgen exposes Rust setters as JS property setters:
@@ -719,4 +735,13 @@ export class OrbitSynthesizer {
     return { real: c.real, imag: c.imag };
   }
 
+  /**
+   * Typed accessor for the underlying wasm controller's read-only
+   * DebugSnapshot seam (issue #111). Returns the controller object exposing
+   * `debugSnapshot()`, or undefined when the wasm build predates the seam.
+   * Diagnostic-only: the snapshot is a pure function of controller state.
+   */
+  debugSnapshotController(): { debugSnapshot?: () => unknown } | undefined {
+    return this.state as unknown as { debugSnapshot?: () => unknown } | undefined;
+  }
 }

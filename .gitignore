@@ -36,6 +36,9 @@ docs/ignore/*
 
 julia_over_time.png
 
+# Node/TS
+node_modules
+
 # Rust build artifacts (runtime-core, wasm-orbit)
 target/
 runtime-core/target/
