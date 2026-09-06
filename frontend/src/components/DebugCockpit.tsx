@@ -358,7 +358,7 @@ export function DebugCockpit(): JSX.Element {
     const heightAt = (x: number, y: number): number =>
       surfaceY(riderSurfaceHeight(frame, x, y));
 
-    placeRider(refs.rider, frame, heightAt);
+    placeRider(refs.rider, frame, heightAt, cameraMode);
     // Feed the animation gait from authoritative metric speed.
     refs.lastMetricSpeed = frame.physics.metricSpeed;
 
