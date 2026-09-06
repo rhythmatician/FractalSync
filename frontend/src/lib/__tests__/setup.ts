@@ -174,3 +174,32 @@ vi.stubGlobal(
     }
   }
 );
+
+// Mock 2D canvas context (jsdom has no canvas implementation). Records
+// enough state for the cockpit minimap tests to assert painting happened.
+if (typeof (globalThis as any).HTMLCanvasElement !== 'undefined') {
+  (globalThis as any).HTMLCanvasElement.prototype.getContext = function (
+    kind: string
+  ) {
+    if (kind !== '2d') return null;
+    return {
+      createImageData: (w: number, h: number) => ({
+        width: w,
+        height: h,
+        data: new Uint8ClampedArray(w * h * 4),
+      }),
+      putImageData: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      closePath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      arc: () => {},
+      fill: () => {},
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+    };
+  };
+}

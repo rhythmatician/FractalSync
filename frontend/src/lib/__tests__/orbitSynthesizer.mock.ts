@@ -50,6 +50,12 @@ class MockOrbitController {
   manifold_drag = 0.1;
   manifold_error: string | null = null;
   planar_velocity: [number, number] = [0, 0];
+  // DebugSnapshot bookkeeping (issue #111).
+  last_controls: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number } | null = null;
+  last_friction_beta = 0.0;
+  last_friction_power = 0.0;
+  last_delta_total: number | null = null;
+  step_time_seconds = 0.0;
   // Momentum state (used when momentum is on).
   v_re = 0;
   v_im = 0;
@@ -66,6 +72,26 @@ class MockOrbitController {
   apply_controls(s: number, alpha: number) {
     this.s = Math.max(0.01, Math.min(3.0, s));
     this.alpha = Math.max(0.0, Math.min(1.0, alpha));
+  }
+
+  // Authoritative player c (real, imag) and planar velocity (vx, vy) —
+  // mirrors the wasm OrbitController's c / velocity getters and setC /
+  // setVelocity seed methods so test harnesses and the cockpit recorder
+  // can seed a non-default starting point (e.g. "approach from outside
+  // M" trajectories).
+  get c(): { real: number; imag: number } {
+    return { real: this.c_re, imag: this.c_im };
+  }
+  setC(re: number, im: number): void {
+    this.c_re = re;
+    this.c_im = im;
+  }
+  get velocity(): { real: number; imag: number } {
+    return { real: this.planar_velocity[0], imag: this.planar_velocity[1] };
+  }
+  setVelocity(vx: number, vy: number): void {
+    this.planar_velocity[0] = vx;
+    this.planar_velocity[1] = vy;
   }
 
   // May's exact mandelbrotBoundary(s, alpha).
@@ -125,7 +151,86 @@ class MockOrbitController {
     this.c_re += this.planar_velocity[0] * dt;
     this.c_im += this.planar_velocity[1] * dt;
     this.theta = (this.theta + this.omega * dt) % TWO_PI;
+    // DebugSnapshot bookkeeping (issue #111): raw controls, friction, clock.
+    this.last_controls = m
+      ? {
+          direction: [dirX, dirY] as [number, number],
+          throttle,
+          brake,
+          grip,
+          impulse,
+        }
+      : null;
+    this.last_friction_beta = beta;
+    this.last_friction_power = -beta * (this.planar_velocity[0] ** 2 + this.planar_velocity[1] ** 2);
+    this.last_delta_total = 0.0;
+    this.step_time_seconds += dt;
     return { real: this.c_re, imag: this.c_im };
+  }
+
+  /**
+   * Read-only DebugSnapshot mock (issue #111). Mirrors the wasm seam's wire
+   * shape with mock-physics values so the cockpit adapter is testable in
+   * vitest. NOT a math mirror: the real values come from Rust.
+   */
+  debugSnapshot() {
+    const c = [this.c_re, this.c_im] as [number, number];
+    const v = [this.planar_velocity[0], this.planar_velocity[1]] as [number, number];
+    // Mock signed distance: distance from the unit-ish Shore at x=0.25.
+    const signedDistance = 0.25 - this.c_re;
+    const sigma = Math.log2(0.1 / Math.sqrt(signedDistance * signedDistance + 1e-8));
+    const kinetic = 0.5 * (v[0] * v[0] + v[1] * v[1]);
+    const potential = sigma;
+    const action = this.last_controls
+      ? {
+          raw: { ...this.last_controls },
+          effective: {
+            direction: [
+              Math.max(-1, Math.min(1, this.last_controls.direction[0])),
+              Math.max(-1, Math.min(1, this.last_controls.direction[1])),
+            ] as [number, number],
+            throttle: Math.max(0, Math.min(1, this.last_controls.throttle)),
+            brake: Math.max(0, Math.min(1, this.last_controls.brake)),
+            grip: Math.max(0, Math.min(1, this.last_controls.grip)),
+            impulse: Math.max(0, Math.min(1, this.last_controls.impulse)),
+          },
+          driveCovector: [this.last_controls.throttle * 2.0, 0] as [number, number],
+          frictionBeta: this.last_friction_beta,
+          frictionPower: this.last_friction_power,
+        }
+      : null;
+    return {
+      version: 'debug-snapshot/1',
+      timeSeconds: this.step_time_seconds,
+      action,
+      map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
+      physics: {
+        c,
+        velocity: v,
+        signedDistance,
+        realm: signedDistance < 0 ? -1 : signedDistance > 0 ? 1 : 0,
+        rho: Math.sqrt(signedDistance * signedDistance + 1e-8),
+        sigma,
+        sigmaDot: 0,
+        scaleGradient: [0, 0] as [number, number],
+        metric: [1, 0, 1] as [number, number, number],
+        metricSpeed: Math.sqrt(v[0] * v[0] + v[1] * v[1]),
+        kinetic,
+        potential,
+        total: kinetic + potential,
+        geodesicAccel: [0, 0] as [number, number],
+        potentialForce: [0, 0] as [number, number],
+        netAccel: [0, 0] as [number, number],
+        derivativeValid: true,
+      },
+      diagnostics: {
+        derivativeStep: 1e-4,
+        valid: true,
+        lastError: null,
+        lastDeltaTotal: this.last_delta_total,
+        crestPotential: Math.log2(0.1 / 1e-4),
+      },
+    };
   }
 
   step(dt: number, _h = 0.0, bandGates?: Float64Array | null) {
@@ -378,5 +483,61 @@ export default {
       analysis_pipeline_version: 'analysis-pipeline/1',
       controls_version: 'controls/2',
     };
+  },
+  debugSnapshotMeta() {
+    return { version: 'debug-snapshot/1', canonicalDt: 1024 / 48000 };
+  },
+  ManifoldConfig: class MockManifoldConfig {
+    d_ref: number; epsilon: number; lambda_sq: number; kappa: number; mu: number;
+    constructor(d: number, e: number, l: number, k: number, mu: number) {
+      this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k; this.mu = mu;
+    }
+  },
+  manifold_embedding(re: number, im: number) {
+    // Mock embedding with REAL slope near the Shore (x=0.25): sigma rises
+    // as the rider approaches it, so per-position height sampling is
+    // distinguishable from patch-center height in tests.
+    const d = 0.25 - re;
+    const rho = Math.sqrt(d * d + 1e-8);
+    const sigma = Math.log2(0.1 / rho);
+    return [re, im, sigma] as [number, number, number];
+  },
+  debugTerrainPatch(cx: number, cy: number, half: number, n: number) {
+    // Mock terrain: same wire shape as the Rust seam. Heights vary so the
+    // cockpit's mesh-building path is exercised in vitest.
+    const positions: number[] = [];
+    const signed: number[] = [];
+    const realm: number[] = [];
+    for (let row = 0; row < n; row++) {
+      const im = cy + half - 2 * half * (row / (n - 1));
+      for (let col = 0; col < n; col++) {
+        const re = cx - half + 2 * half * (col / (n - 1));
+        const d = 0.25 - re;
+        const rho = Math.sqrt(d * d + 1e-8);
+        const sigma = Math.log2(0.1 / rho);
+        positions.push(re, im, sigma);
+        signed.push(d);
+        realm.push(d < 0 ? -1 : d > 0 ? 1 : 0);
+      }
+    }
+    return { n, center: [cx, cy] as [number, number], half, positions, signed, realm };
+  },
+  minimapShoreProximityBatch(re: number[], _im: number[], _level: number) {
+    // Mock S field over the canonical extent: a smooth ramp toward the
+    // Shore band at x=0.25 (shape only — the real field comes from the
+    // Rust pyramid). Points outside the extent clamp to the edge value.
+    return Float32Array.from(re.map((x) => Math.max(0, Math.min(1, 1 - Math.abs(x - 0.25) * 2))));
+  },
+  deepZoomField(re: number[], im: number[]) {
+    // Mock deep-zoom DEM: unsigned distance to the boundary (0 inside),
+    // same boundary the S ramp encodes. Shape only — the real field comes
+    // from the Rust escape-iteration estimator.
+    return Float32Array.from(
+      re.map((x, i) => {
+        const y = im[i];
+        const d = Math.abs(x - 0.25) + Math.abs(y) * 0.5;
+        return d;
+      })
+    );
   },
 };
