@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
-  computeUpperHalfScaleA,
-  rhoFromEmbeddedHeight,
   canonicalizeUpperHalf,
   upperHalfToPoincareBall,
   projectPointToCameraPoincare,
@@ -10,12 +8,7 @@ import {
 } from '../hyperbolicCamera';
 
 describe('hyperbolicCamera projection math', () => {
-  const lambda = 1.0;
-  const a = computeUpperHalfScaleA(lambda); // ~1.44269504
-
-  it('computes upper half scale a = lambda / ln(2)', () => {
-    expect(a).toBeCloseTo(1.0 / Math.LN2, 10);
-  });
+  const a = 1.7; // Arbitrary curvature radius supplied by the geometry authority.
 
   it('computes Poincaré ball coordinates directly via upperHalfToPoincareBall', () => {
     const canonical = { x: 0, y: 0, z: 1 };
@@ -23,20 +16,6 @@ describe('hyperbolicCamera projection math', () => {
     expect(b.x).toBeCloseTo(0, 10);
     expect(b.y).toBeCloseTo(0, 10);
     expect(b.z).toBeCloseTo(0, 10);
-  });
-
-  it('reconstructs physical rho from embedded height z = lambda * sigma(c)', () => {
-    // sigma = log2(d_ref / rho) => z = lambda * log2(d_ref / rho)
-    // For d_ref = 0.1, lambda = 1.0, rho = 0.05:
-    // sigma = log2(0.1 / 0.05) = log2(2) = 1.0
-    // z = 1.0. rhoFromEmbeddedHeight(1.0, 0.1, 1.0) should be 0.05.
-    const rho = rhoFromEmbeddedHeight(1.0, 0.1, 1.0);
-    expect(rho).toBeCloseTo(0.05, 10);
-
-    // For rho = 1e-4:
-    // sigma = log2(0.1 / 1e-4) = log2(1000) ~ 9.96578428
-    const z = Math.log2(0.1 / 1e-4);
-    expect(rhoFromEmbeddedHeight(z, 0.1, 1.0)).toBeCloseTo(1e-4, 10);
   });
 
   it('camera maps to origin: P = C maps to b = (0, 0, 0)', () => {
@@ -89,7 +68,7 @@ describe('hyperbolicCamera projection math', () => {
       { x: 0.5, y: -0.2, z: 0.005 },
     ];
 
-    const alphas = [0.001, 0.1, 2.5, 100.0, 1e4];
+    const alphas = [1e-12, 0.001, 0.1, 2.5, 100.0, 1e4];
 
     for (const alpha of alphas) {
       const scaledCamera = { x: camera.x * alpha, y: camera.y * alpha, z: camera.z * alpha };

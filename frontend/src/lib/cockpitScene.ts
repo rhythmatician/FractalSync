@@ -569,6 +569,7 @@ export function placeRider(
   terrainHeightAt: (x: number, y: number) => number,
   mode: CameraMode = 'physical'
 ): void {
+  rider.scale.setScalar(1);
   const [cx, cy] = snap.physics.c;
   const [vx, vy] = snap.physics.velocity;
 
@@ -843,6 +844,37 @@ export function resetCameraSmoothing(): void {
   smoothedCamHeading = null;
 }
 
+export function updateSmoothedHeading(snap: DebugSnapshot, dt: number): number {
+  // Behind and above, biased along the rider's heading or control direction.
+  const [vx, vy] = snap.physics.velocity;
+  const speed = Math.hypot(vx, vy);
+
+  // Heading stays in c-space; scene placement explicitly maps y to -Z.
+  let targetHeading = smoothedCamHeading ?? 0;
+  if (speed > 0) {
+    targetHeading = Math.atan2(vy, vx);
+  } else if (snap.action) {
+    const [dx, dy] = snap.action.effective.direction;
+    if (Math.hypot(dx, dy) > 1e-6) {
+      targetHeading = Math.atan2(dy, dx);
+    }
+  }
+
+  if (smoothedCamHeading === null) {
+    smoothedCamHeading = targetHeading;
+  } else {
+    // Smooth angle interpolation handling wrap-around
+    let diff = targetHeading - smoothedCamHeading;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    // Damped follow: ~3.5 rad/s keeps camera behind the board without jarring snaps
+    const blend = 1 - Math.exp(-3.5 * Math.max(0, dt));
+    smoothedCamHeading += diff * blend;
+  }
+
+  return smoothedCamHeading;
+}
+
 export const CAMERA_BACK_DISTANCE = 4.8;
 export const CAMERA_UP_DISTANCE = 2.8;
 
@@ -854,6 +886,7 @@ export function updateCamera(
 ): void {
   const [cx, cy] = snap.physics.c;
   const sigma = snap.physics.sigma;
+  updateSmoothedHeading(snap, dt);
 
   let rx: number, rz: number;
   let followSurface: boolean;
@@ -883,34 +916,7 @@ export function updateCamera(
     followSurface = false;
   }
 
-  // Behind and above, biased along the rider's heading or control direction.
-  const [vx, vy] = snap.physics.velocity;
-  const speed = Math.hypot(vx, vy);
-
-  // Target heading in scene space: c-space (vx, vy) -> scene space (vx, -vy)
-  let targetHeading = 0;
-  if (speed > 1e-4) {
-    targetHeading = Math.atan2(-vy, vx);
-  } else if (snap.action) {
-    const [dx, dy] = snap.action.effective.direction;
-    if (Math.hypot(dx, dy) > 1e-6) {
-      targetHeading = Math.atan2(-dy, dx);
-    }
-  }
-
-  if (smoothedCamHeading === null) {
-    smoothedCamHeading = targetHeading;
-  } else {
-    // Smooth angle interpolation handling wrap-around
-    let diff = targetHeading - smoothedCamHeading;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    // Damped follow: ~3.5 rad/s keeps camera behind the board without jarring snaps
-    const blend = Math.min(1.0, Math.max(0.04, 3.5 * dt));
-    smoothedCamHeading += diff * blend;
-  }
-
-  const heading = smoothedCamHeading;
+  const heading = smoothedCamHeading ?? 0;
   // Placed further back and higher up to reveal more forward landscape
   const back = CAMERA_BACK_DISTANCE;
   const up = CAMERA_UP_DISTANCE;
@@ -1037,8 +1043,8 @@ export function applyRenderDistance(
     camera.updateProjectionMatrix();
     const fog = scene.fog;
     if (fog && 'near' in fog && 'far' in fog) {
-      (fog as THREE.Fog).near = 30.0;
-      (fog as THREE.Fog).far = 60.0;
+      (fog as THREE.Fog).near = 12.0;
+      (fog as THREE.Fog).far = 19.0;
     }
     return;
   }

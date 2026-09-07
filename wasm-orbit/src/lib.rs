@@ -1221,6 +1221,12 @@ impl From<&ManifoldConfig> for RustManifoldConfig {
 
 #[wasm_bindgen]
 impl ManifoldConfig {
+    /// Use the same defaults as OrbitController, without a second browser authority.
+    pub fn defaults() -> ManifoldConfig {
+        let config = RustManifoldConfig::default();
+        Self::new(config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu)
+    }
+
     #[wasm_bindgen(constructor)]
     pub fn new(d_ref: f64, epsilon: f64, lambda_sq: f64, kappa: f64, mu: f64) -> ManifoldConfig {
         ManifoldConfig {

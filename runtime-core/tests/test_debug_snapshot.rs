@@ -38,7 +38,39 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/1");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/2");
+}
+
+#[test]
+fn upper_half_geometry_uses_active_config_and_matches_the_surface() {
+    let _g = lock();
+    let config = ManifoldConfig {
+        lambda_sq: 6.25,
+        d_ref: 0.37,
+        epsilon: 0.002,
+        ..Default::default()
+    };
+    let c = Complex64::new(0.4, 0.2);
+    let v = (0.02, -0.01);
+    let snap = snapshot_from_state(c, v, None, None, &config, None).unwrap();
+    let upper = &snap.physics.upper_half;
+    assert!((upper.a - 2.5 / std::f64::consts::LN_2).abs() < 1e-12);
+    assert!((upper.z - upper.a * snap.physics.rho).abs() < 1e-12);
+    assert!((upper.z_dot - upper.gradient[0] * v.0 - upper.gradient[1] * v.1).abs() < 1e-12);
+    let patch = terrain_patch(c.re, c.im, 0.01, 3, &config).unwrap();
+    assert_eq!(patch.upper_z.len(), 9);
+    assert!((patch.upper_z[4] - upper.z).abs() < 1e-12);
+    for (i, z) in patch.upper_z.iter().enumerate() {
+        let q = Complex64::new(patch.positions[3 * i], patch.positions[3 * i + 1]);
+        let rho = runtime_core::manifold::regularized_distance(q, config.epsilon).unwrap();
+        assert!((z - upper.a * rho).abs() < 1e-12);
+    }
+    let wire = serde_json::to_value(&snap).unwrap();
+    assert_eq!(
+        wire["physics"]["upperHalf"]["zDot"],
+        serde_json::json!(upper.z_dot)
+    );
+    assert!(serde_json::to_value(&patch).unwrap()["upperZ"].is_array());
 }
 
 #[test]

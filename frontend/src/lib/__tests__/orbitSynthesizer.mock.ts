@@ -200,7 +200,7 @@ class MockOrbitController {
         }
       : null;
     return {
-      version: 'debug-snapshot/1',
+      version: 'debug-snapshot/2',
       timeSeconds: this.step_time_seconds,
       action,
       map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
@@ -210,6 +210,7 @@ class MockOrbitController {
         signedDistance,
         realm: signedDistance < 0 ? -1 : signedDistance > 0 ? 1 : 0,
         rho: Math.sqrt(signedDistance * signedDistance + 1e-8),
+        upperHalf: { a: 1 / Math.LN2, z: Math.sqrt(signedDistance * signedDistance + 1e-8) / Math.LN2, gradient: [0, 0] as [number, number], zDot: 0 },
         sigma,
         sigmaDot: 0,
         scaleGradient: [0, 0] as [number, number],
@@ -485,9 +486,11 @@ export default {
     };
   },
   debugSnapshotMeta() {
-    return { version: 'debug-snapshot/1', canonicalDt: 1024 / 48000 };
+    return { version: 'debug-snapshot/2', canonicalDt: 1024 / 48000 };
   },
   ManifoldConfig: class MockManifoldConfig {
+    static defaults() { return new this(0.1, 1e-4, 1, 1, 1 / Math.PI); }
+    free() {}
     d_ref: number; epsilon: number; lambda_sq: number; kappa: number; mu: number;
     constructor(d: number, e: number, l: number, k: number, mu: number) {
       this.d_ref = d; this.epsilon = e; this.lambda_sq = l; this.kappa = k; this.mu = mu;
@@ -506,6 +509,7 @@ export default {
     // Mock terrain: same wire shape as the Rust seam. Heights vary so the
     // cockpit's mesh-building path is exercised in vitest.
     const positions: number[] = [];
+    const upperZ: number[] = [];
     const signed: number[] = [];
     const realm: number[] = [];
     for (let row = 0; row < n; row++) {
@@ -516,11 +520,12 @@ export default {
         const rho = Math.sqrt(d * d + 1e-8);
         const sigma = Math.log2(0.1 / rho);
         positions.push(re, im, sigma);
+        upperZ.push(rho / Math.LN2);
         signed.push(d);
         realm.push(d < 0 ? -1 : d > 0 ? 1 : 0);
       }
     }
-    return { n, center: [cx, cy] as [number, number], half, positions, signed, realm };
+    return { n, center: [cx, cy] as [number, number], half, positions, upperZ, signed, realm };
   },
   minimapShoreProximityBatch(re: number[], _im: number[], _level: number) {
     // Mock S field over the canonical extent: a smooth ramp toward the

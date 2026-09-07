@@ -35,6 +35,7 @@ pub mod manifold;
 pub mod proxies;
 pub mod controls;
 pub mod debug;
+pub mod hyperbolic;
 pub mod model_io;
 
 // Conditional bindings.  Only compile the Python or WASM API if the

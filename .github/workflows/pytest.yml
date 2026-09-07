@@ -287,6 +287,12 @@ jobs:
         run: |
           npm test  --prefix frontend
 
+      - name: Install Chromium for GPU rendering checks
+        run: npx --prefix frontend playwright install --with-deps chromium
+
+      - name: Verify hyperbolic GPU projection and maximum terrain LOD
+        run: npm --prefix frontend run test:hyperbolic-gpu
+
   builds:
     name: Build Artifacts
     runs-on: ubuntu-latest

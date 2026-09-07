@@ -70,6 +70,16 @@ struct GoldenVectors {
     player_step_cases: Vec<PlayerStepCase>,
     proximity_cases: Vec<ProximityCase>,
     feature_cases: Vec<FeatureCase>,
+    hyperbolic_cases: Vec<HyperbolicCase>,
+}
+
+#[derive(Serialize)]
+struct HyperbolicCase {
+    point: [f64; 3],
+    camera: [f64; 3],
+    direction: [f64; 3],
+    projected: [f64; 3],
+    tangent: [f64; 3],
 }
 
 #[derive(Serialize)]
@@ -109,6 +119,7 @@ fn main() {
         player_step_cases: Vec::new(),
         proximity_cases: Vec::new(),
         feature_cases: Vec::new(),
+        hyperbolic_cases: Vec::new(),
     };
 
     // ---- Carrier: lobe_point_at_angle over a deterministic grid ----
@@ -169,20 +180,14 @@ fn main() {
     // Case C: no pyramid fallback path is identical to A/B here because the
     // golden generation runs without a pyramid loaded.
     let scenarios: Vec<(&str, fn(f64) -> [f64; 3])> = vec![
-        (
-            "saturated_constant",
-            |_i| [2.69, 0.951, 4.008],
-        ),
-        (
-            "varying",
-            |i| {
-                [
-                    2.7 + 0.03 * (i * 0.05).sin(),
-                    (0.95 + 0.002 * (i * 0.03).cos()).clamp(0.0, 1.0),
-                    4.0,
-                ]
-            },
-        ),
+        ("saturated_constant", |_i| [2.69, 0.951, 4.008]),
+        ("varying", |i| {
+            [
+                2.7 + 0.03 * (i * 0.05).sin(),
+                (0.95 + 0.002 * (i * 0.03).cos()).clamp(0.0, 1.0),
+                4.0,
+            ]
+        }),
     ];
     for (name, ctrl) in scenarios {
         let mut p = PlayerState::new(1, 0, 2.7, 0.95);
@@ -243,7 +248,9 @@ fn main() {
                 + 0.2 * (2.0 * std::f64::consts::PI * 440.0 * t).sin()
                 + 0.1 * (2.0 * std::f64::consts::PI * 880.0 * t).sin();
             // Seeded LCG noise for spectral flux / ZCR variation.
-            lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            lcg = lcg
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let noise = ((lcg >> 33) as i64 as f64 / (1i64 << 30) as f64 - 1.0) * 0.05;
             v += noise;
             audio.push(v.clamp(-1.0, 1.0) as f32);
@@ -259,6 +266,25 @@ fn main() {
         }
     }
 
+    for scale in [1e-6, 0.01, 1.0, 100.0] {
+        for point in [
+            [0.0, 0.0, 1.0],
+            [0.2, -0.3, 0.4],
+            [-3.0, 2.0, 0.01],
+            [1.0, -2.0, 8.0],
+        ] {
+            let point = point.map(|v| v * scale);
+            let camera = [-0.1 * scale, 0.4 * scale, 0.7 * scale];
+            let direction = [0.3 * scale, -0.1 * scale, 0.2 * scale];
+            g.hyperbolic_cases.push(HyperbolicCase {
+                point,
+                camera,
+                direction,
+                projected: runtime_core::hyperbolic::project(point, camera),
+                tangent: runtime_core::hyperbolic::tangent(point, direction, camera),
+            });
+        }
+    }
     let json = serde_json::to_string_pretty(&g).expect("serialize golden vectors");
     std::fs::create_dir_all("../shared").expect("create shared dir");
     std::fs::write("../shared/golden_vectors.json", json).expect("write golden vectors");

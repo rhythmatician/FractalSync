@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/1";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/2";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -89,6 +89,8 @@ pub struct PhysicsSnapshot {
     pub realm: i8,
     /// Regularized distance rho = sqrt(D^2 + epsilon^2).
     pub rho: f64,
+    /// Authoritative H3 rendering data, using this snapshot's manifold config.
+    pub upper_half: UpperHalfGeometry,
     /// Mandelbrot scale sigma(c) = log2(d_ref / rho). Distinct from Julia zoom.
     pub sigma: f64,
     /// sigma_dot = grad(sigma) . v (no independent v_sigma state exists).
@@ -281,6 +283,7 @@ pub fn snapshot_from_state(
         signed_distance,
         realm,
         rho,
+        upper_half: UpperHalfGeometry::new(rho, [gx, gy], sigma_dot, config),
         sigma,
         sigma_dot,
         scale_gradient: [gx, gy],
@@ -358,12 +361,41 @@ pub fn snapshot_from_state(
 // Terrain patch: the skate park from authoritative geometry
 // ---------------------------------------------------------------------------
 
+/// Upper-half-space geometry derived only from the active manifold configuration.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpperHalfGeometry {
+    pub a: f64,
+    pub z: f64,
+    /// dz_H/dc. The presentation's outward normal points toward decreasing z_H.
+    pub gradient: [f64; 2],
+    pub z_dot: f64,
+}
+
+impl UpperHalfGeometry {
+    fn new(
+        rho: f64,
+        gradient: [f64; 2],
+        sigma_dot: f64,
+        config: &crate::manifold::ManifoldConfig,
+    ) -> Self {
+        let lambda = config.lambda_sq.sqrt();
+        Self {
+            a: lambda / std::f64::consts::LN_2,
+            z: lambda / std::f64::consts::LN_2 * rho,
+            gradient: [-lambda * rho * gradient[0], -lambda * rho * gradient[1]],
+            z_dot: -lambda * rho * sigma_dot,
+        }
+    }
+}
+
 /// A sampled terrain patch of the canonical embedding Q(c) = (x, y, lambda*sigma(c)).
 ///
 /// The height visualizes canonical scale. The full Physics metric also weights
 /// horizontal motion by rho^-2, so this Euclidean patch is a diagnostic view of
 /// the graph rather than an isometric embedding of the scale-relative manifold.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerrainPatch {
     /// Grid dimension (n x n vertices).
     pub n: usize,
@@ -374,6 +406,8 @@ pub struct TerrainPatch {
     /// Flat vertex positions, row-major, row 0 = north (im = center + half):
     /// [x0, y0, z0, x1, y1, z1, ...] with z = lambda * sigma(c).
     pub positions: Vec<f64>,
+    /// Authoritative z_H = a*rho per vertex. Never invert embedding heights in clients.
+    pub upper_z: Vec<f64>,
     /// Signed distance D(c) per vertex (row-major).
     pub signed: Vec<f64>,
     /// Realm per vertex: -1 inside, +1 outside, 0 on the boundary.
@@ -407,6 +441,7 @@ pub fn terrain_patch(
     }
     let lambda = config.lambda_sq.sqrt();
     let mut positions = Vec::with_capacity(n * n * 3);
+    let mut upper_z = Vec::with_capacity(n * n);
     let mut signed = Vec::with_capacity(n * n);
     let mut realm = Vec::with_capacity(n * n);
     // Row 0 is the north edge (im = cy + half); column increases with Re.
@@ -420,6 +455,10 @@ pub fn terrain_patch(
             positions.push(re);
             positions.push(im);
             positions.push(lambda * sigma);
+            upper_z.push(
+                lambda / std::f64::consts::LN_2
+                    * crate::manifold::regularized_distance(c, config.epsilon)?,
+            );
             let r: i8 = if d < 0.0 {
                 -1
             } else if d > 0.0 {
@@ -436,6 +475,7 @@ pub fn terrain_patch(
         center: [cx, cy],
         half,
         positions,
+        upper_z,
         signed,
         realm,
     })
@@ -462,10 +502,12 @@ mod tests {
         let wall = crate::manifold::wall_potential(c, &config).unwrap();
 
         assert!(wall > 0.0);
-        assert!((snapshot.physics.total
-            - (snapshot.physics.kinetic + snapshot.physics.potential + wall))
-            .abs()
-            < 1e-10);
+        assert!(
+            (snapshot.physics.total
+                - (snapshot.physics.kinetic + snapshot.physics.potential + wall))
+                .abs()
+                < 1e-10
+        );
         assert!(snapshot.physics.potential < snapshot.physics.total);
     }
 
