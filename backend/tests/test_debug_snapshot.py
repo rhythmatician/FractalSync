@@ -33,7 +33,7 @@ def _config(rc):
 class TestDebugSnapshotFromState:
     def test_snapshot_has_versioned_sections(self, rc):
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
-        assert snap["version"] == "debug-snapshot/1"
+        assert snap["version"] == "debug-snapshot/2"
         for section in ("timeSeconds", "map", "physics", "diagnostics"):
             assert section in snap
         # observation is deliberately absent until #108 (Phase B).
@@ -252,6 +252,7 @@ class TestWireFormat:
             "center",
             "half",
             "positions",
+            "upperZ",
             "signed",
             "realm",
         }

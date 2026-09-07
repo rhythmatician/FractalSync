@@ -63,6 +63,7 @@ import {
 } from '../lib/cockpitScene';
 import {
   transformMeshToHyperbolic,
+  computeHyperbolicCameraFrame,
   transformTrailToHyperbolic,
   transformRiderToHyperbolic,
 } from '../lib/hyperbolicCamera';
@@ -197,6 +198,7 @@ export function DebugCockpit(): JSX.Element {
   const [selected, setSelected] = useState(4);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [riderReady, setRiderReady] = useState(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>('scale-follow');
   const [cockpitMode, setCockpitMode] = useState<'REPLAY' | 'MANUAL'>('REPLAY');
   const cockpitModeRef = useRef<'REPLAY' | 'MANUAL'>('REPLAY');
@@ -237,6 +239,7 @@ export function DebugCockpit(): JSX.Element {
     lodHalf?: number;
     /** Camera mode the current terrain mesh was built for. */
     terrainMode?: CameraMode;
+    terrainOverlays?: TerrainOverlays;
   }>({});
 
   // Load wasm + record all variant trajectories once.
@@ -284,6 +287,7 @@ export function DebugCockpit(): JSX.Element {
       if (disposed) return;
       scene.add(rider);
       sceneRefs.current.rider = rider;
+      setRiderReady(true);
     });
 
     const onResize = () => {
@@ -416,12 +420,17 @@ export function DebugCockpit(): JSX.Element {
       !current || Math.hypot(cx - current[0], cy - current[1]) > lod.half * 0.6;
     const modeChanged = refs.terrainMode !== cameraMode;
     if (!moved && !lodChanged && !modeChanged && refs.terrain && refs.terrainPatch) {
-      applyOverlays(refs.terrain, refs.terrainPatch, overlays);
+      if (refs.terrainOverlays !== overlays) {
+        applyOverlays(refs.terrain, refs.terrainPatch, overlays);
+        refs.terrainOverlays = overlays;
+      }
       return;
     }
     if (refs.terrain) {
       refs.scene.remove(refs.terrain);
       refs.terrain.geometry.dispose();
+      const materials = Array.isArray(refs.terrain.material) ? refs.terrain.material : [refs.terrain.material];
+      materials.forEach(material => material.dispose());
     }
     const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
     // Build the terrain mesh in CHART COORDINATES for the active camera
@@ -432,6 +441,7 @@ export function DebugCockpit(): JSX.Element {
     // for the other mode's Y mapping.
     const mesh = buildTerrainMesh(patch, cameraMode);
     applyOverlays(mesh, patch, overlays);
+    refs.terrainOverlays = overlays;
     refs.scene.add(mesh);
     refs.terrain = mesh;
     refs.terrainPatch = patch;
@@ -460,6 +470,8 @@ export function DebugCockpit(): JSX.Element {
     const heightAt = (x: number, y: number): number =>
       surfaceY(riderSurfaceHeight(frame, x, y));
 
+    // Heading must advance before the hyperbolic frame consumes it.
+    updateCamera(refs.camera, frame, cameraMode, CANONICAL_DT);
     placeRider(refs.rider, frame, heightAt, cameraMode);
     // Feed the animation gait from authoritative metric speed and forward throttle.
     refs.lastMetricSpeed = frame.physics.metricSpeed;
@@ -468,6 +480,8 @@ export function DebugCockpit(): JSX.Element {
     if (refs.trail) {
       refs.scene.remove(refs.trail);
       refs.trail.geometry.dispose();
+      const materials = Array.isArray(refs.trail.material) ? refs.trail.material : [refs.trail.material];
+      materials.forEach(material => material.dispose());
     }
     // Trail window: last 300 steps for legibility.
     const from = Math.max(0, frameIdx - 300);
@@ -499,18 +513,18 @@ export function DebugCockpit(): JSX.Element {
       // Hyperbolic mode: project terrain mesh and trail into Poincaré ball
       // centered at the camera in H^3 with orientation applied.
       const smoothedHeading = getSmoothedCamHeading();
+      const hyperbolicFrame = computeHyperbolicCameraFrame(frame, smoothedHeading);
       if (refs.terrain && refs.terrainPatch) {
-        transformMeshToHyperbolic(refs.terrain, refs.terrainPatch, frame, smoothedHeading);
+        transformMeshToHyperbolic(refs.terrain, refs.terrainPatch, frame, smoothedHeading, hyperbolicFrame);
       }
-      transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading);
-      transformRiderToHyperbolic(refs.rider, frame, smoothedHeading);
+      transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading, hyperbolicFrame);
+      transformRiderToHyperbolic(refs.rider, frame, smoothedHeading, hyperbolicFrame);
     } else {
       // Physical: no transforms, rider follows c directly.
       if (refs.terrain) physicalTransform(refs.terrain);
       physicalTrailTransform(refs.trail);
     }
-    updateCamera(refs.camera, frame, cameraMode);
-  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, cameraMode]);
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, cameraMode, riderReady]);
 
   // Minimap panel: repaint from the canonical pyramid when the frame moves.
   useEffect(() => {

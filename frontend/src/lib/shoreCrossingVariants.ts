@@ -360,5 +360,34 @@ export function explorationVariants(): CrossingVariantSpec[] {
         { direction: [0.10, 0.99], throttle: 0.0, brake: 0.0, grip: 1.0, impulse: 0.0, frames: 120 },
       ],
     },
+    // OUTER-DISK ORBIT ATTEMPT (|c| ~ 1.8).
+    // An intentional demonstration of the manifold physics geometry in the
+    // exterior domain (|c| in [1.8, 1.9]). Seeded at c = (1.8, 0.0), this
+    // variant attempts a counter-clockwise arc around the origin.
+    // Demonstrates why even a half-lap is extraordinarily difficult:
+    // (1) Geodesic outward acceleration (-Gamma^0_11 * vy^2 ~ +79 * vy^2)
+    // flings the rider toward the |c| < 2 wall;
+    // (2) The secant bowl wall barrier (Q_wall ~ -s^3 sec tan (x,y)) crushes
+    // outward excursions and fails the step at |c| >= 2;
+    // (3) Non-symmetric potential gradients pull the rider into the interior
+    // basin (here r drops to ~0.77);
+    // (4) The negative real axis (theta = 180 deg) contains the needle / antenna
+    // where D ~ 0.01 and det(G) ~ 8e7, creating a dead-end wall across any half lap.
+    {
+      name: 'orbit_attempt_r18',
+      description:
+        'attempt orbit around |c|=1.8: tangential drive + inward trim -> sweeps ~63 deg before potential gradient draws rider into interior basin',
+      initialC: [1.8, 0.0],
+      initialV: [0.0, 0.0],
+      actions: [
+        { direction: [-0.15, 0.98], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [-0.35, 0.93], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [-0.55, 0.83], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [-0.75, 0.66], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [-0.90, 0.43], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [-0.98, 0.20], throttle: 0.45, brake: 0.0, grip: 0.6, impulse: 0.0, frames: 35 },
+        { direction: [0.0, 1.0], throttle: 0.0, brake: 0.8, grip: 1.0, impulse: 0.0, frames: 100 },
+      ],
+    },
   ];
 }

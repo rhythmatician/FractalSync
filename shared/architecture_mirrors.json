@@ -30,6 +30,22 @@
     },
     "mirrors": [
         {
+            "path": "frontend/src/lib/hyperbolicCamera.ts",
+            "kind": "behavioral_mirror",
+            "rust_authority": "runtime-core/src/hyperbolic.rs, runtime-core/src/debug.rs",
+            "why_outside_rust": "typescript:rendering",
+            "reason": "Three.js camera interpolation and object placement consume Rust upper-half geometry. The rendering projection and differential mirror the canonical H3 reference.",
+            "parity": ["frontend/src/lib/__tests__/hyperbolicParity.test.ts"]
+        },
+        {
+            "path": "frontend/src/lib/hyperbolicTerrainMaterial.ts",
+            "kind": "behavioral_mirror",
+            "rust_authority": "runtime-core/src/hyperbolic.rs",
+            "why_outside_rust": "typescript:rendering",
+            "reason": "GPU vertex shader projects static Rust terrain samples. WebGL transform feedback compares the actual shader with Rust golden vectors.",
+            "parity": ["frontend/scripts/test_hyperbolic_gpu.mjs"]
+        },
+        {
             "path": "backend/src/cspace_proxies.py",
             "kind": "differentiable_mirror",
             "rust_authority": "runtime-core/src/controller.rs (synthesize, PlayerState::step), runtime-core/src/proxies.rs (mandelbrot_cardioid_proximity)",

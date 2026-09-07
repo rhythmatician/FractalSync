@@ -31,7 +31,7 @@ export const DEFAULT_TERRAIN_GRID = 129;
 /** Terrain patch half-extent in c-space units around the rider. */
 export const DEFAULT_TERRAIN_HALF = 0.5;
 
-/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/1). */
+/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/2). */
 export interface DebugSnapshot {
   version: string;
   timeSeconds: number;
@@ -54,6 +54,8 @@ export interface DebugSnapshot {
     signedDistance: number;
     realm: number;
     rho: number;
+    /** Added in debug-snapshot/2. Legacy recordings can use ordinary camera modes. */
+    upperHalf?: { a: number; z: number; gradient: [number, number]; zDot: number };
     sigma: number;
     sigmaDot: number;
     scaleGradient: [number, number];
@@ -83,6 +85,8 @@ export interface TerrainPatch {
   center: [number, number];
   half: number;
   positions: number[];
+  /** Authoritative z_H values, required by the hyperbolic renderer. */
+  upperZ?: number[];
   signed: number[];
   realm: number[];
 }
@@ -180,7 +184,7 @@ export function sampleTerrainPatch(
   n: number = DEFAULT_TERRAIN_GRID
 ): TerrainPatch {
   const m = getWasmModule() as unknown as {
-    ManifoldConfig: new (d: number, e: number, l: number, k: number, mu: number) => unknown;
+    ManifoldConfig: { defaults: () => { free: () => void } };
     debugTerrainPatch: (
       cx: number,
       cy: number,
@@ -194,10 +198,12 @@ export function sampleTerrainPatch(
       '[debugCockpit] wasm build has no debugTerrainPatch binding; rebuild wasm-orbit'
     );
   }
-  // Controller-default manifold config (kappa=1.0, lambda^2=1.0, eps=1e-4,
-  // mu=1/pi for the p=8 secant wall — must mirror Rust ManifoldConfig::default()).
-  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0, 1.0 / Math.PI);
-  return m.debugTerrainPatch(cx, cy, half, n, config);
+  const config = m.ManifoldConfig.defaults();
+  try {
+    return m.debugTerrainPatch(cx, cy, half, n, config);
+  } finally {
+    config.free();
+  }
 }
 
 /**
@@ -213,7 +219,7 @@ export function sampleTerrainPatch(
  */
 export function riderSurfaceHeight(snap: DebugSnapshot, x: number, y: number): number {
   const m = getWasmModule() as unknown as {
-    ManifoldConfig: new (d: number, e: number, l: number, k: number, mu: number) => unknown;
+    ManifoldConfig: { defaults: () => { free: () => void } };
     manifold_embedding: (re: number, im: number, config: unknown) => [number, number, number];
   };
   if (typeof m.manifold_embedding !== 'function') {
@@ -221,9 +227,13 @@ export function riderSurfaceHeight(snap: DebugSnapshot, x: number, y: number): n
     // position height), which keeps vitest honest about the seam shape.
     return snap.physics.sigma;
   }
-  const config = new m.ManifoldConfig(0.1, 1e-4, 1.0, 1.0, 1.0 / Math.PI);
-  const [, , sigma] = m.manifold_embedding(x, y, config);
-  return sigma;
+  const config = m.ManifoldConfig.defaults();
+  try {
+    const [, , sigma] = m.manifold_embedding(x, y, config);
+    return sigma;
+  } finally {
+    config.free();
+  }
 }
 
 /** Terrain level-of-detail plan for one terrain rebuild. */
