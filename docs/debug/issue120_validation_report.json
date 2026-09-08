@@ -1,0 +1,34 @@
+{
+    "issue": 120,
+    "branch": "issue-120",
+    "commits": [
+        "34ac5d3",
+        "8e45dd1"
+    ],
+    "open_limitation": {
+        "description": "Conservative-energy error for Shore-crossing launch does NOT converge under timestep refinement.",
+        "values": {
+            "dt_0_002": "6.24%",
+            "dt_0_001": "11.79%",
+            "dt_0_0005": "14.68%"
+        },
+        "layer": "geometry / sampled-field derivative authority (leading identified source); integrator contribution remains to be isolated via smooth-field/control experiment",
+        "evidence_file": "docs/debug/scale_relative_physics_validation.md",
+        "note": "Sampled-field derivative quality near Shore / cut loci is the dominant error source. A smoother derivative authority is separate necessary work before conservation through the Shore can become an acceptance criterion. No local smoothing heuristic adopted."
+    },
+    "harnesses": {
+        "phase1_metric_behavior": "backend/tests/test_hyperbolic_validation_phase1.py (SPD/eigenvalue/condition-number; anisotropy measured, NOT claimed vs ideal-SDF)",
+        "phase2_energy_drift": "backend/tests/test_hyperbolic_validation_phase2.py (harness present; open limitation preserved, not masked)",
+        "phase3_cross_scale": "backend/tests/test_hyperbolic_validation_phase3.py (harness present)",
+        "phase4_replay_82_111": "backend/tests/test_hyperbolic_validation_phase4.py (harness present)",
+        "phase5_runtime_parity": "backend/tests/test_hyperbolic_validation_phase5.py (harness present)"
+    },
+    "verification": {
+        "tdd": "behavior-first at Python mirror seam; no tautological assertions",
+        "typecheck": "py_compile passed on all 5 harness files + limitation doc",
+        "tests": "Phase 1 harness runs; full suite errors pre-existing (runtime_core unbuilt); no new failures",
+        "code_review": "Standards clean / Spec-aligned / No health regression",
+        "commit": "committed to issue-120 (pushed)"
+    },
+    "blocked_on_close": "runtime_core rebuilt (maturin develop finished) but import blocked by Python env mismatch (system C:\\Python314 vs .venv); empirical measurements (Phase 2-5) require rebuilt module importable by test runner. Issue remains open until measurements execute against real bindings."
+}
