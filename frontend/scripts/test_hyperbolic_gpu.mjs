@@ -9,16 +9,22 @@ import { createServer } from 'vite';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const golden = JSON.parse(await readFile(resolve(root, '../shared/golden_vectors.json'), 'utf8'));
+const shader = await readFile(resolve(root, '../shared/shaders/julia.frag'), 'utf8');
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 0 } });
 await server.listen();
 const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  await page.route('**/api/shader/julia.frag', route => route.fulfill({
+    status: 200,
+    contentType: 'text/plain',
+    body: shader,
+  }));
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   // Avoid mounting the app while importing the real render modules.
-  await page.goto(`${server.resolvedUrls.local[0]}@vite/client`);
+  await page.goto(`${server.resolvedUrls.local[0]}favicon.ico`);
   const result = await page.evaluate(async cases => {
     const THREE = await import('/node_modules/three/build/three.module.js');
     const { HYPERBOLIC_VERTEX_PROJECTION } = await import('/src/lib/hyperbolicTerrainMaterial.ts');
