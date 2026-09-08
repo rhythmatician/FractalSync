@@ -1111,6 +1111,24 @@ fn manifold_christoffel_symbols(c: &Bound<'_, PyComplex>, config: ManifoldConfig
     ])
 }
 
+/// Scale-aware geometry provider: coherent signed distance jet { D, grad D, H_D }.
+#[pyfunction]
+fn geometry_provider_query(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<String> {
+    let cc = num_complex::Complex64::new(c.real(), c.imag());
+    let jet = crate::geometry_provider::query_geometry(cc, epsilon).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    serde_json::to_string(&jet).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+}
+
+#[pyfunction]
+fn geometry_provider_version() -> String {
+    crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string()
+}
+
+#[pyfunction]
+fn geometry_provider_scale_alpha() -> f64 {
+    crate::geometry_provider::GEOMETRY_SCALE_ALPHA
+}
+
 /// Geodesic acceleration term: Gamma^i_jk v^j v^k.
 #[pyfunction]
 #[pyo3(signature = (vx, vy, c, config))]
@@ -2459,6 +2477,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_wall_potential, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_wall_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_christoffel_symbols, m)?)?;
+    m.add_function(wrap_pyfunction!(geometry_provider_query, m)?)?;
+    m.add_function(wrap_pyfunction!(geometry_provider_version, m)?)?;
+    m.add_function(wrap_pyfunction!(geometry_provider_scale_alpha, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_geodesic_acceleration, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_potential_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_apply_generalized_force, m)?)?;

@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/2";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/3";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -139,12 +139,43 @@ pub struct MapSnapshot {
 // Diagnostics section
 // ---------------------------------------------------------------------------
 
+/// Geometry section: scale-aware provider diagnostics (ADR 0004, issue #145).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeometrySnapshot {
+    /// Provider version (e.g. "geometry-provider/1").
+    pub provider_version: String,
+    /// Provider name ("scale-aware" or "raster-bridge").
+    pub provider_name: String,
+    /// Deterministic tile/cache identity at c.
+    pub tile_id: String,
+    /// Requested local scale: alpha * max(rho, epsilon).
+    pub requested_scale: f64,
+    /// Actual resolved scale / error capability the provider achieved.
+    pub resolved_scale: f64,
+    /// Whether this jet came from the temporary bridge (true) or destination provider.
+    pub is_bridge: bool,
+    /// Validity classification: regular / unresolved / singular / outside_provider / provider_failure.
+    pub validity: String,
+    /// Singularity classification where known: none / cut_locus / high_curvature / etc.
+    pub singularity: String,
+    /// Signed distance D(c).
+    pub d: f64,
+    /// Gradient norm |grad D| (eikonal: ~1 where smooth).
+    pub grad_d_norm: f64,
+    /// Hessian Frobenius norm |H_D|.
+    pub hessian_norm: f64,
+    /// Hessian eigenvalues where valid.
+    pub hessian_eigenvalues: [f64; 2],
+}
+
 /// Diagnostics section: integrator/derivative health evidence for #82-style
-/// Shore-crossing diagnosis.
+/// Shore-crossing diagnosis, now with scale-aware geometry provider evidence.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticsSnapshot {
-    /// Finite-difference step derived from the SDF provider's pixel spacing.
+    /// Scale-aware evaluation step (alpha * epsilon) for diagnostics.
+    /// Legacy `pixel/24` tuning no longer drives Physics.
     pub derivative_step: f64,
     /// Whether the last manifold step succeeded (fail-closed evidence).
     pub valid: bool,
@@ -156,6 +187,8 @@ pub struct DiagnosticsSnapshot {
     /// the mechanical ceiling of the Shore ridge. Rust-owned so consumers
     /// never restate the crest value (issue #111).
     pub crest_potential: f64,
+    /// Scale-aware geometry provider diagnostics (ADR 0004).
+    pub geometry: GeometrySnapshot,
 }
 
 // ---------------------------------------------------------------------------
@@ -338,13 +371,40 @@ pub fn snapshot_from_state(
         },
     });
 
-    // ---- Diagnostics section ----
+    // ---- Diagnostics section (ADR 0004: scale-aware geometry provider) ----
+    let jet = crate::geometry_provider::query_geometry(c, config.epsilon)
+        .unwrap_or_else(|_| crate::geometry_provider::GeometryJet {
+            d: signed_distance,
+            grad_d: [f64::NAN, f64::NAN],
+            hessian_d: [[f64::NAN; 2]; 2],
+            resolved_scale: f64::NAN,
+            requested_scale: f64::NAN,
+            validity: crate::geometry_provider::GeometryValidity::ProviderFailure,
+            singularity: crate::geometry_provider::SingularityKind::None,
+            provider_version: crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string(),
+            tile_id: "error".to_string(),
+            is_bridge: false,
+        });
     let diagnostics = DiagnosticsSnapshot {
         derivative_step: crate::manifold::derivative_step(),
         valid: true,
         last_error: None,
         last_delta_total,
         crest_potential: config.kappa * (config.d_ref / config.epsilon).log2(),
+        geometry: GeometrySnapshot {
+            provider_version: jet.provider_version.clone(),
+            provider_name: if jet.is_bridge { "raster-bridge".to_string() } else { "scale-aware".to_string() },
+            tile_id: jet.tile_id.clone(),
+            requested_scale: jet.requested_scale,
+            resolved_scale: jet.resolved_scale,
+            is_bridge: jet.is_bridge,
+            validity: jet.validity.as_str().to_string(),
+            singularity: jet.singularity.as_str().to_string(),
+            d: jet.d,
+            grad_d_norm: jet.grad_norm(),
+            hessian_norm: jet.hessian_norm(),
+            hessian_eigenvalues: jet.hessian_eigenvalues(),
+        },
     };
 
     Ok(DebugSnapshot {
