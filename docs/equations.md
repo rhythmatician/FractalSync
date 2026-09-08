@@ -1,6 +1,6 @@
 # FractalSync equations
 
-**Last consolidated:** 2026-09-04
+**Last consolidated:** 2026-09-08
 
 This is the current consolidated equation set after the scale-relative Mandelbrot geometry, intrinsic visual-gesture, audiovisual-entrainment, and offline-teacher pivots. It deliberately separates current mechanical authority from research hypotheses and training-only supervision.
 
@@ -417,6 +417,72 @@ Valence and arousal are hypotheses about useful latent supervision, especially f
 | 235 | Shared gesture hypothesis | \(\displaystyle \boxed{X_A\in T\mathcal G_A\quad\longleftrightarrow\quad X_V\in T\mathcal G_V}\) | **Research.** Compare two multiscale dynamical geometries rather than arbitrary audio features and shader parameters. |
 | 236 | Entrainment hypothesis | \(\displaystyle \boxed{\text{musical coherence}\ \approx\ \text{context-conditioned multiscale phase-harmonic entrainment}}\) | **Umbrella research hypothesis.** |
 | 237 | Offline teacher spine | \(\displaystyle \boxed{\text{whole-song teachers}\to\text{versioned soft timelines}\to\text{auxiliary targets / weak labels / evaluation}\to\text{causal Student}}\) | **Training-only architecture.** |
+
+
+## Visual sensitivity and learnability research
+
+This section records the current mathematical backbone for testing whether the adopted scale-relative geometry and structured Controls make audiovisual choreography easier to learn. These equations are **research/diagnostic statements**, not a new Physics law, direct-`c` control path, or global neural-network convergence theorem. #150 owns the empirical program.
+
+| # | Concept | Equation | Status / meaning |
+| -: | --- | --- | --- |
+| 238 | Visual representation | \(\displaystyle \boxed{\mathcal V(c)\in\mathbb R^d}\) | **Research object.** Must be independently justified by continuity/perceptual experiments; do not choose \(\mathcal V\) merely to make its metric resemble \(G\). Julia presentation state is fixed or explicitly conditioned while differentiating. |
+| 239 | Renderer-derived sensitivity form | \(\displaystyle \boxed{P_J(c)=D\mathcal V(c)^{\mathsf T}D\mathcal V(c)}\) | **Research/diagnostic.** For \(v\in T_cM\), \(v^{\mathsf T}P_Jv=\lVert D\mathcal V(c)v\rVert^2\). Positive semidefinite; rank deficiency may be meaningful. |
+| 240 | Metric-comparison hypothesis | \(\displaystyle \boxed{\lambda_-G(c)\preceq P_J(c)\preceq\lambda_+G(c)}\) | **Research hypothesis on resolved regular patches.** The upper bound limits visual sensitivity per intrinsic displacement; a positive lower bound is only expected in directions retained by \(\mathcal V\). |
+| 241 | Intrinsic sensitivity operator | \(\displaystyle \boxed{\mathcal C_J(c)=G(c)^{-1/2}P_J(c)G(c)^{-1/2}}\) | **Diagnostic.** Its eigenvalues/rank measure visual sensitivity in a \(G\)-normalized tangent frame. |
+| 242 | Scale-only comparison metric | \(\displaystyle \boxed{G_0=\rho^{-2}I,\qquad h=I+a^2\nabla\rho\nabla\rho^{\mathsf T},\qquad G=\rho^{-2}h}\) | **Canonical decomposition / research baseline.** Compare Euclidean \(I\), scale-only \(G_0\), and full \(G\) before attributing an effect to the graph correction. |
+| 243 | Ideal-SDF metric bound | \(\displaystyle \boxed{G_0\preceq G\preceq(1+a^2)G_0}\) | **Exact under \(\lVert\nabla\rho\rVert\le1\).** For a nonideal provider with \(\lVert\nabla\rho\rVert\le L_\rho\), replace the upper factor by \(1+a^2L_\rho^2\). |
+| 244 | Scale-normalized visual Jacobian | \(\displaystyle \boxed{B_J(c)=\rho(c)D\mathcal V(c)}\) | **Diagnostic.** Isolates whether visual sensitivity retains an explicit inverse-ruler factor. |
+| 245 | Exact normalized-sensitivity identity | \(\displaystyle \boxed{\mathcal C_J=h^{-1/2}B_J^{\mathsf T}B_Jh^{-1/2}}\) | **Derived identity.** The explicit \(\rho^{-2}\) scale factor cancels; remaining conditioning comes from the normalized renderer Jacobian and bounded graph anisotropy. |
+| 246 | Local appearance-matching loss | \(\displaystyle \boxed{L_V(c;y_*)=\tfrac12\lVert\mathcal V(c)-y_*\rVert^2}\) | **Research reference objective.** Used to study the geometry of a matching problem; it is not by itself the final Player reward. |
+| 247 | Exact-match Hessian | \(\displaystyle \boxed{y_*=\mathcal V(c_*)\implies\operatorname{Hess}_G L_V(c_*)[v,w]=v^{\mathsf T}P_J(c_*)w}\) | **Derived local result.** The residual-dependent second-derivative term vanishes at an attainable exact match. |
+| 248 | Local conditioning consequence | \(\displaystyle \boxed{\operatorname{cond}_G\!\left(\operatorname{Hess}L_V(c_*)\right)\le\frac{\lambda_+}{\lambda_-}}\) | **Conditional local result.** Requires a positive two-sided comparison on the distinguishable tangent subspace; it is not a statement about global policy-parameter curvature. |
+| 249 | Visual-speed bound | \(\displaystyle \boxed{P_J\preceq\lambda_+G\implies\left\lVert\frac{d\mathcal V}{dt}\right\rVert\le\sqrt{\lambda_+}\,\lVert\dot c\rVert_G=\sqrt{2\lambda_+K}}\) | **Conditional derived bound.** Connects intrinsic kinetic-energy/speed budgets to measured visual speed of the rendered parameter trajectory. |
+| 250 | Finite-horizon Controls response | \(\displaystyle \boxed{\delta\mathbf c=\mathcal B_H\,\delta\mathbf a}\) | **Research linearization.** \(\mathcal B_H\) is the local Controls-to-rendered-parameter response over a declared horizon and operating trajectory. |
+| 251 | Local action-objective Hessian | \(\displaystyle \boxed{H_{\rm action}=\mathcal B_H^{\mathsf T}\mathbb P\,\mathcal B_H}\) | **Research/local.** \(\mathbb P\) stacks the relevant visual-sensitivity forms over the horizon at an exact matched trajectory. |
+| 252 | Controls-normalized response | \(\displaystyle \boxed{\mathcal C_H=\mathbb G^{1/2}\mathcal B_H}\) | **Diagnostic.** \(\mathbb G\) stacks the intrinsic metric over the same horizon; singular values quantify reachable control directions after geometric normalization. |
+| 253 | Action-conditioning decomposition | \(\displaystyle \boxed{\operatorname{cond}(H_{\rm action})\le\frac{\lambda_+}{\lambda_-}\left(\frac{\beta_+}{\beta_-}\right)^2}\) | **Conditional local result.** If the useful singular values of \(\mathcal C_H\) lie in \([\beta_-,\beta_+]\), local action-objective conditioning separates into visual/metric and control-response factors. |
+| 254 | Learnability spine | \(\displaystyle \boxed{\mathcal V\to P_J\xleftrightarrow{\;G\;}\mathcal C_J,\qquad\text{Controls}\to\mathcal B_H\to\mathcal C_H\to H_{\rm action}}\) | **Research spine.** Tests whether the world is both visually well-scaled and mechanically accessible before attributing success/failure to PlayerPolicy optimization. |
+
+The positive lower comparison cannot be global for every useful representation. For example, reflection-invariant morphology descriptors satisfy \(\mathcal V(x,y)=\mathcal V(x,-y)\), so \(\partial_y\mathcal V(x,0)=0\) on the real axis even though \(G\) remains positive definite. Likewise, fixed-resolution rendering cannot distinguish arbitrarily deep changes as \(\epsilon\to0\). Report resolved regular domains and null directions explicitly rather than averaging them away.
+
+### Exact location-scale image control example
+
+A normalized two-dimensional Gaussian family
+
+$$
+\Psi_{\mu,s}(\zeta)
+=\frac{1}{\sqrt\pi\,s}
+\exp\!\left(-\frac{\lVert\zeta-\mu\rVert^2}{2s^2}\right)
+$$
+
+has unit \(L^2\) norm. Direct differentiation gives the induced image-sensitivity line element
+
+$$
+\boxed{
+ d\ell_{\rm image}^2
+ =\frac{d\mu_x^2+d\mu_y^2+2\,ds^2}{2s^2}.
+}
+$$
+
+With \(z=\sqrt2\,s\), this is exactly the standard upper-half-space \(H^3\) metric
+
+$$
+\boxed{
+ d\ell_{\rm image}^2
+ =\frac{d\mu_x^2+d\mu_y^2+dz^2}{z^2}.
+}
+$$
+
+Pulling this family back through \(\mu=c\) and \(s=\rho(c)\) yields
+
+$$
+\boxed{
+P_{\rm toy}(c)
+=\rho^{-2}\!\left(\tfrac12I+\nabla\rho\nabla\rho^{\mathsf T}\right).
+}
+$$
+
+For \(a^2=2\), \(P_{\rm toy}=\tfrac12G\) exactly. This is a mathematical control demonstrating that hyperbolic position-scale geometry can arise exactly as visual-sensitivity geometry for a normalized location-scale image family. It is **not** a claim that Julia images are translated Gaussians or that the chosen Julia representation will satisfy the same equality; #150 must measure that independently.
 
 The compact mechanical destination remains
 
