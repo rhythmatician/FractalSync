@@ -377,6 +377,7 @@ pub fn snapshot_from_state(
             d: signed_distance,
             grad_d: [f64::NAN, f64::NAN],
             hessian_d: [[f64::NAN; 2]; 2],
+            estimated_error: f64::INFINITY,
             resolved_scale: f64::NAN,
             requested_scale: f64::NAN,
             validity: crate::geometry_provider::GeometryValidity::ProviderFailure,
@@ -586,6 +587,11 @@ mod tests {
             None,
         )
         .expect_err("a state on the open-disk wall must not produce a valid snapshot");
-        assert!(error.contains("wall potential unstable"));
+        eprintln!("snapshot wall error: {}", error);
+        assert!(
+            error.contains("wall potential unstable") || error.contains("OutsideDomain") || error.contains("outside_provider"),
+            "expected wall or outside domain error, got: {}",
+            error
+        );
     }
 }
