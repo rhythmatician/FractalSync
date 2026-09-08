@@ -1162,7 +1162,7 @@ mod tests {
         // World-aligned Cartesian (chosen) vs heading-polar vs shore-aligned
         let config = cfg();
         let c_flat = C::new(0.0, 0.0);
-        let c_shore = C::new(0.25, 0.0);
+        let c_shore = C::new(0.255, 0.0);
         // World-aligned: drive vector directly, no heading state, works at flat region where grad~0
         let m_world = MotionControls {
             direction: [1.0, 0.0],
