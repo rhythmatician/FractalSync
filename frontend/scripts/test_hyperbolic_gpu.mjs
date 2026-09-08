@@ -24,7 +24,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   // Avoid mounting the app while importing the real render modules.
-  await page.goto(`${server.resolvedUrls.local[0]}favicon.ico`);
+  await page.goto(`${server.resolvedUrls.local[0]}favicon.ico`, { waitUntil: 'commit' });
   const result = await page.evaluate(async cases => {
     const THREE = await import('/node_modules/three/build/three.module.js');
     const { HYPERBOLIC_VERTEX_PROJECTION } = await import('/src/lib/hyperbolicTerrainMaterial.ts');
