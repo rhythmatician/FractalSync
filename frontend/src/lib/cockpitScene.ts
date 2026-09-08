@@ -11,9 +11,9 @@
  * - Rider: low-poly board + capsule, heading/pitch from authoritative
  *   c, velocity, and embedding geometry.
  * - Trail: the recorded c(t) polyline lifted onto the surface.
- * - Camera modes: physical embedding, scale-follow (physical vertical +
- *   1/rho0 horizontal ruler — the controlled experiment), and the
- *   scale-stabilized treadmill chart.
+ * - Camera: the hyperbolic camera (issue #142) — the single camera.
+ *   Terrain and trail vertices are projected into the camera-centered
+ *   Poincaré ball by hyperbolicCamera.ts / hyperbolicTerrainMaterial.ts.
  */
 
 import * as THREE from 'three';
@@ -21,44 +21,10 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import type { DebugSnapshot, TerrainPatch, CockpitTrajectory } from './debugCockpit';
 
-/** Camera presentation modes (issue #111 + hyperbolic camera). */
-export type CameraMode = 'physical' | 'scale-follow' | 'treadmill' | 'hyperbolic';
-
 /**
- * Terrain-mesh build mode: 'physical', 'scale-follow', and 'hyperbolic' render y =
- * surfaceY(z) (the asinh-compressed physical embedding) — scale-follow
- * deliberately keeps the physical vertical presentation and only changes
- * the horizontal ruler at presentation time; 'hyperbolic' uses the hyperbolic
- * isometry + Poincaré ball projection to place vertices; 'treadmill' renders y =
- * SCENE_SCALE * z so the chart Y is the exact relative embedding height,
- * with NO nonlinear compression. All modes share the same Rust patch
- * input — only the Y mapping differs.
+ * Scene scale: world units per c-space unit (visual magnification).
+ * Exported so the LOD planner (debugCockpit) plans in the same units.
  */
-export type TerrainMeshMode = CameraMode;
-
-/**
- * True for modes whose TERRAIN MESH is built with the physical surfaceY()
- * vertical mapping. The terrain builder and any code that needs to know
- * "which vertical authority does this mode's mesh use" consults this —
- * 'scale-follow' keeps the physical vertical and only magnifies X/Z.
- */
-export function isPhysicalYMode(mode: CameraMode): boolean {
-  return mode !== 'treadmill';
-}
-
-/**
- * Horizontal magnification factor for a presentation mode at a given rho.
- * Single authority for "is this mode horizontally magnified, and by how
- * much": scale-follow and treadmill both use the local Mandelbrot ruler
- * 1/rho; physical and hyperbolic use 1.0 (hyperbolic maps into the Poincaré ball).
- */
-export function horizontalMagnification(mode: CameraMode, rho: number): number {
-  if (mode === 'physical' || mode === 'hyperbolic') return 1.0;
-  return 1.0 / Math.max(rho, 1e-9);
-}
-
-/** Scene scale: world units per c-space unit (visual magnification).
- *  Exported so the LOD planner (debugCockpit) plans in the same units. */
 export const SCENE_SCALE = 10.0;
 
 /**
@@ -73,16 +39,17 @@ export const SCENE_SCALE = 10.0;
  */
 
 /**
- * Vertical scale of the sigma axis (PHYSICAL MODE ONLY).
+ * Vertical scale of the sigma axis (static terrain-mesh build).
  *
- * Issue feedback: the raw lambda*sigma surface is far too steep — near the
- * Shore sigma reaches ~10 while valleys sit at ~-1.5, so linear scaling
- * turns hills into cliffs. surfaceY() applies an asinh compression
- * (logarithmic for large |sigma|, linear near 0) so the crest stays
- * dramatic but ridable, and EVERY scene height in physical mode (mesh,
- * rider, trail, camera) goes through this one function — no place
- * re-derives it. TREADMILL MODE does not use surfaceY (see the chart
- * helpers below).
+ * The raw lambda*sigma surface is far too steep — near the Shore sigma
+ * reaches ~10 while valleys sit at ~-1.5, so linear scaling turns hills
+ * into cliffs. surfaceY() applies an asinh compression (logarithmic for
+ * large |sigma|, linear near 0) so the crest stays dramatic but ridable.
+ *
+ * NOTE: this Y mapping only shapes the STATIC CPU `position` attribute
+ * (bounding sphere / fallback). Hyperbolic rendering ignores it — the GPU
+ * projects the authoritative `upperHalfPosition` attribute instead (see
+ * hyperbolicTerrainMaterial.ts).
  */
 const Z_SCALE = 2.0;
 
@@ -90,86 +57,25 @@ const Z_SCALE = 2.0;
 const Z_COMPRESS_LINEAR = 1.5;
 
 /**
- * Scene Y for a sigma value — the single physical-mode vertical authority.
- * asinh(sigma / k) * k * Z_SCALE: linear for |sigma| << k, logarithmic for
- * |sigma| >> k. Preserves sign and monotonicity (uphill stays uphill).
- * Treadmill mode bypasses this entirely (see treadmillChart).
+ * Scene Y for a sigma value — asinh(sigma / k) * k * Z_SCALE: linear for
+ * |sigma| << k, logarithmic for |sigma| >> k. Preserves sign and
+ * monotonicity (uphill stays uphill).
  */
 export function surfaceY(sigma: number): number {
   const s = sigma / Z_COMPRESS_LINEAR;
   return Math.asinh(s) * Z_COMPRESS_LINEAR * Z_SCALE;
 }
 
-// ---------------------------------------------------------------------------
-// Treadmill chart (issue #111 / point 2)
-// ---------------------------------------------------------------------------
-//
-// The scale-stabilized treadmill chart re-expresses the canonical embedding
-// around the CURRENT rider point (x0, y0, sigma0), where sigma0 is the
-// rider's own REGULARIZED embedding height rho(c0):
-//
-//   X = (x - x0) / rho0
-//   Y = (lambda*sigma)(c) - (lambda*sigma)(c0)
-//   Z = -(y - y0) / rho0
-//
-// Horizontal magnification 1/rho0 keeps local terrain resolvable as the
-// rider descends into finer Mandelbrot scale; the vertical axis keeps scale
-// 1 — height difference is never magnified. All three coordinates come
-// from authoritative Rust data (embedding positions / snapshot physics);
-// no lambda constant is duplicated here.
-//
-// The Y mapping is the pure linear relative embedding height, NOT
-// surfaceY(sigma) - surfaceY(sigma0): the asinh compression in surfaceY is
-// a presentation curve reserved for physical mode.
-
-/**
- * Treadmill chart position for an arbitrary c-space point given a
- * snapshot defining the chart origin (c0, sigma0). The single authority
- * for "what scene position corresponds to a c-space point in treadmill
- * mode". `ySigma` is the point's REGULARIZED embedding height rho(c)
- * (the quantity Rust embeds; equals physics.sigma under the
- * controller-default lambda^2 = 1 config), NOT a raw sigma recomputed in
- * TypeScript.
- */
-export function treadmillChart(
-  snap: DebugSnapshot,
-  x: number = snap.physics.c[0],
-  y: number = snap.physics.c[1],
-  ySigma: number = snap.physics.sigma
-): { x: number; y: number; z: number } {
-  const [cx, cy] = snap.physics.c;
-  const sigma0 = snap.physics.sigma;
-  const rho0 = Math.max(snap.physics.rho, 1e-9);
-  return {
-    x: ((x - cx) / rho0) * SCENE_SCALE,
-    y: SCENE_SCALE * (ySigma - sigma0),
-    z: -((y - cy) / rho0) * SCENE_SCALE,
-  };
-}
-
 /**
  * Build (or rebuild) the terrain mesh from a Rust-sampled TerrainPatch.
  *
- * - mode = 'physical' or 'scale-follow': y = surfaceY(z) — the
- *   asinh-compressed physical embedding of the canonical
- *   Q(c) = (x, y, lambda*sigma(c)) sampled by Rust; no invented heightfield
- *   (issue #111 mathematical basis). Scale-follow deliberately shares the
- *   physical vertical: the experiment changes ONLY the horizontal ruler
- *   (applied later by `scaleFollowTransform`), so the same mesh geometry
- *   serves both modes.
- *
- * - mode = 'treadmill': y = SCENE_SCALE * z — the exact linear chart,
- *   consuming the patch's own embedding height z = lambda*sigma(c)
- *   (already lambda-multiplied by Rust). Combined with
- *   `treadmillTransform`'s recenter, the rider's own vertex lands at
- *   y = 0 and nearby terrain sits at SCENE_SCALE * (z - z0). No
- *   surfaceY() compression is applied: the treadmill chart is meant to
- *   be a mathematically meaningful local scale chart, not the cosmetic
- *   physical embedding.
- *
- * The patch input is identical in both modes — only the Y mapping
- * differs. Both modes go through this one function so there is no
- * parallel mesh builder.
+ * The static CPU `position` attribute carries the asinh-compressed
+ * surfaceY(z) embedding of the canonical Q(c) = (x, y, lambda*sigma(c))
+ * sampled by Rust — used for the bounding sphere and as a harmless
+ * fallback. HYPERBOLIC RENDERING does not read this attribute: the GPU
+ * vertex shader projects the authoritative `upperHalfPosition` attribute
+ * (uploaded by terrainProjectionUniforms from patch.upperZ) into the
+ * camera-centered Poincaré ball (see hyperbolicTerrainMaterial.ts).
  */
 // Procedural grid texture generator for the fractal manifold terrain
 let proceduralGridTexture: THREE.CanvasTexture | null = null;
@@ -206,7 +112,7 @@ function getGridTexture(): THREE.CanvasTexture | null {
   return proceduralGridTexture;
 }
 
-export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'physical'): THREE.Mesh {
+export function buildTerrainMesh(patch: TerrainPatch): THREE.Mesh {
   const n = patch.n;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(n * n * 3);
@@ -220,7 +126,7 @@ export function buildTerrainMesh(patch: TerrainPatch, mode: TerrainMeshMode = 'p
     const y = patch.positions[i * 3 + 1];
     const z = patch.positions[i * 3 + 2]; // Rust-embedded lambda*sigma(c).
     positions[i * 3] = x * SCENE_SCALE;
-    positions[i * 3 + 1] = isPhysicalYMode(mode) ? surfaceY(z) : SCENE_SCALE * z;
+    positions[i * 3 + 1] = surfaceY(z);
     positions[i * 3 + 2] = -y * SCENE_SCALE;
 
     uvs[i * 2] = col / (n - 1);
@@ -562,12 +468,19 @@ export async function buildRider(): Promise<THREE.Group> {
   return group;
 }
 
-/** Per-frame rider placement derived from authoritative state. */
+/**
+ * Per-frame rider placement derived from authoritative state.
+ *
+ * Transient Euclidean staging only: the hyperbolic pass
+ * (transformRiderToHyperbolic) immediately overrides position/quaternion/
+ * scale with the projected Poincaré-ball values every frame. This keeps
+ * the rider visible for the single frame before the hyperbolic transform
+ * runs and preserves the velocity-arrow visibility rule.
+ */
 export function placeRider(
   rider: THREE.Group,
   snap: DebugSnapshot,
-  terrainHeightAt: (x: number, y: number) => number,
-  mode: CameraMode = 'physical'
+  terrainHeightAt: (x: number, y: number) => number
 ): void {
   rider.scale.setScalar(1);
   const [cx, cy] = snap.physics.c;
@@ -603,31 +516,6 @@ export function placeRider(
     }
   }
 
-  // Consistent vertical-vs-horizontal scaling:
-  // The terrain's visual horizontal scale is:
-  //   H_scale = SCENE_SCALE * horizontalMagnification(mode, snap.physics.rho)
-  //
-  // The vertical rise rate in the scene is:
-  // - In physical / scale-follow modes:
-  //     y = surfaceY(sigma)
-  //     dy/dsigma ~ d(surfaceY)/dsigma
-  //     dy/dc = grad(sigma) * (d(surfaceY)/dsigma)
-  // - In treadmill mode:
-  //     y = SCENE_SCALE * sigma
-  //     dy/dsigma = SCENE_SCALE
-  //     dy/dc = grad(sigma) * SCENE_SCALE
-  const magnify = horizontalMagnification(mode, snap.physics.rho);
-  const hScale = SCENE_SCALE * magnify;
-
-  const [gx, gy] = snap.physics.scaleGradient;
-  const dYdSigma = isPhysicalYMode(mode)
-    ? (surfaceY(snap.physics.sigma + 0.01) - surfaceY(snap.physics.sigma - 0.01)) / 0.02
-    : SCENE_SCALE;
-
-  // Scene vertical gradient: d(sceneY)/d(cx) and d(sceneY)/d(cy)
-  const dY_dcx = gx * dYdSigma;
-  const dY_dcy = gy * dYdSigma;
-
   // Slope along forward direction and lateral right direction (in scene units):
   // Forward c-space unit vector: (dirX, dirY).
   // Scene forward displacement: dX_scene = dirX * hScale, dZ_scene = -dirY * hScale.
@@ -639,6 +527,16 @@ export function placeRider(
   // which is perpendicular to scene forward (dirX, -dirY)).
   // Lateral rise: dY_lat = (dirY * dY_dcx - dirX * dY_dcy).
   // Slope lateral = dY_lat / hScale.
+  const hScale = SCENE_SCALE;
+
+  const [gx, gy] = snap.physics.scaleGradient;
+  const dYdSigma =
+    (surfaceY(snap.physics.sigma + 0.01) - surfaceY(snap.physics.sigma - 0.01)) / 0.02;
+
+  // Scene vertical gradient: d(sceneY)/d(cx) and d(sceneY)/d(cy)
+  const dY_dcx = gx * dYdSigma;
+  const dY_dcy = gy * dYdSigma;
+
   const slopeFwd = hasDir ? (dirX * dY_dcx + dirY * dY_dcy) / Math.max(hScale, 1e-9) : 0;
   const slopeLat = hasDir ? (dirY * dY_dcx - dirX * dY_dcy) / Math.max(hScale, 1e-9) : 0;
 
@@ -681,40 +579,20 @@ export function placeRider(
 /**
  * Build the trail line from a recorded trajectory up to `upTo` (inclusive).
  *
- * - mode = 'physical' or 'scale-follow': y = surfaceY(sigma) + 0.05
- *   (small lift so the trail draws just above the surface) — matches the
- *   cosmetic compressed physical embedding. Scale-follow keeps this
- *   physical vertical on purpose: the trail mesh is built exactly as in
- *   physical mode, and `scaleFollowTrailTransform` applies only the
- *   horizontal recenter + 1/rho0 magnification, so terrain and trail stay
- *   registered.
- *
- * - mode = 'treadmill': y = SCENE_SCALE * sigma — the exact linear chart
- *   height (physics.sigma equals the Rust embedding height under the
- *   controller-default lambda^2 = 1 config; see the NOTE on lambda).
- *   Combined with `treadmillTrailTransform`'s recenter, the trail sits
- *   in the same chart as the treadmill terrain mesh so the trail stays
- *   glued to the surface in scale-stabilized mode.
- *
- * Building the trail in chart coordinates per-mode (rather than building
- * it once in physical coordinates and trying to compensate via a Y
- * affine transform) is the cleanest way to honor the "exact relative
- * embedding height" Y contract without leaking the asinh compression
- * into treadmill mode.
+ * The static CPU `position` attribute carries the asinh-compressed
+ * surfaceY(sigma) embedding with a small lift so the trail draws just
+ * above the surface fallback. HYPERBOLIC RENDERING does not read this
+ * attribute: transformTrailToHyperbolic (hyperbolicCamera.ts) projects
+ * each authoritative snapshot's upper-half point into the camera-centered
+ * Poincaré ball and overwrites the attribute every playback tick.
  */
-export function buildTrail(
-  trajectory: CockpitTrajectory,
-  upTo: number,
-  mode: CameraMode = 'physical'
-): THREE.Line {
+export function buildTrail(trajectory: CockpitTrajectory, upTo: number): THREE.Line {
   const count = Math.min(upTo + 1, trajectory.snapshots.length);
   const points: THREE.Vector3[] = [];
   for (let i = 0; i < count; i++) {
     const [cx, cy] = trajectory.snapshots[i].physics.c;
     const z = trajectory.snapshots[i].physics.sigma;
-    const yCoord = isPhysicalYMode(mode)
-      ? surfaceY(z) + 0.05
-      : SCENE_SCALE * z;
+    const yCoord = surfaceY(z) + 0.05;
     points.push(new THREE.Vector3(cx * SCENE_SCALE, yCoord, -cy * SCENE_SCALE));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -723,115 +601,14 @@ export function buildTrail(
 }
 
 /**
- * Apply the treadmill chart transform to the trail (same chart as the
- * terrain so the trail stays glued to the surface in treadmill mode).
+ * Hyperbolic third-person camera (issue #142) — the one and only camera.
  *
- * The trail's Y coordinate was built in `buildTrail` with mode='treadmill'
- * as `SCENE_SCALE * sigma` (the embedding height). The post-transform
- * vertex Y is
- *   (SCENE_SCALE * sigma) * scale.y + position.y
- * = SCENE_SCALE * (sigma - sigma0)
- * which is exactly the chart Y (see `treadmillChart`).
- *
- * Previous fix (c3b6456) recentered with `position.y = -surfaceY(sigma)`,
- * which produced Y = surfaceY(sigma) - surfaceY(sigma0) + tiny — the
- * nonlinear asinh compression leaked into the treadmill chart, making it
- * a cosmetic view rather than a mathematically meaningful local scale.
- * Now `position.y = -SCENE_SCALE * sigma` (the rider's own value
- * in the LINEAR chart), and the trail's pre-built Y already matches the
- * chart's linear Y.
- */
-export function treadmillTrailTransform(trail: THREE.Line, snap: DebugSnapshot): void {
-  const [cx, cy] = snap.physics.c;
-  const sigma = snap.physics.sigma;
-  const rho0 = Math.max(snap.physics.rho, 1e-9);
-  const magnify = 1.0 / rho0;
-  trail.position.x = -cx * SCENE_SCALE * magnify;
-  trail.position.z = cy * SCENE_SCALE * magnify;
-  // Vertical recentering subtracts the rider's CURRENT chart Y so the
-  // trail at the rider's own sigma sits at Y=0 — the LINEAR chart Y,
-  // NOT surfaceY(sigma) (the cosmetic physical-mode compression).
-  trail.position.y = -SCENE_SCALE * sigma;
-  trail.scale.set(magnify, 1.0, magnify);
-}
-
-/** Reset the trail to physical coordinates. */
-export function physicalTrailTransform(trail: THREE.Line): void {
-  trail.position.set(0, 0, 0);
-  trail.scale.setScalar(1.0);
-}
-
-// ---------------------------------------------------------------------------
-// Scale-follow presentation (horizontal-ruler experiment)
-// ---------------------------------------------------------------------------
-//
-// Controlled experiment (issue #111): the Shore reads as a near-vertical
-// wall in physical mode possibly NOT because heights are wrong but because
-// the FIXED horizontal ruler collapses valid terrain as rho(c) shrinks.
-// Scale-follow tests that hypothesis by changing ONLY the horizontal ruler:
-//
-//   X = SCENE_SCALE * (x - x0) / rho0
-//   Y = surfaceY(lambda*sigma(c))        <- EXACTLY physical mode's Y
-//   Z = -SCENE_SCALE * (y - y0) / rho0
-//
-// The mesh is built with the physical surfaceY() mapping (identical
-// geometry to physical mode) and only the PRESENTATION transform differs:
-// translate by -c0 and scale by 1/rho0 on X/Z. Y scale stays exactly 1 —
-// no vertical recentering, no asinh changes. Unlike treadmill, there is
-// no relative-height chart; the rider's height comes from the same
-// surfaceY() the rider stands on in physical mode.
-//
-// Debug presentation ONLY — no path back into physics.
-
-/**
- * Apply the scale-follow horizontal transform to a terrain mesh whose
- * geometry was built in physical coordinates (same mesh `buildTerrainMesh`
- * produces for physical mode).
- *
- * Post-transform vertex position for the patch point at c = (x, y):
- *   X = SCENE_SCALE * (x - cx) / rho0
- *   Y = surfaceY(z)              (mesh Y scale is exactly 1)
- *   Z = -SCENE_SCALE * (y - cy) / rho0
- */
-export function scaleFollowTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void {
-  const [cx, cy] = snap.physics.c;
-  const magnify = horizontalMagnification('scale-follow', snap.physics.rho);
-  mesh.position.x = -cx * SCENE_SCALE * magnify;
-  mesh.position.z = cy * SCENE_SCALE * magnify;
-  // Vertical: physical surface, NO recentering. Y scale stays exactly 1.
-  mesh.position.y = 0;
-  mesh.scale.set(magnify, 1.0, magnify);
-}
-
-/**
- * Apply the same horizontal transform to the trail so it stays registered
- * with the scale-follow terrain. The trail is built in physical
- * coordinates (`buildTrail` with a physical-Y mode), so the identical
- * recenter + 1/rho0 X/Z magnification glues it to the surface. Y is left
- * exactly as built.
- */
-export function scaleFollowTrailTransform(trail: THREE.Line, snap: DebugSnapshot): void {
-  const [cx, cy] = snap.physics.c;
-  const magnify = horizontalMagnification('scale-follow', snap.physics.rho);
-  trail.position.x = -cx * SCENE_SCALE * magnify;
-  trail.position.z = cy * SCENE_SCALE * magnify;
-  trail.position.y = 0;
-  trail.scale.set(magnify, 1.0, magnify);
-}
-
-/**
- * Position the third-person camera behind and above the rider.
- *
- * - physical: raw (x, y, lambda*sigma) embedding — geometry-debug mode.
- * - scale-follow: the world is horizontally recentered/magnified beneath
- *   the rider, so the rider sits at X/Z origin, but the vertical follows
- *   the physical surface: camera Y tracks surfaceY(current sigma) exactly
- *   like physical mode. Feels like the normal third-person skateboard
- *   camera.
- * - treadmill: scale-stabilized chart X=(x-x0)/rho0, Y=(z(c)-z(c0))
- *   around the CURRENT rider position c0 — debug presentation ONLY; never
- *   feeds physics (guaranteed structurally: the camera only reads the
- *   snapshot, and this module has no path back into the recorder).
+ * The terrain and trail vertices are projected into the camera-centered
+ * Poincaré ball (origin = (0, 0, 0)), with inverse camera orientation
+ * already applied (hyperbolicCamera.ts / hyperbolicTerrainMaterial.ts).
+ * The Three.js camera therefore sits at (0, 0, 0) with default
+ * orientation (looking down -Z with +Y up) — all view geometry is baked
+ * into the vertex positions by the hyperbolic projection.
  */
 // Persistent smoothed heading for the camera so it stays smoothly behind without whipping
 let smoothedCamHeading: number | null = null;
@@ -875,103 +652,18 @@ export function updateSmoothedHeading(snap: DebugSnapshot, dt: number): number {
   return smoothedCamHeading;
 }
 
-export const CAMERA_BACK_DISTANCE = 4.8;
-export const CAMERA_UP_DISTANCE = 2.8;
-
 export function updateCamera(
   camera: THREE.PerspectiveCamera,
   snap: DebugSnapshot,
-  mode: CameraMode,
   dt: number = 0.016
 ): void {
-  const [cx, cy] = snap.physics.c;
-  const sigma = snap.physics.sigma;
   updateSmoothedHeading(snap, dt);
-
-  let rx: number, rz: number;
-  let followSurface: boolean;
-  if (mode === 'physical') {
-    rx = cx * SCENE_SCALE;
-    rz = -cy * SCENE_SCALE;
-    followSurface = true;
-  } else if (mode === 'scale-follow') {
-    // The terrain carries the (x-x0)/rho0 horizontal transform; the rider
-    // is pinned at the horizontal origin, but height stays physical.
-    rx = 0;
-    rz = 0;
-    followSurface = true;
-  } else if (mode === 'hyperbolic') {
-    // Hyperbolic camera: the terrain and trail vertices are projected into the
-    // camera-centered Poincaré ball (origin = (0, 0, 0)), with inverse camera
-    // orientation already applied. The Three.js camera sits at (0, 0, 0) with
-    // default orientation (looking down -Z with +Y up).
-    camera.position.set(0, 0, 0);
-    camera.quaternion.set(0, 0, 0, 1);
-    return;
-  } else {
-    // Treadmill: the rider is pinned at the chart origin; the terrain mesh
-    // carries the (x-x0)/rho0 transform (see treadmillTransform).
-    rx = 0;
-    rz = 0;
-    followSurface = false;
-  }
-
-  const heading = smoothedCamHeading ?? 0;
-  // Placed further back and higher up to reveal more forward landscape
-  const back = CAMERA_BACK_DISTANCE;
-  const up = CAMERA_UP_DISTANCE;
-  const riderY = followSurface ? surfaceY(sigma) : 0;
-  const targetY = riderY + 0.8;
-
-  const camX = rx - Math.cos(heading) * back;
-  const camZ = rz + Math.sin(heading) * back;
-  const camY = riderY + up;
-
-  camera.position.set(camX, camY, camZ);
-  camera.lookAt(rx, targetY, rz);
-}
-
-/**
- * Scale-stabilized treadmill chart (issue #111):
- *   X = (x - x0) / rho0,
- *   Y = (lambda*sigma)(c) - (lambda*sigma)(c0),
- *   Z = -(y - y0) / rho0
- *
- * Implemented as a Three.js mesh transform on a `buildTerrainMesh(patch,
- * 'treadmill')` mesh:
- *   - Translate the patch horizontally by -c0 (scene units) and
- *     vertically by -SCENE_SCALE * sigma0 (the rider's own chart Y,
- *     NOT surfaceY(sigma0)).
- *   - Scale the patch by 1/rho0 on X/Z only (anisotropic).
- *
- * With the terrain mesh built using the patch's own embedding height
- * (see `buildTerrainMesh` with mode='treadmill'), the post-transform
- * vertex Y is the pure relative embedding height — exactly the intended
- * chart Y. There is NO surfaceY() compression anywhere in the treadmill
- * chart path: the cosmetic asinh curve is reserved for physical mode.
- *
- * Debug presentation ONLY — this module has no path back into physics
- * (the recorder never reads scene objects).
- */
-export function treadmillTransform(mesh: THREE.Mesh, snap: DebugSnapshot): void {
-  const [cx, cy] = snap.physics.c;
-  const sigma = snap.physics.sigma;
-  const rho0 = Math.max(snap.physics.rho, 1e-9);
-  const magnify = 1.0 / rho0;
-  mesh.position.x = -cx * SCENE_SCALE * magnify;
-  mesh.position.z = cy * SCENE_SCALE * magnify;
-  // Vertical recentering subtracts the rider's CURRENT LINEAR chart Y
-  // (SCENE_SCALE * sigma), NOT surfaceY(sigma). The terrain mesh built
-  // in mode='treadmill' already uses the Rust embedding height for Y, so
-  // after this recenter a vertex sits at exactly the relative chart Y.
-  mesh.position.y = -SCENE_SCALE * sigma;
-  mesh.scale.set(magnify, 1.0, magnify);
-}
-
-/** Reset the treadmill transform when returning to physical mode. */
-export function physicalTransform(mesh: THREE.Mesh): void {
-  mesh.position.set(0, 0, 0);
-  mesh.scale.setScalar(1.0);
+  // Hyperbolic camera: the terrain and trail vertices are projected into the
+  // camera-centered Poincaré ball (origin = (0, 0, 0)), with inverse camera
+  // orientation already applied. The Three.js camera sits at (0, 0, 0) with
+  // default orientation (looking down -Z with +Y up).
+  camera.position.set(0, 0, 0);
+  camera.quaternion.set(0, 0, 0, 1);
 }
 
 /** Lights + atmospheric backdrop for an immersive game environment. */
@@ -1017,55 +709,24 @@ export function buildSceneDressing(scene: THREE.Scene): void {
 }
 
 /**
- * Apply the LOD render distance: camera far plane + fog wall track the
- * patch size so fidelity stays balanced with performance as scale shifts
- * (issue #111). Call on every terrain rebuild.
+ * Apply the LOD render distance: camera near/far planes + fog wall for the
+ * hyperbolic camera. Call on every terrain rebuild.
  *
- * The fog wall is floored at the camera-to-rider distance: the LOD patch
- * shrinks at deep scale, and a fog wall tighter than the camera distance
- * would swallow the whole scene (the "black viewport" failure mode).
- * Horizontally magnified modes (treadmill AND scale-follow) inflate the
- * effective patch via `horizontalMagnification`, so their fog wall
- * inflates with it; physical mode is unchanged.
+ * In hyperbolic mode, coordinates live in the scaled Poincaré ball with
+ * radius ~HYPERBOLIC_VISUAL_SCALE (20 units), so the clipping range and
+ * fog wall are fixed constants — the projection itself keeps the rider
+ * framed regardless of Mandelbrot scale.
  */
 export function applyRenderDistance(
   camera: THREE.PerspectiveCamera,
-  scene: THREE.Scene,
-  mode: CameraMode,
-  rho: number,
-  half: number
+  scene: THREE.Scene
 ): void {
-  if (mode === 'hyperbolic') {
-    // In hyperbolic mode, coordinates live in the scaled Poincaré ball
-    // with radius ~HYPERBOLIC_VISUAL_SCALE (20 units).
-    camera.near = 0.1;
-    camera.far = 100.0;
-    camera.updateProjectionMatrix();
-    const fog = scene.fog;
-    if (fog && 'near' in fog && 'far' in fog) {
-      (fog as THREE.Fog).near = 12.0;
-      (fog as THREE.Fog).far = 19.0;
-    }
-    return;
-  }
-  const r = Math.max(rho, 1e-9);
-  const magnify = horizontalMagnification(mode, r);
-  const patchScene = half * 2 * SCENE_SCALE * magnify;
-  const diagonal = patchScene * Math.SQRT2;
-  // updateCamera keeps the camera ~sqrt(4.8^2 + 2.8^2) ~ 5.6 scene units
-  // from the rider; the fog must start beyond the subject.
-  const cameraDist = 5.6;
-  const fogNear = Math.max(cameraDist * 1.15, diagonal * 0.25);
-  const fogFar = Math.max(diagonal * 1.15, cameraDist * 2.2);
-  const far = Math.max(diagonal * 1.8, cameraDist * 2.8);
-
-  if (camera.far !== far) {
-    camera.far = far;
-    camera.updateProjectionMatrix();
-  }
+  camera.near = 0.1;
+  camera.far = 100.0;
+  camera.updateProjectionMatrix();
   const fog = scene.fog;
   if (fog && 'near' in fog && 'far' in fog) {
-    (fog as THREE.Fog).near = fogNear;
-    (fog as THREE.Fog).far = fogFar;
+    (fog as THREE.Fog).near = 12.0;
+    (fog as THREE.Fog).far = 19.0;
   }
 }

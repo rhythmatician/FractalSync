@@ -61,7 +61,7 @@ export class AdaptiveVerticalGain {
   /**
    * Compute the raw target vertical gain from the local terrain slope.
    *
-   * In scale-normalized treadmill coordinates:
+   * In scale-normalized coordinates:
    *   m_local = lambda * rho0 * ||∇σ(c0)||
    *
    * Target gain:

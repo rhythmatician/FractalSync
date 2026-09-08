@@ -65,7 +65,7 @@ describe('compare real terrain patch with sampleTerrainPatch', () => {
 
     // Case 1: Player is low in the valley (rho0 = 0.1, sigma0 = 0)
     const snapValley = makeSnapshot(0.0, 0.1, -0.74, 0.1);
-    const meshValley = buildTerrainMesh(patch, 'physical');
+    const meshValley = buildTerrainMesh(patch);
     transformMeshToHyperbolic(meshValley, patch, snapValley, 0);
     const posV = meshValley.geometry.getAttribute('position') as THREE.BufferAttribute;
     const v1 = new THREE.Vector3(posV.getX(0), posV.getY(0), posV.getZ(0));
@@ -74,7 +74,7 @@ describe('compare real terrain patch with sampleTerrainPatch', () => {
 
     // Case 2: Player is high up on the mountain (rho0 = 0.001, sigma0 = 6.64)
     const snapHigh = makeSnapshot(6.64, 0.001, -0.74, 0.1);
-    const meshHigh = buildTerrainMesh(patch, 'physical');
+    const meshHigh = buildTerrainMesh(patch);
     transformMeshToHyperbolic(meshHigh, patch, snapHigh, 0);
     const posH = meshHigh.geometry.getAttribute('position') as THREE.BufferAttribute;
     const h1 = new THREE.Vector3(posH.getX(0), posH.getY(0), posH.getZ(0));

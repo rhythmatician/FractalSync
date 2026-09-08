@@ -64,7 +64,7 @@ describe('compare low sigma vs high sigma in hyperbolic mode', () => {
 
     // When rider is in valley (rho=0.25):
     const snapValley = makeSnapshot(-1.35, 0.25, cx, cy);
-    const meshValley = buildTerrainMesh(patchValley, 'physical');
+    const meshValley = buildTerrainMesh(patchValley);
     transformMeshToHyperbolic(meshValley, patchValley, snapValley, 0);
     const posV = meshValley.geometry.getAttribute('position') as THREE.BufferAttribute;
 
@@ -74,7 +74,7 @@ describe('compare low sigma vs high sigma in hyperbolic mode', () => {
 
     // When rider is at crest (rho=0.001, high sigma):
     const snapCrest = makeSnapshot(6.64, 0.001, cx, cy);
-    const meshCrest = buildTerrainMesh(patchValley, 'physical');
+    const meshCrest = buildTerrainMesh(patchValley);
     transformMeshToHyperbolic(meshCrest, patchValley, snapCrest, 0);
     const posC = meshCrest.geometry.getAttribute('position') as THREE.BufferAttribute;
 
