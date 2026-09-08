@@ -15,10 +15,10 @@
 //!   migration bridge — it is NOT the destination adaptive/local C²
 //!   representation. It correctly reports `Unresolved` when the fixed raster
 //!   cannot meet `requested_scale = alpha*max(rho,epsilon)`.
-//! - `ScaleAwareGeometryProvider` (NEXT, is_bridge=false): placeholder for
-//!   the destination adaptive/local C² geometry (quadtree / spline tiles /
-//!   on-demand DEM) that will provide true refinement. Not yet implemented
-//!   behind this PR; Physics currently consumes the bridge.
+//! - `ScaleAwareGeometryProvider` (DESTINATION, is_bridge=false): adaptive dyadic
+//!   Shore-contour provider at scales h_k=0.125*2^-k, 57x57 tile (core 8 halo 24),
+//!   N0(k)=512+64k, 4-cell stability band, 3 bisections, 7x7 normalized quadratic fit.
+//!   Direct Rust Mandelbrot membership, no 1024² raster. Physics consumes this.
 //!
 //! Authority: runtime-core (ADR 0001). Versioned, deterministic, and cache-aware.
 
@@ -31,7 +31,7 @@ use std::sync::RwLock;
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.
-pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/1";
+pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/2";
 
 /// Scale-relative resolution law factor: local cell size <= alpha * max(rho, epsilon).
 /// The exact refinement/error criterion is derived and validated (ADR 0004 does
@@ -513,27 +513,35 @@ fn make_oriented_segment(x1: f64, y1: f64, x2: f64, y2: f64, max_iter: usize) ->
     let dx = x2 - x1;
     let dy = y2 - y1;
     let len = (dx * dx + dy * dy).sqrt().max(1e-12);
-    // two normals
+    // two normals: n1 is left of directed edge (inside should be left per spec)
     let n1 = (-dy / len, dx / len);
     let n2 = (dy / len, -dx / len);
     let mx = (x1 + x2) * 0.5;
     let my = (y1 + y2) * 0.5;
-    let _eps = dyadic_h(0) * 1e-3; // small offset, will be scaled per tile? use 1e-6
-    let p1 = Complex64::new(mx + n1.0 * 1e-7, my + n1.1 * 1e-7);
-    let p2 = Complex64::new(mx + n2.0 * 1e-7, my + n2.1 * 1e-7);
+    // Use h-scaled offset: 0.25*h at this segment's scale (approx from segment length ~h)
+    // Since we don't have h here, use a scale-relative epsilon: 1e-8 is too small for deep k, use len*0.25
+    let eps = len * 0.25;
+    let p1 = Complex64::new(mx + n1.0 * eps, my + n1.1 * eps);
+    let p2 = Complex64::new(mx + n2.0 * eps, my + n2.1 * eps);
     let inside1 = mandelbrot_inside(p1, max_iter);
     let inside2 = mandelbrot_inside(p2, max_iter);
-    let normal = if !inside1 && inside2 {
-        n1
-    } else if inside1 && !inside2 {
-        n2
+    // Choose normal that points outward (outside is in direction of normal). Inside should be left, so normal should point outward (right).
+    // If inside1 is true and inside2 false, then n1 points inside, so outward is n2.
+    // We want normal to point outward, and we want endpoints ordered so inside is left.
+    let (normal, p1_out, p2_out) = if inside1 && !inside2 {
+        // n1 is inside, so outward is n2, and current orientation has inside left => keep
+        (n2, (x1, y1), (x2, y2))
+    } else if !inside1 && inside2 {
+        // n1 is outside, so outward is n1, current orientation already has inside left? No, inside is n2 side, so flip
+        // To keep inside-left, we need to swap endpoints
+        (n1, (x2, y2), (x1, y1))
     } else {
-        // fallback: choose n1 (should not happen)
-        n1
+        // fallback: choose n1 and keep orientation
+        (n1, (x1, y1), (x2, y2))
     };
     Segment {
-        p1: (x1, y1),
-        p2: (x2, y2),
+        p1: p1_out,
+        p2: p2_out,
         normal,
     }
 }
@@ -556,78 +564,48 @@ fn point_to_segment_distance(px: f64, py: f64, seg: &Segment) -> (f64, (f64, f64
     (d, seg.normal)
 }
 
+// Precomputed pseudoinverse for normalized 7x7 stencil (u=(x-cx)/h, v=(y-cy)/h).
+ // Basis [1, u, v, u^2, uv, v^2], A is 49x6, P = (A^T A)^{-1} A^T is 6x49.
+// Conditioning is independent of h (spec #145).
+const QUADRATIC_PINV: [[f64; 49]; 6] = [
+  [-4.761904761905e-02, -1.360544217687e-02, 6.802721088435e-03, 1.360544217687e-02, 6.802721088435e-03, -1.360544217687e-02, -4.761904761905e-02, -1.360544217687e-02, 2.040816326531e-02, 4.081632653061e-02, 4.761904761905e-02, 4.081632653061e-02, 2.040816326531e-02, -1.360544217687e-02, 6.802721088435e-03, 4.081632653061e-02, 6.122448979592e-02, 6.802721088435e-02, 6.122448979592e-02, 4.081632653061e-02, 6.802721088435e-03, 1.360544217687e-02, 4.761904761905e-02, 6.802721088435e-02, 7.482993197279e-02, 6.802721088435e-02, 4.761904761905e-02, 1.360544217687e-02, 6.802721088435e-03, 4.081632653061e-02, 6.122448979592e-02, 6.802721088435e-02, 6.122448979592e-02, 4.081632653061e-02, 6.802721088435e-03, -1.360544217687e-02, 2.040816326531e-02, 4.081632653061e-02, 4.761904761905e-02, 4.081632653061e-02, 2.040816326531e-02, -1.360544217687e-02, -4.761904761905e-02, -1.360544217687e-02, 6.802721088435e-03, 1.360544217687e-02, 6.802721088435e-03, -1.360544217687e-02, -4.761904761905e-02],
+  [-1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -5.102040816327e-03, 0.000000000000e+00, 5.102040816327e-03, 1.020408163265e-02, 1.530612244898e-02],
+  [-1.530612244898e-02, -1.530612244898e-02, -1.530612244898e-02, -1.530612244898e-02, -1.530612244898e-02, -1.530612244898e-02, -1.530612244898e-02, -1.020408163265e-02, -1.020408163265e-02, -1.020408163265e-02, -1.020408163265e-02, -1.020408163265e-02, -1.020408163265e-02, -1.020408163265e-02, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 5.102040816327e-03, 5.102040816327e-03, 5.102040816327e-03, 5.102040816327e-03, 5.102040816327e-03, 5.102040816327e-03, 5.102040816327e-03, 1.020408163265e-02, 1.020408163265e-02, 1.020408163265e-02, 1.020408163265e-02, 1.020408163265e-02, 1.020408163265e-02, 1.020408163265e-02, 1.530612244898e-02, 1.530612244898e-02, 1.530612244898e-02, 1.530612244898e-02, 1.530612244898e-02, 1.530612244898e-02, 1.530612244898e-02],
+  [8.503401360544e-03, 7.965566981526e-19, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, 7.965566981526e-19, 8.503401360544e-03, 8.503401360544e-03, -1.091577697468e-18, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, -1.091577697468e-18, 8.503401360544e-03, 8.503401360544e-03, -2.224458334841e-18, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, -2.224458334841e-18, 8.503401360544e-03, 8.503401360544e-03, -2.602085213965e-18, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, -2.602085213965e-18, 8.503401360544e-03, 8.503401360544e-03, -2.224458334841e-18, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, -2.224458334841e-18, 8.503401360544e-03, 8.503401360544e-03, -1.091577697468e-18, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, -1.091577697468e-18, 8.503401360544e-03, 8.503401360544e-03, 7.965566981526e-19, -5.102040816327e-03, -6.802721088435e-03, -5.102040816327e-03, 7.965566981526e-19, 8.503401360544e-03],
+  [1.147959183673e-02, 7.653061224490e-03, 3.826530612245e-03, 0.000000000000e+00, -3.826530612245e-03, -7.653061224490e-03, -1.147959183673e-02, 7.653061224490e-03, 5.102040816327e-03, 2.551020408163e-03, 0.000000000000e+00, -2.551020408163e-03, -5.102040816327e-03, -7.653061224490e-03, 3.826530612245e-03, 2.551020408163e-03, 1.275510204082e-03, 0.000000000000e+00, -1.275510204082e-03, -2.551020408163e-03, -3.826530612245e-03, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, -3.826530612245e-03, -2.551020408163e-03, -1.275510204082e-03, 0.000000000000e+00, 1.275510204082e-03, 2.551020408163e-03, 3.826530612245e-03, -7.653061224490e-03, -5.102040816327e-03, -2.551020408163e-03, 0.000000000000e+00, 2.551020408163e-03, 5.102040816327e-03, 7.653061224490e-03, -1.147959183673e-02, -7.653061224490e-03, -3.826530612245e-03, 0.000000000000e+00, 3.826530612245e-03, 7.653061224490e-03, 1.147959183673e-02],
+  [8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -6.802721088435e-03, -6.802721088435e-03, -6.802721088435e-03, -6.802721088435e-03, -6.802721088435e-03, -6.802721088435e-03, -6.802721088435e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, -5.102040816327e-03, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 0.000000000000e+00, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03, 8.503401360544e-03],
+];
+
 fn fit_quadratic_jet(
     stencil_distances: &[(f64, f64, f64)],
 ) -> Option<([f64; 6], f64)> {
-    // basis [1, x, y, x^2, xy, y^2]  -> coefficients [a0,a1,a2,a3,a4,a5]
-    // D = a0, grad = [a1,a2], Hessian = [[2a3,a4],[a4,2a5]]
-    let n = stencil_distances.len() as f64;
-    if n < 6.0 {
+    if stencil_distances.len() != 49 {
         return None;
     }
-    // Build normal equations AtA * coeff = Atb
-    let mut ata = [[0.0f64; 6]; 6];
-    let mut atb = [0.0f64; 6];
-    for &(x, y, d) in stencil_distances {
-        let b = [1.0, x, y, x * x, x * y, y * y];
-        for i in 0..6 {
-            for j in 0..6 {
-                ata[i][j] += b[i] * b[j];
-            }
-            atb[i] += b[i] * d;
-        }
+    let mut d_vec = [0.0f64; 49];
+    for (i, &(_, _, d)) in stencil_distances.iter().enumerate() {
+        d_vec[i] = d;
     }
-    // Solve 6x6 via Gaussian elimination
-    let mut aug = [[0.0f64; 7]; 6];
+    let mut coeff_norm = [0.0f64; 6];
     for i in 0..6 {
-        for j in 0..6 {
-            aug[i][j] = ata[i][j];
+        let mut sum = 0.0;
+        for j in 0..49 {
+            sum += QUADRATIC_PINV[i][j] * d_vec[j];
         }
-        aug[i][6] = atb[i];
+        coeff_norm[i] = sum;
     }
-    for col in 0..6 {
-        // pivot
-        let mut pivot = col;
-        let mut max_val = aug[col][col].abs();
-        for row in (col + 1)..6 {
-            if aug[row][col].abs() > max_val {
-                max_val = aug[row][col].abs();
-                pivot = row;
-            }
-        }
-        if max_val < 1e-12 {
-            return None;
-        }
-        if pivot != col {
-            aug.swap(col, pivot);
-        }
-        let piv = aug[col][col];
-        for j in col..7 {
-            aug[col][j] /= piv;
-        }
-        for row in 0..6 {
-            if row == col {
-                continue;
-            }
-            let factor = aug[row][col];
-            for j in col..7 {
-                aug[row][j] -= factor * aug[col][j];
-            }
-        }
-    }
-    let mut coeff = [0.0f64; 6];
-    for i in 0..6 {
-        coeff[i] = aug[i][6];
-    }
-    // compute RMS
     let mut sum2 = 0.0;
-    for &(x, y, d) in stencil_distances {
-        let pred = coeff[0] + coeff[1] * x + coeff[2] * y + coeff[3] * x * x + coeff[4] * x * y + coeff[5] * y * y;
+    for (idx, &(_, _, d)) in stencil_distances.iter().enumerate() {
+        let row = idx / 7;
+        let col = idx % 7;
+        let u = col as f64 - 3.0;
+        let v = row as f64 - 3.0;
+        let pred = coeff_norm[0] + coeff_norm[1]*u + coeff_norm[2]*v + coeff_norm[3]*u*u + coeff_norm[4]*u*v + coeff_norm[5]*v*v;
         let e = d - pred;
-        sum2 += e * e;
+        sum2 += e*e;
     }
-    let rms = (sum2 / n).sqrt();
-    Some((coeff, rms))
+    let rms = (sum2 / 49.0).sqrt();
+    Some((coeff_norm, rms))
 }
 
 fn compute_jet_at_level(
@@ -637,43 +615,61 @@ fn compute_jet_at_level(
     h: f64,
     tile: &ShoreTile,
 ) -> Option<(GeometryJet, f64, Vec<Segment>)> {
-    // 7x7 query-centered stencil, step = h
+    // 7x7 query-centered stencil, step = h, sign from oriented Shore only (no second authority)
     let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
-    let _inside_query = mandelbrot_inside(c, dyadic_n0(k));
     for dy in -3..=3 {
         for dx in -3..=3 {
             let px = c.re + dx as f64 * h;
             let py = c.im + dy as f64 * h;
-            let p = Complex64::new(px, py);
-            let inside_p = mandelbrot_inside(p, dyadic_n0(k));
-            // signed distance to shore segments
-            let mut best_dist = f64::INFINITY;
-            let mut _best_normal = (0.0, 0.0);
-            for seg in &tile.segments {
-                let (d, n) = point_to_segment_distance(px, py, seg);
-                if d < best_dist {
-                    best_dist = d;
-                    _best_normal = n;
-                }
-            }
             if tile.segments.is_empty() {
                 // no shore in tile: far field, approximate distance as large
-                // use sign based on inside/outside and distance to tile border
+                // determine sign via Shore orientation fallback: use inside check only when no Shore exists
+                // This is the only case where we use membership as fallback; otherwise sign comes from Shore
+                let inside_p = mandelbrot_inside(Complex64::new(px, py), dyadic_n0(k));
                 let sign = if inside_p { -1.0 } else { 1.0 };
-                // if no shore, distance is at least to tile edge, approximate as 10*h
-                best_dist = 10.0 * h;
+                let best_dist = 10.0 * h;
                 stencil.push((dx as f64 * h, dy as f64 * h, sign * best_dist));
                 continue;
             }
-            let sign = if inside_p { -1.0 } else { 1.0 };
-            // if point is very close to shore but inside/outside ambiguous, use sign
-            stencil.push((dx as f64 * h, dy as f64 * h, sign * best_dist));
+            // find nearest segment and its projection to determine signed distance via Shore normal
+            let mut best_dist = f64::INFINITY;
+            let mut best_signed = f64::INFINITY;
+            let mut best_qx = 0.0;
+            let mut best_qy = 0.0;
+            let mut best_normal = (0.0, 0.0);
+            for seg in &tile.segments {
+                let (x1, y1) = seg.p1;
+                let (x2, y2) = seg.p2;
+                let dxs = x2 - x1;
+                let dys = y2 - y1;
+                let len2 = dxs*dxs + dys*dys;
+                let t = if len2 < 1e-18 { 0.0 } else { ((px - x1)*dxs + (py - y1)*dys)/len2 }.clamp(0.0, 1.0);
+                let qx = x1 + t*dxs;
+                let qy = y1 + t*dys;
+                let d = ((px - qx)*(px - qx) + (py - qy)*(py - qy)).sqrt();
+                // signed distance: dot((p - q), normal) -- normal points outward, so inside => negative
+                let signed = (px - qx)*seg.normal.0 + (py - qy)*seg.normal.1;
+                if d < best_dist {
+                    best_dist = d;
+                    best_signed = signed;
+                    best_qx = qx;
+                    best_qy = qy;
+                    best_normal = seg.normal;
+                }
+            }
+            // Use signed distance from nearest Shore segment (oriented). This is the sole authority.
+            // best_signed already has correct sign (negative inside, positive outside) via outward normal.
+            // For robustness, if best_signed is near zero but we are exactly on Shore, keep it.
+            let signed_dist = if best_signed.is_finite() { best_signed } else { best_dist };
+            // Ensure consistency: if tile is non-empty, we should not fall back to membership
+            let _ = (best_qx, best_qy, best_normal);
+            stencil.push((dx as f64 * h, dy as f64 * h, signed_dist));
         }
     }
-    let (coeff, rms) = fit_quadratic_jet(&stencil)?;
-    let d = coeff[0];
-    let grad = [coeff[1], coeff[2]];
-    let hess = [[2.0 * coeff[3], coeff[4]], [coeff[4], 2.0 * coeff[5]]];
+    let (coeff_n, rms) = fit_quadratic_jet(&stencil)?;
+    let d = coeff_n[0];
+    let grad = [coeff_n[1] / h, coeff_n[2] / h];
+    let hess = [[2.0 * coeff_n[3] / (h * h), coeff_n[4] / (h * h)], [coeff_n[4] / (h * h), 2.0 * coeff_n[5] / (h * h)]];
     // For cut locus we need per-point nearest segments, but we approximate via stencil
     // Return jet with temporary validity Regular, will be refined by caller
     let rho = (d * d + epsilon * epsilon).sqrt();
@@ -717,13 +713,22 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
     }
 
     // initial scale hint from bridge (not used for final D, only for k selection)
-    let hint_requested = if let Ok(b) = query_bridge_geometry(c, epsilon) {
-        b.requested_scale
-    } else {
-        GEOMETRY_SCALE_ALPHA * epsilon
+    // Spec #145: must not auto-load raster when proving independence. Use a non-auto-loading hint.
+    let hint_requested = {
+        // Try to get requested_scale without auto-loading: check if field is loaded
+        let has_field = crate::distance_field::is_field_loaded();
+        if has_field {
+            if let Ok(b) = query_bridge_geometry(c, epsilon) {
+                b.requested_scale
+            } else { GEOMETRY_SCALE_ALPHA * epsilon }
+        } else {
+            // No field loaded: use destination-only hint based on epsilon (conservative)
+            // Compute a hint that will still allow refinement to find correct k
+            GEOMETRY_SCALE_ALPHA * epsilon * 10.0
+        }
     };
 
-    // select k range: find smallest k with h_k <= hint_requested, then evaluate +/-1
+    // select k range: find smallest k with h_k <= hint_requested, then monotone coarse-to-fine until convergence
     let mut target_k = 0;
     for k in 0..=DYADIC_MAX_K {
         if dyadic_h(k) <= hint_requested {
@@ -734,9 +739,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
             target_k = DYADIC_MAX_K;
         }
     }
-    // clamp to reasonable
     let start_k = target_k.saturating_sub(1);
-    let end_k = (target_k + 2).min(DYADIC_MAX_K);
 
     let mut prev_jet: Option<GeometryJet> = None;
     let mut prev_h: f64 = 0.0;
@@ -745,18 +748,86 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
     let mut best_regular: Option<GeometryJet> = None;
     let mut last_jet: Option<GeometryJet> = None;
 
-    for k in start_k..=end_k {
+    // monotone refinement: start near hint, then continue finer until Regular or resource limit (max K)
+    let mut k = start_k;
+    while k <= DYADIC_MAX_K {
         let h = dyadic_h(k);
         let (core_ix, core_iy, _, _) = dyadic_tile_origin(c, h);
         let tile = get_or_generate_shore_tile(k, core_ix, core_iy);
-        // if tile has no shore and query far, treat as large distance but not regular
-        if tile.segments.is_empty() {
-            // no shore in this tile, try coarser
-            continue;
+        // patch expansion: if no Shore, try one expansion (next finer level may have Shore)
+        // For now, allow empty tiles to produce far-field jet via compute_jet (10*h) but also
+        // ensure we advance k if compute_jet fails. The empty case is handled in compute_jet,
+        // so we don't skip here. We keep the check for resource but allow compute_jet to decide.
+        // If tile empty, still try compute_jet (which returns far-field). If that fails, advance.
+        
+        // adaptive patch expansion: if no Shore or Shore within 4 cells of patch edge, expand once
+        let mut tile_for_jet = tile.clone();
+        let _expanded = false;
+        // check if expansion needed
+        let needs_expansion = if tile.segments.is_empty() {
+            true
+        } else {
+            // nearest Shore distance to query, and check if that Shore is near tile edge
+            let mut best_edge_dist = f64::INFINITY;
+            for seg in &tile.segments {
+                // distance from query to segment
+                let (d, _) = point_to_segment_distance(c.re, c.im, seg);
+                if d < best_edge_dist {
+                    best_edge_dist = d;
+                }
+            }
+            // check if nearest Shore is within 4*h of tile border
+            // tile border is at re0, re0+56*h and im0, im0+56*h
+            let tile_re0 = tile.origin_re;
+            let tile_im0 = tile.origin_im;
+            let tile_re1 = tile_re0 + DYADIC_TILE_CELLS as f64 * h;
+            let tile_im1 = tile_im0 + DYADIC_TILE_CELLS as f64 * h;
+            // find the segment closest to query and see if its projection is near edge
+            let mut nearest_seg = None;
+            let mut min_d = f64::INFINITY;
+            for seg in &tile.segments {
+                let (d, _) = point_to_segment_distance(c.re, c.im, seg);
+                if d < min_d {
+                    min_d = d;
+                    nearest_seg = Some(seg);
+                }
+            }
+            if let Some(seg) = nearest_seg {
+                let mx = (seg.p1.0 + seg.p2.0)*0.5;
+                let my = (seg.p1.1 + seg.p2.1)*0.5;
+                let dist_to_edge = (mx - tile_re0).min(tile_re1 - mx).min((my - tile_im0).min(tile_im1 - my));
+                dist_to_edge < 4.0 * h && min_d < 4.0 * h
+            } else { false }
+        };
+        if needs_expansion && !_expanded {
+            // expand by generating a tile with larger halo (or shift to neighboring core)
+            // Simplest: generate tile at same k but with origin shifted by core stride to include query more centrally
+            // Try neighboring tile that contains query more centrally
+            // For empty case or edge case, we try the 8 neighboring core tiles and pick one with Shore
+            let mut best_tile = tile_for_jet.clone();
+            let mut found = false;
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    if dx==0 && dy==0 { continue; }
+                    let (core_ix2, core_iy2, _, _) = dyadic_tile_origin(c, h);
+                    let nix = core_ix2 + dx;
+                    let niy = core_iy2 + dy;
+                    let ntile = get_or_generate_shore_tile(k, nix, niy);
+                    if !ntile.segments.is_empty() {
+                        best_tile = ntile;
+                        found = true;
+                        break;
+                    }
+                }
+                if found { break; }
+            }
+            if found {
+                tile_for_jet = best_tile;
+            }
         }
-        let (jet, rms, segs) = match compute_jet_at_level(c, epsilon, k, h, &tile) {
+        let (jet, rms, segs) = match compute_jet_at_level(c, epsilon, k, h, &tile_for_jet) {
             Some(v) => v,
-            None => continue,
+            None => { k += 1; continue; },
         };
         let rho = (jet.d * jet.d + epsilon * epsilon).sqrt();
         let requested = GEOMETRY_SCALE_ALPHA * rho.max(epsilon);
@@ -780,55 +851,78 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 .max(prev_rms);
             e = e_candidate;
 
-            // cut locus: persistent tie 0.5*h with normal separation >=30° across two levels
-            // For query point c, find two nearest segments at each level with tie
-            let check_tie = |segs: &Vec<Segment>, hh: f64| -> Option<((f64, f64), (f64, f64))> {
+            // cut locus: persistent tie 0.5*h with normal separation >=30° across two levels,
+            // plus non-unique normal when projection lands on contour vertex (persistent)
+            let check_tie = |segs: &Vec<Segment>, hh: f64| -> Option<((f64, f64), (f64, f64), bool)> {
                 if segs.len() < 2 {
                     return None;
                 }
-                let mut dists: Vec<(f64, (f64, f64), usize)> = Vec::new();
+                let mut dists: Vec<(f64, (f64, f64), usize, bool)> = Vec::new();
                 for (idx, seg) in segs.iter().enumerate() {
                     let (d, n) = point_to_segment_distance(c.re, c.im, seg);
-                    dists.push((d, n, idx));
+                    // check if projection lands on vertex (t clamped to 0 or 1)
+                    let (x1, y1) = seg.p1;
+                    let (x2, y2) = seg.p2;
+                    let dx = x2 - x1; let dy = y2 - y1;
+                    let len2 = dx*dx+dy*dy;
+                    let t = if len2 < 1e-18 { 0.0 } else { ((c.re - x1)*dx + (c.im - y1)*dy)/len2 }.clamp(0.0, 1.0);
+                    let on_vertex = t < 1e-9 || t > 1.0-1e-9;
+                    dists.push((d, n, idx, on_vertex));
                 }
                 dists.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                let (d1, n1, idx1) = dists[0];
-                let (d2, n2, idx2) = dists[1];
+                // find first two geometrically distinct (non-adjacent) segments
+                let (d1, n1, idx1, on_v1) = dists[0];
                 if d1 > 0.5 * hh {
                     return None;
                 }
-                // exclude adjacent segments sharing a vertex
                 let s1 = &segs[idx1];
-                let s2 = &segs[idx2];
-                let shared = ( (s1.p1.0 - s2.p1.0).abs() < 1e-12 && (s1.p1.1 - s2.p1.1).abs() < 1e-12 ) ||
-                             ( (s1.p1.0 - s2.p2.0).abs() < 1e-12 && (s1.p1.1 - s2.p2.1).abs() < 1e-12 ) ||
-                             ( (s1.p2.0 - s2.p1.0).abs() < 1e-12 && (s1.p2.1 - s2.p1.1).abs() < 1e-12 ) ||
-                             ( (s1.p2.0 - s2.p2.0).abs() < 1e-12 && (s1.p2.1 - s2.p2.1).abs() < 1e-12 );
-                if shared {
-                    return None;
-                }
-                if (d2 - d1).abs() <= DYADIC_CUT_TIE_FACTOR * hh {
-                    let dot = (n1.0 * n2.0 + n1.1 * n2.1).clamp(-1.0, 1.0);
-                    let ang = dot.acos() * 180.0 / std::f64::consts::PI;
-                    if ang >= DYADIC_CUT_NORMAL_DEGREES {
-                        return Some((n1, n2));
+                let mut found_second = None;
+                for k2 in 1..dists.len() {
+                    let (d2, n2, idx2, on_v2) = dists[k2];
+                    let s2 = &segs[idx2];
+                    let shared = ( (s1.p1.0 - s2.p1.0).abs() < 1e-12 && (s1.p1.1 - s2.p1.1).abs() < 1e-12 ) ||
+                                 ( (s1.p1.0 - s2.p2.0).abs() < 1e-12 && (s1.p1.1 - s2.p2.1).abs() < 1e-12 ) ||
+                                 ( (s1.p2.0 - s2.p1.0).abs() < 1e-12 && (s1.p2.1 - s2.p1.1).abs() < 1e-12 ) ||
+                                 ( (s1.p2.0 - s2.p2.0).abs() < 1e-12 && (s1.p2.1 - s2.p2.1).abs() < 1e-12 );
+                    if shared {
+                        continue;
                     }
+                    if (d2 - d1).abs() <= DYADIC_CUT_TIE_FACTOR * hh {
+                        let dot = (n1.0 * n2.0 + n1.1 * n2.1).clamp(-1.0, 1.0);
+                        let ang = dot.acos() * 180.0 / std::f64::consts::PI;
+                        if ang >= DYADIC_CUT_NORMAL_DEGREES {
+                            found_second = Some((n2, on_v2));
+                            break;
+                        }
+                    }
+                    // if no tie but on_vertex persistent, still consider
+                    if on_v1 || on_v2 {
+                        // non-unique normal at vertex
+                        found_second = Some((n2, true));
+                        break;
+                    }
+                }
+                if let Some((n2, on_v2)) = found_second {
+                    return Some((n1, n2, on_v1 || on_v2));
                 }
                 None
             };
             let tie_c = check_tie(&prev_segments, prev_h);
             let tie_f = check_tie(&segs, h);
-            if tie_c.is_some() && tie_f.is_some() {
-                // check persistence: normals similar across levels (within 15°)
-                let (n1c, n2c) = tie_c.unwrap();
-                let (n1f, n2f) = tie_f.unwrap();
+            if let (Some((n1c, n2c, on_v_c)), Some((n1f, n2f, on_v_f))) = (tie_c, tie_f) {
+                // persistence: check normals similar across levels and vertex persistence
                 let dot1 = (n1c.0 * n1f.0 + n1c.1 * n1f.1).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI;
                 let dot2 = (n2c.0 * n2f.0 + n2c.1 * n2f.1).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI;
-                if dot1 < 30.0 || dot2 < 30.0 {
+                let persistent_normals = dot1 < 30.0 && dot2 < 30.0;
+                let persistent_vertex = on_v_c && on_v_f;
+                if persistent_normals || persistent_vertex {
                     cut_locus = true;
+                } else if dot1 < 30.0 || dot2 < 30.0 {
+                    // one normal persistent but not both - not enough for cut locus per spec, so false
+                    cut_locus = false;
                 } else {
-                    // still consider if both levels have tie with large angle, it's persistent
-                    cut_locus = true;
+                    // both have tie with large angle but normals not persistent => not cut locus
+                    cut_locus = false;
                 }
             }
         }
@@ -851,22 +945,18 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
             jet_with_error.singularity = SingularityKind::None;
             best_regular = Some(jet_with_error);
             break;
-        } else if !cell_ok {
-            // need finer
-            prev_jet = Some(jet);
-            prev_h = h;
-            prev_rms = rms;
-            prev_segments = segs;
-            continue;
         } else {
-            // cell ok but error too large => need finer
+            // need finer (either cell too large or error too large)
             prev_jet = Some(jet);
             prev_h = h;
             prev_rms = rms;
             prev_segments = segs;
+            k += 1;
             continue;
         }
     }
+    // If we exited via finished, k already points beyond, but best_regular is set
+    // If we exited because k > MAX, fall through to Unresolved handling
 
     if let Some(jet) = best_regular {
         return Ok(jet);
@@ -875,14 +965,11 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
     if let Some(mut jet) = last_jet {
         jet.validity = GeometryValidity::Unresolved;
         jet.singularity = SingularityKind::None;
+        jet.is_bridge = false;
         return Ok(jet);
     }
-    // fallback: bridge hint as unresolved
-    let mut fallback = query_bridge_geometry(c, epsilon).unwrap_or_else(|_| failure_jet(f64::NAN, dyadic_h(target_k), GeometryValidity::ProviderFailure, SingularityKind::None));
-    fallback.is_bridge = false;
-    fallback.estimated_error = f64::INFINITY;
-    fallback.validity = GeometryValidity::Unresolved;
-    Ok(fallback)
+    // no jet at all: genuine failure, not bridge-derived (no masquerade)
+    Ok(failure_jet(f64::NAN, dyadic_h(target_k), GeometryValidity::ProviderFailure, SingularityKind::None))
 }
 
 /// Core coherent jet construction.
@@ -1350,15 +1437,20 @@ mod tests {
             .unwrap_or_else(|e| e.into_inner());
         // Clear the raster to ensure ScaleAware does not depend on it
         crate::distance_field::clear_distance_field();
+        assert!(!crate::distance_field::is_field_loaded(), "field should be cleared");
         let cfg = crate::manifold::ManifoldConfig::default();
         let c = num_complex::Complex64::new(0.0, 0.0);
-        // query_geometry should now be ScaleAware and succeed without raster
+        // query_geometry should now be ScaleAware and succeed without raster, and must NOT auto-reload raster
         let jet = crate::geometry_provider::query_geometry(c, cfg.epsilon).expect("scale-aware should succeed without raster");
         assert!(!jet.is_bridge, "query_geometry should be scale-aware (is_bridge=false)");
         assert!(jet.d.is_finite());
         assert!(jet.estimated_error.is_finite());
-        // Also check that explicit bridge would fail or need reload, but scale-aware is independent
+        // Prove raster was not silently reloaded via auto-load
+        assert!(!crate::distance_field::is_field_loaded(), "ScaleAware must not auto-reload 1024² raster");
+        // Also verify that explicit bridge without raster would fail (or auto-load if called)
+        // but scale-aware is independent - we don't call bridge here
         // Re-load raster for other tests
         let _ = crate::distance_field::load_builtin_distance_field("mandelbrot_default");
+        assert!(crate::distance_field::is_field_loaded(), "field should be re-loaded for next tests");
     }
 }
