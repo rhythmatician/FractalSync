@@ -74,7 +74,7 @@ describe('inspect mesh vertices in hyperbolic mode', () => {
     console.log('cameraUpperHalf:', cameraUpperHalf);
     console.log('rider c:', dummySnapshot.physics.c, 'rho:', dummySnapshot.physics.rho);
 
-    const mesh = buildTerrainMesh(dummyPatch, 'physical');
+    const mesh = buildTerrainMesh(dummyPatch);
     transformMeshToHyperbolic(mesh, dummyPatch, dummySnapshot, 0);
 
     const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;

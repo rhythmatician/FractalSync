@@ -99,13 +99,13 @@ void main() { color = vec4(1.0); }`);
     const snap = wasm.debugSnapshotFromState(-0.74, 0.132, 0.001, 0.001, undefined, 0, 0, 0, config, NaN, 0);
     if (!snap.physics.upperHalf) throw new Error('WASM upperHalf geometry missing');
     const patch = wasm.debugTerrainPatch(...snap.physics.c, snap.physics.rho * 6, 512, config);
-    const mesh = cockpit.buildTerrainMesh(patch, 'hyperbolic');
+    const mesh = cockpit.buildTerrainMesh(patch);
     scene.add(mesh);
     const rider = await cockpit.buildRider();
     scene.add(rider);
     const camera = new THREE.PerspectiveCamera(60, 1100 / 800, 0.1, 100);
     cockpit.resetCameraSmoothing();
-    cockpit.updateCamera(camera, snap, 'hyperbolic');
+    cockpit.updateCamera(camera, snap);
     const heading = cockpit.getSmoothedCamHeading();
     const frame = hyper.computeHyperbolicCameraFrame(snap, heading);
     hyper.transformMeshToHyperbolic(mesh, patch, snap, heading, frame);
@@ -127,23 +127,10 @@ void main() { color = vec4(1.0); }`);
     return { cases: cases.length, maxError, vertices: upper.count, triangles, updateMs };
   }, golden.hyperbolic_cases);
   await page.screenshot({ path: resolve(tmpdir(), 'fractalsync-hyperbolic-gpu.png') });
-  // Exercise the actual React effect ordering and camera mode rebuilds too.
-  await page.goto(`${server.resolvedUrls.local[0]}debugCockpit.html`);
-  await page.waitForFunction(() => window.__cockpitRuns?.length > 0, undefined, { timeout: 60000 });
-  const cameraButton = page.getByRole('button', { name: /^cam:/ });
-  for (const mode of ['TREADMILL', 'HYPERBOLIC', 'PHYSICAL', 'SCALE-FOLLOW', 'TREADMILL', 'HYPERBOLIC']) {
-    await cameraButton.click();
-    await page.waitForFunction(mode => [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('cam:') && button.textContent.includes(mode)), mode);
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  }
-  await page.getByRole('button', { name: 'play', exact: true }).click();
-  await page.waitForFunction(() => [...document.querySelectorAll('input[type=range]')].some(input => Number(input.value) >= 10));
-  await page.getByRole('button', { name: 'pause', exact: true }).click();
-  await page.screenshot({ path: resolve(tmpdir(), 'fractalsync-hyperbolic-cockpit.png') });
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('\n')}`);
-  console.log(JSON.stringify({ ...result, cameraModeTransitions: 6,
+  console.log(JSON.stringify({
+    ...result,
     screenshot: resolve(tmpdir(), 'fractalsync-hyperbolic-gpu.png'),
-    cockpitScreenshot: resolve(tmpdir(), 'fractalsync-hyperbolic-cockpit.png'),
   }, null, 2));
 } finally {
   await browser.close();

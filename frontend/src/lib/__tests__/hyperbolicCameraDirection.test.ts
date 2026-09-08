@@ -52,7 +52,7 @@ describe('hyperbolic camera lookAt target direction', () => {
   it.each([[1, 0], [-1, 0], [0, 1], [0, -1]])('chases behind velocity (%s, %s)', (vx, vy) => {
     const snap: DebugSnapshot = { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [vx, vy] } };
     resetCameraSmoothing();
-    updateCamera(new THREE.PerspectiveCamera(), snap, 'hyperbolic');
+    updateCamera(new THREE.PerspectiveCamera(), snap);
     const { cameraUpperHalf: camera } = computeHyperbolicCameraFrame(snap, getSmoothedCamHeading());
     expect((camera.x - snap.physics.c[0]) * vx + (camera.y - snap.physics.c[1]) * vy).toBeLessThan(0);
   });
@@ -60,16 +60,16 @@ describe('hyperbolic camera lookAt target direction', () => {
   it('continues following turns while hyperbolic mode is active', () => {
     resetCameraSmoothing();
     const camera = new THREE.PerspectiveCamera();
-    updateCamera(camera, { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [1, 0] } }, 'hyperbolic');
+    updateCamera(camera, { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [1, 0] } });
     const before = getSmoothedCamHeading();
-    updateCamera(camera, { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [0, 1] } }, 'hyperbolic');
+    updateCamera(camera, { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [0, 1] } });
     expect(getSmoothedCamHeading()).not.toBe(before);
   });
 
-  it.each(['physical', 'scale-follow', 'treadmill'] as const)('restores rider scale on return to %s', mode => {
+  it('restores rider scale after the transient Euclidean staging pass', () => {
     const rider = new THREE.Group();
     transformRiderToHyperbolic(rider, dummySnapshot, 0);
-    placeRider(rider, dummySnapshot, () => 0, mode);
+    placeRider(rider, dummySnapshot, () => 0);
     expect(rider.scale.toArray()).toEqual([1, 1, 1]);
   });
 
@@ -98,20 +98,21 @@ describe('hyperbolic camera lookAt target direction', () => {
     resetCameraSmoothing();
     const camera = new THREE.PerspectiveCamera();
     const snap: DebugSnapshot = { ...dummySnapshot, physics: { ...dummySnapshot.physics, velocity: [0, 1] } };
-    updateCamera(camera, snap, 'hyperbolic');
+    updateCamera(camera, snap);
     const heading = getSmoothedCamHeading();
-    updateCamera(camera, { ...snap, physics: { ...snap.physics, velocity: [0, 0] } }, 'hyperbolic');
+    updateCamera(camera, { ...snap, physics: { ...snap.physics, velocity: [0, 0] } });
     expect(getSmoothedCamHeading()).toBe(heading);
-    updateCamera(camera, { ...snap, physics: { ...snap.physics, velocity: [1, 0] } }, 'hyperbolic', 0);
+    updateCamera(camera, { ...snap, physics: { ...snap.physics, velocity: [1, 0] } }, 0);
     expect(getSmoothedCamHeading()).toBe(heading);
   });
 
-  it.each(['physical', 'scale-follow', 'treadmill'] as const)('also chases +y from behind in %s', mode => {
+  it('pins the Three.js camera at the Poincaré ball origin with default orientation', () => {
     resetCameraSmoothing();
     const camera = new THREE.PerspectiveCamera();
     const snap: DebugSnapshot = { ...dummySnapshot, physics: { ...dummySnapshot.physics, c: [0, 0], velocity: [0, 1] } };
-    updateCamera(camera, snap, mode);
-    expect(camera.position.z).toBeGreaterThan(0);
+    updateCamera(camera, snap);
+    expect(camera.position.toArray()).toEqual([0, 0, 0]);
+    expect(camera.quaternion.toArray()).toEqual([0, 0, 0, 1]);
   });
 
   it('checks rider vector in camera space after applying inverse rotation', () => {

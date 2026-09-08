@@ -46,18 +46,11 @@ import {
   placeRider,
   updateCamera,
   updateRiderAnimation,
-  treadmillTransform,
-  physicalTransform,
-  scaleFollowTransform,
-  treadmillTrailTransform,
-  physicalTrailTransform,
-  scaleFollowTrailTransform,
-  buildSceneDressing,
   applyOverlays,
   applyRenderDistance,
+  buildSceneDressing,
   surfaceY,
   DEFAULT_OVERLAYS,
-  type CameraMode,
   type TerrainOverlays,
   getSmoothedCamHeading,
 } from '../lib/cockpitScene';
@@ -199,7 +192,6 @@ export function DebugCockpit(): JSX.Element {
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [riderReady, setRiderReady] = useState(false);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('scale-follow');
   const [cockpitMode, setCockpitMode] = useState<'REPLAY' | 'MANUAL'>('REPLAY');
   const cockpitModeRef = useRef<'REPLAY' | 'MANUAL'>('REPLAY');
   cockpitModeRef.current = cockpitMode;
@@ -237,8 +229,6 @@ export function DebugCockpit(): JSX.Element {
     lastThrottle?: number;
     /** Half-extent of the currently built terrain patch (LOD tracking). */
     lodHalf?: number;
-    /** Camera mode the current terrain mesh was built for. */
-    terrainMode?: CameraMode;
     terrainOverlays?: TerrainOverlays;
   }>({});
 
@@ -418,8 +408,7 @@ export function DebugCockpit(): JSX.Element {
       refs.lodHalf === undefined || Math.abs(refs.lodHalf - lod.half) > lod.half * 0.35;
     const moved =
       !current || Math.hypot(cx - current[0], cy - current[1]) > lod.half * 0.6;
-    const modeChanged = refs.terrainMode !== cameraMode;
-    if (!moved && !lodChanged && !modeChanged && refs.terrain && refs.terrainPatch) {
+    if (!moved && !lodChanged && refs.terrain && refs.terrainPatch) {
       if (refs.terrainOverlays !== overlays) {
         applyOverlays(refs.terrain, refs.terrainPatch, overlays);
         refs.terrainOverlays = overlays;
@@ -433,13 +422,11 @@ export function DebugCockpit(): JSX.Element {
       materials.forEach(material => material.dispose());
     }
     const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
-    // Build the terrain mesh in CHART COORDINATES for the active camera
-    // mode so the Y axis is the right surface from the start: physical
-    // mode uses the asinh-compressed surfaceY(); treadmill mode uses the
-    // exact linear embedding-height chart Y. modeChanged above guarantees
-    // a mode toggle re-emits the geometry instead of reusing a mesh built
-    // for the other mode's Y mapping.
-    const mesh = buildTerrainMesh(patch, cameraMode);
+    // Build the terrain mesh. The static CPU position attribute carries
+    // the fallback embedding; the hyperbolic renderer projects the
+    // authoritative upperHalfPosition attribute on the GPU (see
+    // terrainProjectionUniforms).
+    const mesh = buildTerrainMesh(patch);
     applyOverlays(mesh, patch, overlays);
     refs.terrainOverlays = overlays;
     refs.scene.add(mesh);
@@ -447,14 +434,12 @@ export function DebugCockpit(): JSX.Element {
     refs.terrainPatch = patch;
     refs.terrainCenter = [cx, cy];
     refs.lodHalf = lod.half;
-    refs.terrainMode = cameraMode;
-    // Render distance + fog wall track the patch (and the treadmill chart's
-    // 1/rho magnification) so the mesh edge always hides inside the fog
-    // while the rider stays fog-free — fidelity balanced with performance.
+    // Hyperbolic render distance: fixed near/far + fog wall for the
+    // scaled Poincaré ball.
     if (refs.camera) {
-      applyRenderDistance(refs.camera, refs.scene, cameraMode, frame.physics.rho, lod.half);
+      applyRenderDistance(refs.camera, refs.scene);
     }
-  }, [frame, overlays, cameraMode]);
+  }, [frame, overlays]);
 
   // Per-frame updates: rider, trail, camera.
   useEffect(() => {
@@ -471,8 +456,8 @@ export function DebugCockpit(): JSX.Element {
       surfaceY(riderSurfaceHeight(frame, x, y));
 
     // Heading must advance before the hyperbolic frame consumes it.
-    updateCamera(refs.camera, frame, cameraMode, CANONICAL_DT);
-    placeRider(refs.rider, frame, heightAt, cameraMode);
+    updateCamera(refs.camera, frame, CANONICAL_DT);
+    placeRider(refs.rider, frame, heightAt);
     // Feed the animation gait from authoritative metric speed and forward throttle.
     refs.lastMetricSpeed = frame.physics.metricSpeed;
     refs.lastThrottle = frame.action?.effective.throttle ?? frame.action?.raw.throttle ?? 0;
@@ -489,42 +474,23 @@ export function DebugCockpit(): JSX.Element {
       ...trajectory,
       snapshots: trajectory.snapshots.slice(from, frameIdx + 1),
     };
-    // Build the trail in CHART COORDINATES for the active camera mode:
-    // physical mode uses surfaceY(); treadmill mode uses the linear
-    // embedding-height chart. The trail is rebuilt every frame, so the
-    // camera mode is always reflected.
-    refs.trail = buildTrail(windowTraj, windowTraj.snapshots.length - 1, cameraMode);
+    // Build the trail: the static positions are a fallback; the hyperbolic
+    // pass below projects the authoritative snapshots into the Poincaré
+    // ball. The trail is rebuilt every frame, so the window is always fresh.
+    refs.trail = buildTrail(windowTraj, windowTraj.snapshots.length - 1);
     refs.scene.add(refs.trail);
 
-    if (cameraMode === 'treadmill') {
-      // Chart transform: terrain AND trail shift together so the trail
-      // stays glued to the surface; the rider sits at the chart origin.
-      if (refs.terrain) treadmillTransform(refs.terrain, frame);
-      treadmillTrailTransform(refs.trail, frame);
-      refs.rider.position.set(0, 0, 0);
-    } else if (cameraMode === 'scale-follow') {
-      // Scale-follow: horizontal recentering + 1/rho0 magnification on
-      // terrain and trail (they stay registered), physical vertical, rider
-      // at X/Z origin.
-      if (refs.terrain) scaleFollowTransform(refs.terrain, frame);
-      scaleFollowTrailTransform(refs.trail, frame);
-      refs.rider.position.set(0, heightAt(frame.physics.c[0], frame.physics.c[1]), 0);
-    } else if (cameraMode === 'hyperbolic') {
-      // Hyperbolic mode: project terrain mesh and trail into Poincaré ball
-      // centered at the camera in H^3 with orientation applied.
-      const smoothedHeading = getSmoothedCamHeading();
-      const hyperbolicFrame = computeHyperbolicCameraFrame(frame, smoothedHeading);
-      if (refs.terrain && refs.terrainPatch) {
-        transformMeshToHyperbolic(refs.terrain, refs.terrainPatch, frame, smoothedHeading, hyperbolicFrame);
-      }
-      transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading, hyperbolicFrame);
-      transformRiderToHyperbolic(refs.rider, frame, smoothedHeading, hyperbolicFrame);
-    } else {
-      // Physical: no transforms, rider follows c directly.
-      if (refs.terrain) physicalTransform(refs.terrain);
-      physicalTrailTransform(refs.trail);
+    // Hyperbolic camera (the only camera): project terrain mesh and trail
+    // into the Poincaré ball centered at the camera in H^3 with orientation
+    // applied.
+    const smoothedHeading = getSmoothedCamHeading();
+    const hyperbolicFrame = computeHyperbolicCameraFrame(frame, smoothedHeading);
+    if (refs.terrain && refs.terrainPatch) {
+      transformMeshToHyperbolic(refs.terrain, refs.terrainPatch, frame, smoothedHeading, hyperbolicFrame);
     }
-  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, cameraMode, riderReady]);
+    transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading, hyperbolicFrame);
+    transformRiderToHyperbolic(refs.rider, frame, smoothedHeading, hyperbolicFrame);
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, riderReady]);
 
   // Minimap panel: repaint from the canonical pyramid when the frame moves.
   useEffect(() => {
@@ -798,29 +764,6 @@ export function DebugCockpit(): JSX.Element {
             </button>
           </div>
 
-          <button
-            onClick={() =>
-              setCameraMode((m) =>
-                m === 'physical'
-                  ? 'scale-follow'
-                  : m === 'scale-follow'
-                    ? 'treadmill'
-                    : m === 'treadmill'
-                      ? 'hyperbolic'
-                      : 'physical'
-              )
-            }
-            style={{ background: '#20203a', color: '#dde', border: '1px solid #2c2c48', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11 }}
-          >
-            cam:{' '}
-            {cameraMode === 'physical'
-              ? 'PHYSICAL (x,y,λσ)'
-              : cameraMode === 'scale-follow'
-                ? 'SCALE-FOLLOW (1/ρ X/Z)'
-                : cameraMode === 'treadmill'
-                  ? 'TREADMILL (debug chart)'
-                  : 'HYPERBOLIC (Poincaré)'}
-          </button>
           <button
             onClick={() => setPlayerView((p) => !p)}
             style={{

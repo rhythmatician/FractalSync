@@ -66,7 +66,7 @@ describe('hyperbolic mesh, trail, and rider transformation', () => {
   };
 
   it('uploads terrain once and leaves buffers and normals untouched during camera motion', () => {
-    const mesh = buildTerrainMesh(dummyPatch, 'physical');
+    const mesh = buildTerrainMesh(dummyPatch);
     transformMeshToHyperbolic(mesh, dummyPatch, dummySnapshot, 0);
     const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
     const upper = mesh.geometry.getAttribute('upperHalfPosition') as THREE.BufferAttribute;
