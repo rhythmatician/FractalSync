@@ -164,9 +164,7 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
     if !jet.is_bridge {
         match jet.validity {
             crate::geometry_provider::GeometryValidity::Singular
-            | crate::geometry_provider::GeometryValidity::ProviderFailure
-            | crate::geometry_provider::GeometryValidity::OutsideDomain
-            | crate::geometry_provider::GeometryValidity::Unresolved => {
+            | crate::geometry_provider::GeometryValidity::ProviderFailure => {
                 return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
             }
             _ => {}
@@ -206,9 +204,7 @@ pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2];
     if !jet.is_bridge {
         match jet.validity {
             crate::geometry_provider::GeometryValidity::Singular
-            | crate::geometry_provider::GeometryValidity::ProviderFailure
-            | crate::geometry_provider::GeometryValidity::OutsideDomain
-            | crate::geometry_provider::GeometryValidity::Unresolved => {
+            | crate::geometry_provider::GeometryValidity::ProviderFailure => {
                 return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
             }
             _ => {}

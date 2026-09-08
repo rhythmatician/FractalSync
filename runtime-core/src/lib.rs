@@ -32,6 +32,7 @@ pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
+pub mod scale_relative_map;
 pub mod manifold;
 pub mod proxies;
 pub mod controls;
