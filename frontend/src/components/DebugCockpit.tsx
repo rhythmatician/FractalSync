@@ -558,11 +558,11 @@ export function DebugCockpit(): JSX.Element {
     if (!ready || !juliaCanvasRef.current || juliaRendererRef.current) return;
     let cancelled = false;
     const renderer = new JuliaRenderer(juliaCanvasRef.current);
-    juliaRendererRef.current = renderer;
     (async () => {
       try {
         await renderer.init();
         if (cancelled) return;
+        juliaRendererRef.current = renderer;
         renderer.updateParameters({
           juliaSeed: { real: 0, imag: 0 },
           colorHue: 0.58,
@@ -575,13 +575,16 @@ export function DebugCockpit(): JSX.Element {
         });
         renderer.start();
       } catch (e) {
-        if (!cancelled) console.warn('[debugCockpit] julia panel init failed:', e);
+        // Backend API not available (e.g. CI, standalone mode): skip Julia panel.
+        if (!cancelled) console.warn('[debugCockpit] julia panel init failed (backend API unavailable?):', e);
       }
     })();
     return () => {
       cancelled = true;
-      renderer.stop();
-      juliaRendererRef.current = null;
+      if (juliaRendererRef.current) {
+        juliaRendererRef.current.stop();
+        juliaRendererRef.current = null;
+      }
     };
   }, [ready]);
 
