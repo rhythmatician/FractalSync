@@ -38,7 +38,7 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/2");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/3");
 }
 
 #[test]

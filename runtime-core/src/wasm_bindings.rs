@@ -754,6 +754,26 @@ pub fn manifold_christoffel_symbols(real: f64, imag: f64, config: &ManifoldConfi
     Ok(outer)
 }
 
+/// Scale-aware geometry provider version (ADR 0004).
+#[wasm_bindgen]
+pub fn geometry_provider_version() -> String {
+    crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string()
+}
+
+#[wasm_bindgen]
+pub fn geometry_provider_scale_alpha() -> f64 {
+    crate::geometry_provider::GEOMETRY_SCALE_ALPHA
+}
+
+/// Coherent geometry jet as JSON string (D, grad D, H_D, validity, etc.).
+#[wasm_bindgen]
+pub fn geometry_provider_query(real: f64, imag: f64, epsilon: f64) -> Result<String, JsValue> {
+    let c = RustComplex::new(real, imag);
+    let jet = crate::geometry_provider::query_geometry(c, epsilon).map_err(|e| JsValue::from_str(&e))?;
+    serde_json::to_string(&jet).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+
 /// Geodesic acceleration term: Gamma^i_jk v^j v^k. Returns [ax, ay].
 #[wasm_bindgen]
 pub fn manifold_geodesic_acceleration(

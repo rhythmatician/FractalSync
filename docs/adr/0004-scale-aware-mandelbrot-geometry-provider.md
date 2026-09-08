@@ -1,6 +1,6 @@
 # 0004 — Scale-aware differential Mandelbrot geometry provider
 
-Status: Proposed (2026-09-07)
+Status: Accepted (2026-09-07) — implemented by #145
 Related: #120, #145, #84, #111, #137, #138
 
 This ADR records the destination architecture for the Mandelbrot geometry consumed by FractalSync Physics.

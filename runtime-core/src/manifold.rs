@@ -20,10 +20,13 @@
 //! about music. Generalized forces are summed as covectors and converted to
 //! coordinate acceleration exactly once via G^{-1} (see [`integrate_step`]).
 //!
-//! Signed realm classification comes from the canonical signed SDF sampler in
-//! `distance_field`; this module does not reconstruct sign with an escape
-//! heuristic. Derivative finite-difference steps are derived from the SDF
-//! provider's pixel spacing, not a magic constant.
+//! Signed realm classification and differential geometry come from the
+//! scale-aware GeometryProvider (ADR 0004, `crate::geometry_provider`).
+//! The provider owns a coherent local representation and exposes one
+//! differential jet { D, grad D, H_D } per query; Physics derives rho,
+//! sigma, G, Gamma analytically via chain rule. This replaces the legacy
+//! fixed-raster 1024² field plus nested finite differences of sampled sigma.
+//! The 2048² F/S mip pyramid remains separate Player/cartography evidence.
 
 use num_complex::Complex64;
 
@@ -67,68 +70,49 @@ impl Default for ManifoldConfig {
 /// Signed geometric distance to the Mandelbrot boundary (canonical authority).
 /// D(c) < 0 inside M, D(c) > 0 outside M, D(c) == 0 on The Shore.
 /// Distinct from unsigned geometric distance d(c)=|D(c)| and from the
-/// Shore-proximity sensitivity S(c)=|∇F|/(|∇F|+G0) carried by the minimap
-/// (mip pyramid) — see `crate::minimap`. S is a sensitivity/proximity proxy,
+/// Shore-proximity sensitivity S(c)=|\u2207F|/(|\u2207F|+G0) carried by the minimap
+/// (mip pyramid) \u2014 see `crate::minimap`. S is a sensitivity/proximity proxy,
 /// not geometric distance; d and D are geometric.
 ///
-/// This delegates to the canonical signed SDF sampler in `distance_field`
-/// (`sample_signed_distance_field`), which interpolates the stored signed
-/// values directly. It does NOT reconstruct the sign with a separate
-/// escape-iteration heuristic — the baked artifact is already signed and is
-/// the single authority for realm classification.
+/// This now delegates to the scale-aware GeometryProvider jet (ADR 0004).
+/// The provider samples the signed field through a coherent local representation
+/// and returns a versioned jet { D, grad D, H_D } with scale-aware validity.
+/// D itself is identical to the direct sampler at c, just via the provider
+/// seam so Physics observes one authority.
 pub fn signed_distance(c: Complex64) -> Result<f64, String> {
-    let dist_signed = crate::distance_field::sample_signed_distance_field(&[c])?
-        .into_iter()
-        .next()
-        .ok_or_else(|| "empty distance sample".to_string())?;
-    Ok(dist_signed as f64)
+    // Single provider authority: do not silently bypass the GeometryProvider.
+    // Provider failure must remain visible to callers.
+    let jet = crate::geometry_provider::query_geometry(c, ManifoldConfig::default().epsilon)?;
+    if !jet.d.is_finite() {
+        return Err(format!("geometry provider: D not finite (validity={:?})", jet.validity));
+    }
+    Ok(jet.d)
 }
 
-/// The finite-difference step used for derivatives of the sampled scale field.
+/// Coherent geometry jet from the scale-aware provider. One query yields
+/// D, grad D, H_D, resolved/requested scale, and validity in one coherent
+/// local representation (ADR 0004).
+pub fn geometry_jet(c: Complex64, config: &ManifoldConfig) -> Result<crate::geometry_provider::GeometryJet, String> {
+    crate::geometry_provider::query_geometry(c, config.epsilon)
+}
+
+/// Scale-aware coherent evaluation step.
 ///
-/// This is chosen from the SDF provider's pixel spacing (via
-/// `distance_field::distance_field_metadata`), NOT a magic constant. The
-/// sampled field is a smooth distance estimate; the finite-difference step
-/// must clear the f32 quantization noise floor of the raster while staying
-/// small enough that the local curvature of sigma ~ log2(d_ref/rho) is
-/// resolved. A step of one full pixel is too coarse near the Shore (where
-/// sigma varies as 1/D) and degrades energy conservation, so we use a small
-/// fraction of a pixel. If no field is loaded a conservative fallback is
-/// used so callers still get a deterministic value.
+/// Destination Physics no longer uses a fixed pixel fraction (legacy
+/// `pixel/24` tuning). The step is a scale-relative ruler
+/// `h = alpha * max(rho, epsilon)` supplied by the GeometryProvider, not a
+/// raster texel fraction. This function returns the provider's minimum
+/// Shore-scale step `alpha * epsilon` for diagnostics and backward-compatible
+/// callers that probe `derivative_step() > 0` without a config context. New
+/// code should query `geometry_jet(c, config).requested_scale` or
+/// `geometry_jet(c, config).resolved_scale` directly.
 pub fn derivative_step() -> f64 {
-    // Ensure the distance field is loaded so the provider spacing is stable.
-    // `sample_signed_distance_field` auto-loads the builtin, but `derivative_step`
-    // is called *before* any sampling in `scale_gradient`/`scale_hessian`. If we
-    // returned the fallback on the first call, the first gradient would be
-    // computed with h=1e-4 and the second with h=px/24 (~1.6e-4), breaking
-    // determinism and the metric-consistent drive covector invariant.
-    if crate::distance_field::distance_field_metadata().is_none() {
-        let _ = crate::distance_field::load_builtin_distance_field("mandelbrot_default");
-    }
-    match crate::distance_field::distance_field_metadata() {
-        Some((_, _, _, _, _, _, dx, dy)) => {
-            let px = dx.max(dy);
-            if px > 0.0 {
-                (px * DERIVATIVE_STEP_PIXEL_FRACTION).max(MIN_DERIVATIVE_STEP)
-            } else {
-                DEFAULT_DERIVATIVE_STEP
-            }
-        }
-        None => DEFAULT_DERIVATIVE_STEP,
-    }
+    let eps = ManifoldConfig::default().epsilon;
+    (crate::geometry_provider::GEOMETRY_SCALE_ALPHA * eps)
+        .clamp(crate::geometry_provider::GEOMETRY_MIN_STEP, crate::geometry_provider::GEOMETRY_MAX_STEP)
 }
 
-/// Fraction of a pixel used as the finite-difference step. The field is a
-/// smooth distance estimate, so a step well below one pixel resolves the
-/// local curvature while still clearing the f32 quantization noise floor.
-const DERIVATIVE_STEP_PIXEL_FRACTION: f64 = 1.0 / 24.0;
 
-/// Floor on the pixel-derived step (keeps the step from collapsing if a
-/// provider reports an unusually fine raster).
-const MIN_DERIVATIVE_STEP: f64 = 1e-5;
-
-/// Fallback finite-difference step when no distance field is loaded.
-const DEFAULT_DERIVATIVE_STEP: f64 = 1e-4;
 
 /// Smooth finite-resolution distance using regularization.
 /// rho(c) = sqrt(D(c)^2 + epsilon^2)
@@ -163,61 +147,88 @@ pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, St
     Ok((config.d_ref / rho).log2())
 }
 
-/// Scale gradient ∇sigma(c) computed with central differences.
+/// Scale gradient \u2207sigma(c) derived analytically from the coherent
+/// GeometryJet. The provider supplies D, grad D, H_D from one local
+/// representation; Physics differentiates that representation via chain rule,
+/// not via repeated finite differences of sampled sigma.
 ///
-/// Returns (∂sigma/∂x, ∂sigma/∂y) in world coordinates.
-///
-/// The finite-difference step is derived from the SDF provider's pixel
-/// spacing (see [`derivative_step`]) so it stays above the interpolation
-/// cell / subpixel-refinement noise scale rather than being a magic constant.
+///   rho = sqrt(D^2 + eps^2),  grad rho = (D/rho) grad D
+///   sigma = log2(d_ref / rho), grad sigma = -(1/(rho ln2)) grad rho
 pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
-    let h = derivative_step();
-
-    let c_px = Complex64::new(c.re + h, c.im);
-    let sigma_px = mandelbrot_scale(c_px, config)?;
-
-    let c_mx = Complex64::new(c.re - h, c.im);
-    let sigma_mx = mandelbrot_scale(c_mx, config)?;
-
-    let c_py = Complex64::new(c.re, c.im + h);
-    let sigma_py = mandelbrot_scale(c_py, config)?;
-
-    let c_my = Complex64::new(c.re, c.im - h);
-    let sigma_my = mandelbrot_scale(c_my, config)?;
-
-    let grad_x = (sigma_px - sigma_mx) / (2.0 * h);
-    let grad_y = (sigma_py - sigma_my) / (2.0 * h);
-
-    Ok((grad_x, grad_y))
+    let jet = crate::geometry_provider::query_geometry(c, config.epsilon)?;
+    // Operational validity: destination Physics (is_bridge==false) must not
+    // silently consume Singular/Unresolved/ProviderFailure/OutsideDomain.
+    // For the bridge (is_bridge==true) we report validity in diagnostics
+    // but still proceed best-effort so existing Shore-crossing tests remain
+    // valid until the adaptive destination is available. See ADR 0004.
+    if !jet.is_bridge {
+        match jet.validity {
+            crate::geometry_provider::GeometryValidity::Singular
+            | crate::geometry_provider::GeometryValidity::ProviderFailure
+            | crate::geometry_provider::GeometryValidity::OutsideDomain
+            | crate::geometry_provider::GeometryValidity::Unresolved => {
+                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+            }
+            _ => {}
+        }
+    } else {
+        // Bridge: fail only on hard provider failure. OutsideDomain and
+        // Singular/Unresolved are reported in diagnostics but still allow
+        // best-effort physics so Shore/wall diagnostics remain testable.
+        // Destination (is_bridge==false) fails closed on all non-Regular.
+        match jet.validity {
+            crate::geometry_provider::GeometryValidity::ProviderFailure => {
+                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+            }
+            _ => {}
+        }
+    }
+    if !jet.d.is_finite() || !jet.grad_d[0].is_finite() {
+        return Err("geometry provider failure".to_string());
+    }
+    let g = crate::geometry_provider::grad_sigma_from_jet(&jet, config);
+    if !g[0].is_finite() || !g[1].is_finite() {
+        return Err("grad sigma singular".to_string());
+    }
+    Ok((g[0], g[1]))
 }
 
-/// Scale Hessian (second derivatives) computed with finite differences.
+/// Scale Hessian (second derivatives) derived analytically from the
+/// coherent GeometryJet. This is not a finite difference of sampled gradients;
+/// it is the analytic Hessian of sigma implied by the local D jet.
 ///
-/// Returns [[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]]
-///
-/// The finite-difference step is derived from the SDF provider's pixel
-/// spacing (see [`derivative_step`]). Second differences amplify noise by an
-/// extra 1/h, so the step must clear the interpolation-cell noise scale.
+///   H_rho = (D/rho) H_D + (eps^2/rho^3) grad_D grad_D^T
+///   H_sigma = -(1/ln2)( H_rho/rho - grad_rho grad_rho^T / rho^2 )
 pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
-    let h = derivative_step();
-
-    let c_px = Complex64::new(c.re + h, c.im);
-    let (gx_px, _) = scale_gradient(c_px, config)?;
-
-    let c_mx = Complex64::new(c.re - h, c.im);
-    let (gx_mx, _) = scale_gradient(c_mx, config)?;
-
-    let c_py = Complex64::new(c.re, c.im + h);
-    let (gx_py, gy_py) = scale_gradient(c_py, config)?;
-
-    let c_my = Complex64::new(c.re, c.im - h);
-    let (gx_my, gy_my) = scale_gradient(c_my, config)?;
-
-    let sigma_xx = (gx_px - gx_mx) / (2.0 * h);
-    let sigma_yy = (gy_py - gy_my) / (2.0 * h);
-    let sigma_xy = (gx_py - gx_my) / (2.0 * h); // or (gy_px - gy_mx)/(2h), should match
-
-    Ok([[sigma_xx, sigma_xy], [sigma_xy, sigma_yy]])
+    let jet = crate::geometry_provider::query_geometry(c, config.epsilon)?;
+    // Operational validity: destination must not silently consume Singular/Unresolved.
+    // Bridge reports but proceeds best-effort.
+    if !jet.is_bridge {
+        match jet.validity {
+            crate::geometry_provider::GeometryValidity::Singular
+            | crate::geometry_provider::GeometryValidity::ProviderFailure
+            | crate::geometry_provider::GeometryValidity::OutsideDomain
+            | crate::geometry_provider::GeometryValidity::Unresolved => {
+                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+            }
+            _ => {}
+        }
+    } else {
+        match jet.validity {
+            crate::geometry_provider::GeometryValidity::ProviderFailure => {
+                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+            }
+            _ => {}
+        }
+    }
+    if !jet.d.is_finite() || !jet.hessian_d[0][0].is_finite() {
+        return Err("geometry provider failure".to_string());
+    }
+    let h = crate::geometry_provider::hessian_sigma_from_jet(&jet, config);
+    if !h[0][0].is_finite() {
+        return Err("hessian sigma singular".to_string());
+    }
+    Ok(h)
 }
 
 /// Embedding q(c) = (x, y, sigma(c)) in position-scale space.
