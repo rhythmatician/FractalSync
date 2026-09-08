@@ -10,7 +10,24 @@ import { createServer } from 'vite';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const golden = JSON.parse(await readFile(resolve(root, '../shared/golden_vectors.json'), 'utf8'));
 const shader = await readFile(resolve(root, '../shared/shaders/julia.frag'), 'utf8');
-const server = await createServer({ root, server: { host: '127.0.0.1', port: 0 } });
+const debugCockpitHtml = await readFile(resolve(root, 'debugCockpit.html'), 'utf8');
+const server = await createServer({
+  root,
+  appType: 'custom',
+  server: { host: '127.0.0.1', port: 0 },
+});
+const transformedDebugCockpitHtml = await server.transformIndexHtml('/debugCockpit.html', debugCockpitHtml);
+server.middlewares.use((request, response, next) => {
+  if (request.url === '/__fractal_sync_gpu_harness__.html' || request.url === '/debugCockpit.html') {
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'text/html');
+    response.end(request.url === '/debugCockpit.html'
+      ? transformedDebugCockpitHtml
+      : '<!doctype html><title>FractalSync GPU harness</title>');
+    return;
+  }
+  next();
+});
 await server.listen();
 const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
 try {
@@ -23,8 +40,8 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  // Establish the app origin without waiting for the debug page to finish loading.
-  await page.goto(`${server.resolvedUrls.local[0]}debugCockpit.html`, { waitUntil: 'commit' });
+  // Establish the app origin without mounting the debug cockpit during module setup.
+  await page.goto(`${server.resolvedUrls.local[0]}__fractal_sync_gpu_harness__.html`);
   const result = await page.evaluate(async cases => {
     const THREE = await import('/node_modules/three/build/three.module.js');
     const { HYPERBOLIC_VERTEX_PROJECTION } = await import('/src/lib/hyperbolicTerrainMaterial.ts');
