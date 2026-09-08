@@ -1,9 +1,10 @@
-"""Phase 5: runtime cost + Rust/Python/WASM parity (issue #120)."""
-from __future__ import annotations
+"""Pending runtime measurements beyond existing Rust/Python parity for #120."""
+
+import pytest
 
 
-class TestRuntimeParity:
-    def test_parity_placeholder(self):
-        """Measure runtime cost; verify Rust/Python/WASM schema agreement.
-        Harness present; measurements pending full build."""
-        assert True
+@pytest.mark.skip(
+    reason="Pending #120: runtime cost and additional Rust/Python/WASM measurements are not implemented."
+)
+def test_runtime_measurements_pending() -> None:
+    pytest.fail("Implement missing runtime measurements before removing the skip.")

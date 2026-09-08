@@ -1,34 +1,60 @@
 {
     "issue": 120,
-    "branch": "issue-120",
-    "commits": [
-        "34ac5d3",
-        "8e45dd1"
-    ],
-    "open_limitation": {
-        "description": "Conservative-energy error for Shore-crossing launch does NOT converge under timestep refinement.",
-        "values": {
-            "dt_0_002": "6.24%",
-            "dt_0_001": "11.79%",
-            "dt_0_0005": "14.68%"
+    "status": "open_incomplete",
+    "existing_evidence": "backend/tests/test_manifold_physics.py checks SPD, connection behavior, conservative rollouts, Shore crossing, timestep-refined crossing times, and Rust/Python parity. Pending phases do not replace that evidence.",
+    "phases": {
+        "phase1_metric_behavior": {
+            "status": "skipped_pending",
+            "measurements": null,
+            "reason": "Eigenvalues, condition number, and tangent/normal anisotropy are not computed. Duplicate SPD checks removed."
         },
-        "layer": "geometry / sampled-field derivative authority (leading identified source); integrator contribution remains to be isolated via smooth-field/control experiment",
-        "evidence_file": "docs/debug/scale_relative_physics_validation.md",
-        "note": "Sampled-field derivative quality near Shore / cut loci is the dominant error source. A smoother derivative authority is separate necessary work before conservation through the Shore can become an acceptance criterion. No local smoothing heuristic adopted."
+        "phase2_energy_drift": {
+            "status": "skipped_blocked",
+            "measurements": null,
+            "reason": "Same-kernel analytic versus sampled control needs a Rust field-injection seam. No rollout implemented here."
+        },
+        "phase3_cross_scale": {
+            "status": "skipped_pending",
+            "measurements": null
+        },
+        "phase4_replay_82_111": {
+            "status": "skipped_pending",
+            "measurements": null
+        },
+        "phase5_runtime_parity": {
+            "status": "skipped_pending",
+            "measurements": null
+        }
     },
-    "harnesses": {
-        "phase1_metric_behavior": "backend/tests/test_hyperbolic_validation_phase1.py (SPD/eigenvalue/condition-number; anisotropy measured, NOT claimed vs ideal-SDF)",
-        "phase2_energy_drift": "backend/tests/test_hyperbolic_validation_phase2.py (harness present; open limitation preserved, not masked)",
-        "phase3_cross_scale": "backend/tests/test_hyperbolic_validation_phase3.py (harness present)",
-        "phase4_replay_82_111": "backend/tests/test_hyperbolic_validation_phase4.py (harness present)",
-        "phase5_runtime_parity": "backend/tests/test_hyperbolic_validation_phase5.py (harness present)"
+    "open_limitation": {
+        "description": "Historical Shore-crossing energy error did not converge under timestep refinement.",
+        "evidence_file": "docs/debug/scale_relative_physics_validation.md",
+        "historical_relative_error_percent": [
+            6.24,
+            11.79,
+            14.68
+        ],
+        "historical_dt": [
+            0.002,
+            0.001,
+            0.0005
+        ],
+        "reproduced_in_this_correction": false,
+        "layer": "Sampled-field derivatives are the leading identified source; integrator contribution remains to be isolated.",
+        "provenance_caveat": "Historical documentation describes bilinear sampling. Current source uses bicubic sampling for fields at least 4x4. Record sampler, field, and full configuration when rerunning."
     },
     "verification": {
-        "tdd": "behavior-first at Python mirror seam; no tautological assertions",
-        "typecheck": "py_compile passed on all 5 harness files + limitation doc",
-        "tests": "Phase 1 harness runs; full suite errors pre-existing (runtime_core unbuilt); no new failures",
-        "code_review": "Standards clean / Spec-aligned / No health regression",
-        "commit": "committed to issue-120 (pushed)"
+        "prior_claims_retracted": [
+            "no tautological assertions",
+            "Phase 1 spectrum and anisotropy measurements",
+            "Phase 2 energy harness",
+            "clean substantive review",
+            "py_compile as typecheck"
+        ],
+        "environment": "Project .venv Python 3.13.3 imports runtime_core, ManifoldConfig, manifold_integrate_step, and manifold_induced_metric successfully.",
+        "tests": "Focused pytest run: 26 existing manifold tests passed, 5 phase tests explicitly skipped. Skips are not empirical evidence. Full suite not run.",
+        "typecheck": "Not run for this correction."
     },
-    "blocked_on_close": "runtime_core rebuilt (maturin develop finished) but import blocked by Python env mismatch (system C:\\Python314 vs .venv); empirical measurements (Phase 2-5) require rebuilt module importable by test runner. Issue remains open until measurements execute against real bindings."
+    "next_experiment": "Use the same production Rust integration kernel with a nonconstant smooth analytic field and the sampled Shore field. Compare energy errors over matched physical durations across timestep refinement and record first-crossing errors. Do not substitute a separate Python timestepper.",
+    "blocked_on_close": "Missing empirical measurements, including the same-integrator analytic control. Python imports are not currently blocked."
 }

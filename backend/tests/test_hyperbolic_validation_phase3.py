@@ -1,11 +1,10 @@
-"""Phase 3: cross-scale handling (issue #120)."""
-from __future__ import annotations
+"""Pending cross-scale measurements for #120."""
+
 import pytest
 
 
-class TestCrossScale:
-    def test_cross_scale_placeholder(self):
-        """Cross-scale measurements (Euclidean |dc|, control authority,
-        tangential navigability, explosive launch) — harness present,
-        measurements pending full runtime_core build."""
-        assert True
+@pytest.mark.skip(
+    reason="Pending #120: cross-scale displacement and control authority measurements are not implemented."
+)
+def test_cross_scale_measurements_pending() -> None:
+    pytest.fail("Implement cross-scale measurements before removing the skip.")
