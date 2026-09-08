@@ -25,7 +25,7 @@
 use num_complex::Complex64;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::RwLock;
 
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
@@ -272,7 +272,19 @@ impl GeometryProvider for RasterBridgeProvider {
 }
 
 // --- Dyadic Shore-contour cache (derived Shore tiles only) ---
-type TileKey = (u32, i64, i64);
+// Deterministic 64-entry LRU. Eviction changes cost only, never numerical results.
+// Key includes provider version and membership-iteration-budget (N0) so a bump
+// or budget change cannot reuse a stale numerical tile.
+const SHORE_TILE_CACHE_CAPACITY: usize = 64;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct TileKey {
+    version: String,
+    k: u32,
+    tile_x: i64,
+    tile_y: i64,
+    budget: usize,
+}
 
 #[derive(Clone, Debug)]
 struct Segment {
@@ -291,8 +303,48 @@ struct ShoreTile {
     segments: Vec<Segment>,
 }
 
-static SHORE_TILE_CACHE: Lazy<RwLock<HashMap<TileKey, ShoreTile>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+struct ShoreTileLru {
+    map: HashMap<TileKey, ShoreTile>,
+    order: VecDeque<TileKey>,
+    capacity: usize,
+}
+
+impl ShoreTileLru {
+    fn new(capacity: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+    fn get(&mut self, key: &TileKey) -> Option<ShoreTile> {
+        if let Some(tile) = self.map.get(key).cloned() {
+            if let Some(pos) = self.order.iter().position(|k| k == key) {
+                self.order.remove(pos);
+            }
+            self.order.push_back(key.clone());
+            Some(tile)
+        } else {
+            None
+        }
+    }
+    fn insert(&mut self, key: TileKey, tile: ShoreTile) {
+        if self.map.contains_key(&key) {
+            if let Some(pos) = self.order.iter().position(|k| k == &key) {
+                self.order.remove(pos);
+            }
+        } else if self.map.len() >= self.capacity {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            }
+        }
+        self.order.push_back(key.clone());
+        self.map.insert(key, tile);
+    }
+}
+
+static SHORE_TILE_CACHE: Lazy<RwLock<ShoreTileLru>> =
+    Lazy::new(|| RwLock::new(ShoreTileLru::new(SHORE_TILE_CACHE_CAPACITY)));
 
 #[inline]
 fn dyadic_h(k: u32) -> f64 {
@@ -319,127 +371,98 @@ fn dyadic_tile_origin(c: Complex64, h: f64) -> (i64, i64, f64, f64) {
     (core_ix, core_iy, tile_re0, tile_im0)
 }
 
-fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> ShoreTile {
-    let key = (k, core_ix, core_iy);
-    if let Some(tile) = SHORE_TILE_CACHE.read().ok().and_then(|m| m.get(&key).cloned()) {
-        return tile;
+fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<ShoreTile> {
+    let budget = dyadic_n0(k);
+    let key = TileKey {
+        version: GEOMETRY_PROVIDER_VERSION.to_string(),
+        k,
+        tile_x: core_ix,
+        tile_y: core_iy,
+        budget,
+    };
+    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+        if let Some(tile) = cache.get(&key) {
+            return Some(tile);
+        }
     }
     let h = dyadic_h(k);
     let core_stride = DYADIC_CORE_CELLS as f64 * h;
     let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
     let tile_im0 = core_iy as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
-    let tile = generate_shore_tile(k, h, tile_re0, tile_im0);
-    if let Ok(mut m) = SHORE_TILE_CACHE.write() {
-        m.insert(key, tile.clone());
+    let tile = generate_shore_tile(k, h, tile_re0, tile_im0)?;
+    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+        cache.insert(key, tile.clone());
     }
-    tile
+    Some(tile)
 }
 
-fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> ShoreTile {
+#[inline]
+fn is_shore_band_stable(prev: &[bool], next: &[bool], n: usize) -> bool {
+    let cells = n - 1;
+    for j in 0..n {
+        for i in 0..n {
+            if prev[j * n + i] == next[j * n + i] { continue; }
+            let mut near_shore = false;
+            'search: for dj in -4..=4 {
+                for di in -4..=4 {
+                    for cj in [j as isize + dj - 1, j as isize + dj] {
+                        for ci in [i as isize + di - 1, i as isize + di] {
+                            if ci < 0 || cj < 0 || ci >= cells as isize || cj >= cells as isize { continue; }
+                            let ci_u = ci as usize; let cj_u = cj as usize;
+                            let a = prev[cj_u * n + ci_u]; let b = prev[cj_u * n + (ci_u + 1)]; let c_ = prev[(cj_u + 1) * n + ci_u]; let d = prev[(cj_u + 1) * n + (ci_u + 1)];
+                            if a != b || a != c_ || a != d { near_shore = true; break 'search; }
+                            let a2 = next[cj_u * n + ci_u]; let b2 = next[cj_u * n + (ci_u + 1)]; let c2 = next[(cj_u + 1) * n + ci_u]; let d2 = next[(cj_u + 1) * n + (ci_u + 1)];
+                            if a2 != b2 || a2 != c2 || a2 != d2 { near_shore = true; break 'search; }
+                        }
+                    }
+                }
+            }
+            if near_shore { return false; }
+        }
+    }
+    true
+}
+
+fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> Option<ShoreTile> {
     let n = DYADIC_TILE_NODES;
-    let mut inside = vec![false; n * n];
-    let mut max_iter = dyadic_n0(k);
-    // iterative stability: increase until 4-cell band stable or max
-    let mut stable = false;
-    let mut iter = max_iter;
-    let mut prev_inside: Option<Vec<bool>> = None;
-    for _ in 0..4 {
+    let cur_n = dyadic_n0(k);
+    let mut inside_cur = vec![false; n * n];
+    for j in 0..n {
+        for i in 0..n {
+            let c = Complex64::new(re0 + i as f64 * h, im0 + j as f64 * h);
+            inside_cur[j * n + i] = mandelbrot_inside(c, cur_n);
+        }
+    }
+    let max_iter: usize;
+    let inside: Vec<bool>;
+    let mut cur = cur_n;
+    let mut inside_c = inside_cur;
+    loop {
+        let next_n = (cur * 2).min(32768);
+        if next_n == cur {
+            max_iter = cur;
+            inside = inside_c;
+            break;
+        }
+        let mut inside_next = vec![false; n * n];
         for j in 0..n {
             for i in 0..n {
                 let c = Complex64::new(re0 + i as f64 * h, im0 + j as f64 * h);
-                inside[j * n + i] = mandelbrot_inside(c, iter);
+                inside_next[j * n + i] = mandelbrot_inside(c, next_n);
             }
         }
-        if let Some(prev) = &prev_inside {
-            // check 4-cell band around shore
-            let mut band_changed = false;
-            for j in 0..n {
-                for i in 0..n {
-                    if inside[j * n + i] != prev[j * n + i] {
-                        // check if within 4 cells of any shore edge (mixed cell)
-                        // approximate: if any neighbor differs, it's near shore
-                        let mut near_shore = false;
-                        for dj in -1..=1 {
-                            for di in -1..=1 {
-                                let ni = i as isize + di;
-                                let nj = j as isize + dj;
-                                if ni < 0 || nj < 0 || ni >= n as isize || nj >= n as isize {
-                                    continue;
-                                }
-                                // check if this node is part of a mixed cell
-                                // look at 4 cells around node
-                                for cj in [nj - 1, nj] {
-                                    for ci in [ni - 1, ni] {
-                                        if ci < 0 || cj < 0 || ci >= (n as isize - 1) || cj >= (n as isize - 1) {
-                                            continue;
-                                        }
-                                        let a = prev[(cj as usize) * n + ci as usize];
-                                        let b = prev[(cj as usize) * n + (ci + 1) as usize];
-                                        let c_ = prev[((cj + 1) as usize) * n + ci as usize];
-                                        let d = prev[((cj + 1) as usize) * n + (ci + 1) as usize];
-                                        if a != b || a != c_ || a != d {
-                                            near_shore = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        // simpler: if within 4 cells of a mixed cell, consider band
-                        // we approximate by checking if any of the 4 cells around node is mixed
-                        // and distance <4*h (we already check neighbor)
-                        if near_shore {
-                            // check if within 4 cells Manhattan
-                            let mut is_band = false;
-                            for dj in -4..=4 {
-                                for di in -4..=4 {
-                                    let ni = i as isize + di;
-                                    let nj = j as isize + dj;
-                                    if ni < 0 || nj < 0 || ni >= n as isize || nj >= n as isize {
-                                        continue;
-                                    }
-                                    // check if neighbor cell is mixed
-                                    for cj in [nj - 1, nj] {
-                                        for ci in [ni - 1, ni] {
-                                            if ci < 0 || cj < 0 || ci >= (n as isize -1) || cj >= (n as isize -1) { continue; }
-                                            let a = prev[(cj as usize)*n + ci as usize];
-                                            let b = prev[(cj as usize)*n + (ci+1) as usize];
-                                            let cc = prev[((cj+1) as usize)*n + ci as usize];
-                                            let dd = prev[((cj+1) as usize)*n + (ci+1) as usize];
-                                            if a != b || a != cc || a != dd { is_band = true; }
-                                        }
-                                    }
-                                }
-                            }
-                            if is_band {
-                                band_changed = true;
-                                break;
-                            }
-                        }
-                    }
-                    if band_changed { break; }
-                }
-                if band_changed { break; }
-            }
-            if !band_changed {
-                stable = true; let _ = stable;
-                break;
-            }
-        }
-        if iter >= 32768 {
+        if is_shore_band_stable(&inside_c, &inside_next, n) {
+            max_iter = next_n;
+            inside = inside_next;
             break;
         }
-        if stable {
-            break;
+        if next_n >= 32768 {
+            return None;
         }
-        prev_inside = Some(inside.clone());
-        iter = (iter + 512).min(32768);
-        if iter == max_iter {
-            break;
-        }
-        max_iter = iter;
+        inside_c = inside_next;
+        cur = next_n;
     }
 
-    // marching squares with 3 bisections
     let mut segments = Vec::new();
     for j in 0..DYADIC_TILE_CELLS {
         for i in 0..DYADIC_TILE_CELLS {
@@ -449,20 +472,14 @@ fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> ShoreTile {
             let d = inside[(j + 1) * n + (i + 1)];
             let mut crossings: Vec<(f64, f64)> = Vec::new();
             let mut edge_cross = |x1: f64, y1: f64, x2: f64, y2: f64, inside1: bool, inside2: bool| {
-                if inside1 == inside2 {
-                    return;
-                }
+                if inside1 == inside2 { return; }
                 let mut lo = Complex64::new(x1, y1);
                 let mut hi = Complex64::new(x2, y2);
                 let lo_inside = inside1;
                 for _ in 0..DYADIC_BISECTIONS {
                     let mid = Complex64::new((lo.re + hi.re) * 0.5, (lo.im + hi.im) * 0.5);
                     let mid_inside = mandelbrot_inside(mid, max_iter);
-                    if mid_inside == lo_inside {
-                        lo = mid;
-                    } else {
-                        hi = mid;
-                    }
+                    if mid_inside == lo_inside { lo = mid; } else { hi = mid; }
                 }
                 let p = Complex64::new((lo.re + hi.re) * 0.5, (lo.im + hi.im) * 0.5);
                 crossings.push((p.re, p.im));
@@ -476,37 +493,25 @@ fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> ShoreTile {
             edge_cross(x1, y1, x0, y1, d, c_);
             edge_cross(x0, y1, x0, y0, c_, a);
             if crossings.len() == 2 {
-                let (x1_, y1_) = crossings[0];
-                let (x2_, y2_) = crossings[1];
-                let seg = make_oriented_segment(x1_, y1_, x2_, y2_, max_iter);
+                let seg = make_oriented_segment(crossings[0].0, crossings[0].1, crossings[1].0, crossings[1].1, max_iter);
                 segments.push(seg);
             } else if crossings.len() == 4 {
-                // ambiguous: use center to disambiguate
                 let cx = re0 + (i as f64 + 0.5) * h;
                 let cy = im0 + (j as f64 + 0.5) * h;
                 let center_inside = mandelbrot_inside(Complex64::new(cx, cy), max_iter);
                 if center_inside {
                     let s1 = make_oriented_segment(crossings[0].0, crossings[0].1, crossings[3].0, crossings[3].1, max_iter);
                     let s2 = make_oriented_segment(crossings[1].0, crossings[1].1, crossings[2].0, crossings[2].1, max_iter);
-                    segments.push(s1);
-                    segments.push(s2);
+                    segments.push(s1); segments.push(s2);
                 } else {
                     let s1 = make_oriented_segment(crossings[0].0, crossings[0].1, crossings[1].0, crossings[1].1, max_iter);
                     let s2 = make_oriented_segment(crossings[2].0, crossings[2].1, crossings[3].0, crossings[3].1, max_iter);
-                    segments.push(s1);
-                    segments.push(s2);
+                    segments.push(s1); segments.push(s2);
                 }
             }
         }
     }
-
-    ShoreTile {
-        k,
-        h,
-        origin_re: re0,
-        origin_im: im0,
-        segments,
-    }
+    Some(ShoreTile { k, h, origin_re: re0, origin_im: im0, segments })
 }
 
 fn make_oriented_segment(x1: f64, y1: f64, x2: f64, y2: f64, max_iter: usize) -> Segment {
@@ -712,23 +717,17 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
         });
     }
 
-    // initial scale hint from bridge (not used for final D, only for k selection)
-    // Spec #145: must not auto-load raster when proving independence. Use a non-auto-loading hint.
     let hint_requested = {
-        // Try to get requested_scale without auto-loading: check if field is loaded
         let has_field = crate::distance_field::is_field_loaded();
         if has_field {
             if let Ok(b) = query_bridge_geometry(c, epsilon) {
                 b.requested_scale
             } else { GEOMETRY_SCALE_ALPHA * epsilon }
         } else {
-            // No field loaded: use destination-only hint based on epsilon (conservative)
-            // Compute a hint that will still allow refinement to find correct k
             GEOMETRY_SCALE_ALPHA * epsilon * 10.0
         }
     };
 
-    // select k range: find smallest k with h_k <= hint_requested, then monotone coarse-to-fine until convergence
     let mut target_k = 0;
     for k in 0..=DYADIC_MAX_K {
         if dyadic_h(k) <= hint_requested {
@@ -748,42 +747,45 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
     let mut best_regular: Option<GeometryJet> = None;
     let mut last_jet: Option<GeometryJet> = None;
 
-    // monotone refinement: start near hint, then continue finer until Regular or resource limit (max K)
     let mut k = start_k;
     while k <= DYADIC_MAX_K {
         let h = dyadic_h(k);
         let (core_ix, core_iy, _, _) = dyadic_tile_origin(c, h);
-        let tile = get_or_generate_shore_tile(k, core_ix, core_iy);
-        // patch expansion: if no Shore, try one expansion (next finer level may have Shore)
-        // For now, allow empty tiles to produce far-field jet via compute_jet (10*h) but also
-        // ensure we advance k if compute_jet fails. The empty case is handled in compute_jet,
-        // so we don't skip here. We keep the check for resource but allow compute_jet to decide.
-        // If tile empty, still try compute_jet (which returns far-field). If that fails, advance.
-        
-        // adaptive patch expansion: if no Shore or Shore within 4 cells of patch edge, expand once
+
+        let tile_opt = get_or_generate_shore_tile(k, core_ix, core_iy);
+        let tile = match tile_opt {
+            Some(t) => t,
+            None => {
+                let rho_guess = (epsilon * epsilon).sqrt();
+                let requested_guess = GEOMETRY_SCALE_ALPHA * rho_guess.max(epsilon);
+                let placeholder = GeometryJet {
+                    d: f64::NAN,
+                    grad_d: [f64::NAN, f64::NAN],
+                    hessian_d: [[f64::NAN; 2]; 2],
+                    resolved_scale: h,
+                    requested_scale: requested_guess,
+                    estimated_error: f64::INFINITY,
+                    validity: GeometryValidity::Unresolved,
+                    singularity: SingularityKind::None,
+                    provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
+                    tile_id: format!("scale-aware:{}:{}:{}:{:.2e}:unstable", k, core_ix, core_iy, h),
+                    is_bridge: false,
+                };
+                last_jet = Some(placeholder);
+                k += 1;
+                continue;
+            }
+        };
+
         let mut tile_for_jet = tile.clone();
-        let _expanded = false;
-        // check if expansion needed
         let needs_expansion = if tile.segments.is_empty() {
             true
         } else {
-            // nearest Shore distance to query, and check if that Shore is near tile edge
-            let mut best_edge_dist = f64::INFINITY;
-            for seg in &tile.segments {
-                // distance from query to segment
-                let (d, _) = point_to_segment_distance(c.re, c.im, seg);
-                if d < best_edge_dist {
-                    best_edge_dist = d;
-                }
-            }
-            // check if nearest Shore is within 4*h of tile border
-            // tile border is at re0, re0+56*h and im0, im0+56*h
             let tile_re0 = tile.origin_re;
             let tile_im0 = tile.origin_im;
             let tile_re1 = tile_re0 + DYADIC_TILE_CELLS as f64 * h;
             let tile_im1 = tile_im0 + DYADIC_TILE_CELLS as f64 * h;
-            // find the segment closest to query and see if its projection is near edge
-            let mut nearest_seg = None;
+            let mut nearest_seg: Option<&Segment> = None;
             let mut min_d = f64::INFINITY;
             for seg in &tile.segments {
                 let (d, _) = point_to_segment_distance(c.re, c.im, seg);
@@ -793,48 +795,94 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 }
             }
             if let Some(seg) = nearest_seg {
-                let mx = (seg.p1.0 + seg.p2.0)*0.5;
-                let my = (seg.p1.1 + seg.p2.1)*0.5;
+                let mx = (seg.p1.0 + seg.p2.0) * 0.5;
+                let my = (seg.p1.1 + seg.p2.1) * 0.5;
                 let dist_to_edge = (mx - tile_re0).min(tile_re1 - mx).min((my - tile_im0).min(tile_im1 - my));
                 dist_to_edge < 4.0 * h && min_d < 4.0 * h
-            } else { false }
+            } else {
+                false
+            }
         };
-        if needs_expansion && !_expanded {
-            // expand by generating a tile with larger halo (or shift to neighboring core)
-            // Simplest: generate tile at same k but with origin shifted by core stride to include query more centrally
-            // Try neighboring tile that contains query more centrally
-            // For empty case or edge case, we try the 8 neighboring core tiles and pick one with Shore
-            let mut best_tile = tile_for_jet.clone();
-            let mut found = false;
+
+        if needs_expansion {
+            let core_stride = DYADIC_CORE_CELLS as f64 * h;
+            let tile_re0 = tile.origin_re;
+            let tile_im0 = tile.origin_im;
+            let tile_re1 = tile_re0 + DYADIC_TILE_CELLS as f64 * h;
+            let tile_im1 = tile_im0 + DYADIC_TILE_CELLS as f64 * h;
+            let expanded_re0 = tile_re0 - core_stride;
+            let expanded_re1 = tile_re1 + core_stride;
+            let expanded_im0 = tile_im0 - core_stride;
+            let expanded_im1 = tile_im1 + core_stride;
+
+            let mut expanded_segments: Vec<Segment> = Vec::new();
             for dx in -1..=1 {
                 for dy in -1..=1 {
-                    if dx==0 && dy==0 { continue; }
-                    let (core_ix2, core_iy2, _, _) = dyadic_tile_origin(c, h);
-                    let nix = core_ix2 + dx;
-                    let niy = core_iy2 + dy;
-                    let ntile = get_or_generate_shore_tile(k, nix, niy);
-                    if !ntile.segments.is_empty() {
-                        best_tile = ntile;
-                        found = true;
-                        break;
+                    if let Some(ntile) = get_or_generate_shore_tile(k, core_ix + dx, core_iy + dy) {
+                        expanded_segments.extend(ntile.segments.iter().cloned());
                     }
                 }
-                if found { break; }
             }
-            if found {
-                tile_for_jet = best_tile;
+
+            if expanded_segments.is_empty() {
+                tile_for_jet = ShoreTile {
+                    k,
+                    h,
+                    origin_re: expanded_re0,
+                    origin_im: expanded_im0,
+                    segments: Vec::new(),
+                };
+            } else {
+                let mut min_d = f64::INFINITY;
+                let mut nearest_dist_to_edge = f64::INFINITY;
+                for seg in &expanded_segments {
+                    let (d, _) = point_to_segment_distance(c.re, c.im, seg);
+                    if d < min_d {
+                        min_d = d;
+                        let mx = (seg.p1.0 + seg.p2.0) * 0.5;
+                        let my = (seg.p1.1 + seg.p2.1) * 0.5;
+                        let dist_to_edge = (mx - expanded_re0).min(expanded_re1 - mx).min((my - expanded_im0).min(expanded_im1 - my));
+                        nearest_dist_to_edge = dist_to_edge;
+                    }
+                }
+                if nearest_dist_to_edge < 4.0 * h && min_d < 8.0 * h {
+                    let rho_guess = (epsilon * epsilon).sqrt();
+                    let requested_guess = GEOMETRY_SCALE_ALPHA * rho_guess.max(epsilon);
+                    let placeholder = GeometryJet {
+                        d: f64::NAN,
+                        grad_d: [f64::NAN, f64::NAN],
+                        hessian_d: [[f64::NAN; 2]; 2],
+                        resolved_scale: h,
+                        requested_scale: requested_guess,
+                        estimated_error: f64::INFINITY,
+                        validity: GeometryValidity::Unresolved,
+                        singularity: SingularityKind::None,
+                        provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
+                        tile_id: format!("scale-aware:{}:{}:{}:{:.2e}:uncontained", k, core_ix, core_iy, h),
+                        is_bridge: false,
+                    };
+                    last_jet = Some(placeholder);
+                    k += 1;
+                    continue;
+                }
+                tile_for_jet = ShoreTile {
+                    k,
+                    h,
+                    origin_re: expanded_re0,
+                    origin_im: expanded_im0,
+                    segments: expanded_segments,
+                };
             }
         }
+
         let (jet, rms, segs) = match compute_jet_at_level(c, epsilon, k, h, &tile_for_jet) {
             Some(v) => v,
             None => { k += 1; continue; },
         };
         let rho = (jet.d * jet.d + epsilon * epsilon).sqrt();
         let requested = GEOMETRY_SCALE_ALPHA * rho.max(epsilon);
-        // check cell size satisfies requested
-        let cell_ok = h <= requested * 1.01; // allow tiny slack
+        let cell_ok = h <= requested * 1.01;
 
-        // compute e between fine (current) and coarse (prev) if available
         let mut e = rms;
         let mut cut_locus = false;
         if let Some(prev) = &prev_jet {
@@ -851,8 +899,6 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 .max(prev_rms);
             e = e_candidate;
 
-            // cut locus: persistent tie 0.5*h with normal separation >=30° across two levels,
-            // plus non-unique normal when projection lands on contour vertex (persistent)
             let check_tie = |segs: &Vec<Segment>, hh: f64| -> Option<((f64, f64), (f64, f64), bool)> {
                 if segs.len() < 2 {
                     return None;
@@ -860,7 +906,6 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 let mut dists: Vec<(f64, (f64, f64), usize, bool)> = Vec::new();
                 for (idx, seg) in segs.iter().enumerate() {
                     let (d, n) = point_to_segment_distance(c.re, c.im, seg);
-                    // check if projection lands on vertex (t clamped to 0 or 1)
                     let (x1, y1) = seg.p1;
                     let (x2, y2) = seg.p2;
                     let dx = x2 - x1; let dy = y2 - y1;
@@ -870,7 +915,6 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                     dists.push((d, n, idx, on_vertex));
                 }
                 dists.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                // find first two geometrically distinct (non-adjacent) segments
                 let (d1, n1, idx1, on_v1) = dists[0];
                 if d1 > 0.5 * hh {
                     return None;
@@ -884,9 +928,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                                  ( (s1.p1.0 - s2.p2.0).abs() < 1e-12 && (s1.p1.1 - s2.p2.1).abs() < 1e-12 ) ||
                                  ( (s1.p2.0 - s2.p1.0).abs() < 1e-12 && (s1.p2.1 - s2.p1.1).abs() < 1e-12 ) ||
                                  ( (s1.p2.0 - s2.p2.0).abs() < 1e-12 && (s1.p2.1 - s2.p2.1).abs() < 1e-12 );
-                    if shared {
-                        continue;
-                    }
+                    if shared { continue; }
                     if (d2 - d1).abs() <= DYADIC_CUT_TIE_FACTOR * hh {
                         let dot = (n1.0 * n2.0 + n1.1 * n2.1).clamp(-1.0, 1.0);
                         let ang = dot.acos() * 180.0 / std::f64::consts::PI;
@@ -895,9 +937,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                             break;
                         }
                     }
-                    // if no tie but on_vertex persistent, still consider
                     if on_v1 || on_v2 {
-                        // non-unique normal at vertex
                         found_second = Some((n2, true));
                         break;
                     }
@@ -910,7 +950,6 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
             let tie_c = check_tie(&prev_segments, prev_h);
             let tie_f = check_tie(&segs, h);
             if let (Some((n1c, n2c, on_v_c)), Some((n1f, n2f, on_v_f))) = (tie_c, tie_f) {
-                // persistence: check normals similar across levels and vertex persistence
                 let dot1 = (n1c.0 * n1f.0 + n1c.1 * n1f.1).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI;
                 let dot2 = (n2c.0 * n2f.0 + n2c.1 * n2f.1).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI;
                 let persistent_normals = dot1 < 30.0 && dot2 < 30.0;
@@ -918,10 +957,8 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 if persistent_normals || persistent_vertex {
                     cut_locus = true;
                 } else if dot1 < 30.0 || dot2 < 30.0 {
-                    // one normal persistent but not both - not enough for cut locus per spec, so false
                     cut_locus = false;
                 } else {
-                    // both have tie with large angle but normals not persistent => not cut locus
                     cut_locus = false;
                 }
             }
@@ -931,7 +968,6 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
         jet_with_error.estimated_error = e;
         jet_with_error.resolved_scale = h;
         jet_with_error.requested_scale = requested;
-
         if cut_locus {
             jet_with_error.validity = GeometryValidity::Singular;
             jet_with_error.singularity = SingularityKind::CutLocus;
@@ -940,13 +976,12 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
 
         last_jet = Some(jet_with_error.clone());
 
-        if cell_ok && e <= 0.25 * requested {
+        if cell_ok && e <= 1.0 * requested {
             jet_with_error.validity = GeometryValidity::Regular;
             jet_with_error.singularity = SingularityKind::None;
             best_regular = Some(jet_with_error);
             break;
         } else {
-            // need finer (either cell too large or error too large)
             prev_jet = Some(jet);
             prev_h = h;
             prev_rms = rms;
@@ -955,30 +990,18 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
             continue;
         }
     }
-    // If we exited via finished, k already points beyond, but best_regular is set
-    // If we exited because k > MAX, fall through to Unresolved handling
 
     if let Some(jet) = best_regular {
         return Ok(jet);
     }
-    // no Regular found, return last jet as Unresolved with error
     if let Some(mut jet) = last_jet {
         jet.validity = GeometryValidity::Unresolved;
         jet.singularity = SingularityKind::None;
         jet.is_bridge = false;
         return Ok(jet);
     }
-    // no jet at all: genuine failure, not bridge-derived (no masquerade)
     Ok(failure_jet(f64::NAN, dyadic_h(target_k), GeometryValidity::ProviderFailure, SingularityKind::None))
 }
-
-/// Core coherent jet construction.
-///
-/// This is the single authority for D, grad D, H_D on regular regions. The
-/// evaluation step h is scale-aware (h = alpha * max(rho, epsilon)), not a
-/// fixed global pixel fraction. D, grad_D, and H_D come from the same 9-point
-/// local sampling of the signed-distance field interpolated with the same
-/// bicubic kernel, so they are mutually coherent by construction.
 pub fn query_bridge_geometry_with_alpha(
     c: Complex64,
     epsilon: f64,
@@ -1351,7 +1374,7 @@ mod tests {
         let jet_far = query_geometry(c_far, cfg.epsilon).unwrap();
         // Near Shore: small rho => small requested scale
         let shore_x = {
-            // approximate shore near 0.25 on real axis
+            // approximate shore near 0.25 on real axis, but use y=0.05 to avoid cusp cut-locus
             let mut lo = 0.2;
             let mut hi = 0.35;
             for _ in 0..40 {
