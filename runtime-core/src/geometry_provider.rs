@@ -825,24 +825,13 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
             }
 
             if expanded_segments.is_empty() {
-                let rho_guess = (epsilon * epsilon).sqrt();
-                let requested_guess = GEOMETRY_SCALE_ALPHA * rho_guess.max(epsilon);
-                let placeholder = GeometryJet {
-                    d: f64::NAN,
-                    grad_d: [f64::NAN, f64::NAN],
-                    hessian_d: [[f64::NAN; 2]; 2],
-                    resolved_scale: h,
-                    requested_scale: requested_guess,
-                    estimated_error: f64::INFINITY,
-                    validity: GeometryValidity::Unresolved,
-                    singularity: SingularityKind::None,
-                    provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
-                    tile_id: format!("scale-aware:{}:{}:{}:{:.2e}:empty-expanded", k, core_ix, core_iy, h),
-                    is_bridge: false,
+                tile_for_jet = ShoreTile {
+                    k,
+                    h,
+                    origin_re: expanded_re0,
+                    origin_im: expanded_im0,
+                    segments: Vec::new(),
                 };
-                last_jet = Some(placeholder);
-                k += 1;
-                continue;
             } else {
                 let mut min_d = f64::INFINITY;
                 let mut nearest_dist_to_edge = f64::INFINITY;
@@ -987,8 +976,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
 
         last_jet = Some(jet_with_error.clone());
 
-        let has_prev = prev_jet.is_some();
-        if has_prev && cell_ok && e <= 0.25 * requested {
+        if cell_ok && e <= 1.0 * requested {
             jet_with_error.validity = GeometryValidity::Regular;
             jet_with_error.singularity = SingularityKind::None;
             best_regular = Some(jet_with_error);
@@ -1405,9 +1393,8 @@ mod tests {
         };
         let c_near = Complex64::new(shore_x, 0.0);
         let jet_near = query_geometry(c_near, cfg.epsilon).unwrap();
-        // With strict has_prev+0.25 and expanded-empty->Unresolved, both far and near may be Unresolved at deep with req~1e-05, so use >= with tolerance
         assert!(
-            jet_far.requested_scale + 1e-12 >= jet_near.requested_scale,
+            jet_far.requested_scale > jet_near.requested_scale,
             "far requested {} should exceed near {}",
             jet_far.requested_scale,
             jet_near.requested_scale
