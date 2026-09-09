@@ -33,6 +33,10 @@ pub fn clear_distance_field() {
     }
 }
 
+pub fn is_field_loaded() -> bool {
+    DIST_FIELD.read().ok().and_then(|g| g.as_ref().map(|_| true)).unwrap_or(false)
+}
+
 pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
     Err("loading .npy from Rust is not implemented in this build; use `set_distance_field_from_vec` (Python) or `load_builtin_distance_field` instead".into())
 }
