@@ -152,6 +152,35 @@ export function upperHalfGeometry(snap: DebugSnapshot) {
 /** Intrinsic distance toward the torso, along presentation up, which is -z_H. */
 export const HYPERBOLIC_TARGET_HEIGHT = 0.04;
 
+function riderSurfaceNormalUpperHalf(gradient: readonly [number, number]): THREE.Vector3 {
+  // The upper-half metric is conformal to Euclidean space, so the graph normal
+  // has the same direction under either metric. The presentation-facing normal
+  // points toward decreasing z_H, matching transformRiderToHyperbolic().
+  return new THREE.Vector3(gradient[0], gradient[1], -1).normalize();
+}
+
+/**
+ * Parallel-transport an upper-half tangent direction from `point` to `camera`,
+ * expressed in the camera-centered Poincaré/scene tangent space.
+ *
+ * The camera-centering isometry sends the unique H3 geodesic point -> camera
+ * to a radial geodesic ending at the Poincaré origin. Along a radial Poincaré
+ * geodesic, parallel transport changes Euclidean tangent magnitude by only a
+ * positive conformal scale. Therefore its direction at the origin is exactly
+ * the normalized direction of the existing projection differential at point.
+ */
+export function transportUpperHalfDirectionToCameraOrigin(
+  point: UpperHalfPoint,
+  tangent: THREE.Vector3,
+  camera: UpperHalfPoint
+): THREE.Vector3 {
+  const direction = projectUpperHalfTangent(point, tangent, camera);
+  if (direction.lengthSq() < 1e-30) {
+    throw new Error('Cannot transport a degenerate upper-half tangent direction.');
+  }
+  return direction.normalize();
+}
+
 export function computeHyperbolicCameraFrame(
   snap: DebugSnapshot,
   smoothedHeading: number | null
@@ -173,9 +202,15 @@ export function computeHyperbolicCameraFrame(
     z: Math.max(Math.min(groundZ, riderZ) / 1.35, riderZ / 4),
   };
   const targetUpperHalf = { x: cx, y: cy, z: riderZ * Math.exp(-HYPERBOLIC_TARGET_HEIGHT / a) };
+  const riderPoint = { x: cx, y: cy, z: riderZ };
+  const cameraUp = transportUpperHalfDirectionToCameraOrigin(
+    riderPoint,
+    riderSurfaceNormalUpperHalf(gradient),
+    cameraUpperHalf
+  );
   const target = poincareToSceneVector(projectPointToCameraPoincare(targetUpperHalf, cameraUpperHalf));
   const rotationMatrix = new THREE.Matrix4().lookAt(
-    new THREE.Vector3(), target, new THREE.Vector3(0, 1, 0)
+    new THREE.Vector3(), target, cameraUp
   );
   return { cameraUpperHalf, targetUpperHalf, rotationMatrix };
 }
@@ -263,7 +298,7 @@ export function transformRiderToHyperbolic(
     forward.set(dx, dy, geometry.gradient[0] * dx + geometry.gradient[1] * dy);
   }
   forward = projectUpperHalfTangent(point, forward.normalize(), frame.cameraUpperHalf).transformDirection(invRot);
-  const upperNormal = new THREE.Vector3(geometry.gradient[0], geometry.gradient[1], -1).normalize();
+  const upperNormal = riderSurfaceNormalUpperHalf(geometry.gradient);
   const up = projectUpperHalfTangent(point, upperNormal, frame.cameraUpperHalf).transformDirection(invRot);
   // Remove roundoff and enforce a right-handed object frame after the scene reflection.
   const lateral = new THREE.Vector3().crossVectors(forward, up).normalize();
