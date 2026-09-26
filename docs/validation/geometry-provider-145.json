@@ -1,0 +1,702 @@
+[
+  {
+    "c": [
+      -0.5,
+      0.1
+    ],
+    "case": "regular_interior",
+    "epsilon": 0.01,
+    "first_us": 13478,
+    "jet": {
+      "D": -0.2386267043083758,
+      "estimated_error": 0.0008034077248675091,
+      "grad_D": [
+        -0.9689995175762849,
+        0.23254575313639003
+      ],
+      "hessian_D": [
+        [
+          0.12579847247824105,
+          0.5502974973566914
+        ],
+        [
+          0.5502974973566914,
+          2.8347646325562224
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.023883614468726676,
+      "resolved_scale": 0.015625,
+      "singularity": "none",
+      "tile_id": "scale-aware:3:-4:0:1.56e-2",
+      "validity": "regular"
+    },
+    "warm_us": 497
+  },
+  {
+    "c": [
+      -0.5,
+      0.1
+    ],
+    "case": "regular_interior",
+    "epsilon": 0.0001,
+    "first_us": 487,
+    "jet": {
+      "D": -0.2386267043083758,
+      "estimated_error": 0.0008034077248675091,
+      "grad_D": [
+        -0.9689995175762849,
+        0.23254575313639003
+      ],
+      "hessian_D": [
+        [
+          0.12579847247824105,
+          0.5502974973566914
+        ],
+        [
+          0.5502974973566914,
+          2.8347646325562224
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.023862672526160394,
+      "resolved_scale": 0.015625,
+      "singularity": "none",
+      "tile_id": "scale-aware:3:-4:0:1.56e-2",
+      "validity": "regular"
+    },
+    "warm_us": 481
+  },
+  {
+    "c": [
+      -0.5,
+      0.1
+    ],
+    "case": "regular_interior",
+    "epsilon": 1e-6,
+    "first_us": 481,
+    "jet": {
+      "D": -0.2386267043083758,
+      "estimated_error": 0.0008034077248675091,
+      "grad_D": [
+        -0.9689995175762849,
+        0.23254575313639003
+      ],
+      "hessian_D": [
+        [
+          0.12579847247824105,
+          0.5502974973566914
+        ],
+        [
+          0.5502974973566914,
+          2.8347646325562224
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.023862670431047114,
+      "resolved_scale": 0.015625,
+      "singularity": "none",
+      "tile_id": "scale-aware:3:-4:0:1.56e-2",
+      "validity": "regular"
+    },
+    "warm_us": 481
+  },
+  {
+    "c": [
+      -0.5,
+      0.1
+    ],
+    "case": "regular_interior",
+    "epsilon": 1e-8,
+    "first_us": 466,
+    "jet": {
+      "D": -0.2386267043083758,
+      "estimated_error": 0.0008034077248675091,
+      "grad_D": [
+        -0.9689995175762849,
+        0.23254575313639003
+      ],
+      "hessian_D": [
+        [
+          0.12579847247824105,
+          0.5502974973566914
+        ],
+        [
+          0.5502974973566914,
+          2.8347646325562224
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0238626704308376,
+      "resolved_scale": 0.015625,
+      "singularity": "none",
+      "tile_id": "scale-aware:3:-4:0:1.56e-2",
+      "validity": "regular"
+    },
+    "warm_us": 455
+  },
+  {
+    "c": [
+      0.3,
+      0.05
+    ],
+    "case": "regular_shore_approach",
+    "epsilon": 0.01,
+    "first_us": 42607,
+    "jet": {
+      "D": -0.017325188537526442,
+      "estimated_error": 0.000283148835239956,
+      "grad_D": [
+        0.7251853647724431,
+        -0.6840652154442046
+      ],
+      "hessian_D": [
+        [
+          2.8919764588646046,
+          2.604115536662732
+        ],
+        [
+          2.604115536662732,
+          4.4378050427087175
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.002000405353574214,
+      "resolved_scale": 0.001953125,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:6:19:3:1.95e-3",
+      "validity": "singular"
+    },
+    "warm_us": 590
+  },
+  {
+    "c": [
+      0.3,
+      0.05
+    ],
+    "case": "regular_shore_approach",
+    "epsilon": 0.0001,
+    "first_us": 16948,
+    "jet": {
+      "D": -0.0172204607330733,
+      "estimated_error": 0.00010472780445314189,
+      "grad_D": [
+        0.7332850204771613,
+        -0.6784030301553159
+      ],
+      "hessian_D": [
+        [
+          2.396635361658923,
+          1.136197143588447
+        ],
+        [
+          1.136197143588447,
+          2.212334206571427
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0017220751082903424,
+      "resolved_scale": 0.0009765625,
+      "singularity": "none",
+      "tile_id": "scale-aware:7:38:6:9.77e-4",
+      "validity": "regular"
+    },
+    "warm_us": 677
+  },
+  {
+    "c": [
+      0.3,
+      0.05
+    ],
+    "case": "regular_shore_approach",
+    "epsilon": 1e-6,
+    "first_us": 649,
+    "jet": {
+      "D": -0.0172204607330733,
+      "estimated_error": 0.00010472780445314189,
+      "grad_D": [
+        0.7332850204771613,
+        -0.6784030301553159
+      ],
+      "hessian_D": [
+        [
+          2.396635361658923,
+          1.136197143588447
+        ],
+        [
+          1.136197143588447,
+          2.212334206571427
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0017220460762108526,
+      "resolved_scale": 0.0009765625,
+      "singularity": "none",
+      "tile_id": "scale-aware:7:38:6:9.77e-4",
+      "validity": "regular"
+    },
+    "warm_us": 638
+  },
+  {
+    "c": [
+      0.3,
+      0.05
+    ],
+    "case": "regular_shore_approach",
+    "epsilon": 1e-8,
+    "first_us": 631,
+    "jet": {
+      "D": -0.0172204607330733,
+      "estimated_error": 0.00010472780445314189,
+      "grad_D": [
+        0.7332850204771613,
+        -0.6784030301553159
+      ],
+      "hessian_D": [
+        [
+          2.396635361658923,
+          1.136197143588447
+        ],
+        [
+          1.136197143588447,
+          2.212334206571427
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0017220460733076205,
+      "resolved_scale": 0.0009765625,
+      "singularity": "none",
+      "tile_id": "scale-aware:7:38:6:9.77e-4",
+      "validity": "regular"
+    },
+    "warm_us": 630
+  },
+  {
+    "c": [
+      0.35,
+      0.05
+    ],
+    "case": "crossing_corridor",
+    "epsilon": 0.01,
+    "first_us": 82449,
+    "jet": {
+      "D": 0.010277205410996547,
+      "estimated_error": 0.006570052303550084,
+      "grad_D": [
+        0.9926219672550913,
+        -0.07608528183734259
+      ],
+      "hessian_D": [
+        [
+          1.4128723340135139,
+          7.313637746969107
+        ],
+        [
+          7.313637746969107,
+          97.06177936462711
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0014339489218930246,
+      "resolved_scale": 0.00048828125,
+      "singularity": "none",
+      "tile_id": "scale-aware:8:89:12:4.88e-4",
+      "validity": "unresolved"
+    },
+    "warm_us": 836
+  },
+  {
+    "c": [
+      0.35,
+      0.05
+    ],
+    "case": "crossing_corridor",
+    "epsilon": 0.0001,
+    "first_us": 780,
+    "jet": {
+      "D": 0.010277205410996547,
+      "estimated_error": 0.006570052303550084,
+      "grad_D": [
+        0.9926219672550913,
+        -0.07608528183734259
+      ],
+      "hessian_D": [
+        [
+          1.4128723340135139,
+          7.313637746969107
+        ],
+        [
+          7.313637746969107,
+          97.06177936462711
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0010277691913061838,
+      "resolved_scale": 0.00048828125,
+      "singularity": "none",
+      "tile_id": "scale-aware:8:89:12:4.88e-4",
+      "validity": "unresolved"
+    },
+    "warm_us": 834
+  },
+  {
+    "c": [
+      0.35,
+      0.05
+    ],
+    "case": "crossing_corridor",
+    "epsilon": 1e-6,
+    "first_us": 739,
+    "jet": {
+      "D": 0.010277205410996547,
+      "estimated_error": 0.006570052303550084,
+      "grad_D": [
+        0.9926219672550913,
+        -0.07608528183734259
+      ],
+      "hessian_D": [
+        [
+          1.4128723340135139,
+          7.313637746969107
+        ],
+        [
+          7.313637746969107,
+          97.06177936462711
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0010277205459647905,
+      "resolved_scale": 0.00048828125,
+      "singularity": "none",
+      "tile_id": "scale-aware:8:89:12:4.88e-4",
+      "validity": "unresolved"
+    },
+    "warm_us": 726
+  },
+  {
+    "c": [
+      0.35,
+      0.05
+    ],
+    "case": "crossing_corridor",
+    "epsilon": 1e-8,
+    "first_us": 714,
+    "jet": {
+      "D": 0.010277205410996547,
+      "estimated_error": 0.006570052303550084,
+      "grad_D": [
+        0.9926219672550913,
+        -0.07608528183734259
+      ],
+      "hessian_D": [
+        [
+          1.4128723340135139,
+          7.313637746969107
+        ],
+        [
+          7.313637746969107,
+          97.06177936462711
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.0010277205411001412,
+      "resolved_scale": 0.00048828125,
+      "singularity": "none",
+      "tile_id": "scale-aware:8:89:12:4.88e-4",
+      "validity": "unresolved"
+    },
+    "warm_us": 699
+  },
+  {
+    "c": [
+      0.0,
+      0.0
+    ],
+    "case": "cut_locus",
+    "epsilon": 0.01,
+    "first_us": 20234,
+    "jet": {
+      "D": -0.2509517304816417,
+      "estimated_error": 0.0016755045859934868,
+      "grad_D": [
+        0.9921991831528512,
+        2.7755575615628914e-16
+      ],
+      "hessian_D": [
+        [
+          -0.061497828355401296,
+          1.7763568394002505e-15
+        ],
+        [
+          1.7763568394002505e-15,
+          -4.008100408545753
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.02511508929542767,
+      "resolved_scale": 0.015625,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:3:0:0:1.56e-2",
+      "validity": "singular"
+    },
+    "warm_us": 548
+  },
+  {
+    "c": [
+      0.0,
+      0.0
+    ],
+    "case": "cut_locus",
+    "epsilon": 0.0001,
+    "first_us": 532,
+    "jet": {
+      "D": -0.2509517304816417,
+      "estimated_error": 0.0016755045859934868,
+      "grad_D": [
+        0.9921991831528512,
+        2.7755575615628914e-16
+      ],
+      "hessian_D": [
+        [
+          -0.061497828355401296,
+          1.7763568394002505e-15
+        ],
+        [
+          1.7763568394002505e-15,
+          -4.008100408545753
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.02509517504057912,
+      "resolved_scale": 0.015625,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:3:0:0:1.56e-2",
+      "validity": "singular"
+    },
+    "warm_us": 526
+  },
+  {
+    "c": [
+      0.0,
+      0.0
+    ],
+    "case": "cut_locus",
+    "epsilon": 1e-6,
+    "first_us": 643,
+    "jet": {
+      "D": -0.2509517304816417,
+      "estimated_error": 0.0016755045859934868,
+      "grad_D": [
+        0.9921991831528512,
+        2.7755575615628914e-16
+      ],
+      "hessian_D": [
+        [
+          -0.061497828355401296,
+          1.7763568394002505e-15
+        ],
+        [
+          1.7763568394002505e-15,
+          -4.008100408545753
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.025095173048363412,
+      "resolved_scale": 0.015625,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:3:0:0:1.56e-2",
+      "validity": "singular"
+    },
+    "warm_us": 560
+  },
+  {
+    "c": [
+      0.0,
+      0.0
+    ],
+    "case": "cut_locus",
+    "epsilon": 1e-8,
+    "first_us": 549,
+    "jet": {
+      "D": -0.2509517304816417,
+      "estimated_error": 0.0016755045859934868,
+      "grad_D": [
+        0.9921991831528512,
+        2.7755575615628914e-16
+      ],
+      "hessian_D": [
+        [
+          -0.061497828355401296,
+          1.7763568394002505e-15
+        ],
+        [
+          1.7763568394002505e-15,
+          -4.008100408545753
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.02509517304816419,
+      "resolved_scale": 0.015625,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:3:0:0:1.56e-2",
+      "validity": "singular"
+    },
+    "warm_us": 527
+  },
+  {
+    "c": [
+      0.25,
+      0.0
+    ],
+    "case": "cardioid_cusp",
+    "epsilon": 0.01,
+    "first_us": 19171,
+    "jet": {
+      "D": -0.0008198677569338912,
+      "estimated_error": 0.0010006060152838883,
+      "grad_D": [
+        0.349571519175209,
+        4.163336342344337e-17
+      ],
+      "hessian_D": [
+        [
+          -168.48074992731733,
+          2.1316282072803006e-14
+        ],
+        [
+          2.1316282072803006e-14,
+          -486.4844685296732
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.001003355286719813,
+      "resolved_scale": 0.0009765625,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:7:32:0:9.77e-4",
+      "validity": "singular"
+    },
+    "warm_us": 658
+  },
+  {
+    "c": [
+      0.25,
+      0.0
+    ],
+    "case": "cardioid_cusp",
+    "epsilon": 0.0001,
+    "first_us": 11260,
+    "jet": {
+      "D": -6.721670417272408e-6,
+      "estimated_error": 7.737417398185784e-6,
+      "grad_D": [
+        0.33251693470666155,
+        9.71445146547012e-17
+      ],
+      "hessian_D": [
+        [
+          -26158.72944676854,
+          -9.094947017729282e-13
+        ],
+        [
+          -9.094947017729282e-13,
+          -61668.61493389719
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 0.000010022564967710828,
+      "resolved_scale": 7.62939453125e-6,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:14:4096:0:7.63e-6",
+      "validity": "singular"
+    },
+    "warm_us": 927
+  },
+  {
+    "c": [
+      0.25,
+      0.0
+    ],
+    "case": "cardioid_cusp",
+    "epsilon": 1e-6,
+    "first_us": 11024,
+    "jet": {
+      "D": -5.2513050135057906e-8,
+      "estimated_error": 6.044857342334588e-8,
+      "grad_D": [
+        0.3325169347065504,
+        1.249000902703301e-16
+      ],
+      "hessian_D": [
+        [
+          -3348317.369174495,
+          -1.1641532182693481e-10
+        ],
+        [
+          -1.1641532182693481e-10,
+          -7893582.711544063
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 1.0013778609668216e-7,
+      "resolved_scale": 5.960464477539063e-8,
+      "singularity": "cut_locus",
+      "tile_id": "scale-aware:21:524288:0:5.96e-8",
+      "validity": "singular"
+    },
+    "warm_us": 1490
+  },
+  {
+    "c": [
+      0.25,
+      0.0
+    ],
+    "case": "cardioid_cusp",
+    "epsilon": 1e-8,
+    "first_us": 8542,
+    "jet": {
+      "D": -2.7761147565938456e-8,
+      "estimated_error": 2.994820317139837e-8,
+      "grad_D": [
+        0.35400079537442053,
+        1.3877787807814457e-17
+      ],
+      "hessian_D": [
+        [
+          -6834115.962991899,
+          -6.984919309616089e-10
+        ],
+        [
+          -6.984919309616089e-10,
+          -15568772.67239016
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/3",
+      "requested_scale": 2.9507309504219644e-9,
+      "resolved_scale": 2.9802322387695312e-8,
+      "singularity": "none",
+      "tile_id": "scale-aware:22:1048576:0:2.98e-8",
+      "validity": "unresolved"
+    },
+    "warm_us": 1241
+  }
+]

@@ -38,7 +38,7 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/3");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/4");
 }
 
 #[test]
@@ -50,9 +50,12 @@ fn upper_half_geometry_uses_active_config_and_matches_the_surface() {
         epsilon: 0.002,
         ..Default::default()
     };
-    let c = Complex64::new(0.4, 0.2);
+    let c = Complex64::new(-0.5, 0.1);
     let v = (0.02, -0.01);
     let snap = snapshot_from_state(c, v, None, None, &config, None).unwrap();
+    let jet = runtime_core::manifold::geometry_jet(c, &config).unwrap();
+    assert_eq!(snap.physics.signed_distance, jet.d);
+    assert_eq!(snap.diagnostics.geometry.estimated_error, jet.estimated_error);
     let upper = &snap.physics.upper_half;
     assert!((upper.a - 2.5 / std::f64::consts::LN_2).abs() < 1e-12);
     assert!((upper.z - upper.a * snap.physics.rho).abs() < 1e-12);

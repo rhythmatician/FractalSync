@@ -24,7 +24,12 @@ fn clamp_index(value: isize, max: usize) -> usize {
     }
 }
 
-fn to_gray(image: &[f64], width: usize, height: usize, channels: usize) -> Result<Vec<f64>, &'static str> {
+fn to_gray(
+    image: &[f64],
+    width: usize,
+    height: usize,
+    channels: usize,
+) -> Result<Vec<f64>, &'static str> {
     // Treat channels == 0 as a single-channel (grayscale) image to avoid
     // silently discarding a non-empty buffer and producing misleading metrics.
     let effective_channels = if channels == 0 { 1 } else { channels };
@@ -166,7 +171,35 @@ fn compute_color_uniformity(gray: &[f64], width: usize, height: usize) -> f64 {
     (1.0 / (1.0 + avg_variance * 10.0)).clamp(0.0, 1.0)
 }
 
+/// Return true only when the point is safely inside the main cardioid or
+/// period-2 bulb. The strict error margin keeps floating-point rounding near
+/// their boundaries on the ordinary orbit path, preserving finite-iteration
+/// membership semantics there.
+fn is_safely_interior(c: num_complex::Complex64) -> bool {
+    if !c.re.is_finite() || !c.im.is_finite() {
+        return false;
+    }
+
+    let x = c.re;
+    let y = c.im;
+    let cardioid_x = x - 0.25;
+    let q = cardioid_x * cardioid_x + y * y;
+    let cardioid_value = q * (q + cardioid_x) - 0.25 * y * y;
+    let cardioid_scale = (q * (q + cardioid_x)).abs() + (0.25 * y * y).abs();
+    let margin = 64.0 * f64::EPSILON;
+    if cardioid_value < -margin * cardioid_scale {
+        return true;
+    }
+
+    let bulb_x = x + 1.0;
+    let bulb_radius_squared = bulb_x * bulb_x + y * y;
+    bulb_radius_squared < 0.0625 - margin * (bulb_radius_squared + 0.0625)
+}
+
 pub fn mandelbrot_membership(c: num_complex::Complex64, max_iter: usize) -> bool {
+    if is_safely_interior(c) {
+        return true;
+    }
     let mut z = num_complex::Complex64::new(0.0, 0.0);
     for _ in 0..max_iter {
         if z.re * z.re + z.im * z.im > 4.0 {
@@ -234,7 +267,59 @@ mod tests {
 
     #[test]
     fn mandelbrot_membership_detects_inside_outside() {
-        assert!(mandelbrot_membership(num_complex::Complex64::new(0.0, 0.0), 50));
-        assert!(!mandelbrot_membership(num_complex::Complex64::new(2.0, 0.0), 10));
+        assert!(mandelbrot_membership(
+            num_complex::Complex64::new(0.0, 0.0),
+            50
+        ));
+        assert!(!mandelbrot_membership(
+            num_complex::Complex64::new(2.0, 0.0),
+            10
+        ));
+    }
+
+    fn orbit_membership_reference(c: num_complex::Complex64, max_iter: usize) -> bool {
+        let mut z = num_complex::Complex64::new(0.0, 0.0);
+        for _ in 0..max_iter {
+            if z.norm_sqr() > 4.0 {
+                return false;
+            }
+            z = z * z + c;
+        }
+        true
+    }
+
+    #[test]
+    fn interior_shortcuts_preserve_finite_iteration_membership() {
+        let points = [
+            num_complex::Complex64::new(0.0, 0.0),
+            num_complex::Complex64::new(-1.0, 0.0),
+            num_complex::Complex64::new(-0.125, 0.72),
+            num_complex::Complex64::new(0.25, 0.0),
+            num_complex::Complex64::new(0.2500001, 0.0),
+            num_complex::Complex64::new(-1.2500001, 0.0),
+            num_complex::Complex64::new(2.0, 0.0),
+        ];
+        for point in points {
+            for max_iter in [0, 1, 2, 50, 512] {
+                assert_eq!(
+                    mandelbrot_membership(point, max_iter),
+                    orbit_membership_reference(point, max_iter),
+                    "point={point:?}, max_iter={max_iter}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn interior_shortcuts_leave_non_finite_points_on_orbit_path() {
+        for point in [
+            num_complex::Complex64::new(f64::NAN, 0.0),
+            num_complex::Complex64::new(f64::INFINITY, 0.0),
+        ] {
+            assert_eq!(
+                mandelbrot_membership(point, 4),
+                orbit_membership_reference(point, 4)
+            );
+        }
     }
 }

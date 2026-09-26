@@ -40,7 +40,7 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
         debugSnapshotMeta?: () => { version: string; canonicalDt: number };
       }
     ).debugSnapshotMeta?.();
-    expect(meta?.version).toBe('debug-snapshot/2');
+    expect(meta?.version).toBe('debug-snapshot/4');
     expect(meta?.canonicalDt).toBeCloseTo(1024 / 48000, 15);
   });
 
@@ -189,12 +189,22 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     const recorder = new CockpitRecorder();
     const trajectory = recorder.recordVariant(baselineVariants()[3]);
     const s: DebugSnapshot = trajectory.snapshots[10];
-    expect(s.version).toBe('debug-snapshot/2');
+    expect(s.version).toBe('debug-snapshot/4');
     // Phase-A groups only: observation arrives with #108 (Phase B).
     expect(s).toHaveProperty('physics');
     expect(s).toHaveProperty('action');
     expect(s).toHaveProperty('map');
     expect(s).toHaveProperty('diagnostics');
+    expect(s.diagnostics.geometry).toMatchObject({
+      providerVersion: 'geometry-provider/3',
+      providerName: 'scale-aware',
+      resolvedScale: expect.any(Number),
+      estimatedError: expect.any(Number),
+      isBridge: false,
+      validity: 'regular',
+      singularity: 'none',
+      tileId: 'mock-tile',
+    });
     expect(s).not.toHaveProperty('observation');
   });
 

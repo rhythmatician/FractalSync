@@ -24,6 +24,7 @@ and the CLI is guarded by ``if __name__ == "__main__":``.
 
 from __future__ import annotations
 
+import json
 import math
 import sys
 from pathlib import Path
@@ -305,6 +306,12 @@ def check_manifold_mirror_parity(rc) -> tuple[bool, float]:
 
     # PARITY RULE: contract-derived timestep, never a literal (#93).
     dt = canonical_hop_dt()
+    initial_c = (-0.5, 0.1)
+    geometry = json.loads(
+        rc.geometry_provider_query(complex(*initial_c), 1e-4)
+    )
+    if geometry["validity"] != "regular" or geometry["is_bridge"]:
+        return False, float("inf")
 
     n_steps = 60
     max_err = 0.0
@@ -314,10 +321,14 @@ def check_manifold_mirror_parity(rc) -> tuple[bool, float]:
         a_vals = torch.rand(n_steps, generator=rng).clamp(0.0, 1.0)
         gates = torch.rand(n_steps, K_RESIDUALS, generator=rng)
         seg = torch.zeros(n_steps, dtype=torch.int64)
-        energy = torch.linspace(0.2, 0.8, n_steps)
+        # Keep this parity path within a regular geometry chart. Larger
+        # forces can legitimately reach cut loci, where destination Physics
+        # fails closed and ordinary trajectory parity is undefined.
+        energy = torch.full((n_steps,), 0.01)
 
         # Rust controller with manifold physics on.
         ctrl = rc.OrbitController(float(s_vals[0]), float(a_vals[0]), 1.0)
+        ctrl.set_c(*initial_c)
         ctrl.set_manifold_physics(True)
         ctrl.set_manifold_drag(0.1)
         ctrl.set_manifold_config(rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0))
@@ -339,6 +350,7 @@ def check_manifold_mirror_parity(rc) -> tuple[bool, float]:
             energy=energy,
             manifold_drag=0.1,
             config=ManifoldConfig(),
+            initial_c=torch.tensor(complex(*initial_c)),
         )
         for i in range(n_steps):
             err = max(

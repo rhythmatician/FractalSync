@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/3";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/4";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -153,6 +153,8 @@ pub struct GeometrySnapshot {
     pub requested_scale: f64,
     /// Actual resolved scale / error capability the provider achieved.
     pub resolved_scale: f64,
+    /// Measured cross-level jet error, in distance units.
+    pub estimated_error: f64,
     /// Whether this jet came from the temporary bridge (true) or destination provider.
     pub is_bridge: bool,
     /// Validity classification: regular / unresolved / singular / outside_provider / provider_failure.
@@ -243,7 +245,8 @@ pub fn snapshot_from_state(
     last_delta_total: Option<f64>,
 ) -> Result<DebugSnapshot, String> {
     // ---- Physics: every value from the canonical manifold functions ----
-    let signed_distance = crate::manifold::signed_distance(c)?;
+    let jet = crate::manifold::geometry_jet(c, config)?;
+    let signed_distance = jet.d;
     let realm: i8 = if signed_distance < 0.0 {
         -1
     } else if signed_distance > 0.0 {
@@ -372,20 +375,6 @@ pub fn snapshot_from_state(
     });
 
     // ---- Diagnostics section (ADR 0004: scale-aware geometry provider) ----
-    let jet = crate::geometry_provider::query_geometry(c, config.epsilon)
-        .unwrap_or_else(|_| crate::geometry_provider::GeometryJet {
-            d: signed_distance,
-            grad_d: [f64::NAN, f64::NAN],
-            hessian_d: [[f64::NAN; 2]; 2],
-            estimated_error: f64::INFINITY,
-            resolved_scale: f64::NAN,
-            requested_scale: f64::NAN,
-            validity: crate::geometry_provider::GeometryValidity::ProviderFailure,
-            singularity: crate::geometry_provider::SingularityKind::None,
-            provider_version: crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string(),
-            tile_id: "error".to_string(),
-            is_bridge: false,
-        });
     let diagnostics = DiagnosticsSnapshot {
         derivative_step: crate::manifold::derivative_step(),
         valid: true,
@@ -398,6 +387,7 @@ pub fn snapshot_from_state(
             tile_id: jet.tile_id.clone(),
             requested_scale: jet.requested_scale,
             resolved_scale: jet.resolved_scale,
+            estimated_error: jet.estimated_error,
             is_bridge: jet.is_bridge,
             validity: jet.validity.as_str().to_string(),
             singularity: jet.singularity.as_str().to_string(),
@@ -511,14 +501,16 @@ pub fn terrain_patch(
         for col in 0..n {
             let re = cx - half + 2.0 * half * (col as f64) / ((n - 1) as f64);
             let c = Complex64::new(re, im);
-            let d = crate::manifold::signed_distance(c)?;
-            let sigma = crate::manifold::mandelbrot_scale(c, config)?;
+            let jet = crate::manifold::geometry_jet(c, config)?;
+            let d = jet.d;
+            if !d.is_finite() { return Err(format!("terrain geometry has no finite distance: {:?}", jet.validity)); }
+            let sigma = crate::geometry_provider::sigma_from_jet(&jet, config);
             positions.push(re);
             positions.push(im);
             positions.push(lambda * sigma);
             upper_z.push(
                 lambda / std::f64::consts::LN_2
-                    * crate::manifold::regularized_distance(c, config.epsilon)?,
+                    * crate::geometry_provider::rho_from_jet(&jet, config.epsilon),
             );
             let r: i8 = if d < 0.0 {
                 -1

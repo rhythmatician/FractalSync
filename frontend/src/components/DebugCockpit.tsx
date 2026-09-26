@@ -26,6 +26,7 @@ import {
   riderSurfaceHeight,
   sampleTerrainPatch,
   type CockpitTrajectory,
+  type GeometrySnapshot,
 } from '../lib/debugCockpit';
 import {
   ManualDriver,
@@ -125,6 +126,26 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       <div style={{ fontSize: 11, letterSpacing: 1, color: '#778', marginBottom: 4 }}>{title}</div>
       {children}
     </div>
+  );
+}
+
+export function GeometryProviderPanel({ geometry }: { geometry: GeometrySnapshot }): JSX.Element {
+  return (
+    <Panel title="GEOMETRY PROVIDER">
+      <Row label="provider" value={geometry.providerName} kind="STATE" />
+      <Row label="provider version" value={geometry.providerVersion} kind="STATE" />
+      <Row label="tile" value={geometry.tileId} kind="STATE" />
+      <Row label="requested scale" value={geometry.requestedScale} kind="DIAG" digits={8} />
+      <Row label="resolved scale" value={geometry.resolvedScale} kind="DIAG" digits={8} />
+      <Row label="estimated error" value={geometry.estimatedError} kind="DIAG" digits={8} />
+      <Row label="source" value={geometry.isBridge ? 'raster bridge' : 'destination provider'} kind="DIAG" />
+      <Row label="validity" value={geometry.validity} kind="DIAG" />
+      <Row label="singularity" value={geometry.singularity} kind="DIAG" />
+      <Row label="D(c) provider" value={geometry.d} kind="STATE" digits={7} />
+      <Row label="|grad D|" value={geometry.gradDNorm} kind="DIAG" />
+      <Row label="|H D|" value={geometry.hessianNorm} kind="DIAG" />
+      <Row label="H D eigenvalues" value={`${geometry.hessianEigenvalues[0].toFixed(4)}, ${geometry.hessianEigenvalues[1].toFixed(4)}`} kind="DIAG" />
+    </Panel>
   );
 }
 
@@ -667,6 +688,10 @@ export function DebugCockpit(): JSX.Element {
             <Row label="crest U (ceiling)" value={diag.crestPotential} kind="STATE" />
             <Row label="integrator" value={diag.valid ? 'ok' : `FAIL: ${diag.lastError ?? ''}`} kind="DIAG" />
           </Panel>
+        )}
+
+        {!playerView && diag?.geometry && (
+          <GeometryProviderPanel geometry={diag.geometry} />
         )}
 
         {!playerView && (

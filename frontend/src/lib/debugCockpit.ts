@@ -31,7 +31,7 @@ export const DEFAULT_TERRAIN_GRID = 129;
 /** Terrain patch half-extent in c-space units around the rider. */
 export const DEFAULT_TERRAIN_HALF = 0.5;
 
-/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/2). */
+/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/4). */
 export interface DebugSnapshot {
   version: string;
   timeSeconds: number;
@@ -76,7 +76,26 @@ export interface DebugSnapshot {
     lastDeltaTotal: number | null;
     /** Rust-owned regularized crest potential kappa*log2(d_ref/epsilon). */
     crestPotential: number;
+    /** Added in debug-snapshot/4 by the geometry-provider seam. */
+    geometry?: GeometrySnapshot;
   };
+}
+
+/** Rust-owned geometry-provider evidence attached to debug snapshots. */
+export interface GeometrySnapshot {
+  providerVersion: string;
+  providerName: string;
+  tileId: string;
+  requestedScale: number;
+  resolvedScale: number;
+  estimatedError: number;
+  isBridge: boolean;
+  validity: string;
+  singularity: string;
+  d: number;
+  gradDNorm: number;
+  hessianNorm: number;
+  hessianEigenvalues: [number, number];
 }
 
 /** Wire shape of the Rust TerrainPatch (camelCase). */
