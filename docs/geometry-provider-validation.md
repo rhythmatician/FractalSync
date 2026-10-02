@@ -2,7 +2,28 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
-## Repairs and evidence
+## October 2 follow-up: startup and partial diagnostics
+
+The approved lifecycle change is implemented. An untouched controller entering manifold mode starts at the verified regular point `(-0.5, 0.1)`. Legacy initialization stays at the origin. Explicit positions, existing nonzero velocity, and established trajectories are preserved. There is no new collision or swept-path barrier at `(0, 0)`; the integrator still evaluates sampled states and endpoints and fails closed when a required derivative is unavailable.
+
+`debug-snapshot/5` returns partial snapshots for Singular, Unresolved, and outside-provider geometry. Position, velocity, classification, provenance, and available finite scalar values remain visible. Unavailable metric, derivative, force, kinetic/total-energy, and camera geometry values serialize as `null`. Diagnostics report invalidity and an error instead of failing before the provider can be inspected. Malformed state/configuration inputs are rejected. The controller preserves the core invalidity flag. `orbit-controller/7` records the startup change; regenerated golden vectors changed only this version string.
+
+The cockpit displays unavailable values explicitly and retains its last valid scene when the new snapshot cannot supply rendering derivatives. Manual startup no longer manufactures an explicit origin seed. Explicit saved seeds remain explicit.
+
+Verification of this follow-up:
+
+- Controller integration tests: 21 passed, including explicit origin refusal, preserved legacy defaults, and preservation of existing velocity at the origin.
+- Snapshot-focused Rust tests: 16 passed, including singular/nonzero-velocity, unresolved, regular equivalence, JSON nulls, and malformed input.
+- Full Rust suite: 225 passed, 4 failed, 1 ignored. One failure was an obsolete test expecting an error instead of a partial outside-provider snapshot; its corrected scoped test passes. The remaining three failures are the native undriven/driven rollout test and two pre-existing manifold assertions in the debug integration file. The full snapshot integration target had 31 passed, 2 failed.
+- Canonical preflight parity passed. Python stub generation had no API diff.
+- Final compiled Python smoke: `(0,0)` is invalid/Singular with no metric; `(-0.5,0.1)` is valid/Regular with a metric; `(0.35,0.05)` is invalid/Unresolved with no metric.
+- Frontend production build passed; 27 test files / 116 tests passed. Model-dependent ONNX checks retain their existing unavailable-runtime skips.
+- Three focused Python debug tests passed against `target/python-snapshot5`. The full debug file was interrupted during slow controller replay tests; no complete result is claimed.
+- Rebuilt WASM passed `node frontend/scripts/test_debug_snapshot_contract.mjs`. The test caught and fixed the default serializer emitting `undefined` for Rust `None`: both snapshot bindings now serialize explicit `null`, matching Python and recorded JSON. The test covers the standalone and controller APIs, regular automatic startup, explicit origin preservation, and unresolved diagnostics.
+
+**Remaining #145 blocker:** the native rollout test fails in its undriven phase, near `c=(0.29842574478946454, 0.051456454020995405)`, `v=(-0.003236304445455842, 0.0029941732581717675)`, with a CutLocus refusal. This is not evidence that the driven trajectory crossed the Shore and failed there. A narrow refinement probe also found that `(0.35,0.05)` remains Unresolved at level 8; level 9 cannot contain the nearest contour in the current expanded tile footprint. Its level-8 error is about 0.00657 for requested scale 0.001028. These results require further provider/classification validation; the startup and diagnostics repair does not establish that the refused rollout is a genuine geometric singularity, or that changing the footprint alone fixes it. Crossing tests remain enabled. PR #148 and issue #145 remain unaccepted.
+
+## September 26 repairs and evidence
 
 The provider now measures nearest-segment distance, handles the sign at shared contour vertices, and resolves ambiguous marching-squares connectivity using membership. It requires stable contributing tiles, checks containment of the sampled distance neighborhood, and refines one dyadic level at a time. Cross-level gradient and Hessian error use the coarser level's spacing. Regular jets must satisfy both the requested resolution and error bound. Cut-locus classification excludes incidental corners but retains persistent competing nearest features. Missing contours return unresolved geometry instead of invented jets.
 

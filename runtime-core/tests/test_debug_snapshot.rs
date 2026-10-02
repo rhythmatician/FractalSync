@@ -38,7 +38,7 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/4");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/5");
 }
 
 #[test]
@@ -54,11 +54,11 @@ fn upper_half_geometry_uses_active_config_and_matches_the_surface() {
     let v = (0.02, -0.01);
     let snap = snapshot_from_state(c, v, None, None, &config, None).unwrap();
     let jet = runtime_core::manifold::geometry_jet(c, &config).unwrap();
-    assert_eq!(snap.physics.signed_distance, jet.d);
-    assert_eq!(snap.diagnostics.geometry.estimated_error, jet.estimated_error);
-    let upper = &snap.physics.upper_half;
+    assert_eq!(snap.physics.signed_distance, Some(jet.d));
+    assert_eq!(snap.diagnostics.geometry.estimated_error, Some(jet.estimated_error));
+    let upper = snap.physics.upper_half.as_ref().expect("regular upper-half geometry");
     assert!((upper.a - 2.5 / std::f64::consts::LN_2).abs() < 1e-12);
-    assert!((upper.z - upper.a * snap.physics.rho).abs() < 1e-12);
+    assert!((upper.z - upper.a * snap.physics.rho.unwrap()).abs() < 1e-12);
     assert!((upper.z_dot - upper.gradient[0] * v.0 - upper.gradient[1] * v.1).abs() < 1e-12);
     let patch = terrain_patch(c.re, c.im, 0.01, 3, &config).unwrap();
     assert_eq!(patch.upper_z.len(), 9);
@@ -99,13 +99,18 @@ fn snapshot_creation_does_not_mutate_controller() {
 }
 
 #[test]
-fn snapshot_physics_fields_match_canonical_manifold_math() {
+fn snapshot_invalid_origin_keeps_scalars_and_omits_derivatives() {
     let _g = lock();
     let config = ManifoldConfig::default();
     let c = Complex64::new(0.0, 0.0);
     let v = (0.05, -0.02);
 
-    let snap = snapshot_from_state(c, v, None, None, &config, None)
+    let last_action = runtime_core::debug::LastAction {
+        raw: controls(0.3),
+        friction_beta: 0.5,
+        friction_power: 0.0,
+    };
+    let snap = snapshot_from_state(c, v, Some(last_action), None, &config, None)
         .expect("standalone snapshot");
 
     let p = &snap.physics;
@@ -113,37 +118,97 @@ fn snapshot_physics_fields_match_canonical_manifold_math() {
     assert_eq!(p.c, [c.re, c.im]);
     assert_eq!(p.velocity, [v.0, v.1]);
 
-    // E = K + U holds to float tolerance.
-    assert!((p.kinetic + p.potential - p.total).abs() < 1e-12);
+    assert!(p.signed_distance.is_some() && p.rho.is_some() && p.sigma.is_some());
+    assert!(p.potential.is_some());
+    assert!(!p.derivative_valid);
+    assert!(!snap.diagnostics.valid);
+    assert_eq!(snap.diagnostics.geometry.validity, "singular");
+    assert!(snap.diagnostics.last_error.is_some());
+    assert!(p.upper_half.is_none());
+    assert!(p.sigma_dot.is_none() && p.scale_gradient.is_none());
+    assert!(p.metric.is_none() && p.metric_speed.is_none() && p.kinetic.is_none());
+    assert!(p.total.is_none() && p.geodesic_accel.is_none());
+    assert!(p.potential_force.is_none() && p.net_accel.is_none());
+    assert!(snap.action.unwrap().drive_covector.is_none());
+}
 
-    // sigma equals the canonical binding value.
-    let sigma = runtime_core::manifold::mandelbrot_scale(c, &config).unwrap();
-    assert!((p.sigma - sigma).abs() < 1e-14);
+#[test]
+fn snapshot_unresolved_geometry_keeps_jet_provenance_without_derivatives() {
+    let _g = lock();
+    let c = Complex64::new(0.35, 0.05);
+    let v = (0.02, -0.01);
+    let config = ManifoldConfig::default();
+    let jet = runtime_core::manifold::geometry_jet(c, &config).unwrap();
+    assert_eq!(jet.validity.as_str(), "unresolved", "fixture must exercise provider refusal");
 
-    // D equals the canonical signed-distance authority.
-    let d = runtime_core::manifold::signed_distance(c).unwrap();
-    assert!((p.signed_distance - d).abs() < 1e-14);
+    let snap = snapshot_from_state(c, v, None, None, &config, None).expect("partial unresolved snapshot");
+    assert_eq!(snap.diagnostics.geometry.validity, "unresolved");
+    assert!(!snap.diagnostics.valid && !snap.physics.derivative_valid);
+    assert!(snap.diagnostics.last_error.is_some());
+    assert!(snap.physics.signed_distance.is_some());
+    assert!(snap.physics.rho.is_some() && snap.physics.sigma.is_some());
+    assert!(snap.physics.metric.is_none() && snap.physics.geodesic_accel.is_none());
+    assert!(snap.diagnostics.geometry.grad_d_norm.is_none());
+    assert!(snap.diagnostics.geometry.hessian_norm.is_none());
+    assert!(snap.diagnostics.geometry.hessian_eigenvalues.is_none());
+}
 
-    // realm sign follows D.
-    assert_eq!(p.realm, if d < 0.0 { -1 } else if d > 0.0 { 1 } else { 0 });
+#[test]
+fn snapshot_rejects_nonfinite_state_and_malformed_config() {
+    let _g = lock();
+    let config = ManifoldConfig::default();
+    let valid_c = Complex64::new(-0.5, 0.1);
+    assert!(snapshot_from_state(
+        Complex64::new(f64::NAN, 0.0), (0.0, 0.0), None, None, &config, None
+    ).is_err());
+    assert!(snapshot_from_state(
+        valid_c, (f64::INFINITY, 0.0), None, None, &config, None
+    ).is_err());
 
-    // metric equals the canonical induced metric.
+    let mut invalid = config.clone();
+    invalid.epsilon = 0.0;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let mut invalid = config.clone();
+    invalid.epsilon = -1e-4;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let mut invalid = config.clone();
+    invalid.d_ref = f64::NAN;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let mut invalid = config.clone();
+    invalid.kappa = f64::INFINITY;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let mut invalid = config.clone();
+    invalid.lambda_sq = f64::NAN;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let mut invalid = config;
+    invalid.mu = f64::INFINITY;
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+    let invalid = ManifoldConfig { d_ref: 1e308, epsilon: 1e-308, ..ManifoldConfig::default() };
+    assert!(snapshot_from_state(valid_c, (0.0, 0.0), None, None, &invalid, None).is_err());
+}
+
+#[test]
+fn snapshot_regular_physics_fields_match_canonical_manifold_math() {
+    let _g = lock();
+    let config = ManifoldConfig::default();
+    let c = Complex64::new(-0.5, 0.1);
+    let v = (0.05, -0.02);
+    let snap = snapshot_from_state(c, v, None, None, &config, None).expect("regular snapshot");
+    let p = &snap.physics;
+    assert!(snap.diagnostics.valid && p.derivative_valid);
+    assert!((p.kinetic.unwrap() + p.potential.unwrap()
+        + runtime_core::manifold::wall_potential(c, &config).unwrap() - p.total.unwrap()).abs() < 1e-12);
     let g = runtime_core::manifold::induced_metric(c, &config).unwrap();
-    assert!((p.metric[0] - g[0][0]).abs() < 1e-14);
-    assert!((p.metric[1] - g[0][1]).abs() < 1e-14);
-    assert!((p.metric[2] - g[1][1]).abs() < 1e-14);
-
-    // metric speed = sqrt(v^T G v).
-    let gv0 = g[0][0] * v.0 + g[0][1] * v.1;
-    let gv1 = g[1][0] * v.0 + g[1][1] * v.1;
-    let metric_speed = (v.0 * gv0 + v.1 * gv1).sqrt();
-    assert!((p.metric_speed - metric_speed).abs() < 1e-12);
+    let metric = p.metric.unwrap();
+    assert!((metric[0] - g[0][0]).abs() < 1e-14);
+    assert!((metric[1] - g[0][1]).abs() < 1e-14);
+    assert!((metric[2] - g[1][1]).abs() < 1e-14);
 }
 
 #[test]
 fn snapshot_reports_validity_and_derivative_step() {
     let _g = lock();
-    let snap = snapshot_from_state(Complex64::new(0.1, -0.1), (0.1, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(-0.5, 0.1), (0.1, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
     assert!(snap.diagnostics.derivative_step > 0.0);
     assert!(snap.diagnostics.valid, "ordinary state must be valid");
@@ -178,8 +243,9 @@ fn snapshot_exposes_raw_and_effective_controls() {
 
     // Drive covector is the metric-consistent one actually used.
     let q = raw.clamped().drive_covector(ctrl.c, &ctrl.manifold_config).unwrap();
-    assert!((action.drive_covector[0] - q.0).abs() < 1e-12);
-    assert!((action.drive_covector[1] - q.1).abs() < 1e-12);
+    let drive = action.drive_covector.expect("regular drive covector");
+    assert!((drive[0] - q.0).abs() < 1e-12);
+    assert!((drive[1] - q.1).abs() < 1e-12);
     assert!((action.friction_beta - raw.clamped().friction_beta()).abs() < 1e-12);
 }
 
@@ -606,6 +672,12 @@ fn debug_snapshot_serializes_camel_case() {
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"signedDistance\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"pyramidLoaded\""), "wire format is camelCase: {json}");
+    let wire = serde_json::to_value(&snap).expect("JSON snapshot");
+    assert_eq!(wire["physics"]["metric"], serde_json::Value::Null);
+    assert_eq!(wire["physics"]["upperHalf"], serde_json::Value::Null);
+    assert_eq!(wire["diagnostics"]["geometry"]["hessianNorm"], serde_json::Value::Null);
+    assert_eq!(wire["diagnostics"]["geometry"]["validity"], "singular");
+    assert_eq!(wire["diagnostics"]["valid"], false);
 }
 
 #[test]

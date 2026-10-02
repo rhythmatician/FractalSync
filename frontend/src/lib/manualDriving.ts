@@ -125,14 +125,14 @@ export class ManualDriver {
   private lastImpulseState = false;
   private pendingImpulse = false;
   private headingAngle = 0;
-  private initialC: [number, number] = [0, 0];
-  private initialV: [number, number] = [0, 0];
+  private initialC?: [number, number];
+  private initialV?: [number, number];
 
   public trajectory: CockpitTrajectory;
 
-  constructor(initialC: [number, number] = [0, 0], initialV: [number, number] = [0, 0]) {
-    this.initialC = [...initialC];
-    this.initialV = [...initialV];
+  constructor(initialC?: [number, number], initialV?: [number, number]) {
+    this.initialC = initialC ? [...initialC] : undefined;
+    this.initialV = initialV ? [...initialV] : undefined;
     this.synth = new OrbitSynthesizer(6);
     this.trajectory = this.createEmptyTrajectory();
     this.reset(initialC, initialV);
@@ -143,15 +143,15 @@ export class ManualDriver {
       name: 'manual_flight',
       description: 'Interactive manual flight via Controls v2 (#121)',
       actions: [],
-      initialC: this.initialC,
-      initialV: this.initialV,
+      ...(this.initialC ? { initialC: this.initialC } : {}),
+      ...(this.initialV ? { initialV: this.initialV } : {}),
     };
     return {
       spec,
       snapshots: [],
       crossingStep: null,
       crossed: false,
-      maxPotential: -Infinity,
+      maxPotential: null,
       crestedRidge: false,
     };
   }
@@ -164,16 +164,19 @@ export class ManualDriver {
     if (v) this.initialV = [...v];
 
     this.synth = new OrbitSynthesizer(6);
-    this.synth.seed(
-      { re: this.initialC[0], im: this.initialC[1] },
-      { re: this.initialV[0], im: this.initialV[1] }
-    );
+    if (this.initialC || this.initialV) {
+      this.synth.seed(
+        this.initialC ? { re: this.initialC[0], im: this.initialC[1] } : undefined,
+        this.initialV ? { re: this.initialV[0], im: this.initialV[1] } : undefined
+      );
+    }
 
     this.accumulator = 0;
     this.lastImpulseState = false;
     this.pendingImpulse = false;
-    const initialSpeed = Math.hypot(this.initialV[0], this.initialV[1]);
-    this.headingAngle = initialSpeed > 1e-7 ? Math.atan2(this.initialV[1], this.initialV[0]) : 0;
+    const initialV = this.initialV ?? [0, 0];
+    const initialSpeed = Math.hypot(initialV[0], initialV[1]);
+    this.headingAngle = initialSpeed > 1e-7 ? Math.atan2(initialV[1], initialV[0]) : 0;
     this.trajectory = this.createEmptyTrajectory();
 
     // Capture baseline initial snapshot (t=0, step 0)
@@ -229,15 +232,16 @@ export class ManualDriver {
       const snap = currentSnapshot(this.synth);
 
       this.trajectory.snapshots.push(snap);
-      this.trajectory.maxPotential = Math.max(
-        this.trajectory.maxPotential,
-        snap.physics.potential
-      );
+      if (snap.physics.potential !== null) {
+        this.trajectory.maxPotential = this.trajectory.maxPotential === null
+          ? snap.physics.potential
+          : Math.max(this.trajectory.maxPotential, snap.physics.potential);
+      }
       if (snap.diagnostics.crestPotential) {
         this.trajectory.crestedRidge =
-          this.trajectory.maxPotential > snap.diagnostics.crestPotential - 1.0;
+          this.trajectory.maxPotential !== null && this.trajectory.maxPotential > snap.diagnostics.crestPotential - 1.0;
       }
-      if (this.trajectory.crossingStep === null && snap.physics.signedDistance > 0) {
+      if (this.trajectory.crossingStep === null && snap.physics.signedDistance !== null && snap.physics.signedDistance > 0) {
         this.trajectory.crossingStep = this.trajectory.snapshots.length - 1;
         this.trajectory.crossed = true;
       }

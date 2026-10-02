@@ -200,7 +200,7 @@ class MockOrbitController {
         }
       : null;
     return {
-      version: 'debug-snapshot/4',
+      version: 'debug-snapshot/5',
       timeSeconds: this.step_time_seconds,
       action,
       map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
@@ -501,7 +501,7 @@ export default {
     };
   },
   debugSnapshotMeta() {
-    return { version: 'debug-snapshot/4', canonicalDt: 1024 / 48000 };
+    return { version: 'debug-snapshot/5', canonicalDt: 1024 / 48000 };
   },
   ManifoldConfig: class MockManifoldConfig {
     static defaults() { return new this(0.1, 1e-4, 1, 1, 1 / Math.PI); }

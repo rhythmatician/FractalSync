@@ -12,15 +12,17 @@ describe('GeometryProviderPanel', () => {
           tileId: 'tile-17',
           requestedScale: 0.0001,
           resolvedScale: 0.0002,
-          estimatedError: 0.00003,
+          estimatedError: null,
           isBridge: true,
           validity: 'unresolved',
           singularity: 'cut_locus',
           d: -0.002,
-          gradDNorm: 0.98,
-          hessianNorm: 12.5,
-          hessianEigenvalues: [12, -3],
+          gradDNorm: null,
+          hessianNorm: null,
+          hessianEigenvalues: null,
         }}
+        valid={false}
+        lastError="geometry not regular: singular"
       />
     );
 
@@ -30,7 +32,9 @@ describe('GeometryProviderPanel', () => {
     expect(screen.getByText('tile-17')).toBeTruthy();
     expect(screen.getByText('0.00010000')).toBeTruthy();
     expect(screen.getByText('0.00020000')).toBeTruthy();
-    expect(screen.getByText('0.00003000')).toBeTruthy();
+    expect(screen.getAllByText('unavailable').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByText('INVALID')).toBeTruthy();
+    expect(screen.getByText('geometry not regular: singular')).toBeTruthy();
     expect(screen.getByText('unresolved')).toBeTruthy();
     expect(screen.getByText('cut_locus')).toBeTruthy();
   });

@@ -31,14 +31,14 @@ export const DEFAULT_TERRAIN_GRID = 129;
 /** Terrain patch half-extent in c-space units around the rider. */
 export const DEFAULT_TERRAIN_HALF = 0.5;
 
-/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/4). */
+/** Wire shape of the Rust DebugSnapshot (camelCase, debug-snapshot/5). */
 export interface DebugSnapshot {
   version: string;
   timeSeconds: number;
   action: {
     raw: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number };
     effective: { direction: [number, number]; throttle: number; brake: number; grip: number; impulse: number };
-    driveCovector: [number, number];
+    driveCovector: [number, number] | null;
     frictionBeta: number;
     frictionPower: number;
   } | null;
@@ -51,22 +51,22 @@ export interface DebugSnapshot {
   physics: {
     c: [number, number];
     velocity: [number, number];
-    signedDistance: number;
-    realm: number;
-    rho: number;
+    signedDistance: number | null;
+    realm: number | null;
+    rho: number | null;
     /** Added in debug-snapshot/2. Legacy recordings can use ordinary camera modes. */
-    upperHalf?: { a: number; z: number; gradient: [number, number]; zDot: number };
-    sigma: number;
-    sigmaDot: number;
-    scaleGradient: [number, number];
-    metric: [number, number, number];
-    metricSpeed: number;
-    kinetic: number;
-    potential: number;
-    total: number;
-    geodesicAccel: [number, number];
-    potentialForce: [number, number];
-    netAccel: [number, number];
+    upperHalf?: { a: number; z: number; gradient: [number, number]; zDot: number } | null;
+    sigma: number | null;
+    sigmaDot: number | null;
+    scaleGradient: [number, number] | null;
+    metric: [number, number, number] | null;
+    metricSpeed: number | null;
+    kinetic: number | null;
+    potential: number | null;
+    total: number | null;
+    geodesicAccel: [number, number] | null;
+    potentialForce: [number, number] | null;
+    netAccel: [number, number] | null;
     derivativeValid: boolean;
   };
   diagnostics: {
@@ -77,7 +77,7 @@ export interface DebugSnapshot {
     /** Rust-owned regularized crest potential kappa*log2(d_ref/epsilon). */
     crestPotential: number;
     /** Added in debug-snapshot/4 by the geometry-provider seam. */
-    geometry?: GeometrySnapshot;
+  geometry?: GeometrySnapshot;
   };
 }
 
@@ -86,16 +86,33 @@ export interface GeometrySnapshot {
   providerVersion: string;
   providerName: string;
   tileId: string;
-  requestedScale: number;
-  resolvedScale: number;
-  estimatedError: number;
+  requestedScale: number | null;
+  resolvedScale: number | null;
+  estimatedError: number | null;
   isBridge: boolean;
   validity: string;
   singularity: string;
-  d: number;
-  gradDNorm: number;
-  hessianNorm: number;
-  hessianEigenvalues: [number, number];
+  d: number | null;
+  gradDNorm: number | null;
+  hessianNorm: number | null;
+  hessianEigenvalues: [number, number] | null;
+}
+
+/** True only when the snapshot contains a complete, valid surface jet for scene geometry. */
+export type RenderableDebugSnapshot = DebugSnapshot & { physics: DebugSnapshot['physics'] & {
+  rho: number; sigma: number; upperHalf: NonNullable<DebugSnapshot['physics']['upperHalf']>;
+  scaleGradient: [number, number];
+} };
+
+export function isGeometryRenderableSnapshot(snap: DebugSnapshot): snap is RenderableDebugSnapshot {
+  const p = snap.physics;
+  const upper = p.upperHalf;
+  const gradient = p.scaleGradient;
+  return snap.diagnostics.valid && p.derivativeValid &&
+    p.rho !== null && p.sigma !== null && upper != null && gradient !== null &&
+    Number.isFinite(p.rho) && Number.isFinite(p.sigma) &&
+    Number.isFinite(upper.a) && Number.isFinite(upper.z) && upper.a > 0 && upper.z > 0 &&
+    [...upper.gradient, upper.zDot, ...gradient].every(Number.isFinite);
 }
 
 /** Wire shape of the Rust TerrainPatch (camelCase). */
@@ -118,7 +135,7 @@ export interface CockpitTrajectory {
   crossingStep: number | null;
   crossed: boolean;
   /** Max potential U reached over the trajectory (crest evidence). */
-  maxPotential: number;
+  maxPotential: number | null;
   /** Whether the trajectory reached the Rust-owned crest neighborhood. */
   crestedRidge: boolean;
 }
@@ -144,7 +161,7 @@ export class CockpitRecorder {
     const actions = expandActions(spec);
     const snapshots: DebugSnapshot[] = [];
     let crossingStep: number | null = null;
-    let maxPotential = -Infinity;
+    let maxPotential: number | null = null;
     let crestPotential = Infinity;
 
     for (const a of actions) {
@@ -157,9 +174,11 @@ export class CockpitRecorder {
       });
       const snap = currentSnapshot(synth);
       snapshots.push(snap);
-      maxPotential = Math.max(maxPotential, snap.physics.potential);
+      if (snap.physics.potential !== null) {
+        maxPotential = maxPotential === null ? snap.physics.potential : Math.max(maxPotential, snap.physics.potential);
+      }
       crestPotential = snap.diagnostics.crestPotential;
-      if (crossingStep === null && snap.physics.signedDistance > 0) {
+      if (crossingStep === null && snap.physics.signedDistance !== null && snap.physics.signedDistance > 0) {
         crossingStep = snapshots.length - 1;
       }
     }
@@ -173,7 +192,7 @@ export class CockpitRecorder {
       // Crest evidence is judged against the RUST-OWNED crest potential
       // carried by every snapshot (within 1.0 of the ceiling), never a
       // TypeScript-restated constant.
-      crestedRidge: maxPotential > crestPotential - 1.0,
+      crestedRidge: maxPotential !== null && maxPotential > crestPotential - 1.0,
     };
   }
 }
@@ -244,6 +263,7 @@ export function riderSurfaceHeight(snap: DebugSnapshot, x: number, y: number): n
   if (typeof m.manifold_embedding !== 'function') {
     // Mock/test builds: fall back to the snapshot's sigma (the rider's own
     // position height), which keeps vitest honest about the seam shape.
+    if (snap.physics.sigma === null) throw new Error('Snapshot sigma is unavailable');
     return snap.physics.sigma;
   }
   const config = m.ManifoldConfig.defaults();

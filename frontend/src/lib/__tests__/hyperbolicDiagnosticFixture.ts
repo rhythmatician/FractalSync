@@ -9,7 +9,11 @@ export function computeUpperHalfScaleA(lambda: number) { return lambda / Math.LN
 export function rhoFromEmbeddedHeight(z: number, dRef = 0.1, lambda = 1) { return dRef * 2 ** (-z / lambda); }
 
 function fixtureSnapshot(snap: DebugSnapshot): DebugSnapshot {
-  const { rho, scaleGradient: [gx, gy], sigmaDot } = snap.physics;
+  const { rho, scaleGradient, sigmaDot } = snap.physics;
+  if (rho === null || scaleGradient === null || sigmaDot === null) {
+    throw new Error('Diagnostic fixture requires a regular snapshot');
+  }
+  const [gx, gy] = scaleGradient;
   return { ...snap, physics: { ...snap.physics, upperHalf: {
     a: 1 / Math.LN2, z: rho / Math.LN2, gradient: [-rho * gx, -rho * gy], zDot: -rho * sigmaDot,
   } } };

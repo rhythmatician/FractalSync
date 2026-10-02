@@ -24,6 +24,7 @@ import {
   replayVariantAsTrajectory,
   riderSurfaceHeight,
   sampleTerrainPatch,
+  isGeometryRenderableSnapshot,
   type DebugSnapshot,
 } from '../debugCockpit';
 import { baselineVariants, expandActions, explorationVariants, type CrossingVariantSpec } from '../shoreCrossingVariants';
@@ -40,8 +41,37 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
         debugSnapshotMeta?: () => { version: string; canonicalDt: number };
       }
     ).debugSnapshotMeta?.();
-    expect(meta?.version).toBe('debug-snapshot/4');
+    expect(meta?.version).toBe('debug-snapshot/5');
     expect(meta?.canonicalDt).toBeCloseTo(1024 / 48000, 15);
+  });
+
+  it('keeps invalid partial snapshots out of terrain and camera updates', () => {
+    const valid = new CockpitRecorder().recordVariant(baselineVariants()[0]).snapshots[0];
+    expect(isGeometryRenderableSnapshot(valid)).toBe(true);
+
+    const invalid: DebugSnapshot = {
+      ...valid,
+      physics: {
+        ...valid.physics,
+        upperHalf: null,
+        sigmaDot: null,
+        scaleGradient: null,
+        metric: null,
+        metricSpeed: null,
+        kinetic: null,
+        total: null,
+        geodesicAccel: null,
+        potentialForce: null,
+        netAccel: null,
+        derivativeValid: false,
+      },
+      diagnostics: {
+        ...valid.diagnostics,
+        valid: false,
+        lastError: 'geometry not regular: singular',
+      },
+    };
+    expect(isGeometryRenderableSnapshot(invalid)).toBe(false);
   });
 
   it('records a trajectory of snapshots keyed to destination steps', () => {
@@ -104,9 +134,10 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
   it('maxPotential equals the max snapshot potential (crest evidence)', () => {
     const recorder = new CockpitRecorder();
     const trajectory = recorder.recordVariant(baselineVariants()[3]);
-    const maxU = Math.max(...trajectory.snapshots.map((s) => s.physics.potential));
+    const maxU = Math.max(...trajectory.snapshots.map((s) => s.physics.potential ?? -Infinity));
+    expect(trajectory.maxPotential).not.toBeNull();
     expect(trajectory.maxPotential).toBeCloseTo(maxU, 14);
-    expect(trajectory.crestedRidge).toBe(trajectory.maxPotential > 8.9);
+    expect(trajectory.crestedRidge).toBe((trajectory.maxPotential ?? -Infinity) > 8.9);
   });
 
   it('snapshots are deterministic for identical inputs', () => {
@@ -189,7 +220,7 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     const recorder = new CockpitRecorder();
     const trajectory = recorder.recordVariant(baselineVariants()[3]);
     const s: DebugSnapshot = trajectory.snapshots[10];
-    expect(s.version).toBe('debug-snapshot/4');
+    expect(s.version).toBe('debug-snapshot/5');
     // Phase-A groups only: observation arrives with #108 (Phase B).
     expect(s).toHaveProperty('physics');
     expect(s).toHaveProperty('action');
@@ -215,7 +246,8 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     const snap = sampleSnapshotWith(0.2549, 0.0, 0.9);
     const h = riderSurfaceHeight(snap, snap.physics.c[0], snap.physics.c[1]);
     // At the rider's own position the height IS the authoritative embedding.
-    expect(h).toBeCloseTo(snap.physics.sigma, 12);
+    expect(snap.physics.sigma).not.toBeNull();
+    expect(h).toBeCloseTo(snap.physics.sigma!, 12);
   });
 
   it('rider height resolves steep near-Shore gradients (no flying)', () => {
@@ -230,9 +262,10 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     const h2 = riderSurfaceHeight(snap, snap.physics.c[0] - offset, snap.physics.c[1]);
     // Heights at +/-5e-4 must DIFFER by roughly |grad sigma| * 1e-3 (the
     // surface has real slope there), proving per-position sampling.
+    expect(snap.physics.scaleGradient).not.toBeNull();
     const expectedDelta = Math.hypot(
-      snap.physics.scaleGradient[0],
-      snap.physics.scaleGradient[1]
+      snap.physics.scaleGradient![0],
+      snap.physics.scaleGradient![1]
     ) * 2 * offset;
     expect(Math.abs(h1 - h2)).toBeGreaterThan(expectedDelta * 0.5);
     // And the rider's own height must sit between them (continuous surface).

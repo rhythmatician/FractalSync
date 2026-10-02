@@ -963,7 +963,8 @@ mod tests {
         let undriven = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 0.0, brake: 0.0, grip: 0.0, impulse: 0.0 };
         let mut crossed_undriven = false;
         for _ in 0..steps {
-            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &undriven, dt, &config).unwrap();
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &undriven, dt, &config)
+                .unwrap_or_else(|error| panic!("undriven rollout failed at c={c:?}, v={v:?}: {error}"));
             c = c1; v = v1;
             if signed_distance(c).unwrap() > 0.0 { crossed_undriven = true; break; }
         }
@@ -974,7 +975,8 @@ mod tests {
         let mut crossed_driven = false;
         let mut final_c = c0;
         for _ in 0..steps {
-            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &driven, dt, &config).unwrap();
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &driven, dt, &config)
+                .unwrap_or_else(|error| panic!("driven rollout failed at c={c:?}, v={v:?}: {error}"));
             c = c1; v = v1;
             final_c = c;
             if signed_distance(c).unwrap() > 0.0 { crossed_driven = true; break; }
