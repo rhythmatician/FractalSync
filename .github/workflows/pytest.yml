@@ -287,6 +287,9 @@ jobs:
         run: |
           npm test  --prefix frontend
 
+      - name: Verify real WASM snapshot and startup contract
+        run: node frontend/scripts/test_debug_snapshot_contract.mjs
+
       - name: Install Chromium for GPU rendering checks
         run: npx --prefix frontend playwright install --with-deps chromium
 

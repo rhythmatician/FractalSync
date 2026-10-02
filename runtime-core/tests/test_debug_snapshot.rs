@@ -501,9 +501,11 @@ fn test_wall_force_zero_at_center() {
 
 #[test]
 fn test_total_potential_decomposition() {
-    // total potential = kappa * sigma + U_wall
+    // This algebra requires a smooth metric; singular refusal is tested separately.
     let config = ManifoldConfig::default();
-    let c = Complex64::new(0.5, 0.1);
+    let c = Complex64::new(-0.5, 0.1);
+    assert_eq!(runtime_core::manifold::geometry_jet(c, &config).unwrap().validity,
+        runtime_core::geometry_provider::GeometryValidity::Regular);
     let sigma = runtime_core::manifold::mandelbrot_scale(c, &config).unwrap();
     let u_sigma = config.kappa * sigma;
     let u_wall = runtime_core::manifold::wall_potential(c, &config).unwrap();
@@ -553,22 +555,17 @@ fn test_hard_invariant_rejects_invalid_step() {
 }
 
 #[test]
-fn test_shore_behavior_preserved() {
-    // Existing Shore-crossing behavior must remain possible and not be confused
-    // with the outer-domain barrier.
+fn test_outer_wall_allows_regular_interior_motion() {
+    // Isolate the outer-wall invariant from signed-distance singularities.
+    // Native Shore crossing has its own driven/undriven rollout regression.
     let config = ManifoldConfig::default();
-    // A point well inside the main cardioid should still allow shore crossing
-    // when driven properly (this test verifies the barrier doesn't interfere
-    // with normal operation at |c| << 2).
-    let c = Complex64::new(0.1, 0.0);
-    let v = (0.01, 0.0);
-    let q_control = (0.0, 0.0);
-    let beta = 0.1;
-    let dt = 0.02;
-
-    let result = runtime_core::manifold::integrate_step(c, v, q_control, beta, dt, &config);
-    // Should succeed (no hard invariant violation at |c| = 0.1)
-    assert!(result.is_ok(), "integrate_step at |c| = 0.1 should succeed");
+    let c = Complex64::new(-0.5, 0.1);
+    assert_eq!(runtime_core::manifold::geometry_jet(c, &config).unwrap().validity,
+        runtime_core::geometry_provider::GeometryValidity::Regular);
+    let (next, _, _) = runtime_core::manifold::integrate_step(
+        c, (0.01, 0.0), (0.0, 0.0), 0.1, 0.02, &config,
+    ).expect("ordinary regular interior motion should remain possible");
+    assert!(next.norm_sqr() < 4.0);
 }
 
 #[test]
