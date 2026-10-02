@@ -77,10 +77,10 @@ Use the configured project interpreter for the Python commands and rebuild its e
 
 At epsilon 1e-4, `(-0.5, 0.1)` and `(0.3, 0.05)` are Regular, `(0.35, 0.05)` is Unresolved, and the origin and cusp `(0.25, 0)` are Singular. The cusp becomes Unresolved at epsilon 1e-8. Immediate-repeat timings in this release sample were about 0.45 to 1.49 ms; first touches reached about 82 ms. These machine-specific measurements do not establish the live frame budget or deep-scale acceptance.
 
-## Remaining blockers
+## September 26 blockers (updated October 2)
 
 1. **Native Shore crossing.** The Rust crossing test still fails. Python high-curvature, near-Shore, and underpowered/above-barrier trajectories encounter Unresolved or Singular geometry. Recorded failing positions include `(0.4005984941807052, 0.054142245287925383)`, `(0.300068357754536, 0.05333168318631767)`, and `(0.38777728061779215, 0.05037298251515404)`. Determine which represent real geometric ambiguity and which are contour/jet-estimation defects, then establish the ordinary Controls behavior there. Do not relax quality thresholds merely to obtain a trajectory.
-2. **Initialization and diagnostic behavior at invalid geometry.** Default-state and cut-locus snapshot tests fail because metric evaluation requires Regular geometry before the snapshot can report validity. Define a valid startup state and a diagnostic contract for singular/unresolved states. Moving all fixtures to regular points would hide the lifecycle problem.
+2. **Initialization and diagnostic behavior at invalid geometry — resolved October 2.** The follow-up above implements regular untouched startup and partial invalid snapshots. Explicit origin states remain covered by refusal and diagnostic tests.
 3. **Broader numerical and perceptual acceptance.** Finish #120 validation of conditioning, energy drift, cut loci, perturbation sensitivity, deep scales, cost, and cross-language behavior. Then obtain the #82 crossing/non-crossing visual verdict. The passing sample and bindings checks above do not close these items.
 
 The [migration inventory](geometry-provider-migration.md) records destination ownership and deletion triggers for this geometry seam. It is a partial #84 artifact, not completion of that broader issue.

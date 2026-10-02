@@ -435,7 +435,6 @@ export function DebugCockpit(): JSX.Element {
   useEffect(() => {
     const refs = sceneRefs.current;
     if (!refs.scene || !frame || !isGeometryRenderableSnapshot(frame)) return;
-    if (!isGeometryRenderableSnapshot(frame)) return;
     const [cx, cy] = frame.physics.c;
     const planarSpeed = Math.hypot(frame.physics.velocity[0], frame.physics.velocity[1]);
     const lod = planTerrainLod(frame.physics.rho, planarSpeed);
