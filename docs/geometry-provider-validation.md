@@ -94,3 +94,21 @@ At epsilon 1e-4, `(-0.5, 0.1)` and `(0.3, 0.05)` are Regular, `(0.35, 0.05)` is 
 3. **Broader numerical and perceptual acceptance.** Finish #120 validation of conditioning, energy drift, cut loci, perturbation sensitivity, deep scales, cost, and cross-language behavior. Then obtain the #82 crossing/non-crossing visual verdict. The passing sample and bindings checks above do not close these items.
 
 The [migration inventory](geometry-provider-migration.md) records destination ownership and deletion triggers for this geometry seam. It is a partial #84 artifact, not completion of that broader issue.
+
+## October 2 completed CI and classifier diagnosis
+
+At PR head `2014f942fa42c66a4ef4ec496051826a2fc113d6`, [CI run 37077513809](https://github.com/rhythmatician/FractalSync/actions/runs/37077513809) completed with the frontend/GPU, native and WASM builds, stubs, and type checks green. Rust still fails the native crossing rollout. Python reports 180 passed and five failed: the two Controls-v2 rollout/training smoke tests, high-curvature energy, near-Shore energy, and Shore-crossing acceptance. Terrain tests pass in that CI run.
+
+The rejected native candidate endpoint `(0.29835945330580743, 0.0515177858286498)` now has a concrete classifier diagnosis:
+
+- At level 5, the nearest projection is the shared vertex `(0.313232421875, 0.0390625)`; incident segment normals differ by about 50.53 degrees.
+- At level 6, the nearest projection is the shared vertex `(0.3133544921875, 0.0390625)`; incident segment normals differ by 45 degrees. The current persistence rule therefore returns CutLocus.
+- At level 7, the nearest foot is approximately `(0.313052173, 0.038784095)`, at distance `0.01944281063`. The competing segment's foot is its endpoint `(0.312438965, 0.038085938)`, at distance `0.01945885903`. The edge normals differ by about 85.91 degrees, but the signed distance directions from the actual feet differ by only about 2.7 degrees.
+
+Two incident edges sharing one nearest foot do not establish two distinct nearest points. Away from that vertex, distance to the vertex has a unique displacement direction. Likewise, an endpoint-clamped segment's edge normal need not equal the distance gradient at the query. The current classifier therefore has insufficient evidence for its CutLocus result; this does not prove that the underlying exact Mandelbrot distance is regular.
+
+Issue #145's settled plan explicitly calls for persistent sharp incident tangents at a nearest vertex to be classified as non-unique-normal geometry. That rule must be reconciled with the query's distance-gradient semantics before changing the implementation. The proposed correction is to compare directions derived from actual distinct nearest feet away from the Shore, while handling zero-distance boundary normals explicitly. It needs synthetic corner and genuine medial-axis regressions plus the existing rollout tests; no production classifier change was made in this diagnosis.
+
+Separate Unresolved failures remain. The Python high-curvature trajectory reaches `(0.4005984942, 0.0541422453)` and is refused as Unresolved. Changing cut-locus classification alone is not sufficient evidence that CI or #145 will pass. Six exploratory full-throttle, outward-gradient trajectories from Regular points also encountered Singular or Unresolved geometry before crossing; they establish no successful crossing. No crossing assertion, quality threshold, or refusal behavior was weakened. Work stops at this identified contract conflict pending resolution, as requested.
+
+The two Python Controls-v2 failures also expose startup assumptions. The explicit rollout smoke fixture starts at `(0, 0)` (Singular/CutLocus); its second start `(0.8, 0)` is Unresolved. The trainer smoke failure occurs in a randomized initial state that the provider classifies Singular/CutLocus; the traceback does not retain its exact coordinate. The trainer needs an explicit policy for selecting valid initial geometry. Neither a successful fast passage through the origin nor the cockpit's default-start fix makes a stationary origin a valid training seed.
