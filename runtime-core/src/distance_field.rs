@@ -380,7 +380,7 @@ pub fn mandelbrot_distance_estimate_with_params(
 
         let sdf_vals = sample_distance_field(&perimeter_cs)?;
         if sdf_vals.len() != perimeter_cs.len() { return Err("sdf length mismatch".to_string()) }
-        let mut best = std::f64::INFINITY;
+        let mut best = f64::INFINITY;
         for (p, &sdf) in perimeter_cs.iter().zip(sdf_vals.iter()) {
             let xb = p.re;
             let yb = p.im;
