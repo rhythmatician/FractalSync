@@ -33,14 +33,16 @@ def _config(rc):
 class TestDebugSnapshotFromState:
     def test_snapshot_has_versioned_sections(self, rc):
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
-        assert snap["version"] == "debug-snapshot/3"
+        assert snap["version"] == "debug-snapshot/5"
         for section in ("timeSeconds", "map", "physics", "diagnostics"):
             assert section in snap
         # observation is deliberately absent until #108 (Phase B).
         assert "observation" not in snap
 
     def test_physics_fields_match_canonical_bindings(self, rc):
-        c = complex(0.0, 0.0)
+        # The origin is intentionally a partial singular snapshot in /5.
+        # Use a known regular interior point to verify derivative-dependent math.
+        c = complex(-0.5, 0.1)
         v = (0.05, -0.02)
         snap = rc.debug_snapshot_from_state(c.real, c.imag, v[0], v[1])
         p = snap["physics"]
@@ -69,6 +71,29 @@ class TestDebugSnapshotFromState:
         assert p["total"] == pytest.approx(
             rc.manifold_total_energy(v[0], v[1], c, _config(rc)), abs=1e-12
         )
+
+    def test_origin_returns_honest_partial_singular_snapshot(self, rc):
+        snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.1, 0.0)
+        p = snap["physics"]
+        d = snap["diagnostics"]
+        assert p["c"] == [0.0, 0.0]
+        assert p["velocity"] == [0.1, 0.0]
+        assert p["signedDistance"] is not None
+        assert p["realm"] is not None
+        assert p["rho"] is not None
+        assert p["sigma"] is not None
+        assert p["potential"] is not None
+        assert p["derivativeValid"] is False
+        for field in ("upperHalf", "sigmaDot", "scaleGradient", "metric", "metricSpeed",
+                      "kinetic", "total", "geodesicAccel", "potentialForce", "netAccel"):
+            assert p[field] is None
+        assert d["valid"] is False
+        assert d["lastError"]
+        g = d["geometry"]
+        assert g["validity"] == "singular"
+        assert g["gradDNorm"] is None
+        assert g["hessianNorm"] is None
+        assert g["hessianEigenvalues"] is None
 
     def test_realm_follows_signed_distance(self, rc):
         inside = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)

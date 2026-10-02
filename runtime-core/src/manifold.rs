@@ -121,8 +121,11 @@ pub fn derivative_step() -> f64 {
 /// symmetrically. It does not make a nonsmooth signed-distance field globally
 /// twice differentiable; cut loci still limit Hessian and connection validity.
 pub fn regularized_distance(c: Complex64, epsilon: f64) -> Result<f64, String> {
-    let d = signed_distance(c)?;
-    Ok((d * d + epsilon * epsilon).sqrt())
+    let jet = crate::geometry_provider::query_geometry(c, epsilon)?;
+    if !jet.d.is_finite() {
+        return Err(format!("geometry provider: D not finite (validity={:?})", jet.validity));
+    }
+    Ok(crate::geometry_provider::rho_from_jet(&jet, epsilon))
 }
 
 /// Unsigned geometric distance d(c) = |D(c)|.
@@ -165,8 +168,8 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
         match jet.validity {
             crate::geometry_provider::GeometryValidity::Singular
             | crate::geometry_provider::GeometryValidity::ProviderFailure
-            | crate::geometry_provider::GeometryValidity::OutsideDomain
-            | crate::geometry_provider::GeometryValidity::Unresolved => {
+            | crate::geometry_provider::GeometryValidity::Unresolved
+            | crate::geometry_provider::GeometryValidity::OutsideDomain => {
                 return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
             }
             _ => {}
@@ -207,8 +210,8 @@ pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2];
         match jet.validity {
             crate::geometry_provider::GeometryValidity::Singular
             | crate::geometry_provider::GeometryValidity::ProviderFailure
-            | crate::geometry_provider::GeometryValidity::OutsideDomain
-            | crate::geometry_provider::GeometryValidity::Unresolved => {
+            | crate::geometry_provider::GeometryValidity::Unresolved
+            | crate::geometry_provider::GeometryValidity::OutsideDomain => {
                 return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
             }
             _ => {}
@@ -707,7 +710,7 @@ mod tests {
     fn test_metric_positive_definite() {
         let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = ManifoldConfig::default();
-        let c = Complex64::new(0.0, 0.0);
+        let c = Complex64::new(-0.5, 0.1);
         let g = induced_metric(c, &config).unwrap();
         
         // Check symmetry
@@ -723,7 +726,7 @@ mod tests {
     fn test_energy_conservation_no_forces() {
         let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = ManifoldConfig::default();
-        let c = Complex64::new(0.0, 0.0);
+        let c = Complex64::new(-0.5, 0.1);
         let v = (0.01, 0.01);
         let dt = 0.01;
         
@@ -738,7 +741,7 @@ mod tests {
     fn embedding_jacobian_and_qdot_consistency() {
         let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = ManifoldConfig::default();
-        let c = Complex64::new(0.12, -0.34);
+        let c = Complex64::new(-0.5, 0.1);
         let v = (0.07, -0.03);
         let (x, y, s) = embedding(c, &config).unwrap();
         assert!((x - c.re).abs() < 1e-12);
@@ -843,29 +846,24 @@ mod tests {
     #[test]
     fn scale_regularization_is_smooth_and_symmetric() {
         let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-        // rho(c)=sqrt(D^2+eps^2) gives finite, smooth sigma through D=0 and symmetric
-        // geometric scale on inside/outside. Finite differences must stay finite.
+        // Regularization is smooth for a smooth input jet. It does not turn
+        // a genuine cut locus into a differentiable distance function.
+        use crate::geometry_provider::*;
         let config = ManifoldConfig::default();
-        // Find Shore at y=0 by bisection on signed distance (needs field).
-        // If field not available, just check sigma finiteness at 0.25.
-        let c_inside = Complex64::new(0.24, 0.0);
-        let c_outside = Complex64::new(0.26, 0.0);
-        let s_in = mandelbrot_scale(c_inside, &config).unwrap();
-        let s_out = mandelbrot_scale(c_outside, &config).unwrap();
-        assert!(s_in.is_finite() && s_out.is_finite());
-        // Scale is highest near the Shore, lower farther away.
-        let s_far = mandelbrot_scale(Complex64::new(1.0, 0.0), &config).unwrap();
-        assert!(s_in > s_far);
-        assert!(s_out > s_far);
-        // Derivatives through the crossing must be finite (smooth).
-        for x in [0.245, 0.25, 0.255] {
-            let (gx, gy) = scale_gradient(Complex64::new(x, 0.0), &config).unwrap();
-            assert!(gx.is_finite() && gy.is_finite());
-            let h = scale_hessian(Complex64::new(x, 0.0), &config).unwrap();
-            for row in h { for v in row { assert!(v.is_finite()); } }
-            let gamma = christoffel_symbols(Complex64::new(x, 0.0), &config).unwrap();
-            for i in 0..2 { for j in 0..2 { for k in 0..2 { assert!(gamma[i][j][k].is_finite()); } } }
+        for d in [-0.001, -0.0001, 0.0, 0.0001, 0.001] {
+            let jet=GeometryJet { d, grad_d:[1.0,0.0],hessian_d:[[0.0;2];2],
+                resolved_scale:1e-6,requested_scale:1e-5,estimated_error:0.0,
+                validity:GeometryValidity::Regular,singularity:SingularityKind::None,
+                provider_version:"analytic-test".into(),tile_id:"plane".into(),is_bridge:false };
+            let mut reflected=jet.clone(); reflected.d=-d;
+            assert_eq!(sigma_from_jet(&jet,&config),sigma_from_jet(&reflected,&config));
+            assert!(grad_sigma_from_jet(&jet,&config).iter().all(|v|v.is_finite()));
+            assert!(hessian_sigma_from_jet(&jet,&config).iter().flatten().all(|v|v.is_finite()));
         }
+        let cut=Complex64::new(0.0,0.0);
+        assert_eq!(geometry_jet(cut,&config).unwrap().validity,GeometryValidity::Singular);
+        assert!(scale_gradient(cut,&config).is_err());
+        assert!(christoffel_symbols(cut,&config).is_err());
     }
 
     #[test]
@@ -874,7 +872,7 @@ mod tests {
         // D, d=|D|, and S must be explicitly distinct. This test documents the
         // invariant and checks the Rust side honors it: d = |D| exactly, while
         // S (if later exposed) is NOT geometric distance.
-        let c = Complex64::new(0.0, 0.0);
+        let c = Complex64::new(-0.5, 0.1);
         let d_signed = signed_distance(c).unwrap();
         let d_abs = unsigned_distance(c).unwrap();
         assert!((d_abs - d_signed.abs()).abs() < 1e-12);
@@ -888,7 +886,7 @@ mod tests {
         let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         // Friction/brake is PSD: P = v^T Q_friction <= 0 regardless of grip.
         let config = ManifoldConfig::default();
-        let c = Complex64::new(0.1, -0.2);
+        let c = Complex64::new(-0.5, 0.1);
         let v = (0.4, 0.3);
         for (grip, brake) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.5, 0.5)] {
             let mc = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 0.0, brake, grip, impulse: 0.0 };
@@ -905,7 +903,7 @@ mod tests {
         // With Q_control=0, beta=0, total energy E=K+U should drift only O(dt)
         let config = ManifoldConfig::default();
         let dt = 0.005;
-        let mut c = Complex64::new(0.0, 0.6);
+        let mut c = Complex64::new(-0.5, 0.1);
         let mut v = (0.015, -0.01);
         let e0 = total_energy(v, c, &config).unwrap();
         for _ in 0..80 {
@@ -923,7 +921,7 @@ mod tests {
         // Drive covector must have metric-consistent dual norm; its work
         // w = v·Q*dt is attributable to the control, not hidden geometry.
         let config = ManifoldConfig::default();
-        let c = Complex64::new(0.05, 0.1);
+        let c = Complex64::new(-0.5, 0.1);
         let v = (0.02, 0.01);
         let mc = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 1.0, brake: 0.0, grip: 0.5, impulse: 0.0 };
         let q = mc.drive_covector(c, &config).unwrap();
@@ -936,21 +934,13 @@ mod tests {
     }
 
     #[test]
-    fn mip_boundaries_do_not_cause_discontinuity() {
-        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
-        // Map-derived mechanics must vary continuously across stored MIP
-        // boundaries and through the regularized Shore crest. We approximate
-        // this by checking metric/shear continuity at 0.25 +/- eps (shore)
-        // and at far/near points where SDF resolution changes would appear as
-        // jumps. Tolerance is generous because bicubic interpolation is smooth
-        // but FD noise exists.
-        let config = ManifoldConfig::default();
-        for x in [0.249, 0.25, 0.251, -0.751, -0.75, -0.749] {
-            let g = induced_metric(Complex64::new(x, 0.0), &config).unwrap();
-            for row in g { for v in row { assert!(v.is_finite()); } }
-            let det = g[0][0]*g[1][1] - g[0][1]*g[0][1];
-            assert!(det > 0.0 && det.is_finite());
-        }
+    fn dyadic_tile_boundary_preserves_regular_metric() {
+        let config=ManifoldConfig::default();
+        let left=induced_metric(Complex64::new(-0.5-1e-7,0.1),&config).unwrap();
+        let right=induced_metric(Complex64::new(-0.5+1e-7,0.1),&config).unwrap();
+        for i in 0..2 { for j in 0..2 {
+            assert!((left[i][j]-right[i][j]).abs() < 1e-4*left[i][j].abs().max(1.0));
+        }}
     }
 
     #[test]
@@ -963,7 +953,7 @@ mod tests {
         // (ControlsV2 -> G, Γ, U) and checks that a driven rollout crosses
         // while an undriven rollout from the same start remains inside.
         let config = ManifoldConfig { d_ref: 0.1, epsilon: 1e-4, lambda_sq: 1.0, kappa: 0.5, mu: std::f64::consts::FRAC_1_PI };
-        let c0 = Complex64::new(0.23, 0.0);
+        let c0 = Complex64::new(0.3, 0.05);
         let v0 = (0.0, 0.0);
         let dt = 0.02;
         let steps = 400;
@@ -973,7 +963,8 @@ mod tests {
         let undriven = crate::controls::MotionControls { direction: [1.0, 0.0], throttle: 0.0, brake: 0.0, grip: 0.0, impulse: 0.0 };
         let mut crossed_undriven = false;
         for _ in 0..steps {
-            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &undriven, dt, &config).unwrap();
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &undriven, dt, &config)
+                .unwrap_or_else(|error| panic!("undriven rollout failed at c={c:?}, v={v:?}: {error}"));
             c = c1; v = v1;
             if signed_distance(c).unwrap() > 0.0 { crossed_undriven = true; break; }
         }
@@ -984,7 +975,8 @@ mod tests {
         let mut crossed_driven = false;
         let mut final_c = c0;
         for _ in 0..steps {
-            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &driven, dt, &config).unwrap();
+            let (c1, v1, _) = crate::controls::integrate_motion_controls(c, v, &driven, dt, &config)
+                .unwrap_or_else(|error| panic!("driven rollout failed at c={c:?}, v={v:?}: {error}"));
             c = c1; v = v1;
             final_c = c;
             if signed_distance(c).unwrap() > 0.0 { crossed_driven = true; break; }

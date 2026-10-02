@@ -200,7 +200,7 @@ class MockOrbitController {
         }
       : null;
     return {
-      version: 'debug-snapshot/2',
+      version: 'debug-snapshot/5',
       timeSeconds: this.step_time_seconds,
       action,
       map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
@@ -230,6 +230,21 @@ class MockOrbitController {
         lastError: null,
         lastDeltaTotal: this.last_delta_total,
         crestPotential: Math.log2(0.1 / 1e-4),
+        geometry: {
+          providerVersion: 'geometry-provider/3',
+          providerName: 'scale-aware',
+          tileId: 'mock-tile',
+          requestedScale: 1e-4,
+          resolvedScale: 5e-5,
+          estimatedError: 1e-6,
+          isBridge: false,
+          validity: 'regular',
+          singularity: 'none',
+          d: -0.1,
+          gradDNorm: 1,
+          hessianNorm: 0.2,
+          hessianEigenvalues: [0.1, -0.1] as [number, number],
+        },
       },
     };
   }
@@ -479,14 +494,14 @@ export default {
       default_residual_omega_scale: 2.0,
       default_base_omega: 1.0,
       default_orbit_seed: 1337,
-      controller_version: 'orbit-controller/5',
+      controller_version: 'orbit-controller/6',
       feature_version: 'features/2',
       analysis_pipeline_version: 'analysis-pipeline/1',
       controls_version: 'controls/2',
     };
   },
   debugSnapshotMeta() {
-    return { version: 'debug-snapshot/2', canonicalDt: 1024 / 48000 };
+    return { version: 'debug-snapshot/5', canonicalDt: 1024 / 48000 };
   },
   ManifoldConfig: class MockManifoldConfig {
     static defaults() { return new this(0.1, 1e-4, 1, 1, 1 / Math.PI); }

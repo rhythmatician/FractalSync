@@ -1,4 +1,4 @@
-use runtime_core::controller::{OrbitState, ResidualParams, synthesize, step};
+use runtime_core::controller::{OrbitController, OrbitState, ResidualParams, step, synthesize};
 
 #[test]
 fn test_orbit_state_initialization() {
@@ -313,4 +313,65 @@ fn test_different_lobes() {
     
     assert!(diff12 > 0.01, "Different lobes should produce different outputs");
     assert!(diff23 > 0.01, "Different lobes should produce different outputs");
+}
+
+#[test]
+fn default_controller_starts_in_a_regular_manifold_chart() {
+    let mut controller = OrbitController::default();
+    assert_eq!(controller.c, num_complex::Complex64::new(0.0, 0.0));
+    // The legacy no-physics path keeps its original default and behavior.
+    controller.step(0.01, None, 0.0);
+    assert_eq!(controller.c, num_complex::Complex64::new(0.0, 0.0));
+
+    // A fresh controller entering destination manifold motion gets the
+    // verified regular startup chart.
+    let mut controller = OrbitController::default();
+    controller.set_manifold_physics_enabled(true);
+    assert_eq!(controller.c, num_complex::Complex64::new(-0.5, 0.1));
+    controller.step_with_controls(0.01, &Default::default());
+    assert!(
+        controller.manifold_error.is_none(),
+        "default manifold startup should be valid: {:?}",
+        controller.manifold_error
+    );
+
+    // Existing direct Rust users may seed the public state field rather than
+    // the binding setter; a non-default position must still be preserved.
+    let existing = num_complex::Complex64::new(-0.45, 0.12);
+    let mut seeded = OrbitController::default();
+    seeded.c = existing;
+    seeded.set_manifold_physics_enabled(true);
+    assert_eq!(seeded.c, existing);
+}
+
+#[test]
+fn explicit_cut_locus_startup_remains_fail_closed() {
+    let mut controller = OrbitController::default();
+    controller.set_c(0.0, 0.0);
+    controller.set_manifold_physics_enabled(true);
+    let start = controller.c;
+    let velocity = controller.planar_velocity;
+
+    let stopped = controller.step_with_controls(0.01, &Default::default());
+
+    assert_eq!(stopped, start);
+    assert_eq!(controller.c, start);
+    assert_eq!(controller.planar_velocity, velocity);
+    assert!(
+        controller.manifold_error.as_deref().is_some_and(|error| error.contains("geometry not regular")),
+        "explicit cut-locus state should report the manifold failure: {:?}",
+        controller.manifold_error
+    );
+    let snapshot = controller.debug_snapshot().expect("invalid state is still diagnosable");
+    assert!(!snapshot.diagnostics.valid);
+    assert!(snapshot.diagnostics.last_error.is_some());
+}
+
+#[test]
+fn enabling_manifold_preserves_an_existing_velocity_at_origin() {
+    let mut controller = OrbitController::default();
+    controller.planar_velocity = (0.3, -0.2);
+    controller.set_manifold_physics_enabled(true);
+    assert_eq!(controller.c, num_complex::Complex64::new(0.0, 0.0));
+    assert_eq!(controller.planar_velocity, (0.3, -0.2));
 }

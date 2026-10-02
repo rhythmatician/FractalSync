@@ -398,7 +398,7 @@ impl OrbitController {
 
     /// Set the persistent c position (momentum/shore-bias paths).
     fn set_c(&mut self, re: f64, im: f64) {
-        self.inner.c = num_complex::Complex64::new(re, im);
+        self.inner.set_c(re, im);
     }
 
     // ---- Manifold physics (issue #106) ----
@@ -408,7 +408,7 @@ impl OrbitController {
     /// generalized force covector for the musically-ignorant manifold kernel.
     /// Transitional; not destination Controls v2 (issue #107).
     fn set_manifold_physics(&mut self, on: bool) {
-        self.inner.manifold_physics = on;
+        self.inner.set_manifold_physics_enabled(on);
     }
 
     /// Whether manifold physics is currently enabled.

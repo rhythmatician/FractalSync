@@ -23,9 +23,11 @@ import {
   CANONICAL_DT,
   DEFAULT_TERRAIN_HALF,
   planTerrainLod,
+  isGeometryRenderableSnapshot,
   riderSurfaceHeight,
   sampleTerrainPatch,
   type CockpitTrajectory,
+  type GeometrySnapshot,
 } from '../lib/debugCockpit';
 import {
   ManualDriver,
@@ -99,7 +101,7 @@ function Row({
       ? Number.isFinite(value)
         ? value.toFixed(digits)
         : '—'
-      : value ?? '—';
+      : value ?? 'unavailable';
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, lineHeight: 1.6 }}>
       <span style={{ color: '#889' }}>
@@ -128,8 +130,31 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+export function GeometryProviderPanel({ geometry, valid, lastError }: { geometry: GeometrySnapshot; valid: boolean; lastError: string | null }): JSX.Element {
+  return (
+    <Panel title="GEOMETRY PROVIDER">
+      <Row label="provider" value={geometry.providerName} kind="STATE" />
+      <Row label="snapshot status" value={valid ? 'valid' : 'INVALID'} kind="DIAG" />
+      <Row label="last error" value={lastError ?? (valid ? '—' : 'unavailable')} kind="DIAG" />
+      <Row label="provider version" value={geometry.providerVersion} kind="STATE" />
+      <Row label="tile" value={geometry.tileId} kind="STATE" />
+      <Row label="requested scale" value={geometry.requestedScale} kind="DIAG" digits={8} />
+      <Row label="resolved scale" value={geometry.resolvedScale} kind="DIAG" digits={8} />
+      <Row label="estimated error" value={geometry.estimatedError} kind="DIAG" digits={8} />
+      <Row label="source" value={geometry.isBridge ? 'raster bridge' : 'destination provider'} kind="DIAG" />
+      <Row label="validity" value={geometry.validity} kind="DIAG" />
+      <Row label="singularity" value={geometry.singularity} kind="DIAG" />
+      <Row label="D(c) provider" value={geometry.d} kind="STATE" digits={7} />
+      <Row label="|grad D|" value={geometry.gradDNorm} kind="DIAG" />
+      <Row label="|H D|" value={geometry.hessianNorm} kind="DIAG" />
+      <Row label="H D eigenvalues" value={geometry.hessianEigenvalues ? `${geometry.hessianEigenvalues[0].toFixed(4)}, ${geometry.hessianEigenvalues[1].toFixed(4)}` : 'unavailable'} kind="DIAG" />
+    </Panel>
+  );
+}
+
 /** Human-readable realm name from the authoritative realm field. */
-function realmName(realm: number): string {
+function realmName(realm: number | null): string {
+  if (realm === null) return 'unavailable';
   return realm < 0 ? 'INSIDE (connected)' : realm > 0 ? 'OUTSIDE (dust)' : 'ON SHORE';
 }
 
@@ -153,19 +178,29 @@ function EnergySparkline({
   // Sample at most ~400 points across the trajectory for the polyline.
   const total = trajectory.snapshots.length;
   const stride = Math.max(1, Math.floor(total / 400));
-  const pts: Array<{ k: number; u: number; e: number }> = [];
+      const pts: Array<{ k: number | null; u: number | null; e: number | null }> = [];
   for (let i = 0; i < total; i += stride) {
     const s = trajectory.snapshots[i];
     pts.push({ k: s.physics.kinetic, u: s.physics.potential, e: s.physics.total });
   }
-  const eMin = Math.min(...pts.map((p) => p.e));
-  const eMax = Math.max(...pts.map((p) => p.e));
+  const finiteEnergy = pts.flatMap((p) => [p.k, p.u, p.e]).filter((v): v is number => v !== null && Number.isFinite(v));
+  if (finiteEnergy.length === 0) return <div style={{ fontSize: 10, color: '#889' }}>Energy unavailable</div>;
+  const eMin = Math.min(...finiteEnergy);
+  const eMax = Math.max(...finiteEnergy);
   const span = Math.max(eMax - eMin, 1e-9);
   const toY = (v: number): number => H - 2 - ((v - eMin) / span) * (H - 4);
   const toX = (i: number): number => (i / Math.max(pts.length - 1, 1)) * (W - 2) + 1;
 
-  const poly = (key: 'k' | 'u' | 'e'): string =>
-    pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(p[key]).toFixed(1)}`).join(' ');
+  const poly = (key: 'k' | 'u' | 'e'): string => {
+    let connected = false;
+    return pts.map((p, i) => {
+      const value = p[key];
+      if (value === null || !Number.isFinite(value)) { connected = false; return ''; }
+      const command = connected ? 'L' : 'M';
+      connected = true;
+      return `${command}${toX(i).toFixed(1)},${toY(value).toFixed(1)}`;
+    }).filter(Boolean).join(' ');
+  };
 
   // Marker for the current frame.
   const curIdx = Math.min(Math.floor(frameIdx / stride), pts.length - 1);
@@ -176,7 +211,7 @@ function EnergySparkline({
       <path d={poly('e')} fill="none" stroke="#9fe8b0" strokeWidth={1.2} />
       <path d={poly('u')} fill="none" stroke="#7fb0ff" strokeWidth={1} />
       <path d={poly('k')} fill="none" stroke="#ffd479" strokeWidth={1} />
-      {cur && <circle cx={toX(curIdx)} cy={toY(cur.e)} r={2.5} fill="#fff" />}
+      {cur?.e !== null && cur?.e !== undefined && <circle cx={toX(curIdx)} cy={toY(cur.e)} r={2.5} fill="#fff" />}
     </svg>
   );
 }
@@ -306,7 +341,7 @@ export function DebugCockpit(): JSX.Element {
         if (steps > 0) {
           const snaps = driver.trajectory.snapshots;
           const latestSnap = snaps[snaps.length - 1];
-          sceneRefs.current.lastMetricSpeed = latestSnap.physics.metricSpeed;
+          if (latestSnap.physics.metricSpeed !== null) sceneRefs.current.lastMetricSpeed = latestSnap.physics.metricSpeed;
           sceneRefs.current.lastThrottle = latestSnap.action?.effective.throttle ?? 0;
           setManualRun(driver.trajectory);
           setFrameIdx(snaps.length - 1);
@@ -379,8 +414,8 @@ export function DebugCockpit(): JSX.Element {
     if (cockpitMode === 'MANUAL') {
       // Use selected variant start or [0, 0] as seed
       const currentSelectedRun = runs?.[selected];
-      const startC = currentSelectedRun?.spec.initialC ?? [0, 0];
-      const startV = currentSelectedRun?.spec.initialV ?? [0, 0];
+      const startC = currentSelectedRun?.spec.initialC;
+      const startV = currentSelectedRun?.spec.initialV;
       const driver = new ManualDriver(startC, startV);
       manualDriverRef.current = driver;
       setManualRun({ ...driver.trajectory });
@@ -399,7 +434,7 @@ export function DebugCockpit(): JSX.Element {
 
   useEffect(() => {
     const refs = sceneRefs.current;
-    if (!refs.scene || !frame) return;
+    if (!refs.scene || !frame || !isGeometryRenderableSnapshot(frame)) return;
     const [cx, cy] = frame.physics.c;
     const planarSpeed = Math.hypot(frame.physics.velocity[0], frame.physics.velocity[1]);
     const lod = planTerrainLod(frame.physics.rho, planarSpeed);
@@ -445,7 +480,7 @@ export function DebugCockpit(): JSX.Element {
   useEffect(() => {
     const refs = sceneRefs.current;
     const trajectory = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
-    if (!refs.scene || !refs.rider || !refs.camera || !trajectory || !frame) return;
+    if (!refs.scene || !refs.rider || !refs.camera || !trajectory || !frame || !isGeometryRenderableSnapshot(frame)) return;
 
     // Rider height: sampled per-position through the authoritative Rust
     // embedding seam — never the patch-center sigma, which diverges from
@@ -459,7 +494,7 @@ export function DebugCockpit(): JSX.Element {
     updateCamera(refs.camera, frame, CANONICAL_DT);
     placeRider(refs.rider, frame, heightAt);
     // Feed the animation gait from authoritative metric speed and forward throttle.
-    refs.lastMetricSpeed = frame.physics.metricSpeed;
+    if (frame.physics.metricSpeed !== null) refs.lastMetricSpeed = frame.physics.metricSpeed;
     refs.lastThrottle = frame.action?.effective.throttle ?? frame.action?.raw.throttle ?? 0;
 
     if (refs.trail) {
@@ -469,7 +504,10 @@ export function DebugCockpit(): JSX.Element {
       materials.forEach(material => material.dispose());
     }
     // Trail window: last 300 steps for legibility.
-    const from = Math.max(0, frameIdx - 300);
+    let from = Math.max(0, frameIdx - 300);
+    for (let i = from; i < frameIdx; i++) {
+      if (!isGeometryRenderableSnapshot(trajectory.snapshots[i])) from = i + 1;
+    }
     const windowTraj: CockpitTrajectory = {
       ...trajectory,
       snapshots: trajectory.snapshots.slice(from, frameIdx + 1),
@@ -631,7 +669,7 @@ export function DebugCockpit(): JSX.Element {
                 </span>
                 <br />
                 <span style={{ color: '#667', fontSize: 10 }}>
-                  max U {r.maxPotential.toFixed(2)} {r.crestedRidge ? '· crested' : ''}
+          max U {r.maxPotential?.toFixed(2) ?? 'unavailable'} {r.crestedRidge ? '· crested' : ''}
                 </span>
               </button>
             ))}
@@ -647,14 +685,14 @@ export function DebugCockpit(): JSX.Element {
             <Row label="rho" value={physics.rho} kind="STATE" digits={7} />
             <Row label="sigma (scale)" value={physics.sigma} kind="STATE" digits={5} />
             <Row label="sigma_dot" value={physics.sigmaDot} kind="STATE" digits={5} />
-            <Row label="|grad sigma|" value={Math.hypot(physics.scaleGradient[0], physics.scaleGradient[1])} kind="STATE" />
+            <Row label="|grad sigma|" value={physics.scaleGradient ? Math.hypot(physics.scaleGradient[0], physics.scaleGradient[1]) : 'unavailable'} kind="STATE" />
             <Row label="metric speed" value={physics.metricSpeed} kind="STATE" />
             <Row label="K kinetic" value={physics.kinetic} kind="STATE" />
             <Row label="U potential" value={physics.potential} kind="STATE" />
             <Row label="E total" value={physics.total} kind="STATE" />
-            <Row label="geodesic |a|" value={Math.hypot(physics.geodesicAccel[0], physics.geodesicAccel[1])} kind="STATE" />
-            <Row label="potential force" value={`${physics.potentialForce[0].toFixed(3)}, ${physics.potentialForce[1].toFixed(3)}`} kind="STATE" />
-            <Row label="net accel" value={Math.hypot(physics.netAccel[0], physics.netAccel[1])} kind="STATE" />
+            <Row label="geodesic |a|" value={physics.geodesicAccel ? Math.hypot(physics.geodesicAccel[0], physics.geodesicAccel[1]) : 'unavailable'} kind="STATE" />
+            <Row label="potential force" value={physics.potentialForce ? `${physics.potentialForce[0].toFixed(3)}, ${physics.potentialForce[1].toFixed(3)}` : 'unavailable'} kind="STATE" />
+            <Row label="net accel" value={physics.netAccel ? Math.hypot(physics.netAccel[0], physics.netAccel[1]) : 'unavailable'} kind="STATE" />
             <Row label="derivative valid" value={physics.derivativeValid ? 'yes' : 'NO'} kind="DIAG" />
           </Panel>
         )}
@@ -667,6 +705,10 @@ export function DebugCockpit(): JSX.Element {
             <Row label="crest U (ceiling)" value={diag.crestPotential} kind="STATE" />
             <Row label="integrator" value={diag.valid ? 'ok' : `FAIL: ${diag.lastError ?? ''}`} kind="DIAG" />
           </Panel>
+        )}
+
+        {!playerView && diag?.geometry && (
+          <GeometryProviderPanel geometry={diag.geometry} valid={diag.valid} lastError={diag.lastError} />
         )}
 
         {!playerView && (
@@ -724,7 +766,7 @@ export function DebugCockpit(): JSX.Element {
               border: '1px solid #333',
             }}
           >
-            <span style={{ color: physics.realm < 0 ? '#6af' : physics.realm > 0 ? '#7f7' : '#ff4' }}>
+            <span style={{ color: physics.realm === null ? '#889' : physics.realm < 0 ? '#6af' : physics.realm > 0 ? '#7f7' : '#ff4' }}>
               {realmName(physics.realm)}
             </span>
             <span style={{ color: '#889' }}> · step {frameIdx} · t={((frame?.timeSeconds ?? 0)).toFixed(3)}s</span>
@@ -816,7 +858,7 @@ export function DebugCockpit(): JSX.Element {
               <Row label="brake" value={frame.action.effective.brake} kind="ACTION" />
               <Row label="grip" value={frame.action.effective.grip} kind="ACTION" />
               <Row label="impulse" value={frame.action.effective.impulse} kind="ACTION" />
-              <Row label="Q_drive covector" value={`${frame.action.driveCovector[0].toFixed(3)}, ${frame.action.driveCovector[1].toFixed(3)}`} kind="STATE" />
+              <Row label="Q_drive covector" value={frame.action.driveCovector ? `${frame.action.driveCovector[0].toFixed(3)}, ${frame.action.driveCovector[1].toFixed(3)}` : 'unavailable'} kind="STATE" />
               <Row label="friction beta" value={frame.action.frictionBeta} kind="STATE" />
               <Row label="friction power" value={frame.action.frictionPower} kind="STATE" />
             </Panel>

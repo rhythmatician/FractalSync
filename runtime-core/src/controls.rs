@@ -877,7 +877,7 @@ mod tests {
         // Need distance field? If none loaded, manifold falls back to derivative_step 1e-4 and
         // still provides finite metric; test still validates normalization algebra.
         // Compare two directions at same c: their G^{-1} norms should match for same throttle.
-        let c = C::new(0.0, 0.0);
+        let c = C::new(-0.5, 0.1);
         let m_x = MotionControls {
             direction: [1.0, 0.0],
             throttle: 1.0,
@@ -917,8 +917,8 @@ mod tests {
         // likely have different sigma gradients even without field (finite diff on signed distance
         // still varies due to numerical field? This test is best-effort: we check mechanism, not distance field.)
         let config = cfg();
-        let c_a = C::new(0.0, 0.0);
-        let c_b = C::new(0.8, 0.0);
+        let c_a = C::new(-0.5, 0.1);
+        let c_b = C::new(0.3, 0.05);
         let m = MotionControls {
             direction: [1.0, 0.0],
             throttle: 1.0,
@@ -944,7 +944,7 @@ mod tests {
     fn brake_non_energy_injecting() {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = cfg();
-        let c = C::new(0.1, 0.05);
+        let c = C::new(-0.5, 0.1);
         let v = (0.8, -0.4);
         // Q_brake = -beta G v, power = v^T Q_brake = -beta v^T G v ≤ 0
         for brake in [0.0, 0.5, 1.0] {
@@ -992,7 +992,7 @@ mod tests {
     fn taps_are_bounded_impulses_layered_on_momentum() {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = cfg();
-        let c = C::new(0.0, 0.0);
+        let c = C::new(-0.5, 0.1);
         // Impulse is bounded and direction-dependent: direction=[1,0], throttle=0, impulse=1
         // must give non-zero Δv, while drive force is zero when throttle=0.
         let m = MotionControls {
@@ -1157,38 +1157,68 @@ mod tests {
 
     #[test]
     fn candidate_frame_comparison_world_aligned_wins() {
+        let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         // Controlled comparison of 2D control frames on learnability/controllability
-        // Metrics: (1) no singularity at flat region, (2) no heading state, (3) deterministic, (4) metric-consistent
+        // Metrics: (1) no heading state, (2) deterministic, (3) metric-consistent
         // World-aligned Cartesian (chosen) vs heading-polar vs shore-aligned
         let config = cfg();
-        let c_flat = C::new(0.0, 0.0);
-        let c_shore = C::new(0.25, 0.0);
-        // World-aligned: drive vector directly, no heading state, works at flat region where grad~0
+        let c_far = C::new(-0.5, 0.1);
+        let c_near_shore = C::new(0.3, 0.05);
+        // Compare only regular provider locations; singular geometry is tested
+        // separately and must remain a refusal regardless of control frame.
+        for c in [c_far, c_near_shore] {
+            let jet = crate::geometry_provider::query_geometry(c, config.epsilon).unwrap();
+            assert_eq!(
+                jet.validity,
+                crate::geometry_provider::GeometryValidity::Regular,
+                "control-frame comparison requires regular geometry at {c:?}"
+            );
+        }
+
+        // World-aligned drive is a direct 2D vector with no persistent heading state.
         let m_world = MotionControls {
             direction: [1.0, 0.0],
             throttle: 1.0,
             ..Default::default()
         };
-        let q_world_flat = m_world.drive_covector(c_flat, &config).unwrap();
-        let q_world_shore = m_world.drive_covector(c_shore, &config).unwrap();
-        // Both succeed (no singularity)
-        assert!(q_world_flat.0.is_finite() && q_world_flat.1.is_finite());
-        assert!(q_world_shore.0.is_finite() && q_world_shore.1.is_finite());
-        // Heading-polar would require persistent heading state; absence in MotionControls proves no hidden state
-        // Shore-aligned would be singular where grad~0 (flat region); world-aligned is not
-        let g_flat = crate::manifold::induced_metric(c_flat, &config).unwrap();
-        let grad_flat = crate::manifold::scale_gradient(c_flat, &config).unwrap();
-        let grad_norm_flat = (grad_flat.0 * grad_flat.0 + grad_flat.1 * grad_flat.1).sqrt();
-        // At flat region, shore-aligned frame would be ill-defined (grad ~0), but world-aligned is well-defined
-        // If grad is near zero, shore frame fails, world frame succeeds — world-aligned wins on robustness
-        if grad_norm_flat < 1e-3 {
-            assert!(q_world_flat.0.is_finite(), "world-aligned should be well-defined even where shore frame is singular");
+        for c in [c_far, c_near_shore] {
+            let q = m_world.drive_covector(c, &config).unwrap();
+            assert!(q.0.is_finite() && q.1.is_finite());
+            let g = crate::manifold::induced_metric(c, &config).unwrap();
+            let det = g[0][0] * g[1][1] - g[0][1] * g[1][0];
+            assert!(det > 0.0 && det.is_finite());
+            let norm_squared = (g[1][1] * q.0 * q.0
+                - (g[0][1] + g[1][0]) * q.0 * q.1
+                + g[0][0] * q.1 * q.1)
+                / det;
+            let norm = norm_squared.sqrt();
+            assert!(
+                (norm - MAX_DRIVE_FORCE).abs() < 1e-3,
+                "metric-consistent force norm at {c:?}: {norm} vs {MAX_DRIVE_FORCE}"
+            );
         }
-        // Metric-consistent: same throttle gives same force norm regardless of position
-        let g_inv_flat_det = g_flat[0][0] * g_flat[1][1] - g_flat[0][1]*g_flat[0][1];
-        let g_inv_flat = [[g_flat[1][1]/g_inv_flat_det, -g_flat[0][1]/g_inv_flat_det], [-g_flat[0][1]/g_inv_flat_det, g_flat[0][0]/g_inv_flat_det]];
-        let norm_flat = (q_world_flat.0*(g_inv_flat[0][0]*q_world_flat.0+g_inv_flat[0][1]*q_world_flat.1)+q_world_flat.1*(g_inv_flat[1][0]*q_world_flat.0+g_inv_flat[1][1]*q_world_flat.1)).sqrt();
-        assert!((norm_flat - MAX_DRIVE_FORCE).abs() < 1e-3, "metric-consistent force norm should be MAX_DRIVE_FORCE within 1e-3, got {} vs {}", norm_flat, MAX_DRIVE_FORCE);
+    }
+
+    #[test]
+    fn world_aligned_drive_refuses_singular_geometry() {
+        let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = cfg();
+        let cusp = C::new(0.0, 0.0);
+        let jet = crate::geometry_provider::query_geometry(cusp, config.epsilon).unwrap();
+        assert_eq!(
+            jet.validity,
+            crate::geometry_provider::GeometryValidity::Singular
+        );
+
+        let drive = MotionControls {
+            direction: [1.0, 0.0],
+            throttle: 1.0,
+            ..Default::default()
+        };
+        let error = drive
+            .drive_covector(cusp, &config)
+            .expect_err("world-aligned controls must not consume singular geometry");
+        assert!(error.contains("geometry not regular"), "{error}");
     }
 
 }

@@ -57,7 +57,7 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q. The adapter fails closed on
 ///       manifold error (no silent flat-physics fallback). This is a
 ///       transitional seam, not destination Controls v2 (issue #107).
-pub const CONTROLLER_VERSION: &str = "orbit-controller/5";
+pub const CONTROLLER_VERSION: &str = "orbit-controller/7";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
 /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are
@@ -470,6 +470,10 @@ pub struct OrbitController {
     pub momentum: bool,
     /// Persistent c position (used only when momentum or shore_bias is on).
     pub c: num_complex::Complex64,
+    /// Pending one-time manifold startup for a controller whose position was
+    /// never supplied by its owner. Legacy startup and explicit states keep
+    /// their original position.
+    manifold_start_pending: bool,
     /// Velocity state for refinement 1.
     pub velocity: num_complex::Complex64,
     /// Per-frame velocity retention when momentum is on (0.90 = May+10%).
@@ -540,6 +544,7 @@ impl Default for OrbitController {
             alpha: 0.0,
             momentum: false,
             c: num_complex::Complex64::new(0.0, 0.0),
+            manifold_start_pending: true,
             velocity: num_complex::Complex64::new(0.0, 0.0),
             drag: 0.90,
             thrust: 0.0,
@@ -563,6 +568,39 @@ impl Default for OrbitController {
 }
 
 impl OrbitController {
+    /// Canonical regular chart for the first manifold step of an untouched
+    /// controller. Verified Regular at the default geometry epsilon.
+    const MANIFOLD_START: num_complex::Complex64 =
+        num_complex::Complex64::new(-0.5, 0.1);
+
+    /// Set an explicit map position. Even an invalid point such as the origin
+    /// remains caller-owned and is handled by the integrator's fail-closed
+    /// contract rather than silently replaced.
+    pub fn set_c(&mut self, re: f64, im: f64) {
+        self.c = num_complex::Complex64::new(re, im);
+        self.manifold_start_pending = false;
+    }
+
+    /// Enable or disable the legacy manifold adapter. Only its first enable
+    /// chooses a regular startup point, and only when no position was supplied.
+    pub fn set_manifold_physics_enabled(&mut self, enabled: bool) {
+        if enabled {
+            self.initialize_manifold_start();
+        }
+        self.manifold_physics = enabled;
+    }
+
+    fn initialize_manifold_start(&mut self) {
+        if self.manifold_start_pending {
+            if self.c == num_complex::Complex64::new(0.0, 0.0)
+                && self.planar_velocity == (0.0, 0.0)
+            {
+                self.c = Self::MANIFOLD_START;
+            }
+            self.manifold_start_pending = false;
+        }
+    }
+
     pub fn new(s: f64, alpha: f64, omega: f64) -> Self {
         Self {
             theta: 0.0,
@@ -696,6 +734,7 @@ impl OrbitController {
             self.apply_shore_bias(v_dt.re, v_dt.im, h)
         } else {
             self.c = self.c + v_dt;
+            self.manifold_start_pending = false;
             self.c
         }
     }
@@ -721,6 +760,7 @@ impl OrbitController {
         )
         .unwrap_or((self.c.re + du_re, self.c.im + du_im));
         self.c = num_complex::Complex64::new(nr, ni);
+        self.manifold_start_pending = false;
         self.c
     }
 
@@ -741,6 +781,7 @@ impl OrbitController {
         dt: f64,
         controls: &crate::controls::MotionControls,
     ) -> num_complex::Complex64 {
+        self.initialize_manifold_start();
         match crate::controls::integrate_motion_controls(
             self.c,
             self.planar_velocity,
@@ -770,6 +811,7 @@ impl OrbitController {
                 self.last_delta_total = Some(info.delta_total);
                 self.step_time_seconds += dt;
                 self.c = c_new;
+                self.manifold_start_pending = false;
                 self.planar_velocity = v_new;
                 self.c
             }
@@ -800,8 +842,10 @@ impl OrbitController {
             self.last_delta_total,
         )?;
         snap.time_seconds = self.step_time_seconds;
-        snap.diagnostics.valid = self.manifold_error.is_none();
-        snap.diagnostics.last_error = self.manifold_error.clone();
+        if let Some(error) = &self.manifold_error {
+            snap.diagnostics.valid = false;
+            snap.diagnostics.last_error = Some(error.clone());
+        }
         Ok(snap)
     }
 
@@ -834,6 +878,7 @@ impl OrbitController {
         band_gates: Option<&[f64]>,
         _h: f64,
     ) -> num_complex::Complex64 {
+        self.initialize_manifold_start();
         // ---- Legacy target synthesis (adapter-only; not manifold authority) ----
         let target = self.mandelbrot_boundary();
         let mut res_re = 0.0;
@@ -877,6 +922,7 @@ impl OrbitController {
             Ok((c_new, v_new, _info)) => {
                 self.manifold_error = None;
                 self.c = c_new;
+                self.manifold_start_pending = false;
                 self.planar_velocity = v_new;
                 self.c
             }

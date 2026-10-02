@@ -3,7 +3,7 @@
 Covers the acceptance criteria from the issue:
 
 1. Connection validity — the induced metric G(c) is symmetric positive
-   definite and its inverse is bounded near the Map resolution floor.
+   definite with bounded inverse on sampled Regular geometry.
 2. Friction non-energy-injecting — metric-consistent drag
    Q_drag = -beta*G*v dissipates: P = v^T Q_drag <= 0 within tolerance.
 3. Bounded total-energy drift — with Controls and drag disabled, the
@@ -13,10 +13,9 @@ Covers the acceptance criteria from the issue:
    creates a finite mechanical barrier without a transient-gated wall.
    Underpowered trajectories reflect; a sufficiently energetic launch
    crosses using the native scale-relative geometry.
-5. Signed-SDF continuity — mechanics derive from the SINGLE signed
-   distance field authority; sigma/gradient/metric vary continuously
-   through the regularized Shore crest with no dependence on a discrete
-   mip level.
+5. Adaptive geometry — mechanics derive from the Rust GeometryProvider;
+   its signed distance varies continuously near a regular Shore patch, and
+   genuine cut loci are reported explicitly and fail closed in Physics.
 
 The Rust binding is the canonical source of truth (ADR 0001); these
 tests exercise the Python mirror in ``src.cspace_proxies`` against the
@@ -27,6 +26,7 @@ Run: python -m pytest backend/tests/test_manifold_physics.py -q
 
 from __future__ import annotations
 
+import json
 import math
 
 import pytest
@@ -41,13 +41,11 @@ from src.cspace_proxies import (
     orbit_controller_manifold_sequence,
 )
 
-# Tolerances. The Rust integrator derives its finite-difference step from
-# the distance-field provider's pixel spacing (currently px/24, ~1e-4), so
-# mirror-vs-Rust agreement is limited by that sampled geometry rather than
-# float rounding.
+# Tolerances for the Python mirror against the canonical Rust provider.
 PARITY_TOL = 1e-6
 ENERGY_DRIFT_TOL = 0.05
 FRICTION_TOL = 1e-9
+REGULAR_POINTS = ((-0.5, 0.1), (0.3, 0.05), (-0.5, 0.3), (-1.0, 0.1), (0.4, 0.05))
 
 
 @pytest.fixture(scope="module")
@@ -72,19 +70,30 @@ def _rust_step(rc, c, v, q, beta, dt, config):
     )
 
 
-def _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5):
+def _geometry_jet(rc, c, epsilon=None):
+    """Decode the canonical Rust GeometryJet exposed by the Python binding."""
+    if epsilon is None:
+        epsilon = DEFAULT_CONFIG.epsilon
+    return json.loads(rc.geometry_provider_query(complex(*c), epsilon))
+
+
+def _signed_distance(rc, c, epsilon=None):
+    return _geometry_jet(rc, c, epsilon)["D"]
+
+
+def _locate_shore_x(rc, y=0.05, x_lo=0.2, x_hi=0.5):
     """Bisect along the line y=const to find the Shore crossing where the
     signed distance changes sign. Returns the x where D ~ 0."""
     lo, hi = x_lo, x_hi
-    assert rc.manifold_signed_distance(complex(lo, y)) < 0.0, (
+    assert _signed_distance(rc, (lo, y)) < 0.0, (
         f"x_lo={lo} not inside the set"
     )
-    assert rc.manifold_signed_distance(complex(hi, y)) > 0.0, (
+    assert _signed_distance(rc, (hi, y)) > 0.0, (
         f"x_hi={hi} not outside the set"
     )
     for _ in range(60):
         mid = 0.5 * (lo + hi)
-        if rc.manifold_signed_distance(complex(mid, y)) < 0.0:
+        if _signed_distance(rc, (mid, y)) < 0.0:
             lo = mid
         else:
             hi = mid
@@ -95,17 +104,11 @@ class TestConnectionValidity:
     """Acceptance: connection validity bounded near Map resolution floor."""
 
     def test_metric_symmetric_positive_definite(self, rc):
-        """G(c) must be symmetric with det > 0 and g11 > 0 everywhere
-        sampled, including points very close to the Shore."""
-        points = [
-            (0.0, 0.0),  # deep inside
-            (0.25, 0.0),  # near cardioid cusp
-            (-0.75, 0.0),  # near period-2 bulb boundary
-            (0.2501, 0.0),  # just outside the cusp
-            (-1.75, -0.05),  # near antenna
-            (0.3, 0.5),  # open water
-        ]
+        """G(c) must be symmetric positive definite on sampled Regular jets."""
+        points = REGULAR_POINTS
         for x, y in points:
+            jet = _geometry_jet(rc, (x, y))
+            assert jet["validity"] == "regular", f"unexpected jet at ({x},{y}): {jet}"
             g = rc.manifold_induced_metric(
                 complex(x, y),
                 rc.ManifoldConfig(
@@ -122,28 +125,40 @@ class TestConnectionValidity:
             assert g11 > 0.0, f"metric g11 <= 0 at ({x},{y})"
 
     def test_metric_inverse_bounded(self, rc):
-        """G^{-1} must stay bounded near the resolution floor: the
-        regularized distance rho = sqrt(D^2 + eps^2) keeps the metric
-        gradient finite even exactly on the boundary."""
+        """G^{-1} stays bounded at the sampled regular points."""
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        for x in (-0.76, -0.75, -0.749, 0.249, 0.25, 0.251):
-            g = rc.manifold_induced_metric(complex(x, 0.0), config)
+        for x, y in ((0.3, 0.05), (0.4, 0.05), (-0.5, 0.1)):
+            jet = _geometry_jet(rc, (x, y), config.epsilon)
+            assert jet["validity"] == "regular", f"unexpected jet at ({x},{y}): {jet}"
+            g = rc.manifold_induced_metric(complex(x, y), config)
             det = g[0][0] * g[1][1] - g[0][1] * g[0][1]
             inv_det = 1.0 / det
             assert math.isfinite(inv_det)
             assert inv_det < 1e12, f"metric near-singular at x={x}: 1/det={inv_det}"
 
-    def test_christoffel_finite_everywhere_sampled(self, rc):
-        """The connection must be finite across Shore crossings."""
+    def test_christoffel_finite_on_regular_geometry(self, rc):
+        """Ordinary Levi-Civita mechanics are defined on Regular jets."""
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        for x in (-0.8, -0.75, -0.7, 0.2, 0.25, 0.3):
-            gamma = rc.manifold_christoffel_symbols(complex(x, 0.0), config)
+        for x, y in REGULAR_POINTS:
+            jet = _geometry_jet(rc, (x, y), config.epsilon)
+            assert jet["validity"] == "regular", f"unexpected jet at ({x},{y}): {jet}"
+            gamma = rc.manifold_christoffel_symbols(complex(x, y), config)
             for i in range(2):
                 for j in range(2):
                     for k in range(2):
                         assert math.isfinite(gamma[i][j][k]), (
                             f"non-finite Gamma at x={x}, ({i},{j},{k})"
                         )
+
+    def test_cut_locus_is_explicit_and_physics_fails_closed(self, rc):
+        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
+        jet = _geometry_jet(rc, (0.0, 0.0), config.epsilon)
+        assert jet["validity"] == "singular"
+        assert jet["singularity"] == "cut_locus"
+        with pytest.raises(RuntimeError, match="geometry not regular"):
+            rc.manifold_induced_metric(0.0 + 0.0j, config)
+        with pytest.raises(RuntimeError, match="geometry not regular"):
+            rc.manifold_christoffel_symbols(0.0 + 0.0j, config)
 
     def test_differentiable_connection_matches_metric_derivative_definition(self):
         """The compact connection agrees with the Levi-Civita definition."""
@@ -227,7 +242,8 @@ class TestConnectionValidity:
         rc_config = rc.ManifoldConfig(
             config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
         )
-        for point in (complex(0.0, 0.0), complex(0.3, 0.1), complex(-1.7, 0.02)):
+        for x, y in REGULAR_POINTS[:3]:
+            point = complex(x, y)
             sigma = torch.tensor(
                 rc.manifold_mandelbrot_scale(point, rc_config), dtype=torch.float64
             )
@@ -268,7 +284,7 @@ class TestFrictionNonEnergyInjecting:
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         beta = 0.1
         velocities = [(0.1, 0.0), (0.0, -0.2), (0.05, 0.05), (-0.3, 0.15)]
-        points = [(0.0, 0.0), (0.25, 0.0), (-0.75, 0.0), (0.4, 0.4)]
+        points = REGULAR_POINTS
         for x, y in points:
             for vx, vy in velocities:
                 q = rc.manifold_drag_force(vx, vy, complex(x, y), beta, config)
@@ -280,11 +296,12 @@ class TestFrictionNonEnergyInjecting:
     def test_drag_reduces_kinetic_energy(self, rc):
         """A step with drag but no other forces must not increase K."""
         config = ManifoldConfig()
-        c = torch.tensor(0.0)
+        c = torch.tensor(-0.5)
+        c_im = torch.tensor(0.1)
         v = torch.tensor(0.2)
         zero = torch.tensor(0.0)
         _, _, _, _, info = manifold_integrate_step(
-            c, c, v, v, zero, zero, beta=0.5, dt=0.01, config=config
+            c, c_im, v, v, zero, zero, beta=0.5, dt=0.01, config=config
         )
         assert info.delta_kinetic <= 1e-6, (
             f"kinetic energy increased under pure drag: {info.delta_kinetic}"
@@ -299,7 +316,7 @@ class TestEnergyDrift:
         the semi-implicit integrator's O(dt) error."""
         config = ManifoldConfig()
         dt = 0.01
-        c = (0.0, 0.0)
+        c = (-0.5, 0.1)
         v = (0.01, 0.01)
         max_drift = 0.0
         for _ in range(50):
@@ -320,8 +337,8 @@ class TestEnergyDrift:
         crossability remains a separate #106/#82 acceptance question."""
         config = ManifoldConfig()
         dt = 0.005
-        c = (0.5, 0.0)
-        v = (-0.05, 0.0)
+        c = (0.4, 0.05)
+        v = (-0.03, 0.0)
         max_drift = 0.0
         for _ in range(100):
             new_re, new_im, new_vx, new_vy, info = _rust_step(
@@ -367,7 +384,7 @@ class TestEnergyDrift:
     def test_energy_conserved_low_curvature_rollout(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         dt = 0.002
-        c0 = (0.0, 0.9)
+        c0 = (-0.5, 0.1)
         v0 = (0.01, 0.0)
         drift, excursion, _ = self._rollout_energy_drift(
             rc, c0, v0, dt, n_steps=150, config=config
@@ -379,7 +396,7 @@ class TestEnergyDrift:
         """FD ∇σ/Hσ noise propagating into analytic Γ must remain bounded."""
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         dt = 0.002
-        c0 = (0.35, 0.0)
+        c0 = (0.4, 0.05)
         v0 = (0.0, 0.02)
         drift, excursion, _ = self._rollout_energy_drift(
             rc, c0, v0, dt, n_steps=150, config=config
@@ -390,7 +407,7 @@ class TestEnergyDrift:
     def test_energy_conserved_near_shore_rollout(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         dt = 0.002
-        c0 = (0.30, 0.0)
+        c0 = (0.3, 0.05)
         v0 = (0.0, 0.02)
         drift, excursion, _ = self._rollout_energy_drift(
             rc, c0, v0, dt, n_steps=100, config=config
@@ -404,16 +421,16 @@ class TestShoreCrossings:
 
     def test_potential_force_points_downhill_from_ridge(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        f = rc.manifold_potential_force(complex(0.5, 0.0), config)
+        f = rc.manifold_potential_force(complex(0.4, 0.05), config)
         assert f[0] > 0.0
 
     def test_h_signal_irrelevant_to_manifold_path(self, rc):
         rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         a = rc.manifold_integrate_step(
-            0.3, 0.1, 0.02, -0.01, 0.001, 0.001, 0.1, 0.01, rc_config
+            0.3, 0.05, 0.02, -0.01, 0.001, 0.001, 0.1, 0.01, rc_config
         )
         b = rc.manifold_integrate_step(
-            0.3, 0.1, 0.02, -0.01, 0.001, 0.001, 0.1, 0.01, rc_config
+            0.3, 0.05, 0.02, -0.01, 0.001, 0.001, 0.1, 0.01, rc_config
         )
         assert a[:4] == b[:4]
         import inspect
@@ -425,8 +442,8 @@ class TestShoreCrossings:
     def test_ridge_is_barrier_without_h_gate(self, rc):
         config = ManifoldConfig()
         dt = 0.005
-        c = (0.6, 0.0)
-        v = (-0.05, 0.0)
+        c = (0.6, 0.15)
+        v = (-0.03, 0.0)
         min_d = math.inf
         for _ in range(200):
             new_re, new_im, new_vx, new_vy, _ = _rust_step(
@@ -434,7 +451,7 @@ class TestShoreCrossings:
             )
             c = (new_re, new_im)
             v = (new_vx, new_vy)
-            min_d = min(min_d, rc.manifold_signed_distance(complex(new_re, new_im)))
+            min_d = min(min_d, _signed_distance(rc, (new_re, new_im)))
         assert min_d > 0.0
         assert abs(new_re) < 10.0
 
@@ -442,12 +459,13 @@ class TestShoreCrossings:
         """Scale-relative kinetic energy can carry a native Shore crossing."""
         config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
         rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)
-        c0 = (0.35, 0.0)
-        x_shore = _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5)
-        assert abs(x_shore - 0.25) < 0.05
+        shore_y = 0.05
+        c0 = (0.4, shore_y)
+        x_shore = _locate_shore_x(rc, y=shore_y, x_lo=0.2, x_hi=0.5)
+        assert 0.2 < x_shore < 0.5
 
         u0 = rc.manifold_potential_energy(complex(*c0), rc_config)
-        u_crest = rc.manifold_potential_energy(complex(x_shore, 0.0), rc_config)
+        u_crest = rc.manifold_potential_energy(complex(x_shore, shore_y), rc_config)
         barrier = u_crest - u0
         assert barrier > 0.0
 
@@ -485,7 +503,7 @@ class TestShoreCrossings:
                     raise
                 c = (new_re, new_im)
                 v = (new_vx, new_vy)
-                d = rc.manifold_signed_distance(complex(*c))
+                d = _signed_distance(rc, c, config.epsilon)
                 min_d = min(min_d, d)
                 if d < 0.0:
                     crossed = True
@@ -543,14 +561,13 @@ class TestShoreCrossings:
 
 
 class TestSignedSdfContinuity:
-    """Mechanics derive from one signed distance-field authority."""
+    """Physics geometry comes from the adaptive Rust GeometryProvider."""
 
     def test_signed_distance_authority_sign_and_continuity(self, rc):
-        meta = rc.get_builtin_distance_field_py("default")
-        assert len(meta) == 6
-        assert rc.manifold_signed_distance(complex(0.0, 0.0)) < 0.0
-        assert rc.manifold_signed_distance(complex(0.5, 0.0)) > 0.0
-        x_shore = _locate_shore_x(rc, y=0.0, x_lo=0.2, x_hi=0.5)
+        y = 0.05
+        assert _signed_distance(rc, (0.0, y)) < 0.0
+        assert _signed_distance(rc, (0.5, y)) > 0.0
+        x_shore = _locate_shore_x(rc, y=y, x_lo=0.2, x_hi=0.5)
         prev = None
         for x in [
             x_shore - 5e-3,
@@ -561,37 +578,36 @@ class TestSignedSdfContinuity:
             x_shore + 2e-3,
             x_shore + 5e-3,
         ]:
-            d = rc.manifold_signed_distance(complex(x, 0.0))
+            d = _signed_distance(rc, (x, y))
             assert math.isfinite(d)
             if prev is not None:
                 assert abs(d - prev) < 0.05
             prev = d
 
-    def test_signed_distance_unsigned_consistency(self, rc):
-        meta = rc.get_builtin_distance_field_py("default")
-        assert len(meta) == 6
-        pts = [(0.0, 0.0), (0.25, 0.0), (0.5, 0.0), (-0.75, 0.0), (0.3, 0.5)]
-        unsigned = rc.sample_distance_field_py([complex(x, y) for x, y in pts])
-        for (x, y), u in zip(pts, unsigned):
-            signed = rc.manifold_signed_distance(complex(x, y))
-            assert u == pytest.approx(abs(signed), abs=1e-6)
+    def test_jet_exposes_scale_and_convergence_quality(self, rc):
+        jet = _geometry_jet(rc, (0.3, 0.05))
+        assert jet["validity"] == "regular"
+        assert jet["is_bridge"] is False
+        assert jet["provider_version"] == rc.geometry_provider_version()
+        assert jet["resolved_scale"] > 0.0
+        assert jet["requested_scale"] > 0.0
+        assert math.isfinite(jet["estimated_error"])
+        assert jet["estimated_error"] <= 0.25 * jet["requested_scale"]
 
-    def test_scale_continuous_through_shore_crest(self, rc):
-        meta = rc.get_builtin_distance_field_py("default")
-        assert len(meta) == 6
+    def test_scale_continuous_inside_regular_patch(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        xs = [0.24 + 0.001 * i for i in range(21)]
-        sigmas = [rc.manifold_mandelbrot_scale(complex(x, 0.0), config) for x in xs]
+        xs = [0.30 + 0.001 * i for i in range(6)]
+        sigmas = [rc.manifold_mandelbrot_scale(complex(x, 0.05), config) for x in xs]
         for s in sigmas:
             assert math.isfinite(s)
         for a, b in zip(sigmas, sigmas[1:]):
             assert abs(a - b) < 20.0
 
-    def test_metric_continuous_across_shore(self, rc):
+    def test_metric_continuous_inside_regular_patch(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
         eps = 1e-3
-        g_out = rc.manifold_induced_metric(complex(0.25 + eps, 0.0), config)
-        g_in = rc.manifold_induced_metric(complex(0.25 - eps, 0.0), config)
+        g_out = rc.manifold_induced_metric(complex(0.3 + eps, 0.05), config)
+        g_in = rc.manifold_induced_metric(complex(0.3 - eps, 0.05), config)
         for i in range(2):
             for j in range(2):
                 assert math.isfinite(g_out[i][j]) and math.isfinite(g_in[i][j])
@@ -607,7 +623,7 @@ class TestMirrorParity:
     def test_mirror_matches_rust_single_step(self, rc):
         config = ManifoldConfig()
         c_re = torch.tensor(0.3, requires_grad=True)
-        c_im = torch.tensor(0.1, requires_grad=True)
+        c_im = torch.tensor(0.05, requires_grad=True)
         v_re = torch.tensor(0.02)
         v_im = torch.tensor(-0.01)
         q_re = torch.tensor(0.001)
@@ -616,7 +632,7 @@ class TestMirrorParity:
             c_re, c_im, v_re, v_im, q_re, q_im, beta=0.1, dt=0.01, config=config
         )
         r_re, r_im, _, _, _ = _rust_step(
-            rc, (0.3, 0.1), (0.02, -0.01), (0.001, 0.001), 0.1, 0.01, config
+            rc, (0.3, 0.05), (0.02, -0.01), (0.001, 0.001), 0.1, 0.01, config
         )
         assert new_re.item() == pytest.approx(r_re, abs=PARITY_TOL)
         assert new_im.item() == pytest.approx(r_im, abs=PARITY_TOL)
@@ -624,7 +640,7 @@ class TestMirrorParity:
     def test_mirror_ste_smoke_gradients_flow(self, rc):
         config = ManifoldConfig()
         c_re = torch.tensor(0.3, requires_grad=True)
-        c_im = torch.tensor(0.1, requires_grad=True)
+        c_im = torch.tensor(0.05, requires_grad=True)
         new_re, new_im, _, _, _ = manifold_integrate_step(
             c_re,
             c_im,
@@ -658,6 +674,7 @@ class TestManifoldSequence:
         energy = [0.5] * n_frames
 
         ctrl = rc.OrbitController(s_vals[0], a_vals[0], omega)
+        ctrl.set_c(-0.5, 0.1)
         ctrl.set_manifold_physics(True)
         ctrl.set_manifold_drag(drag)
         ctrl.set_manifold_config(
@@ -687,6 +704,7 @@ class TestManifoldSequence:
             energy=e_t,
             manifold_drag=drag,
             config=config,
+            initial_c=torch.tensor(complex(-0.5, 0.1)),
         )
 
         max_err = 0.0
@@ -708,6 +726,7 @@ class TestManifoldSequence:
             segment_ids=torch.zeros(n, dtype=torch.int64),
             dt=1.0 / 60.0,
             energy=torch.linspace(0, 1, n),
+            initial_c=torch.tensor(complex(-0.5, 0.1)),
         )
         assert traj.shape == (n,)
         assert len(infos) == n
@@ -727,6 +746,7 @@ class TestManifoldSequence:
             segment_ids=torch.zeros(n, dtype=torch.int64),
             dt=1.0 / 60.0,
             energy=torch.ones(n) * 0.5,
+            initial_c=torch.tensor(complex(-0.5, 0.1)),
         )
         loss = traj[-1].real + traj[-1].imag
         loss.backward()

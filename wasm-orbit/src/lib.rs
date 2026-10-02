@@ -924,7 +924,7 @@ impl OrbitController {
     /// Transitional; not destination Controls v2 (issue #107).
     #[wasm_bindgen(setter)]
     pub fn set_manifold_physics(&mut self, on: bool) {
-        self.inner.manifold_physics = on;
+        self.inner.set_manifold_physics_enabled(on);
     }
 
     /// Whether manifold physics is currently enabled.
@@ -984,7 +984,7 @@ impl OrbitController {
     /// Complex instance) so callers never need to construct wasm objects.
     #[wasm_bindgen(js_name = "setC")]
     pub fn set_c(&mut self, re: f64, im: f64) {
-        self.inner.c = RustComplex::new(re, im);
+        self.inner.set_c(re, im);
     }
 
     /// Authoritative planar velocity (vx, vy) used by the destination
@@ -1890,6 +1890,14 @@ export interface DebugSnapshotMeta {
 }
 "#;
 
+// Match Python/JSON: unavailable snapshot values are explicit nulls, not
+// undefined properties that disappear when a browser records the snapshot.
+fn serialize_debug_snapshot(snapshot: &runtime_core::debug::DebugSnapshot) -> Result<JsValue, JsValue> {
+    snapshot
+        .serialize(&serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true))
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 /// The DebugSnapshot contract version and canonical step cadence.
 #[wasm_bindgen(js_name = "debugSnapshotMeta")]
 pub fn debug_snapshot_meta() -> JsValue {
@@ -1958,7 +1966,7 @@ pub fn debug_snapshot_from_state(
     )
     .map_err(|e| JsValue::from_str(&e))?;
     snap.time_seconds = time_seconds;
-    serde_wasm_bindgen::to_value(&snap).map_err(|e| JsValue::from_str(&e.to_string()))
+    serialize_debug_snapshot(&snap)
 }
 
 /// Sample an n x n terrain patch of the canonical embedding
@@ -1995,7 +2003,7 @@ impl OrbitController {
     #[wasm_bindgen(js_name = "debugSnapshot")]
     pub fn debug_snapshot(&self) -> Result<JsValue, JsValue> {
         let snap = self.inner.debug_snapshot().map_err(|e| JsValue::from_str(&e))?;
-        serde_wasm_bindgen::to_value(&snap).map_err(|e| JsValue::from_str(&e.to_string()))
+        serialize_debug_snapshot(&snap)
     }
 }
 
