@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Short, opinionated contract for any AI agent working in this repo. Read this,
-then read `CONTEXT.md` and the ADRs you need.
+then read `GLOSSARY.md` and the ADRs you need.
 
 ## Token safety
 
@@ -65,7 +65,7 @@ stop and add a Rust implementation and binding instead.  Rust should carry as mu
 ## What we don't do here
 
 - We don't restate architecture, workflows, or debugging tips in this file —
-  the ADRs and `CONTEXT.md` own that. Keep this file short.
+  the ADRs and `GLOSSARY.md` own that. Keep this file short.
 - We don't maintain a parallel `.github/copilot-instructions.md`. That file
   is retired; the AGENTS.md convention replaces it.
 
