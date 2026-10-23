@@ -273,10 +273,13 @@ impl GeometryProvider for RasterBridgeProvider {
 }
 
 // --- Dyadic Shore-contour cache (derived Shore tiles only) ---
-// Deterministic 64-entry LRU. Eviction changes cost only, never numerical results.
+// Deterministic bounded LRU. Eviction changes cost only, never numerical results.
 // Key includes provider version and membership-iteration-budget (N0) so a bump
 // or budget change cannot reuse a stale numerical tile.
-const SHORE_TILE_CACHE_CAPACITY: usize = 64;
+// A single measured refusal visits 134 distinct tiles. The original 64 slots
+// evicted the entire working set on every repeat. Retain room for the measured
+// working sets without extending any geometry-generation or quality budget.
+const SHORE_TILE_CACHE_CAPACITY: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct TileKey {
@@ -449,13 +452,19 @@ fn is_shore_band_stable(prev: &[bool], next: &[bool], n: usize) -> bool {
 fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> Option<ShoreTile> {
     let n = DYADIC_TILE_NODES;
     let cur_n = dyadic_n0(k);
-    let mut inside_cur = vec![false; n * n];
-    for j in 0..n {
-        for i in 0..n {
-            let c = Complex64::new(re0 + i as f64 * h, im0 + j as f64 * h);
-            inside_cur[j * n + i] = mandelbrot_inside(c, cur_n);
-        }
-    }
+    // Membership budgets grow monotonically for this tile. Retain each
+    // critical orbit while certifying it instead of replaying its prefix at
+    // every doubling. These construction states are not part of the LRU.
+    let mut orbits: Vec<_> = (0..n * n)
+        .map(|index| {
+            let c = Complex64::new(re0 + (index % n) as f64 * h, im0 + (index / n) as f64 * h);
+            crate::visual_metrics::MembershipOrbit::new(c)
+        })
+        .collect();
+    let inside_cur: Vec<bool> = orbits
+        .iter_mut()
+        .map(|orbit| orbit.inside_at(cur_n))
+        .collect();
     let max_iter: usize;
     let inside: Vec<bool>;
     let mut unstable_nodes = Vec::new();
@@ -468,13 +477,10 @@ fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> Option<ShoreTile> 
             inside = inside_c;
             break;
         }
-        let mut inside_next = vec![false; n * n];
-        for j in 0..n {
-            for i in 0..n {
-                let c = Complex64::new(re0 + i as f64 * h, im0 + j as f64 * h);
-                inside_next[j * n + i] = mandelbrot_inside(c, next_n);
-            }
-        }
+        let inside_next: Vec<bool> = orbits
+            .iter_mut()
+            .map(|orbit| orbit.inside_at(next_n))
+            .collect();
         if is_shore_band_stable(&inside_c, &inside_next, n) {
             max_iter = next_n;
             inside = inside_next;
@@ -1958,8 +1964,8 @@ mod tests {
         let cold = query_geometry(c, 1e-4).unwrap();
         assert_eq!(cold.validity, GeometryValidity::Regular);
         let warm = query_geometry(c, 1e-4).unwrap();
-        // Generate unrelated outside-domain tiles to evict all 64 cached tiles.
-        for ix in 10..80 {
+        // Generate more unrelated tiles than the configured cache can retain.
+        for ix in 10..10 + SHORE_TILE_CACHE_CAPACITY as i64 + 6 {
             get_or_generate_shore_tile(0, ix, 0).unwrap();
         }
         crate::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();

@@ -196,18 +196,56 @@ fn is_safely_interior(c: num_complex::Complex64) -> bool {
     bulb_radius_squared < 0.0625 - margin * (bulb_radius_squared + 0.0625)
 }
 
-pub fn mandelbrot_membership(c: num_complex::Complex64, max_iter: usize) -> bool {
-    if is_safely_interior(c) {
-        return true;
-    }
-    let mut z = num_complex::Complex64::new(0.0, 0.0);
-    for _ in 0..max_iter {
-        if z.re * z.re + z.im * z.im > 4.0 {
-            return false;
+pub(crate) struct MembershipOrbit {
+    c: num_complex::Complex64,
+    z: num_complex::Complex64,
+    evaluated: usize,
+    escaped_at: Option<usize>,
+    safely_interior: bool,
+    #[cfg(test)]
+    iterations: usize,
+}
+
+impl MembershipOrbit {
+    pub(crate) fn new(c: num_complex::Complex64) -> Self {
+        Self {
+            c,
+            z: num_complex::Complex64::new(0.0, 0.0),
+            evaluated: 0,
+            escaped_at: None,
+            safely_interior: is_safely_interior(c),
+            #[cfg(test)]
+            iterations: 0,
         }
-        z = z * z + c;
     }
-    true
+
+    pub(crate) fn inside_at(&mut self, max_iter: usize) -> bool {
+        if self.safely_interior {
+            return true;
+        }
+        if let Some(escaped_at) = self.escaped_at {
+            return max_iter <= escaped_at;
+        }
+        while self.evaluated < max_iter {
+            // Preserve the original pre-update cutoff. An escape observed at
+            // N still counts inside for a request of exactly N iterations.
+            if self.z.re * self.z.re + self.z.im * self.z.im > 4.0 {
+                self.escaped_at = Some(self.evaluated);
+                return false;
+            }
+            self.z = self.z * self.z + self.c;
+            self.evaluated += 1;
+            #[cfg(test)]
+            {
+                self.iterations += 1;
+            }
+        }
+        true
+    }
+}
+
+pub fn mandelbrot_membership(c: num_complex::Complex64, max_iter: usize) -> bool {
+    MembershipOrbit::new(c).inside_at(max_iter)
 }
 
 pub fn compute_runtime_metrics(
@@ -264,6 +302,50 @@ pub fn compute_runtime_metrics(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resumed_membership_matches_fresh_orbits_at_every_requested_budget() {
+        let mut points = vec![
+            num_complex::Complex64::new(2.0, 0.0),
+            num_complex::Complex64::new(0.25, 0.0),
+            num_complex::Complex64::new(-0.1225611668766536, 0.7448617666197442),
+            num_complex::Complex64::new(0.30752043982706229, 0.02876420131721053),
+            num_complex::Complex64::new(f64::NAN, 0.0),
+            num_complex::Complex64::new(f64::INFINITY, 0.0),
+        ];
+        for y in -6..=6 {
+            for x in -10..=5 {
+                points.push(num_complex::Complex64::new(x as f64 * 0.2, y as f64 * 0.2));
+            }
+        }
+        for c in points {
+            let mut orbit = MembershipOrbit::new(c);
+            // Decreasing requests after exhaustion/escape must preserve the
+            // original pre-update escape check, including the exact cutoff.
+            for budget in [0, 1, 2, 3, 5, 32, 512, 2048, 32768, 1, 0, 17] {
+                assert_eq!(
+                    orbit.inside_at(budget),
+                    orbit_membership_reference(c, budget),
+                    "{c:?} at {budget}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn membership_budget_growth_does_not_replay_the_orbit() {
+        // Period-three interior, outside the exact cardioid/bulb shortcuts.
+        let c = num_complex::Complex64::new(-0.1225611668766536, 0.7448617666197442);
+        assert!(!is_safely_interior(c));
+        let mut orbit = MembershipOrbit::new(c);
+        for budget in [512, 1024, 2048] {
+            assert!(orbit.inside_at(budget));
+        }
+        assert_eq!(
+            orbit.iterations, 2048,
+            "budget growth must resume the previous orbit"
+        );
+    }
 
     #[test]
     fn mandelbrot_membership_detects_inside_outside() {

@@ -33,6 +33,14 @@ fn main() {
             "inward_after_jump",
             Complex64::new(0.3948230501337527, 0.0499674412699672),
         ),
+        (
+            "live_training_refusal",
+            Complex64::new(0.30752043982706229, 0.02876420131721053),
+        ),
+        (
+            "kinetic_crossing_refusal",
+            Complex64::new(0.35714730438616327, 0.06380885577340460),
+        ),
     ] {
         for epsilon in [1e-2, 1e-4, 1e-6, 1e-8] {
             // Each child owns an initially empty cache. Timings exclude process
