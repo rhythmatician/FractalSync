@@ -30,6 +30,7 @@ from .cspace_proxies import (
 from .data_loader import AudioDataset
 from .c_trace_plot import collect_c_traces, plot_c_traces
 from .visual_metrics import LossVisualMetrics
+from .training_geometry import sample_regular_training_start
 from runtime_core import (
     DEFAULT_BASE_OMEGA,
     DEFAULT_K_RESIDUALS,
@@ -1297,7 +1298,15 @@ class ControlTrainer:
                     _starts_im2: dict[int, float] = {}
                     import math as _math3
 
-                    for _sid in _uniq2.tolist():
+                    _config2 = ManifoldConfig(
+                        d_ref=0.1,
+                        epsilon=1e-4,
+                        lambda_sq=1.0,
+                        kappa=1.0,
+                        mu=0.3183098861837907,
+                    )
+
+                    def _draw_start2() -> complex:
                         if torch.rand((), device=self.device).item() < 0.10:
                             _ang = (
                                 torch.rand((), device=self.device).item()
@@ -1308,8 +1317,7 @@ class ControlTrainer:
                             # valid disk (outer-domain wall invariant). Sample
                             # "far" starts in the 1.5-1.9 band, below the wall.
                             _r = 1.5 + torch.rand((), device=self.device).item() * 0.4
-                            _starts_re2[_sid] = _math3.cos(_ang) * _r
-                            _starts_im2[_sid] = _math3.sin(_ang) * _r
+                            return complex(_math3.cos(_ang) * _r, _math3.sin(_ang) * _r)
                         else:
                             _t = (
                                 torch.rand((), device=self.device).item()
@@ -1321,8 +1329,17 @@ class ControlTrainer:
                             _j = (
                                 torch.rand((), device=self.device).item() - 0.5
                             ) * 0.30
-                            _starts_re2[_sid] = _cb.real + _j * _mu.real * 0.5
-                            _starts_im2[_sid] = _cb.imag + _j * _mu.imag * 0.5
+                            return complex(
+                                _cb.real + _j * _mu.real * 0.5,
+                                _cb.imag + _j * _mu.imag * 0.5,
+                            )
+
+                    for _sid in _uniq2.tolist():
+                        _start2 = sample_regular_training_start(
+                            _draw_start2, _config2.epsilon
+                        )
+                        _starts_re2[_sid] = _start2.real
+                        _starts_im2[_sid] = _start2.imag
                     _ic_re2 = torch.tensor(
                         [_starts_re2[int(s)] for s in _seg.tolist()],
                         device=self.device,
@@ -1343,13 +1360,7 @@ class ControlTrainer:
                         impulse=impulse.squeeze(-1),
                         segment_ids=segment_ids,
                         dt=canonical_hop_dt(),
-                        config=ManifoldConfig(
-                            d_ref=0.1,
-                            epsilon=1e-4,
-                            lambda_sq=1.0,
-                            kappa=1.0,
-                            mu=0.3183098861837907,
-                        ),
+                        config=_config2,
                         initial_c=_initial_c2,
                     )
                 except Exception as _e2:

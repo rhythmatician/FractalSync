@@ -2,6 +2,7 @@
   "diagnostic_only": true,
   "provider_version": "geometry-provider/5",
   "epsilon": 0.0001,
+  "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
   "rows": [
     {
       "case": "inward_before",
@@ -523,8 +524,5 @@
         }
       ]
     }
-  ],
-  "method": "Centered differences of public geometry_provider_query D and grad_D; derivative diagnostic only.",
-  "query_protocol": "One process; each center followed by minus/plus x and minus/plus y for steps 1e-6 and 1e-7.",
-  "code_commit": "f82d1395818a539c3356568afeb7f18528e0cbb9"
+  ]
 }

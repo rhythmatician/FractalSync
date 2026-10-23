@@ -2,6 +2,66 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 follow-up: reset validity and derivative reproducers
+
+This follow-up keeps production geometry at `geometry-provider/5` and `orbit-controller/9`. Geometry source, golden vectors, quality thresholds and both crossing test sources are unchanged from `cdcc2cd`. **Crossing, live training trajectories, differential consistency and synchronous query cost still prevent merging.**
+
+### Training resets
+
+Controls-v2 training now conditions its existing randomized reset proposals on Rust's Regular geometry gate. Each proposal is rounded to the float32 position actually passed into the complex64 rollout before validation. The existing Rust `manifold_induced_metric` checks that position with the rollout epsilon. A Regular first proposal keeps its original position; rejected proposals are resampled from the same generator, up to 16 attempts. Exhaustion raises with the last Rust refusal chained as its cause. This changes the reset distribution by explicit rejection; it does not repair the geometry of excluded positions.
+
+Only resets are retried. The live `controls_v2_sequence` remains outside that loop, so a later invalid step still fails the batch. The new reset tests first failed on a proposal that rounds onto the exact cusp and on unbounded acceptance of invalid proposals, then passed after the gate was added.
+
+| Check | Follow-up result |
+|---|---|
+| New reset regressions | 3 passed: float32 cusp rejection, unchanged Regular first proposal, 16-attempt exhaustion with preserved Rust cause |
+| Reset plus complete Controls-v2 smoke files | 7 passed; sampled training smoke took 9.92 seconds in the final run |
+| End-to-end training plus reset tests | 5 passed, including both existing training workflows; overlaps the three reset tests above |
+| Fixed-seed training smoke | Seed 123 passes; seed 42 still fails during a live rollout, after reset validation |
+| Inward energy acceptance | Passed against the restored production provider, 10.93 seconds |
+| Static checks | Mypy passes for helper and trainer; architecture guardrail and canonical-surfaces gate pass; new helper/test Black formatting and diff whitespace checks pass |
+| Independent review | Standards, Spec and Health Regression found no actionable issues in the final code diff |
+
+Seed 42 fails at `(0.30752043982706229,0.02876420131721053)`, Unresolved, requested scale `4.50042492e-5`, resolved scale `3.81469727e-6`, estimated error `0.00049565977`. The failure remains visible. To reproduce without changing the test assertions, set `RUNTIME_CORE_NO_BUILD=1` after rebuilding the extension, then run the project interpreter with this payload:
+
+```python
+import numpy as np
+import pytest
+import torch
+
+np.random.seed(42)
+torch.manual_seed(42)
+raise SystemExit(pytest.main([
+    "backend/tests/test_controls_v2_smoke.py::test_controls_v2_training_batch_smoke",
+    "-q", "--tb=short",
+]))
+```
+
+Reset validation adds one Rust metric query per accepted first proposal, or up to 16 queries before exhaustion. CUDA retries also repeat the existing scalar sampling synchronizations. Representative device throughput has not been measured; this is bounded correctness work, not a query-cost improvement.
+
+### Differential consistency
+
+The [Rust diagnostic example](../runtime-core/examples/geometry_derivative_report.rs) now regenerates the [eight-probe report](validation/geometry-145-derivatives.json) directly from public provider queries. It compares centered differences at two step sizes with the reported gradient/Hessian and records neighboring validity and resolution. Its `1e-4` comparison tolerance is diagnostic only and changes no provider or energy threshold.
+
+```text
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+```
+
+The first command emits JSON. The second deliberately returns nonzero on the existing defect: `8 derivative probes disagree`. The compiled diagnostic completes in about 1.11 seconds on this machine. It is not added to CI as a passing acceptance gate, and no existing test is skipped.
+
+Three local prototypes were tested and rejected, then production geometry was restored:
+
+| Prototype | Near-Shore excursion at dt=0.001 / 0.0005 | Largest step change | Disposition |
+|---|---:|---:|---|
+| Analytic derivatives of the moving scalar fit | 0.43809 / 0.43977 | about 0.04938 | Local derivative regression passed, but total energy drift worsened |
+| Globally anchored cubic field with analytic derivatives | 0.08198 / 0.08154 | about 0.08105 | Derivatives matched and cell-boundary checks passed, but refinement switches exceeded the unchanged limit |
+| Cubic field with local second-moment coefficient correction | 0.09743 / 0.09637 | about 0.09297 | Quadratic reproduction and all provider regressions passed, but energy acceptance worsened |
+
+The cubic example's peak switched from a level-8 jet with gradient approximately `(0.76550,-0.64314)` to a level-7 jet with gradient `(0.73326,-0.68005)`. Thus making each fixed-level field C2 is insufficient: adaptive level selection must also preserve spatially coherent differential geometry. The next geometry repair needs to address that transition together with within-level consistency, and pass the unchanged conservative-energy and crossing tests. No prototype above is shipped as a fix.
+
+Standards and Spec review found no actionable issues. Health Regression found no diff-attributable maintainability, verification, or reasoning regressions within its bounded checks; training throughput remains unproved. No complete new Rust or Python suite is claimed for this training-only policy change. The complete provider-5 Rust baseline below remains 238 passed, one native crossing failure and one ignored test.
+
 ## October 23 follow-up: inward field convergence
 
 The follow-up from `580fbc6`, implemented in `f82d1395818a539c3356568afeb7f18528e0cbb9`, uses `geometry-provider/5`, `orbit-controller/9`, and the unchanged `debug-snapshot/5` wire shape. Golden numeric values are unchanged; only their controller stamp changes. Earlier sections below are historical provider-4 evidence. The linked JSON reports have been regenerated for provider 5.
