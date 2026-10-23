@@ -1,11 +1,11 @@
 {
   "controller_version": "orbit-controller/8",
   "provider_version": "geometry-provider/4",
-  "duration_seconds": 0.3,
   "acceptance_energy_excursion": 0.05,
   "rollouts": [
     {
       "case": "low_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.004,
       "steps": 75,
       "completed": true,
@@ -33,6 +33,7 @@
     },
     {
       "case": "low_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.002,
       "steps": 150,
       "completed": true,
@@ -60,6 +61,7 @@
     },
     {
       "case": "low_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.001,
       "steps": 300,
       "completed": true,
@@ -87,6 +89,7 @@
     },
     {
       "case": "low_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.0005,
       "steps": 600,
       "completed": true,
@@ -114,6 +117,7 @@
     },
     {
       "case": "high_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.004,
       "steps": 75,
       "completed": true,
@@ -141,6 +145,7 @@
     },
     {
       "case": "high_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.002,
       "steps": 150,
       "completed": true,
@@ -168,6 +173,7 @@
     },
     {
       "case": "high_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.001,
       "steps": 300,
       "completed": true,
@@ -195,6 +201,7 @@
     },
     {
       "case": "high_curvature",
+      "duration_seconds": 0.3,
       "dt": 0.0005,
       "steps": 600,
       "completed": true,
@@ -222,6 +229,7 @@
     },
     {
       "case": "near_shore",
+      "duration_seconds": 0.3,
       "dt": 0.004,
       "steps": 75,
       "completed": true,
@@ -249,6 +257,7 @@
     },
     {
       "case": "near_shore",
+      "duration_seconds": 0.3,
       "dt": 0.002,
       "steps": 150,
       "completed": true,
@@ -276,6 +285,7 @@
     },
     {
       "case": "near_shore",
+      "duration_seconds": 0.3,
       "dt": 0.001,
       "steps": 300,
       "completed": true,
@@ -303,6 +313,7 @@
     },
     {
       "case": "near_shore",
+      "duration_seconds": 0.3,
       "dt": 0.0005,
       "steps": 600,
       "completed": true,
@@ -327,6 +338,119 @@
         0.05350153585945869
       ],
       "failure": null
+    },
+    {
+      "case": "near_shore_inward",
+      "duration_seconds": 0.5,
+      "dt": 0.005,
+      "steps": 100,
+      "completed": true,
+      "c": [
+        0.38928799537302106,
+        0.049155662619423474
+      ],
+      "velocity": [
+        -0.013774461771802964,
+        -0.004221035177379554
+      ],
+      "initial_energy": 1.652990619069848,
+      "final_energy": 1.2474307921731722,
+      "maximum_excursion": 0.4153873666274803,
+      "maximum_step_energy_change": 0.4135658728610736,
+      "peak_from": [
+        0.39494073887023606,
+        0.04996931486326729
+      ],
+      "peak_to": [
+        0.3948230501337527,
+        0.0499674412699672
+      ],
+      "failure": null
+    },
+    {
+      "case": "near_shore_inward",
+      "duration_seconds": 0.5,
+      "dt": 0.0025,
+      "steps": 200,
+      "completed": true,
+      "c": [
+        0.3892685173190743,
+        0.049151221190703656
+      ],
+      "velocity": [
+        -0.01378210500210866,
+        -0.004240248865310099
+      ],
+      "initial_energy": 1.652990619069848,
+      "final_energy": 1.248144394063721,
+      "maximum_excursion": 0.4156669600590539,
+      "maximum_step_energy_change": 0.4145049383015986,
+      "peak_from": [
+        0.39493186294860194,
+        0.049969636795116595
+      ],
+      "peak_to": [
+        0.39487281204063024,
+        0.04996871402653824
+      ],
+      "failure": null
+    },
+    {
+      "case": "near_shore_inward",
+      "duration_seconds": 0.5,
+      "dt": 0.00125,
+      "steps": 400,
+      "completed": true,
+      "c": [
+        0.3892553163300811,
+        0.04915562765773878
+      ],
+      "velocity": [
+        -0.013795361147592325,
+        -0.004228938438435914
+      ],
+      "initial_energy": 1.652990619069848,
+      "final_energy": 1.24891693087573,
+      "maximum_excursion": 0.4153968106121555,
+      "maximum_step_energy_change": 0.41460719119752465,
+      "peak_from": [
+        0.39489785483843554,
+        0.04996934106785864
+      ],
+      "peak_to": [
+        0.39486832332568356,
+        0.04996887906076854
+      ],
+      "failure": null
+    },
+    {
+      "case": "near_shore_inward",
+      "duration_seconds": 0.5,
+      "dt": 0.000625,
+      "steps": 800,
+      "completed": true,
+      "c": [
+        0.3892522005967944,
+        0.049151200054080746
+      ],
+      "velocity": [
+        -0.013792575365163259,
+        -0.004244186677260006
+      ],
+      "initial_energy": 1.652990619069848,
+      "final_energy": 1.2488871700258866,
+      "maximum_excursion": 0.4156797593876109,
+      "maximum_step_energy_change": 0.4150336716872154,
+      "peak_from": [
+        0.3949104166969304,
+        0.04996965226013208
+      ],
+      "peak_to": [
+        0.39489562664644495,
+        0.0499694231617069
+      ],
+      "failure": null
     }
-  ]
+  ],
+  "acceptance_step_energy_change": 0.05
 }

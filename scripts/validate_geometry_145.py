@@ -16,6 +16,7 @@ import runtime_core as rc
 @dataclass
 class Rollout:
     case: str
+    duration_seconds: float
     dt: float
     steps: int
     completed: bool
@@ -30,7 +31,13 @@ class Rollout:
     failure: str | None
 
 
-def measure(name: str, c: complex, velocity: tuple[float, float], dt: float) -> Rollout:
+def measure(
+    name: str,
+    c: complex,
+    velocity: tuple[float, float],
+    dt: float,
+    duration_seconds: float,
+) -> Rollout:
     config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
     initial = rc.manifold_total_energy(*velocity, c, config)
     energy = initial
@@ -39,7 +46,7 @@ def measure(name: str, c: complex, velocity: tuple[float, float], dt: float) -> 
     failure = None
     maximum_step_change = 0.0
     peak_from = peak_to = (c.real, c.imag)
-    for _ in range(round(0.3 / dt)):
+    for _ in range(round(duration_seconds / dt)):
         previous_c = c
         try:
             x, y, vx, vy, info = rc.manifold_integrate_step(
@@ -59,6 +66,7 @@ def measure(name: str, c: complex, velocity: tuple[float, float], dt: float) -> 
             peak_to = c.real, c.imag
     return Rollout(
         name,
+        duration_seconds,
         dt,
         completed_steps,
         failure is None,
@@ -76,19 +84,44 @@ def measure(name: str, c: complex, velocity: tuple[float, float], dt: float) -> 
 
 def main() -> None:
     rows = [
-        asdict(measure(name, start, velocity, dt))
-        for name, start, velocity in [
-            ("low_curvature", complex(-0.5, 0.1), (0.01, 0.0)),
-            ("high_curvature", complex(0.4, 0.05), (0.0, 0.02)),
-            ("near_shore", complex(0.3, 0.05), (0.0, 0.02)),
+        asdict(measure(name, start, velocity, dt, duration))
+        for name, start, velocity, duration, timesteps in [
+            (
+                "low_curvature",
+                complex(-0.5, 0.1),
+                (0.01, 0.0),
+                0.3,
+                (0.004, 0.002, 0.001, 0.0005),
+            ),
+            (
+                "high_curvature",
+                complex(0.4, 0.05),
+                (0.0, 0.02),
+                0.3,
+                (0.004, 0.002, 0.001, 0.0005),
+            ),
+            (
+                "near_shore",
+                complex(0.3, 0.05),
+                (0.0, 0.02),
+                0.3,
+                (0.004, 0.002, 0.001, 0.0005),
+            ),
+            (
+                "near_shore_inward",
+                complex(0.4, 0.05),
+                (-0.03, 0.0),
+                0.5,
+                (0.005, 0.0025, 0.00125, 0.000625),
+            ),
         ]
-        for dt in [0.004, 0.002, 0.001, 0.0005]
+        for dt in timesteps
     ]
     report = {
         "controller_version": rc.CONTROLLER_VERSION,
         "provider_version": rc.geometry_provider_version(),
-        "duration_seconds": 0.3,
         "acceptance_energy_excursion": 0.05,
+        "acceptance_step_energy_change": 0.05,
         "rollouts": rows,
     }
     destination = (
