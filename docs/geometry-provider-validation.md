@@ -2,9 +2,56 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 follow-up: inward field convergence
+
+The follow-up from `580fbc6`, implemented in `f82d1395818a539c3356568afeb7f18528e0cbb9`, uses `geometry-provider/5`, `orbit-controller/9`, and the unchanged `debug-snapshot/5` wire shape. Golden numeric values are unchanged; only their controller stamp changes. Earlier sections below are historical provider-4 evidence. The linked JSON reports have been regenerated for provider 5.
+
+The inward false convergence came from comparing only fitted jets. At the recorded destination `(0.3948230501337527,0.0499674412699672)`, the level-6 fitted error was `0.00114922`, small enough to pass, while the coarse and fine contour distance fields disagreed by `0.00603986` at matching stencil positions. Least-squares projection concealed that disagreement. Membership signs and the fitted center value were checked separately and did not explain this jump.
+
+Convergence now includes the maximum signed-distance disagreement across the same 49 fine-stencil positions. One Rust evaluator owns both fitting and this comparison, including shared-vertex signs. The fine samples are retained from fitting; the previous contour segments are moved into explicit previous-level state. This avoids recomputing fine samples or cloning the segment vector. The requested-scale law, error threshold, tie band, angle threshold, refinement budget, 64-entry cache, and all crossing test assertions remain unchanged.
+
+The new public-query regression failed before this correction and passes afterward. Across the original inward pair, D now changes by `0.00010373754` over a move of `0.00011770365`; both queries resolve at level 8 with errors about `2.77e-5`. The previous `0.00729421503` scalar jump is gone.
+
+The rebuilt Python extension passes the original 100-step inward acceptance test. The [16-row energy report](validation/geometry-145-energy.json) preserves all three short trajectories and adds these completed inward results:
+
+| dt | Maximum excursion | Maximum individual energy change |
+|---|---:|---:|
+| 0.005 | 0.0029482902 | 0.0000433818 |
+| 0.0025 | 0.0014284124 | 0.0000105753 |
+| 0.00125 | 0.0006686324 | 0.0000025055 |
+| 0.000625 | 0.0002887823 | 0.0000005568 |
+
+The original maximum individual jump was `0.4135659`. All 16 sampled rollouts now complete below the unchanged `0.05` excursion and step-change limits. The near-Shore short trajectory still approaches an excursion of `0.0252252` and a step change of `0.0243545` as dt decreases; spatial derivative/metric consistency remains an open concern.
+
+A subsequent [offline derivative probe](validation/geometry-145-derivatives.json) narrows that concern. It queries the center and `c +/- delta` on each coordinate axis through the public Rust binding, then takes centered differences of returned D and gradients. Both delta=`1e-6` and `1e-7` give nearly identical results, and every neighboring query remains Regular at the same level as its center. Before the near-Shore peak, the returned mixed Hessian is `8.27792`, while differences of the queried gradient give `d(grad_y)/dx=2.51670` and `d(grad_x)/dy=6.34802`. After the peak, the corresponding values are `1.74260`, `1.15179` and `4.21919`. Thus spatially moving the fit already creates differential inconsistency within a single accepted level; changing levels is not required. At the repaired inward points, the analogous mixed-derivative discrepancies are much smaller, about `0.0063` or less. These are diagnostic finite differences, never a substitute Physics implementation or a new acceptance threshold. A spatially coherent value/gradient/Hessian representation is the next numerical frontier.
+
+### Follow-up verification and remaining blockers
+
+| Check | Provider-5 result |
+|---|---|
+| Provider regressions | 20 passed, including the new inward consistency regression |
+| Complete release Rust suite | 238 passed, 1 failed, 1 ignored with `--jobs 1 --no-fail-fast -- --test-threads=1`. The sole failure is native crossing; all 33 snapshot integration tests pass (598.87 seconds). The first concurrent-build attempt exhausted the Windows paging file and is not a test verdict. Provider tests overlap this total. |
+| Three previously failing Python nodes | 2 passed, 1 failed in 381.96 seconds: inward energy and the sampled training smoke pass; kinetic crossing still fails |
+| Canonical preflight | All mandatory checks passed; manifold mirror maximum error `1.490e-8` |
+| Frontend / production build | 27 files / 116 tests passed; build passed; existing unavailable-ONNX-runtime branches remain |
+| Rebuilt real WASM | Snapshot/startup contract passed |
+| GPU | 16 projection cases, maximum error `5.411e-8`, 262,144 vertices, 531,502 triangles, 1,000 camera updates passed |
+| Structural checks | Architecture guardrail, canonical-surfaces gate, changed Rust formatting and diff whitespace checks passed; Python stub generation has no API diff |
+| Independent review | Standards, Spec and Health Regression reviewed the final code diff with no actionable findings |
+
+The Python crossing test now refuses `(0.35714730438616327,0.06380885577340460)` as Unresolved, requested scale `1.49003765e-5`, resolved scale `9.53674316e-7`, error `0.00023872088`. Native crossing still encounters the recorded Singular/CutLocus endpoint `(0.21656074663216787,0.12610803467485909)`. Neither crossing test was changed.
+
+The isolated training smoke pass does not establish training validity: replaying the prior failed coordinate `(-0.01567560926387349,0.68496020433710436)` still returns Unresolved with error `0.0059855766`. No full Python-suite rerun is claimed for provider 5; the complete provider-4 result below remains the broader baseline.
+
+At code commit `f82d139`, [CI run 40033947928](https://github.com/rhythmatician/FractalSync/actions/runs/40033947928) passes native/Python and WASM builds and frontend tests including real-WASM/GPU checks. The separate type-check and generated-stub workflows pass. Rust CI reproduces the identical native crossing refusal (75 library passes, 1 failure) and stops before integration targets. Backend CI remains pending at this checkpoint; the targeted rebuilt-extension verdict above is the current local follow-up result.
+
+The [44-row query report](validation/geometry-provider-145.json) uses eleven cases at four epsilon values, each in a fresh process followed by an immediate repeat. It verifies repeated jets and Regular scale/error bounds. At epsilon `1e-4`, the inward pair costs about `665â€“681 ms` cold and `3.4 ms` on immediate repeat; the corridor costs `643 ms` cold and `3.2 ms` repeated. Across the report, cold queries reach `2369 ms` and repeated singular queries reach `3342 ms`. These timings were collected alongside acceptance work and are machine/load dependent. They do not establish a frame budget; synchronous cost remains a merge blocker.
+
+**PR #148 remains unready to merge:** crossing/refusal semantics, training geometry validity, spatial consistency and performance acceptance remain outstanding. The inward false-convergence and excessive scalar energy jump now have a regression and timestep-refinement evidence.
+
 ## October 23: projection classification and bounded refinement repairs
 
-Work resumed from PR head `9af409f62794d63dc43675cf7dc3caac19721330`, preserving the separate, diverged local `issue-145` branch. Current versions are `geometry-provider/4`, `orbit-controller/8`, and the unchanged `debug-snapshot/5` wire shape. Regenerated golden numeric values are unchanged; their controller stamp is now `/8`.
+Work resumed from PR head `9af409f62794d63dc43675cf7dc3caac19721330`, preserving the separate, diverged local `issue-145` branch. Versions at that checkpoint were `geometry-provider/4`, `orbit-controller/8`, and the unchanged `debug-snapshot/5` wire shape. Regenerated golden numeric values were unchanged; their controller stamp was `/8`.
 
 ### Implemented corrections
 
@@ -204,7 +251,7 @@ At epsilon 1e-4, `(-0.5, 0.1)` and `(0.3, 0.05)` are Regular, `(0.35, 0.05)` is 
 ## September 26 blockers (updated October 2)
 
 1. **Native Shore crossing.** The Rust crossing test still fails. Python high-curvature, near-Shore, and underpowered/above-barrier trajectories encounter Unresolved or Singular geometry. Recorded failing positions include `(0.4005984941807052, 0.054142245287925383)`, `(0.300068357754536, 0.05333168318631767)`, and `(0.38777728061779215, 0.05037298251515404)`. Determine which represent real geometric ambiguity and which are contour/jet-estimation defects, then establish the ordinary Controls behavior there. Do not relax quality thresholds merely to obtain a trajectory.
-2. **Initialization and diagnostic behavior at invalid geometry — resolved October 2.** The follow-up above implements regular untouched startup and partial invalid snapshots. Explicit origin states remain covered by refusal and diagnostic tests.
+2. **Initialization and diagnostic behavior at invalid geometry â€” resolved October 2.** The follow-up above implements regular untouched startup and partial invalid snapshots. Explicit origin states remain covered by refusal and diagnostic tests.
 3. **Broader numerical and perceptual acceptance.** Finish #120 validation of conditioning, energy drift, cut loci, perturbation sensitivity, deep scales, cost, and cross-language behavior. Then obtain the #82 crossing/non-crossing visual verdict. The passing sample and bindings checks above do not close these items.
 
 The [migration inventory](geometry-provider-migration.md) records destination ownership and deletion triggers for this geometry seam. It is a partial #84 artifact, not completion of that broader issue.
