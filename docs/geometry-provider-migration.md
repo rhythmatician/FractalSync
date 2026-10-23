@@ -2,6 +2,8 @@
 
 This is the #84 migration record for the #145 Physics geometry seam. The architecture route belongs to [#77](https://github.com/rhythmatician/FractalSync/issues/77); this file records only the code ownership, bridge consumers, and deletion triggers needed to change this seam safely. It supplements [ADR 0004](adr/0004-scale-aware-mandelbrot-geometry-provider.md), which owns the provider design.
 
+October 23 state: `geometry-provider/4` and `orbit-controller/8` repair projection classification and bounded refinement; `debug-snapshot/5` keeps the same nullable wire shape. The original rejected endpoint and corridor resolve. Requiring both comparison levels within the requested scale removes the high-curvature energy jump, and all twelve short energy rollouts pass the unchanged limit. Native rollout refusal, invalid training resets and synchronous query cost still prevent acceptance; near-Shore spatial consistency also remains a concern. See the [current validation evidence](geometry-provider-validation.md#october-23-projection-classification-and-bounded-refinement-repairs). No bridge or legacy deletion trigger has been satisfied by this repair.
+
 ## Migration rule
 
 Migration is one way:

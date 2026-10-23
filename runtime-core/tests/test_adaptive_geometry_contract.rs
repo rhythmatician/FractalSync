@@ -64,11 +64,8 @@ fn destination_provider_is_independent_of_loaded_bridge_and_marks_provenance() {
     assert_eq!(with_bridge.provider_version, GEOMETRY_PROVIDER_VERSION);
     assert!(!with_bridge.is_bridge);
 
-    let bridge = runtime_core::geometry_provider::query_bridge_geometry(
-        regular_interior(),
-        1e-4,
-    )
-    .expect("explicit bridge query should succeed when its raster is loaded");
+    let bridge = runtime_core::geometry_provider::query_bridge_geometry(regular_interior(), 1e-4)
+        .expect("explicit bridge query should succeed when its raster is loaded");
     assert!(bridge.is_bridge);
     assert_eq!(bridge.provider_version, GEOMETRY_PROVIDER_VERSION);
 }
@@ -78,19 +75,23 @@ fn cut_locus_and_unachievable_shore_scale_fail_closed() {
     let _guard = distance_field::global_test_mutex()
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    let cusp = runtime_core::geometry_provider::query_geometry(Complex64::new(0.0, 0.0), 1e-4)
-        .expect("cusp query should return an explicit classification");
-    assert_eq!(cusp.validity, GeometryValidity::Singular);
-    assert_eq!(cusp.singularity, SingularityKind::CutLocus);
+    let cut_locus =
+        runtime_core::geometry_provider::query_geometry(Complex64::new(-1.0, 0.0), 1e-4)
+            .expect("cut-locus query should return an explicit classification");
+    assert_eq!(cut_locus.validity, GeometryValidity::Singular);
+    assert_eq!(cut_locus.singularity, SingularityKind::CutLocus);
 
     // The smooth top of the primary cardioid is on the Shore. This epsilon
     // requests a spatial scale far below the provider's finite dyadic budget.
-    let deep_shore = runtime_core::geometry_provider::query_geometry(
-        Complex64::new(0.25, 0.5),
-        1e-100,
-    )
-    .expect("bounded refinement should return an unresolved jet");
+    let deep_shore =
+        runtime_core::geometry_provider::query_geometry(Complex64::new(0.25, 0.5), 1e-100)
+            .expect("bounded refinement should return an unresolved jet");
     assert_eq!(deep_shore.validity, GeometryValidity::Unresolved);
     assert!(!deep_shore.is_bridge);
-    assert!(deep_shore.resolved_scale > deep_shore.requested_scale);
+    // Either spatial resolution or the consecutive-level error can exhaust
+    // the budget. An unresolved jet must not satisfy both acceptance gates.
+    assert!(
+        deep_shore.resolved_scale > deep_shore.requested_scale
+            || deep_shore.estimated_error > 0.25 * deep_shore.requested_scale
+    );
 }

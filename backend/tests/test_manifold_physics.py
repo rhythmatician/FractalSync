@@ -152,13 +152,13 @@ class TestConnectionValidity:
 
     def test_cut_locus_is_explicit_and_physics_fails_closed(self, rc):
         config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)
-        jet = _geometry_jet(rc, (0.0, 0.0), config.epsilon)
+        jet = _geometry_jet(rc, (-1.0, 0.0), config.epsilon)
         assert jet["validity"] == "singular"
         assert jet["singularity"] == "cut_locus"
         with pytest.raises(RuntimeError, match="geometry not regular"):
-            rc.manifold_induced_metric(0.0 + 0.0j, config)
+            rc.manifold_induced_metric(-1.0 + 0.0j, config)
         with pytest.raises(RuntimeError, match="geometry not regular"):
-            rc.manifold_christoffel_symbols(0.0 + 0.0j, config)
+            rc.manifold_christoffel_symbols(-1.0 + 0.0j, config)
 
     def test_differentiable_connection_matches_metric_derivative_definition(self):
         """The compact connection agrees with the Levi-Civita definition."""

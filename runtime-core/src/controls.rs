@@ -1078,7 +1078,7 @@ mod tests {
     fn deterministic_evolution_same_actions() {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = cfg();
-        let c0 = C::new(-0.2, 0.3);
+        let c0 = C::new(-0.5, 0.1);
         let v0 = (0.02, -0.01);
         let dt = 0.02;
         let controls = MotionControls {
@@ -1203,7 +1203,7 @@ mod tests {
     fn world_aligned_drive_refuses_singular_geometry() {
         let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
         let config = cfg();
-        let cusp = C::new(0.0, 0.0);
+        let cusp = C::new(-1.0, 0.0);
         let jet = crate::geometry_provider::query_geometry(cusp, config.epsilon).unwrap();
         assert_eq!(
             jet.validity,

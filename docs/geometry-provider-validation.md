@@ -1,6 +1,97 @@
-# Adaptive geometry validation, September 26, 2026
+# Adaptive geometry validation
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
+
+## October 23: projection classification and bounded refinement repairs
+
+Work resumed from PR head `9af409f62794d63dc43675cf7dc3caac19721330`, preserving the separate, diverged local `issue-145` branch. Current versions are `geometry-provider/4`, `orbit-controller/8`, and the unchanged `debug-snapshot/5` wire shape. Regenerated golden numeric values are unchanged; their controller stamp is now `/8`.
+
+### Implemented corrections
+
+- Off-Shore competition uses displacement directions from actual nearest projection points. Incident edges sharing a projection cannot manufacture two distance gradients. At zero distance, incident boundary normals remain meaningful evidence of nonsmoothness.
+- Refinement persistence matches projection locations within one coarse cell diagonal, as well as directions. Both matched coarse and fine pairs must compete; two coarse features cannot both match one fine feature and establish persistence. All near-tied candidates are retained so symmetric cases are independent of segment order.
+- Both consecutive levels must satisfy the requested scale before accepting Regular or supporting Singular. Comparing against an oversized previous level had admitted two neighboring Regular queries with a distance jump of `0.00843` across a move of only `0.0000188`, beyond their combined reported errors. A regression now rejects that inconsistency. A qualifying Singular candidate remains provisional while bounded refinement is available. The observed native endpoint `(0.24978495883420873, 0.09661690704669372)` was prematurely refused at level 5 but resolves with further refinement. This deliberately extends the issue's one-refinement stopping policy; it does not change the `0.5*h` tie band, 30-degree angle, scale law, or `0.25*requested_scale` error bound. Regular also requires no remaining competition.
+- The old nine-tile expansion shifted by one eight-cell core stride, expanding 56 cells to only 72. The replacement uses contiguous complete tiles and one bounded expansion of at most 7x7 tiles, stopping earlier when containment succeeds. It skips tiles only when their spatial bounds prove they cannot influence the distance stencil. The deterministic LRU remains 64 entries.
+- Membership nodes still changing at the iteration limit are retained as uncertainty. Each stencil sample rejects uncertain adjacent cells that could contain a closer contour, and uncertain nodes within four cells of its nearest projection. Farther nodes inside an enclosing ball do not invalidate an unrelated local jet. An unstable level retries finer spatial resolution and clears convergence history, so nonconsecutive levels cannot certify convergence.
+- The origin now correctly has a unique off-Shore cusp projection. Its distance, gradient and Hessian are checked against the local distance-to-cusp values. Singular-refusal fixtures use `(-1,0)`; unresolved snapshot fixtures use an unattainable scale at `(0.25,0.5)`. Explicit startup positions and genuine invalid-state refusal remain tested.
+- The exactly known primary cardioid cusp `(0.25,0)` is explicitly Singular/NonUniqueNormal, with exact scalar `D=0` and unavailable derivatives/error. Finite orbit iteration numerically rounded this point into an apparently smooth contour even at level 23; that approximation cannot certify smoothness at a known boundary singularity. No neighborhood is special-cased. A wider boundary uncertainty-band experiment was discarded.
+- Runtime refusal messages retain the exact failed coordinate, provider/tile, requested/resolved scales and estimated error, including failures reached through Python training.
+
+The original rejected endpoint `(0.29835945330580743,0.0515177858286498)`, refinement corridor `(0.35,0.05)`, and former high-curvature refusal `(0.4005984941807052,0.054142245287925383)` now return Regular jets satisfying the unchanged scale/error limits. At the corridor, the new jet resolves at level 10 with `D=0.0070220696361` and error `7.3430772e-6`, against a permitted error of about `1.7557e-4`.
+
+### Verification
+
+| Check | October 23 result |
+|---|---|
+| Provider unit regressions | 19 passed, including endpoint/corner, true medial axis, projection persistence, neighboring distance consistency, local membership uncertainty, known cusp and repaired coordinates |
+| Complete release Rust suite | 236 passed, 2 failed, 1 ignored. One stale boundary-contract assertion was corrected and its complete target rerun passes 3/3; native crossing remains the unresolved failure. Provider tests overlap this total. No complete green run is claimed. |
+| Rust snapshot integration | 33/33 passed, including partial singular/unresolved diagnostics and JSON nulls |
+| Python final-artifact suite | Full run is in progress on the rebuilt extension; no complete verdict is claimed. It reached the longer Shore-crossing acceptance test. The duplicate focused run was stopped and is not counted. |
+| Canonical preflight | All mandatory checks passed; manifold mirror maximum error `1.490e-8` |
+| Frontend | 27 files / 116 tests passed; existing model-dependent unavailable-ONNX-runtime branches remain |
+| Production build | Passed |
+| Real WASM | Both snapshot entry points, nulls, regular automatic and explicit startup, and singular/unresolved diagnostics passed |
+| GPU | 16 projection cases, maximum error `5.411e-8`, 262,144 vertices, 531,502 triangles and 1,000 camera updates passed |
+| Structural/static checks | Architecture guardrail and canonical-surfaces gate passed; diagnostic script Pyright has zero errors and one compiled-extension source warning; Python stub generation has no API diff |
+| Independent review | Standards and Health Regression had no actionable findings. The Spec review's many-to-one persistence finding was fixed and re-reviewed; no remaining actionable Spec finding. |
+
+The boundary-contract assertion previously assumed that every Unresolved jet had an oversized cell. Unresolved also legitimately includes a small cell with excessive consecutive-level error; the corrected assertion requires at least one acceptance gate to fail. Regular thresholds are unchanged. Rust snapshot integration took about 560 seconds on this run, adding test-loop cost evidence. New/updated provider, contract, example and generator Rust formatting checks pass; the diagnostic script passes Black. Whole-file formatting checks on the three existing Python test files and `manifold.rs` expose formatting already present at the prior PR head, which was not broadly rewritten.
+
+The Controls-v2 smoke fixture `(0.8,0)` is itself Singular under the destination provider. Its smooth-motion comparison now uses two Regular charts and asserts different coordinate displacements, rather than accepting equality. That corrected scoped test passes. The native crossing assertions, energy limit and randomized trainer failure remain enabled.
+
+### Energy convergence and remaining merge blockers
+
+The reproducible [energy report](validation/geometry-145-energy.json) runs the same 0.3-second conservative trajectories at four timesteps through the rebuilt Rust bindings. The [driver](../scripts/validate_geometry_145.py) records endpoint state, maximum excursion, largest individual energy change and its coordinates, and any exact provider refusal.
+
+| Geometry | Excursion at dt=0.004 | dt=0.002 | dt=0.001 | dt=0.0005 |
+|---|---:|---:|---:|---:|
+| Low curvature | 0.0004483 | 0.0002155 | 0.0000991 | 0.0000412 |
+| High curvature | 0.0004634 | 0.0002340 | 0.0001192 | 0.0000619 |
+| Near Shore | 0.0202737 | 0.0226497 | 0.0242506 | 0.0252252 |
+
+All twelve short trajectories complete below the unchanged 0.05 limit. Low- and high-curvature drift decrease with timestep. Before requiring both comparison levels within the requested scale, high-curvature excursion was about 0.259 and did not improve with smaller timesteps; the excessive neighboring distance jump described above caused a single energy change of about 0.260. The repaired high-curvature maximum step change at dt=0.002 is `1.73e-6`. Near-Shore drift still increases toward about 0.025 under timestep refinement, indicating a remaining spatial consistency concern despite satisfying this short acceptance window. No tolerance was widened.
+
+At the near-Shore dt=0.0005 peak, the move from `(0.30007240651412576,0.05348910097156354)` to `(0.3000728655316197,0.05350153585945869)` changes D by `1.1464e-5`, within the move length `1.2443e-5` and combined reported error `1.1819e-4`. However, the accepted level changes from 8 to 7, gradient changes from approximately `(0.74504,-0.66469)` to `(0.73542,-0.67585)`, and the largest step energy change is `0.02435`. This points the remaining investigation toward derivative/metric consistency across accepted local fits; it is not a recurrence of the excessive scalar distance jump fixed above.
+
+The native rollout now proceeds beyond its original refusal but still fails in its **undriven** phase. Its last accepted state is `c=(0.21830798283479041,0.1245443967216562)`, `v=(-0.08464911002539771,0.07579486122988947)`. The rejected endpoint is `(0.21656074663216787,0.12610803467485909)`, reported as Singular/CutLocus at level 7, requested scale `0.0130064219662`, resolved scale `0.0009765625`, error `0.0002209228102`. The isolated query report reproduces it at every sampled epsilon. This is retained evidence of persistent sampled competition at the last contained level, not proof that the exact Mandelbrot geometry has a genuine cut locus there. The driven crossing phase has not established acceptance.
+
+An exploratory Rust probe sampled finer tiles centered on the competing level-7 feet, rather than attempting complete coverage around the query. The nearest tracked feature approaches `(0.31036,0.03589)` and the other approaches the cardioid cusp `(0.25,0)`. Their distance separation stays positive while the tie band shrinks:
+
+| Level | Tracked distance gap | Tie band | Local competition |
+|---|---:|---:|---|
+| 7 | 0.00035829 | 0.00048828 | yes |
+| 8 | 0.00032886 | 0.00024414 | no |
+| 9 | 0.00033293 | 0.00012207 | no |
+| 10 | 0.00032547 | 0.00006104 | no |
+| 11 | 0.00032174 | 0.00003052 | no |
+
+These local probes lack complete contour containment and stencil-membership certification, so they cannot promote the runtime result to Regular or prove exact uniqueness. They do strengthen the finite-band-aliasing diagnosis. The current terminal Singular classification retains the settled two-level rule's **suspected** nonsmoothness meaning; an Unresolved result on coverage exhaustion would communicate the provisional status more clearly, but would also change the public classification of genuine cut-locus fixtures whose refinement exhausts that footprint. Resolving this needs a coverage/refinement contract that can distinguish those outcomes, rather than a coordinate exception or another arbitrary persistence count.
+
+Training still needs a policy for selecting valid initial geometry. Randomizing inside the radius-two domain does not guarantee a Regular jet. The new errors preserve failed coordinates instead of hiding them. Do not silently discard failed rollout steps, substitute the raster, or count successful reset coverage as navigation.
+
+Runtime cost is also unaccepted. The [query report](validation/geometry-provider-145.json) measures nine cases at four epsilons, each in a fresh child process followed by an immediate repeat. This removes the old report's cross-row warm-cache ambiguity. The October 23 sample, taken while other validation jobs were active, includes roughly 496 ms cold / 1.44 ms repeat at the corridor, 1.80 seconds cold / 1.88 seconds repeat at the true cut-locus fixture, and 372 ms cold / 376 ms repeat at the remaining crossing refusal (epsilon=1e-4). Repeated refinement can churn the 64-entry cache. These are not live-frame-budget results; bounded correctness does not establish playable throughput.
+
+Merge still requires resolving/classifying the remaining rollout refusals, validating training resets, and meeting live query-cost requirements. Near-Shore spatial consistency and longer-window energy behavior also remain acceptance concerns. #120 owns that acceptance; #82's visual crossing verdict is still outstanding. #145 and PR #148 remain open and unaccepted.
+
+The next classification investigation should extend the local projection-track evidence above into a complete containment/error argument. The current public jet gives a reproducible refusal but cannot distinguish exact nonuniqueness from a persistent finite-width tie before containment ends. Training reset work should validate proposed seeds through the Rust provider with a bounded failure policy; it must not suppress invalid states reached during a rollout. Cost work should measure generated tiles and iteration work for moving queries as well as repeated identical queries; improving an exact-repeat cache alone would not establish navigation throughput.
+
+### Reproduction and tooling
+
+From the repository root, use the project interpreter and rebuilt extension:
+
+```text
+rtk cargo test -p runtime_core --release --no-fail-fast -- --test-threads=1
+rtk proxy .venv/Scripts/python.exe -m pytest backend/tests -q --tb=short
+rtk proxy .venv/Scripts/python.exe scripts/preflight_parity.py
+rtk proxy .venv/Scripts/python.exe scripts/validate_geometry_145.py
+rtk cargo run --release -p runtime_core --example geometry_provider_report
+rtk proxy node frontend/scripts/test_debug_snapshot_contract.mjs
+rtk npm --prefix frontend test -- --run
+rtk npm --prefix frontend run build
+rtk npm --prefix frontend run test:hyperbolic-gpu
+```
+
+The golden generator is now anchored to `CARGO_MANIFEST_DIR`, so root-level invocation writes the repository's `shared/golden_vectors.json`. Before that repair, an invocation from the root also overwrote the sibling generated file `C:/Users/JeffHall/git/shared/golden_vectors.json`; its previous contents were not captured. The repository artifact was subsequently regenerated in the correct location. No handwritten source outside this checkout was changed.
 
 ## October 2 follow-up: startup and partial diagnostics
 

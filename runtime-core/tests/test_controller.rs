@@ -347,7 +347,7 @@ fn default_controller_starts_in_a_regular_manifold_chart() {
 #[test]
 fn explicit_cut_locus_startup_remains_fail_closed() {
     let mut controller = OrbitController::default();
-    controller.set_c(0.0, 0.0);
+    controller.set_c(-1.0, 0.0);
     controller.set_manifold_physics_enabled(true);
     let start = controller.c;
     let velocity = controller.planar_velocity;

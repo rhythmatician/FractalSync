@@ -40,7 +40,6 @@ class TestDebugSnapshotFromState:
         assert "observation" not in snap
 
     def test_physics_fields_match_canonical_bindings(self, rc):
-        # The origin is intentionally a partial singular snapshot in /5.
         # Use a known regular interior point to verify derivative-dependent math.
         c = complex(-0.5, 0.1)
         v = (0.05, -0.02)
@@ -72,11 +71,11 @@ class TestDebugSnapshotFromState:
             rc.manifold_total_energy(v[0], v[1], c, _config(rc)), abs=1e-12
         )
 
-    def test_origin_returns_honest_partial_singular_snapshot(self, rc):
-        snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.1, 0.0)
+    def test_cut_locus_returns_honest_partial_singular_snapshot(self, rc):
+        snap = rc.debug_snapshot_from_state(-1.0, 0.0, 0.1, 0.0)
         p = snap["physics"]
         d = snap["diagnostics"]
-        assert p["c"] == [0.0, 0.0]
+        assert p["c"] == [-1.0, 0.0]
         assert p["velocity"] == [0.1, 0.0]
         assert p["signedDistance"] is not None
         assert p["realm"] is not None

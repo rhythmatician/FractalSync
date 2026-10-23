@@ -71,9 +71,10 @@ def test_controls_v2_cspace_rollout_is_manifold_aware(runtime_core_module):  # t
     impulse = torch.tensor([0.0] * n)
     seg = torch.zeros(n, dtype=torch.int64)
 
-    # Start at origin vs far field — metric differs via sigma gradient
+    # Two Regular charts with different metrics. The real-axis far point
+    # (0.8, 0) has competing nearest Shore features and is not a smooth fixture.
     start_origin = torch.complex(torch.zeros(n), torch.zeros(n))
-    start_far = torch.complex(torch.full((n,), 0.8), torch.zeros(n))
+    start_far = torch.complex(torch.full((n,), 0.4), torch.full((n,), 0.05))
 
     from src.cspace_proxies import canonical_hop_dt
 
@@ -93,8 +94,9 @@ def test_controls_v2_cspace_rollout_is_manifold_aware(runtime_core_module):  # t
         direction_x, direction_y, throttle, brake, grip, impulse, seg, dt, cfg, initial_c=start_origin
     )
     assert torch.allclose(traj_origin.real, traj_origin2.real, atol=1e-12)
-    # If metrics differ, the resulting accelerations differ; we tolerate equality at flat region but require determinism
-    _ = (traj_origin, traj_far)
+    assert not torch.allclose(
+        traj_origin - start_origin, traj_far - start_far, atol=1e-8, rtol=1e-5
+    ), "different Regular metrics must produce different coordinate displacements"
 
 
 def test_controls_v2_training_batch_smoke(runtime_core_module):  # type: ignore

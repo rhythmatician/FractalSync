@@ -18,14 +18,16 @@ function assertPartial(snapshot, classification) {
   assert.equal(snapshot.diagnostics.geometry.hessianNorm, null);
 }
 
-const config = ManifoldConfig.defaults();
-for (const [x, y, kind] of [[0, 0, 'singular'], [0.35, 0.05, 'unresolved']]) {
+const defaults = ManifoldConfig.defaults();
+for (const [x, y, kind, epsilon] of [[-1, 0, 'singular', 1e-4], [0.25, 0.5, 'unresolved', 1e-100]]) {
+  const config = new ManifoldConfig(defaults.d_ref, epsilon, defaults.lambda_sq, defaults.kappa, defaults.mu);
   const snapshot = debugSnapshotFromState(x, y, 0.2, 0.1, null, 0, 0, 0, config, 0, 0);
   assertPartial(snapshot, kind);
   assert.deepEqual(snapshot.physics.c, [x, y]);
   assert.deepEqual(snapshot.physics.velocity, [0.2, 0.1]);
+  config.free();
 }
-config.free();
+defaults.free();
 
 const automatic = new OrbitController(1, 1, 1);
 automatic.manifold_physics = true;
@@ -36,7 +38,14 @@ automatic.free();
 const explicit = new OrbitController(1, 1, 1);
 explicit.setC(0, 0);
 explicit.manifold_physics = true;
-assertPartial(explicit.debugSnapshot(), 'singular');
+assert.equal(explicit.debugSnapshot().diagnostics.geometry.validity, 'regular');
 assert.deepEqual(explicit.debugSnapshot().physics.c, [0, 0]);
 explicit.free();
+
+const singular = new OrbitController(1, 1, 1);
+singular.setC(-1, 0);
+singular.manifold_physics = true;
+assertPartial(singular.debugSnapshot(), 'singular');
+assert.deepEqual(singular.debugSnapshot().physics.c, [-1, 0]);
+singular.free();
 console.log('Real WASM snapshot/startup contract passed');

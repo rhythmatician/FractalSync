@@ -99,10 +99,10 @@ fn snapshot_creation_does_not_mutate_controller() {
 }
 
 #[test]
-fn snapshot_invalid_origin_keeps_scalars_and_omits_derivatives() {
+fn snapshot_cut_locus_keeps_scalars_and_omits_derivatives() {
     let _g = lock();
     let config = ManifoldConfig::default();
-    let c = Complex64::new(0.0, 0.0);
+    let c = Complex64::new(-1.0, 0.0);
     let v = (0.05, -0.02);
 
     let last_action = runtime_core::debug::LastAction {
@@ -135,9 +135,9 @@ fn snapshot_invalid_origin_keeps_scalars_and_omits_derivatives() {
 #[test]
 fn snapshot_unresolved_geometry_keeps_jet_provenance_without_derivatives() {
     let _g = lock();
-    let c = Complex64::new(0.35, 0.05);
+    let c = Complex64::new(0.25, 0.5);
     let v = (0.02, -0.01);
-    let config = ManifoldConfig::default();
+    let config = ManifoldConfig { epsilon: 1e-100, ..Default::default() };
     let jet = runtime_core::manifold::geometry_jet(c, &config).unwrap();
     assert_eq!(jet.validity.as_str(), "unresolved", "fixture must exercise provider refusal");
 
@@ -663,7 +663,7 @@ fn deep_zoom_field_matches_pyramid_near_its_resolution() {
 #[test]
 fn debug_snapshot_serializes_camel_case() {
     let _g = lock();
-    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
+    let snap = snapshot_from_state(Complex64::new(-1.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
         .expect("snapshot");
     let json = serde_json::to_string(&snap).expect("serialize");
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");

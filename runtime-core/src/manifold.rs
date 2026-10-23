@@ -150,13 +150,18 @@ pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, St
     Ok((config.d_ref / rho).log2())
 }
 
-/// Scale gradient \u2207sigma(c) derived analytically from the coherent
-/// GeometryJet. The provider supplies D, grad D, H_D from one local
-/// representation; Physics differentiates that representation via chain rule,
-/// not via repeated finite differences of sampled sigma.
-///
-///   rho = sqrt(D^2 + eps^2),  grad rho = (D/rho) grad D
-///   sigma = log2(d_ref / rho), grad sigma = -(1/(rho ln2)) grad rho
+fn geometry_refusal(c: Complex64, jet: &crate::geometry_provider::GeometryJet) -> String {
+    format!(
+        "geometry not regular: {:?} (singularity={:?}) at c=({:.17}, {:.17}); provider={}, tile={}, requested={}, resolved={}, error={}",
+        jet.validity, jet.singularity, c.re, c.im, jet.provider_version, jet.tile_id,
+        jet.requested_scale, jet.resolved_scale, jet.estimated_error
+    )
+}
+
+/// Scale gradient derived analytically from one coherent GeometryJet.
+/// Physics uses the chain rule, not repeated samples of sigma:
+/// rho = sqrt(D^2 + eps^2), grad rho = (D/rho) grad D,
+/// grad sigma = -(1/(rho ln 2)) grad rho.
 pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
     let jet = crate::geometry_provider::query_geometry(c, config.epsilon)?;
     // Operational validity: destination Physics (is_bridge==false) must not
@@ -170,7 +175,7 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
             | crate::geometry_provider::GeometryValidity::ProviderFailure
             | crate::geometry_provider::GeometryValidity::Unresolved
             | crate::geometry_provider::GeometryValidity::OutsideDomain => {
-                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+                return Err(geometry_refusal(c, &jet));
             }
             _ => {}
         }
@@ -181,7 +186,7 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
         // Destination (is_bridge==false) fails closed on all non-Regular.
         match jet.validity {
             crate::geometry_provider::GeometryValidity::ProviderFailure => {
-                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+                return Err(geometry_refusal(c, &jet));
             }
             _ => {}
         }
@@ -212,14 +217,14 @@ pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2];
             | crate::geometry_provider::GeometryValidity::ProviderFailure
             | crate::geometry_provider::GeometryValidity::Unresolved
             | crate::geometry_provider::GeometryValidity::OutsideDomain => {
-                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+                return Err(geometry_refusal(c, &jet));
             }
             _ => {}
         }
     } else {
         match jet.validity {
             crate::geometry_provider::GeometryValidity::ProviderFailure => {
-                return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+                return Err(geometry_refusal(c, &jet));
             }
             _ => {}
         }
@@ -860,7 +865,7 @@ mod tests {
             assert!(grad_sigma_from_jet(&jet,&config).iter().all(|v|v.is_finite()));
             assert!(hessian_sigma_from_jet(&jet,&config).iter().flatten().all(|v|v.is_finite()));
         }
-        let cut=Complex64::new(0.0,0.0);
+        let cut=Complex64::new(-1.0,0.0);
         assert_eq!(geometry_jet(cut,&config).unwrap().validity,GeometryValidity::Singular);
         assert!(scale_gradient(cut,&config).is_err());
         assert!(christoffel_symbols(cut,&config).is_err());
