@@ -231,7 +231,7 @@ class MockOrbitController {
         lastDeltaTotal: this.last_delta_total,
         crestPotential: Math.log2(0.1 / 1e-4),
         geometry: {
-          providerVersion: 'geometry-provider/4',
+          providerVersion: 'geometry-provider/5',
           providerName: 'scale-aware',
           tileId: 'mock-tile',
           requestedScale: 1e-4,

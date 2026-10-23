@@ -31,7 +31,7 @@ use std::sync::RwLock;
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.
-pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/4";
+pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/5";
 
 /// Scale-relative resolution law factor: local cell size <= alpha * max(rho, epsilon).
 /// The exact refinement/error criterion is derived and validated (ADR 0004 does
@@ -146,7 +146,8 @@ pub struct GeometryJet {
     /// Requested local scale: alpha * max(rho, epsilon). Exposed so diagnostics
     /// can compare requested vs resolved and fail closed when insufficient.
     pub requested_scale: f64,
-    /// Estimated jet error e = max(|dD|, h*|dgrad|, h^2*|dH|_F, fit_rms).
+    /// Estimated error: maximum of consecutive-jet differences, fit residuals,
+    /// and signed-distance field disagreement at matching stencil positions.
     #[serde(default)]
     pub estimated_error: f64,
     /// Validity classification (regular / unresolved / outside / singular / failure).
@@ -949,74 +950,89 @@ fn fit_quadratic_jet(stencil_distances: &[(f64, f64, f64)]) -> Option<([f64; 6],
     Some((coeff_norm, rms))
 }
 
+fn signed_shore_distance(p: Complex64, h: f64, segments: &[Segment]) -> Option<f64> {
+    if segments.is_empty() {
+        return None;
+    }
+    let px = p.re;
+    let py = p.im;
+    let mut best_dist = f64::INFINITY;
+    let mut best_signed = f64::INFINITY;
+    let mut best_qx = 0.0;
+    let mut best_qy = 0.0;
+    for seg in segments {
+        let (d, (qx, qy)) = point_to_segment_distance(px, py, seg);
+        // signed distance: dot((p - q), normal) -- normal points outward, so inside => negative
+        let signed = (px - qx) * seg.normal.0 + (py - qy) * seg.normal.1;
+        if d < best_dist {
+            best_dist = d;
+            best_signed = signed;
+            best_qx = qx;
+            best_qy = qy;
+        }
+    }
+    // At a shared endpoint, either incident normal alone can give the
+    // wrong sign (notably at the cardioid cusp). Use its pseudonormal.
+    let vertex_tol = h * 1e-8;
+    let mut normal_sum = (0.0, 0.0);
+    for seg in segments {
+        let at_start = (seg.p1.0 - best_qx).hypot(seg.p1.1 - best_qy) <= vertex_tol;
+        let at_end = (seg.p2.0 - best_qx).hypot(seg.p2.1 - best_qy) <= vertex_tol;
+        if at_start || at_end {
+            normal_sum.0 += seg.normal.0;
+            normal_sum.1 += seg.normal.1;
+        }
+    }
+    if normal_sum.0 != 0.0 || normal_sum.1 != 0.0 {
+        best_signed = (px - best_qx) * normal_sum.0 + (py - best_qy) * normal_sum.1;
+    }
+    // Use signed distance from nearest Shore segment (oriented). This is the sole authority.
+    // best_signed already has correct sign (negative inside, positive outside) via outward normal.
+    // For robustness, if best_signed is near zero but we are exactly on Shore, keep it.
+    Some(best_dist.copysign(best_signed))
+}
+
+/// Compare the actual contour distance fields at matching stencil positions.
+/// Fitted coefficients can agree while changes in nearest features cancel in
+/// the least-squares projection. Those changes still invalidate convergence.
+fn stencil_distance_disagreement(
+    c: Complex64,
+    coarse_h: f64,
+    stencil: &[(f64, f64, f64)],
+    coarse_segments: &[Segment],
+) -> Option<f64> {
+    let mut error = 0.0_f64;
+    for &(x, y, fine) in stencil {
+        let coarse = signed_shore_distance(c + Complex64::new(x, y), coarse_h, coarse_segments)?;
+        error = error.max((fine - coarse).abs());
+    }
+    Some(error)
+}
+
+struct FittedJet {
+    jet: GeometryJet,
+    fit_rms: f64,
+    stencil: Vec<(f64, f64, f64)>,
+}
+
 fn compute_jet_at_level(
     c: Complex64,
     epsilon: f64,
     k: u32,
     h: f64,
     tile: &ShoreTile,
-) -> Option<(GeometryJet, f64, Vec<Segment>)> {
+) -> Option<FittedJet> {
     if tile.segments.is_empty() {
         return None;
     }
-    // 7x7 query-centered stencil, step = h, sign from oriented Shore only (no second authority)
+    // The same signed-distance evaluator owns fitting and convergence.
     let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
     for dy in -3..=3 {
         for dx in -3..=3 {
-            let px = c.re + dx as f64 * h;
-            let py = c.im + dy as f64 * h;
-            let mut best_dist = f64::INFINITY;
-            let mut best_signed = f64::INFINITY;
-            let mut best_qx = 0.0;
-            let mut best_qy = 0.0;
-            let mut best_normal = (0.0, 0.0);
-            for seg in &tile.segments {
-                let (x1, y1) = seg.p1;
-                let (x2, y2) = seg.p2;
-                let dxs = x2 - x1;
-                let dys = y2 - y1;
-                let len2 = dxs * dxs + dys * dys;
-                let t = if len2 <= f64::MIN_POSITIVE {
-                    0.0
-                } else {
-                    ((px - x1) * dxs + (py - y1) * dys) / len2
-                }
-                .clamp(0.0, 1.0);
-                let qx = x1 + t * dxs;
-                let qy = y1 + t * dys;
-                let d = ((px - qx) * (px - qx) + (py - qy) * (py - qy)).sqrt();
-                // signed distance: dot((p - q), normal) -- normal points outward, so inside => negative
-                let signed = (px - qx) * seg.normal.0 + (py - qy) * seg.normal.1;
-                if d < best_dist {
-                    best_dist = d;
-                    best_signed = signed;
-                    best_qx = qx;
-                    best_qy = qy;
-                    best_normal = seg.normal;
-                }
-            }
-            // At a shared endpoint, either incident normal alone can give the
-            // wrong sign (notably at the cardioid cusp). Use its pseudonormal.
-            let vertex_tol = h * 1e-8;
-            let mut normal_sum = (0.0, 0.0);
-            for seg in &tile.segments {
-                let at_start = (seg.p1.0 - best_qx).hypot(seg.p1.1 - best_qy) <= vertex_tol;
-                let at_end = (seg.p2.0 - best_qx).hypot(seg.p2.1 - best_qy) <= vertex_tol;
-                if at_start || at_end {
-                    normal_sum.0 += seg.normal.0;
-                    normal_sum.1 += seg.normal.1;
-                }
-            }
-            if normal_sum.0 != 0.0 || normal_sum.1 != 0.0 {
-                best_signed = (px - best_qx) * normal_sum.0 + (py - best_qy) * normal_sum.1;
-            }
-            // Use signed distance from nearest Shore segment (oriented). This is the sole authority.
-            // best_signed already has correct sign (negative inside, positive outside) via outward normal.
-            // For robustness, if best_signed is near zero but we are exactly on Shore, keep it.
-            let signed_dist = best_dist.copysign(best_signed);
-            // Ensure consistency: if tile is non-empty, we should not fall back to membership
-            let _ = (best_qx, best_qy, best_normal);
-            stencil.push((dx as f64 * h, dy as f64 * h, signed_dist));
+            let x = dx as f64 * h;
+            let y = dy as f64 * h;
+            let distance = signed_shore_distance(c + Complex64::new(x, y), h, &tile.segments)?;
+            stencil.push((x, y, distance));
         }
     }
     let (coeff_n, rms) = fit_quadratic_jet(&stencil)?;
@@ -1049,7 +1065,11 @@ fn compute_jet_at_level(
         ),
         is_bridge: false,
     };
-    Some((jet, rms, tile.segments.clone()))
+    Some(FittedJet {
+        jet,
+        fit_rms: rms,
+        stencil,
+    })
 }
 
 fn nearest_shore_distance(c: Complex64, tile: &ShoreTile) -> f64 {
@@ -1180,6 +1200,13 @@ struct NearestFeature {
     direction: (f64, f64),
 }
 
+struct PreviousLevel {
+    jet: GeometryJet,
+    fit_rms: f64,
+    ties: Option<Vec<NearestFeature>>,
+    segments: Vec<Segment>,
+}
+
 fn competing_normals(c: Complex64, segs: &[Segment], h: f64) -> Option<Vec<NearestFeature>> {
     let d1 = segs
         .iter()
@@ -1293,7 +1320,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
         jet.is_bridge = false;
         return Ok(jet);
     }
-    let mut previous: Option<(GeometryJet, f64, Option<Vec<NearestFeature>>)> = None;
+    let mut previous: Option<PreviousLevel> = None;
     let mut last = failure_jet(
         f64::NAN,
         dyadic_h(0),
@@ -1317,11 +1344,23 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 continue;
             }
         };
-        let Some((mut jet, rms, segs)) = compute_jet_at_level(c, epsilon, k, h, &tile) else {
+        let Some(FittedJet {
+            mut jet,
+            fit_rms: rms,
+            stencil,
+        }) = compute_jet_at_level(c, epsilon, k, h, &tile)
+        else {
             return Ok(last);
         };
+        let segs = tile.segments;
         let ties = competing_normals(c, &segs, h);
-        if let Some((prev, prev_rms, prev_ties)) = &previous {
+        if let Some(previous) = &previous {
+            let prev = &previous.jet;
+            let Some(field_error) =
+                stencil_distance_disagreement(c, prev.resolved_scale, &stencil, &previous.segments)
+            else {
+                return Ok(last);
+            };
             let grad_diff = (jet.grad_d[0] - prev.grad_d[0]).hypot(jet.grad_d[1] - prev.grad_d[1]);
             let hess_diff = ((jet.hessian_d[0][0] - prev.hessian_d[0][0]).powi(2)
                 + 2.0 * (jet.hessian_d[0][1] - prev.hessian_d[0][1]).powi(2)
@@ -1332,10 +1371,11 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
                 .max(prev.resolved_scale * grad_diff)
                 .max(prev.resolved_scale * prev.resolved_scale * hess_diff)
                 .max(rms)
-                .max(*prev_rms);
+                .max(previous.fit_rms)
+                .max(field_error);
             // Coarse competing features cannot classify a fine-scale query.
             if h <= jet.requested_scale {
-                if let (Some(a), Some(b)) = (prev_ties, &ties) {
+                if let (Some(a), Some(b)) = (&previous.ties, &ties) {
                     if prev.resolved_scale <= jet.requested_scale
                         && persistent_competition(a, b, prev.resolved_scale)
                     {
@@ -1367,7 +1407,12 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> 
         // An unconverged coarse D is not a safe lower bound on distance.
         // Skipping levels can jump to a tile too small to contain the Shore.
         // Refine monotonically one level at a time until the ruler and error agree.
-        previous = Some((jet, rms, ties));
+        previous = Some(PreviousLevel {
+            jet,
+            fit_rms: rms,
+            ties,
+            segments: segs,
+        });
         k += 1;
     }
     Ok(last)
@@ -1841,6 +1886,22 @@ mod tests {
     }
 
     #[test]
+    fn inward_regular_queries_respect_distance_error_bound() {
+        let from = Complex64::new(0.39494073887023606, 0.04996931486326729);
+        let to = Complex64::new(0.3948230501337527, 0.0499674412699672);
+        let a = query_geometry(from, 1e-4).unwrap();
+        let b = query_geometry(to, 1e-4).unwrap();
+        assert_eq!(a.validity, GeometryValidity::Regular);
+        assert_eq!(b.validity, GeometryValidity::Regular);
+        let bound = (to - from).norm() + a.estimated_error + b.estimated_error;
+        assert!(
+            (a.d - b.d).abs() <= bound,
+            "inward distance jump {} exceeds {bound}: {a:?}, {b:?}",
+            (a.d - b.d).abs()
+        );
+    }
+
+    #[test]
     fn rollout_candidate_and_refinement_corridor_resolve() {
         for c in [
             Complex64::new(0.29835945330580743, 0.0515177858286498),
@@ -1966,8 +2027,9 @@ mod tests {
             }],
             unstable_nodes: Vec::new(),
         };
-        let (jet, _, _) =
-            compute_jet_at_level(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile).unwrap();
+        let jet = compute_jet_at_level(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile)
+            .unwrap()
+            .jet;
         assert!(
             (jet.d - 2.0_f64.sqrt()).abs() < 1e-6,
             "endpoint distance was {}",
@@ -1984,7 +2046,7 @@ mod tests {
 
     #[test]
     fn provider_version_is_pinned() {
-        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/4");
+        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/5");
     }
 
     #[test]

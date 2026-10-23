@@ -25,6 +25,14 @@ fn main() {
             "remaining_crossing_refusal",
             Complex64::new(0.21656074663216787, 0.12610803467485909),
         ),
+        (
+            "inward_before_jump",
+            Complex64::new(0.39494073887023606, 0.04996931486326729),
+        ),
+        (
+            "inward_after_jump",
+            Complex64::new(0.3948230501337527, 0.0499674412699672),
+        ),
     ] {
         for epsilon in [1e-2, 1e-4, 1e-6, 1e-8] {
             // Each child owns an initially empty cache. Timings exclude process
