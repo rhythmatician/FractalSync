@@ -1,5 +1,28 @@
 # Adaptive geometry validation
 
+## October 24 continuation: bounded membership tails do not resolve field certification
+
+An unshipped experiment reuses the canonical orbit state already computed at the 32,768-step cap. It attempts a bounded disk proof for the remaining machine-orbit tail, including rounding error. It adds no empirical membership iterations. Attracting-cycle, neutral-cycle, escaped-state and nonfinite-state tests exercise the helper. The experiment is preserved separately from production.
+
+Requiring proofs for every remaining inside node did not resolve any target refusal. A second variant removes a changed-node marker only when its full 11-by-11 node neighborhood is permanent; border markers remain uncertain. This neighborhood covers the existing four-cell stability band and adjacent cell vertices. That variant removes 3 of 87 markers in the near-Shore replay, 0 of 22 in the regular-interior replay, and 2 of 26 at the recorded Python crossing. All three targets still refuse. Marker totals count generated cap tiles within each replay, not distinct global nodes. The local rule also lacks a complete bound for later edge-bisection movement, so it is not suitable for adoption on these results.
+
+The near-Shore center trace identifies the remaining dependency: raw levels 9 and 10 are certified, but levels 11 and 12 are not. The cumulative refinement weight at level 11 is about `7.59e-9`. Its small size does not make its dependency disappear. Dropping that dependency would repeat the reviewed certification error. The full public derivative report still passes six of twelve probes and refuses six.
+
+All eleven coherent-field helper tests and three new tail-proof tests pass against the actual experimental Rust modules. Both archived patches were applied in a fresh isolated repository and verified to reconstruct all three tested source files after line-ending normalization. The [measurement report](validation/geometry-145-membership-tail.json) contains the public results and marker counts. The [incremental experimental patch](validation/experiments/geometry-145-membership-tail.patch) applies after the earlier field-certification patch at `f8dacb6`:
+
+```text
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-field-certification.patch
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-membership-tail.patch
+rtk cargo test --release --jobs 1 -p runtime_core --lib coherent_field_tests
+rtk cargo test --release --jobs 1 -p runtime_core --lib tail_tests
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+```
+
+To reconstruct the earlier whole-tile variant recorded as `tail` in the report, apply [the whole-tile variant patch](validation/experiments/geometry-145-membership-tail-whole.patch) after both patches above, rebuild the examples, and run `geometry_derivative_report --case near_shore_before --check`, `geometry_provider_report --sample regular_interior .0001`, and `geometry_provider_report --sample new_kinetic_crossing_refusal .0001`. The example names refer to the rebuilt Rust executables.
+
+The public check intentionally fails. Neither variant is shipping code; baseline version stamps identify only the comparison baseline. Thresholds, iteration caps, golden vectors and crossing tests remain intact. Production sources were restored and the default diagnostic executables rebuilt after testing. The next implementation needs shared nodal coefficient bounds that can certify the refinement selectors. More distant-node proofs alone do not address the measured refusal. High-curvature energy, original crossings, training validity and query cost still require acceptance validation before merge.
+
+
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
 ## October 23 continuation: refinement certification remains blocking
