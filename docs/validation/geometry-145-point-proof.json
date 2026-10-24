@@ -1,0 +1,42 @@
+{
+  "production_adopted": false,
+  "tests": {
+    "passed": 4,
+    "mutation_checks": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "budget_box_recorded_point": {
+    "elapsed_s": 1200.2808291000547,
+    "timed_out": true,
+    "timeout_s": 1200
+  },
+  "certificate_scope": "Exact complex parameter represented by the supplied binary64 coordinates; not the canonical floating-point orbit. Point membership only, not distance or derivative validity.",
+  "blocking_node": [
+    0.3204946517944336,
+    0.04734092950820923
+  ],
+  "blocking_escape_update": 32747,
+  "native_inside": {
+    "prefix": 1024,
+    "period": 85
+  },
+  "python_crossing_inside": {
+    "prefix": 2048,
+    "period": 308
+  }
+}
