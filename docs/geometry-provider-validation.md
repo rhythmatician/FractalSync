@@ -1,5 +1,24 @@
 # Adaptive geometry validation
 
+## October 24 continuation: component node data recovers the derivative probes
+
+A new unshipped candidate uses distance to the main-cardioid boundary or period-two circle as scalar node data strictly inside those components. Every other active spline node independently seeks a stable contained contour search. The quintic field and its differentiated refinement weights retain the corrected selector-certification rules. The mathematical basis is that indifferent-cycle parameters lie on the Mandelbrot boundary, as stated in Proposition 7.7 of [Cheraghi's dynamics notes](https://www.ma.imperial.ac.uk/~dcheragh/Teaching/2014-S-DS-TCC/DS-TCC.pdf). Inside a component, its boundary is therefore the nearest Mandelbrot boundary. This is a geometric deduction, not a new empirical membership tolerance.
+
+All twelve original public derivative probes now pass. The independent-node implementation takes 47.49 seconds for that report; reusing the contained source search and omitting unused spline support reduces this to 27.05 seconds. The **complete serialized reports are identical**. Eleven tests against the actual coherent-field helpers and three standalone cardioid tests pass. These tests do not establish root-isolation rounding bounds, complete source-search equivalence or cache independence. Those remain adoption requirements.
+
+The recorded native refusal point becomes Regular in a 30.53-second cold query, but that is not a passing crossing trajectory. The recorded Python refusal point times out at 180 seconds without a classification. A full high-curvature energy sweep also times out. A separate completed first-timestep replay gives excursion **0.319856** and largest step change **0.429317**, failing the unchanged 0.05 limits. The largest transition has Regular endpoints but Hessian entries near 43,000. Two added endpoint probes fail at step `1e-6` and pass at `1e-7`, with about 100-fold error reduction. That supports finite-difference truncation across a sharp smooth field; it does not excuse the failed energy rollout.
+
+The [measurement report](validation/geometry-145-component-nodes.json) preserves the twelve original probes, endpoint probes, exact energy transition, point replay and timeout outcomes. The [experimental patch](validation/experiments/geometry-145-component-nodes.patch) applies directly to production `d8ec37a`, without either preceding experimental patch. Reconstruction was checked in a fresh isolated repository. The [standalone cardioid probe](validation/experiments/geometry-145-cardioid-probe.rs) preserves the derivative and distinct-nearest-feature checks.
+
+```text
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-component-nodes.patch
+rtk cargo test --release --jobs 1 -p runtime_core --lib coherent_field_tests
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_energy_report -- --case high_curvature --check
+```
+
+This candidate is not adopted. Production thresholds, crossing tests, formulas, versions and golden values remain unchanged. Local derivative consistency alone has not resolved energy stability, coverage, live training or query cost.
+
 ## October 24 continuation: exact machine cycles reduce repeated membership work
 
 Canonical membership now detects exact bounded floating-point cycles with Brent's constant-space detector. It compares both coordinate bit patterns, not a proximity tolerance. Once a bounded state repeats, subsequent deterministic machine updates repeat too. The shortcut preserves the original pre-update escape cutoff, including decreasing budget requests. It neither increases the membership cap nor claims a floating-point cycle proves a mathematical Mandelbrot interior.
