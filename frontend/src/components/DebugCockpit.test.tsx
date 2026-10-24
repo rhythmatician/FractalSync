@@ -7,7 +7,7 @@ describe('GeometryProviderPanel', () => {
     render(
       <GeometryProviderPanel
         geometry={{
-          providerVersion: 'geometry-provider/5',
+          providerVersion: 'geometry-provider/6',
           providerName: 'raster-bridge',
           tileId: 'tile-17',
           requestedScale: 0.0001,
@@ -27,7 +27,7 @@ describe('GeometryProviderPanel', () => {
     );
 
     expect(screen.getByText('GEOMETRY PROVIDER')).toBeTruthy();
-    expect(screen.getByText('geometry-provider/5')).toBeTruthy();
+    expect(screen.getByText('geometry-provider/6')).toBeTruthy();
     expect(screen.getByText('raster-bridge')).toBeTruthy();
     expect(screen.getByText('tile-17')).toBeTruthy();
     expect(screen.getByText('0.00010000')).toBeTruthy();

@@ -227,7 +227,7 @@ describe('debug cockpit adapter (issue #111 Phase A)', () => {
     expect(s).toHaveProperty('map');
     expect(s).toHaveProperty('diagnostics');
     expect(s.diagnostics.geometry).toMatchObject({
-      providerVersion: 'geometry-provider/5',
+      providerVersion: 'geometry-provider/6',
       providerName: 'scale-aware',
       resolvedScale: expect.any(Number),
       estimatedError: expect.any(Number),

@@ -31,7 +31,7 @@ use std::sync::RwLock;
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.
-pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/5";
+pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/6";
 
 /// Scale-relative resolution law factor: local cell size <= alpha * max(rho, epsilon).
 /// The exact refinement/error criterion is derived and validated (ADR 0004 does
@@ -276,10 +276,14 @@ impl GeometryProvider for RasterBridgeProvider {
 // Deterministic bounded LRU. Eviction changes cost only, never numerical results.
 // Key includes provider version and membership-iteration-budget (N0) so a bump
 // or budget change cannot reuse a stale numerical tile.
-// A single measured refusal visits 134 distinct tiles. The original 64 slots
+// A single measured refusal visits 270 distinct tiles. Both 64 and 256 slots
 // evicted the entire working set on every repeat. Retain room for the measured
 // working sets without extending any geometry-generation or quality budget.
-const SHORE_TILE_CACHE_CAPACITY: usize = 256;
+const SHORE_TILE_CACHE_CAPACITY: usize = 384;
+// Keep the footprint bounded, but allow the next level to separate recorded
+// near ties and converge the small Shore features found during live rollouts.
+// Radius 3 truncated those queries before their unchanged quality gates passed.
+const SHORE_TILE_EXPANSION_RADIUS: i64 = 5;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct TileKey {
@@ -1149,7 +1153,7 @@ fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
     if contour_footprint_contains(c, &tile, DYADIC_TILE_CELLS) {
         return Err(TileQueryError::MembershipUnresolved);
     }
-    // One bounded expansion, at most 7x7 complete tiles (49 derived entries).
+    // One bounded expansion, at most 11x11 complete tiles (121 derived entries).
     // Adjacent complete tiles are seven core strides apart. Offsetting by one
     // core stride mostly overlaps the same samples and loses the Shore as h
     // shrinks, even when the finer local jet would satisfy the error bound.
@@ -1162,7 +1166,7 @@ fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
         segments: Vec::new(),
         unstable_nodes: Vec::new(),
     };
-    for radius in 0_i64..=3 {
+    for radius in 0_i64..=SHORE_TILE_EXPANSION_RADIUS {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 if dx.abs().max(dy.abs()) != radius {
@@ -1924,6 +1928,20 @@ mod tests {
     }
 
     #[test]
+    fn expanded_footprint_resolves_recorded_rollout_refusals() {
+        for c in [
+            Complex64::new(0.21656074663216787, 0.12610803467485909),
+            Complex64::new(0.30752043982706229, 0.02876420131721053),
+            Complex64::new(0.35714730438616327, 0.06380885577340460),
+        ] {
+            let jet = query_geometry(c, 1e-4).unwrap();
+            assert_eq!(jet.validity, GeometryValidity::Regular, "{c:?}: {jet:?}");
+            assert!(jet.resolved_scale <= jet.requested_scale);
+            assert!(jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale);
+        }
+    }
+
+    #[test]
     fn membership_uncertainty_invalidates_only_overlapping_distance_neighborhoods() {
         let mut tile = ShoreTile {
             k: 0,
@@ -2052,7 +2070,7 @@ mod tests {
 
     #[test]
     fn provider_version_is_pinned() {
-        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/5");
+        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/6");
     }
 
     #[test]
