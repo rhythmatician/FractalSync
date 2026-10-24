@@ -28,6 +28,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::RwLock;
 
+mod uniform_box;
+
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.
@@ -400,6 +402,18 @@ fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<Shor
     let core_stride = DYADIC_CORE_CELLS as f64 * h;
     let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
     let tile_im0 = core_iy as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+    // These boxes have no contour at any membership budget. Avoid constructing
+    // 3,249 point orbits, and retain the LRU for tiles that carry geometry.
+    if uniform_box::membership(tile_re0, tile_im0, DYADIC_TILE_CELLS as f64 * h).is_some() {
+        return Some(ShoreTile {
+            k,
+            h,
+            origin_re: tile_re0,
+            origin_im: tile_im0,
+            segments: Vec::new(),
+            unstable_nodes: Vec::new(),
+        });
+    }
     let tile = generate_shore_tile(k, h, tile_re0, tile_im0)?;
     if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
         cache.insert(key, tile.clone());
@@ -1089,10 +1103,6 @@ fn nearest_shore_distance(c: Complex64, tile: &ShoreTile) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-fn stencil_search_radius(c: Complex64, tile: &ShoreTile) -> f64 {
-    nearest_shore_distance(c, tile) + (6.0 * 2.0_f64.sqrt() + 4.0) * tile.h
-}
-
 // Certify that unseen contours beyond this tile cannot be nearer to the stencil.
 fn contour_footprint_contains(c: Complex64, tile: &ShoreTile, cells: usize) -> bool {
     let margin = (c.re - tile.origin_re)
@@ -1166,13 +1176,14 @@ fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
         segments: Vec::new(),
         unstable_nodes: Vec::new(),
     };
+    let mut nearest_distance = f64::INFINITY;
     for radius in 0_i64..=SHORE_TILE_EXPANSION_RADIUS {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 if dx.abs().max(dy.abs()) != radius {
                     continue;
                 }
-                let search_radius = stencil_search_radius(c, &expanded);
+                let search_radius = nearest_distance + (6.0 * 2.0_f64.sqrt() + 4.0) * h;
                 let tx = ix + dx * tile_stride;
                 let ty = iy + dy * tile_stride;
                 let re0 = (tx * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
@@ -1188,6 +1199,12 @@ fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
                 }
                 let next = get_or_generate_shore_tile(k, tx, ty)
                     .ok_or(TileQueryError::MembershipUnresolved)?;
+                nearest_distance =
+                    next.segments
+                        .iter()
+                        .fold(nearest_distance, |distance, segment| {
+                            distance.min(point_to_segment_distance(c.re, c.im, segment).0)
+                        });
                 expanded.segments.extend(next.segments);
                 expanded.unstable_nodes.extend(next.unstable_nodes);
             }
@@ -1973,6 +1990,22 @@ mod tests {
     }
 
     #[test]
+    fn certified_uniform_tiles_do_not_evict_contour_tiles() {
+        let tile_x = 10000;
+        let tile = get_or_generate_shore_tile(0, tile_x, 0).unwrap();
+        assert!(tile.segments.is_empty());
+        assert!(tile.unstable_nodes.is_empty());
+        let key = TileKey {
+            version: GEOMETRY_PROVIDER_VERSION.to_string(),
+            k: 0,
+            tile_x,
+            tile_y: 0,
+            budget: dyadic_n0(0),
+        };
+        assert!(!SHORE_TILE_CACHE.read().unwrap().map.contains_key(&key));
+    }
+
+    #[test]
     fn derived_cache_eviction_and_bridge_loading_do_not_change_geometry() {
         let _lock = crate::distance_field::global_test_mutex()
             .lock()
@@ -1984,7 +2017,19 @@ mod tests {
         let warm = query_geometry(c, 1e-4).unwrap();
         // Generate more unrelated tiles than the configured cache can retain.
         for ix in 10..10 + SHORE_TILE_CACHE_CAPACITY as i64 + 6 {
-            get_or_generate_shore_tile(0, ix, 0).unwrap();
+            let tile = get_or_generate_shore_tile(0, ix, 0).unwrap();
+            // Certified uniform boxes deliberately bypass retention. Insert
+            // their equivalent empty tiles explicitly to exercise eviction.
+            SHORE_TILE_CACHE.write().unwrap().insert(
+                TileKey {
+                    version: GEOMETRY_PROVIDER_VERSION.to_string(),
+                    k: 0,
+                    tile_x: ix,
+                    tile_y: 0,
+                    budget: dyadic_n0(0),
+                },
+                tile,
+            );
         }
         crate::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
         let after = query_geometry(c, 1e-4).unwrap();

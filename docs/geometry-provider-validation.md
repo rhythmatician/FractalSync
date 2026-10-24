@@ -2,6 +2,14 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 continuation: reducing contour-query cost
+
+Two performance changes retain provider-6 semantics. Outward-rounded whole-box arithmetic proves a tile entirely inside the primary cardioid/period-two bulb, or proves every orbit in the box escapes within 64 iterations. Such a tile has no contour and needs neither 3,249 individual orbit states nor a retained cache entry. An uncertain proof falls back to ordinary tile construction with the existing budgets. Expansion also maintains its nearest-distance minimum as segments arrive, instead of rescanning every accumulated segment for every candidate tile.
+
+The [before/after report](validation/geometry-145-uniform-cost.json) records **64 exactly identical serialized jets**, including classification and error fields. All **26 provider tests pass**, including whole-tile node comparisons, a map sweep, uncertain/invalid boxes, non-retention and explicit eviction. The new shortcut regression was first observed failing. The LRU still has 384 entries, production expansion remains radius 5, and no quality, membership, refinement, tie or crossing threshold changed. No version or golden-number change is needed for this cost-only delta.
+
+A separate, unshipped radius-64 diagnostic demonstrates the repeated-scan cost: the same native endpoint result takes 23.23 seconds cold / 254.59 milliseconds repeat before maintaining the minimum, versus 16.79 seconds / 14.87 milliseconds afterward. These machine/load-dependent measurements do not establish a live frame budget. The deeper trace remains Singular through level 9, lacks membership certification at levels 10 and 11, and exhausts coverage at level 12. Larger coverage alone does not resolve that crossing. Independent Standards, Spec and Health Regression reviews found no actionable findings in this bounded source delta.
+
 ## October 23 follow-up: coherent scalar-field experiment
 
 The new candidate evaluates a globally anchored tensor quintic B-spline scalar field at each dyadic level. It accumulates scalar corrections through C2 refinement weights and differentiates the complete expression, including those weights, to obtain `D`, `grad_D` and `H_D`. This addresses the earlier moving-fit derivative mismatch and the discontinuous choice of accepted resolution. It is an **unshipped experiment**, not a replacement for provider 6. No production math, golden vector, quality threshold or crossing test changed. **PR #148 remains blocked.**
