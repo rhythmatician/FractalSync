@@ -98,6 +98,8 @@ the linear hit-maintenance cost measured in the superseded optional
 `geometry-145-box-cache.patch` LRU experiment. Both memo variants pass 55 targeted
 tests. Their derivative checks preserve every serialized row from the uncached
 candidate; full-query cost improvement is not yet established.
+The FIFO candidate's original native crossing test subsequently times out at
+1200 seconds, as does the LRU candidate's isolated recorded-point query.
 The recorded training jet is also bit-for-bit unchanged with FIFO caching; its
 cold query takes 70.91 seconds under concurrent load.
 
@@ -116,3 +118,7 @@ terminal outcomes and mutation logs. Original native and Python crossings,
 general training validity and live query cost remain merge blockers. Adoption
 also requires the version, golden and binding updates and full verification of
 the exact chosen field. No experimental field has been promoted to production.
+
+The subsequent [budget-aware proof experiment](geometry-145-budget-boxes.md)
+preserves the ordinary tile budget semantics but establishes no cost benefit
+in its sampled difficult region.

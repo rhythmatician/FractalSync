@@ -1,0 +1,1064 @@
+{
+  "diagnostic_only": true,
+  "adopted": false,
+  "base": "d8ec37a plus certified-feature eight-patch chain, adaptive-affine, ranged-field and box-fifo patches",
+  "patch_reconstruction_verified": true,
+  "comments_corrected_after_review": true,
+  "targeted_tests": 58,
+  "derivative_checks": 12,
+  "proof_semantics": "Exterior escape strictly before supplied minimum budget; production call sites use dyadic_n0(k). Default512 semantics remain intact. Cache key includes all three float bit patterns and the minimum budget.",
+  "thresholds_and_original_crossing_tests_unchanged": true,
+  "mutations": {
+    "cache_partition": {
+      "exit_code": 101,
+      "stdout": "\nrunning 1 test\ntest geometry_provider::uniform_box::budget_tests::minimum_budget_preserves_the_preupdate_escape_cutoff_and_cache_partition ... FAILED\n\nfailures:\n\nfailures:\n    geometry_provider::uniform_box::budget_tests::minimum_budget_preserves_the_preupdate_escape_cutoff_and_cache_partition\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 142 filtered out; finished in 0.00s\n\n",
+      "stderr": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n   Compiling runtime_core v0.1.0 (C:\\Users\\JeffHall\\git\\FractalSync\\runtime-core)\nwarning: variable does not need to be mutable\n  --> runtime-core\\src\\geometry_provider\\uniform_box.rs:39:41\n   |\n39 |     if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {if let Some(result)=guard.get(&key) {return result;}}}\n   |                                         ----^^^^^\n   |                                         |\n   |                                         help: remove this `mut`\n   |\n   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default\n\nwarning: value assigned to `radius` is never read\n   --> runtime-core\\src\\geometry_provider\\uniform_box.rs:292:17\n    |\n292 |  let mut radius=0.;\n    |                 ^^ this value is reassigned later and never used\n...\n310 |   radius=upper_add(upper_mul(norm_upper(d),cr),remainder);\n    |   ------------------------------------------------------- `radius` is overwritten here before the previous value is read\n    |\n    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `detail`\n    --> runtime-core\\src\\geometry_provider.rs:1193:62\n     |\n1193 |     fn next_weight(previous: FieldJet, h: f64, epsilon: f64, detail: FieldJet) -> FieldJet {\n     |                                                              ^^^^^^ help: if this is intentional, prefix it with an underscore: `_detail`\n     |\n     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: associated function `either` is never used\n    --> runtime-core\\src\\geometry_provider.rs:1205:8\n     |\n1192 | impl FieldHierarchy {\n     | ------------------- associated function in this implementation\n...\n1205 |     fn either(a: FieldJet, b: FieldJet) -> FieldJet {\n     |        ^^^^^^\n     |\n     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: field `visits` is never read\n --> runtime-core\\src\\geometry_provider\\certified_cardioid.rs:9:16\n  |\n6 | pub(super) struct DistanceBounds {\n  |                   -------------- field in this struct\n...\n9 |     pub(super) visits: usize,\n  |                ^^^^^^\n  |\n  = note: `DistanceBounds` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis\n\nwarning: field `visits` is never read\n --> runtime-core\\src\\geometry_provider\\feature_cover.rs:7:16\n  |\n4 | pub(super) struct FeatureCover {\n  |                   ------------ field in this struct\n...\n7 |     pub(super) visits: usize,\n  |                ^^^^^^\n\nwarning: the `jet:` in this pattern is redundant\n    --> runtime-core\\src\\geometry_provider.rs:2123:57\n     |\n2123 |         let FittedJet{size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;\n     |                                                         ^^^^^^^^^^^ help: use shorthand field pattern: `mut jet`\n     |\n     = note: `#[warn(non_shorthand_field_patterns)]` on by default\n\nwarning: `runtime_core` (lib test) generated 7 warnings (run `cargo fix --lib -p runtime_core --tests` to apply 3 suggestions)\n    Finished `release` profile [optimized] target(s) in 37.83s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'geometry_provider::uniform_box::budget_tests::minimum_budget_preserves_the_preupdate_escape_cutoff_and_cache_partition' (34832) panicked at runtime-core\\src\\geometry_provider\\uniform_box.rs:441:5:\nassertion `left == right` failed\n  left: Some(false)\n right: None\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `-p runtime_core --lib`\n"
+    },
+    "escape_cutoff": {
+      "exit_code": 101,
+      "stdout": "\nrunning 1 test\ntest geometry_provider::uniform_box::affine_tests::affine_exterior_obeys_the_preupdate_escape_budget ... FAILED\n\nfailures:\n\nfailures:\n    geometry_provider::uniform_box::affine_tests::affine_exterior_obeys_the_preupdate_escape_budget\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 142 filtered out; finished in 0.00s\n\n",
+      "stderr": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n   Compiling runtime_core v0.1.0 (C:\\Users\\JeffHall\\git\\FractalSync\\runtime-core)\nwarning: variable does not need to be mutable\n  --> runtime-core\\src\\geometry_provider\\uniform_box.rs:39:41\n   |\n39 |     if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {if let Some(result)=guard.get(&key) {return result;}}}\n   |                                         ----^^^^^\n   |                                         |\n   |                                         help: remove this `mut`\n   |\n   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default\n\nwarning: value assigned to `radius` is never read\n   --> runtime-core\\src\\geometry_provider\\uniform_box.rs:292:17\n    |\n292 |  let mut radius=0.;\n    |                 ^^ this value is reassigned later and never used\n...\n310 |   radius=upper_add(upper_mul(norm_upper(d),cr),remainder);\n    |   ------------------------------------------------------- `radius` is overwritten here before the previous value is read\n    |\n    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `detail`\n    --> runtime-core\\src\\geometry_provider.rs:1193:62\n     |\n1193 |     fn next_weight(previous: FieldJet, h: f64, epsilon: f64, detail: FieldJet) -> FieldJet {\n     |                                                              ^^^^^^ help: if this is intentional, prefix it with an underscore: `_detail`\n     |\n     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: associated function `either` is never used\n    --> runtime-core\\src\\geometry_provider.rs:1205:8\n     |\n1192 | impl FieldHierarchy {\n     | ------------------- associated function in this implementation\n...\n1205 |     fn either(a: FieldJet, b: FieldJet) -> FieldJet {\n     |        ^^^^^^\n     |\n     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: field `visits` is never read\n --> runtime-core\\src\\geometry_provider\\certified_cardioid.rs:9:16\n  |\n6 | pub(super) struct DistanceBounds {\n  |                   -------------- field in this struct\n...\n9 |     pub(super) visits: usize,\n  |                ^^^^^^\n  |\n  = note: `DistanceBounds` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis\n\nwarning: field `visits` is never read\n --> runtime-core\\src\\geometry_provider\\feature_cover.rs:7:16\n  |\n4 | pub(super) struct FeatureCover {\n  |                   ------------ field in this struct\n...\n7 |     pub(super) visits: usize,\n  |                ^^^^^^\n\nwarning: the `jet:` in this pattern is redundant\n    --> runtime-core\\src\\geometry_provider.rs:2123:57\n     |\n2123 |         let FittedJet{size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;\n     |                                                         ^^^^^^^^^^^ help: use shorthand field pattern: `mut jet`\n     |\n     = note: `#[warn(non_shorthand_field_patterns)]` on by default\n\nwarning: `runtime_core` (lib test) generated 7 warnings (run `cargo fix --lib -p runtime_core --tests` to apply 3 suggestions)\n    Finished `release` profile [optimized] target(s) in 39.79s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'geometry_provider::uniform_box::affine_tests::affine_exterior_obeys_the_preupdate_escape_budget' (84632) panicked at runtime-core\\src\\geometry_provider\\uniform_box.rs:399:4:\nassertion `left == right` failed\n  left: Some(false)\n right: None\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `-p runtime_core --lib`\n"
+    }
+  },
+  "coverage_protocol": "Compile the exact reconstructed proof with std LazyLock replacing once_cell Lazy. 81 boxes at four spacings at each of four levels around the recorded retained node. Every existing certificate must remain unchanged; new certificates, if any, must be exterior. Timings are diagnostics under concurrent load.",
+  "coverage": [
+    {
+      "k": 20,
+      "stride": 1,
+      "budget": 1792,
+      "boxes": 81,
+      "default_certified": 23,
+      "budget_certified": 23,
+      "new_exterior": 0,
+      "default_ns": 8304600,
+      "budget_ns": 8323900
+    },
+    {
+      "k": 20,
+      "stride": 8,
+      "budget": 1792,
+      "boxes": 81,
+      "default_certified": 38,
+      "budget_certified": 38,
+      "new_exterior": 0,
+      "default_ns": 1937700,
+      "budget_ns": 1920700
+    },
+    {
+      "k": 20,
+      "stride": 32,
+      "budget": 1792,
+      "boxes": 81,
+      "default_certified": 46,
+      "budget_certified": 46,
+      "new_exterior": 0,
+      "default_ns": 2471500,
+      "budget_ns": 2449600
+    },
+    {
+      "k": 20,
+      "stride": 128,
+      "budget": 1792,
+      "boxes": 81,
+      "default_certified": 58,
+      "budget_certified": 58,
+      "new_exterior": 0,
+      "default_ns": 916800,
+      "budget_ns": 892200
+    },
+    {
+      "k": 24,
+      "stride": 1,
+      "budget": 2048,
+      "boxes": 81,
+      "default_certified": 42,
+      "budget_certified": 42,
+      "new_exterior": 0,
+      "default_ns": 26354100,
+      "budget_ns": 26765600
+    },
+    {
+      "k": 24,
+      "stride": 8,
+      "budget": 2048,
+      "boxes": 81,
+      "default_certified": 51,
+      "budget_certified": 51,
+      "new_exterior": 0,
+      "default_ns": 13544800,
+      "budget_ns": 13667000
+    },
+    {
+      "k": 24,
+      "stride": 32,
+      "budget": 2048,
+      "boxes": 81,
+      "default_certified": 54,
+      "budget_certified": 54,
+      "new_exterior": 0,
+      "default_ns": 6799100,
+      "budget_ns": 6836600
+    },
+    {
+      "k": 24,
+      "stride": 128,
+      "budget": 2048,
+      "boxes": 81,
+      "default_certified": 43,
+      "budget_certified": 43,
+      "new_exterior": 0,
+      "default_ns": 1882800,
+      "budget_ns": 1883200
+    },
+    {
+      "k": 26,
+      "stride": 1,
+      "budget": 2176,
+      "boxes": 81,
+      "default_certified": 81,
+      "budget_certified": 81,
+      "new_exterior": 0,
+      "default_ns": 12878800,
+      "budget_ns": 13136300
+    },
+    {
+      "k": 26,
+      "stride": 8,
+      "budget": 2176,
+      "boxes": 81,
+      "default_certified": 78,
+      "budget_certified": 78,
+      "new_exterior": 0,
+      "default_ns": 15173100,
+      "budget_ns": 15648100
+    },
+    {
+      "k": 26,
+      "stride": 32,
+      "budget": 2176,
+      "boxes": 81,
+      "default_certified": 62,
+      "budget_certified": 62,
+      "new_exterior": 0,
+      "default_ns": 11260800,
+      "budget_ns": 11833400
+    },
+    {
+      "k": 26,
+      "stride": 128,
+      "budget": 2176,
+      "boxes": 81,
+      "default_certified": 62,
+      "budget_certified": 62,
+      "new_exterior": 0,
+      "default_ns": 6583800,
+      "budget_ns": 6716400
+    },
+    {
+      "k": 27,
+      "stride": 1,
+      "budget": 2240,
+      "boxes": 81,
+      "default_certified": 81,
+      "budget_certified": 81,
+      "new_exterior": 0,
+      "default_ns": 9596300,
+      "budget_ns": 9746600
+    },
+    {
+      "k": 27,
+      "stride": 8,
+      "budget": 2240,
+      "boxes": 81,
+      "default_certified": 81,
+      "budget_certified": 81,
+      "new_exterior": 0,
+      "default_ns": 12252200,
+      "budget_ns": 12398200
+    },
+    {
+      "k": 27,
+      "stride": 32,
+      "budget": 2240,
+      "boxes": 81,
+      "default_certified": 66,
+      "budget_certified": 66,
+      "new_exterior": 0,
+      "default_ns": 14590800,
+      "budget_ns": 14292300
+    },
+    {
+      "k": 27,
+      "stride": 128,
+      "budget": 2240,
+      "boxes": 81,
+      "default_certified": 63,
+      "budget_certified": 63,
+      "new_exterior": 0,
+      "default_ns": 7034400,
+      "budget_ns": 7065000
+    }
+  ],
+  "coverage_total_boxes": 1296,
+  "additional_exterior_certificates": 0,
+  "reviews": "All three axes found no concrete proof/cache defect. Corrected minimum-budget comments; boundary, cache-partition and independent ordinary-node regressions added.",
+  "reports": {
+    "budget-boxes-targeted": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 0.36307980003766716,
+        "timed_out": false
+      },
+      "output": "\nrunning 58 tests\ntest geometry_provider::bounded_selector_tests::a_small_or_zero_weight_cannot_use_the_one_certificate ... ok\ntest geometry_provider::bounded_selector_tests::an_unbounded_finer_dependency_still_prevents_certification ... ok\ntest geometry_provider::bounded_selector_tests::independently_bounded_one_can_discard_an_uncertified_coarse_model ... ok\ntest geometry_provider::bounded_selector_tests::interval_certificate_forces_the_actual_gate_for_the_full_scalar_range ... ok\ntest geometry_provider::bounded_selector_tests::interval_field_bound_encloses_node_endpoint_extrema ... ok\ntest geometry_provider::canonical_node_tests::every_tied_projection_participates_in_uncertainty_certification ... ok\ntest geometry_provider::certified_cardioid::tests::contains_regular_reference_distances ... ok\ntest geometry_provider::certified_cardioid::tests::encloses_exact_nearest_cusp_and_left_tip_distances ... ok\ntest geometry_provider::certified_cardioid::tests::exhausted_or_invalid_queries_cannot_supply_a_certificate ... ok\ntest geometry_provider::certified_cardioid::tests::underflowing_nonzero_chord_still_encloses_its_endpoint ... ok\ntest geometry_provider::coherent_field_tests::agreeing_pair_does_not_hide_later_distance_change ... ok\ntest geometry_provider::coherent_field_tests::already_certified_closure_does_not_depend_on_later_unused_models ... ok\ntest geometry_provider::coherent_field_tests::certified_size_saturation_can_dominate_unknown_disagreement ... ok\ntest geometry_provider::coherent_field_tests::discarded_values_still_taint_a_dependent_gate ... ok\ntest geometry_provider::coherent_field_tests::partial_disagreement_with_uncertain_data_is_refused ... ok\ntest geometry_provider::coherent_field_tests::quintic_reproduces_quadratics_and_derivatives ... ok\ntest geometry_provider::coherent_field_tests::refinement_weight_derivatives_match_the_scalar_field ... ok\ntest geometry_provider::coherent_field_tests::uncertified_disagreement_invalidates_a_partial_size_weight ... ok\ntest geometry_provider::coherent_field_tests::uncertified_lookahead_cannot_certify_a_zero_refinement_plateau ... ok\ntest geometry_provider::coherent_field_tests::uncertified_zero_weight_lookahead_is_refused ... ok\ntest geometry_provider::coherent_field_tests::unused_outer_row_and_column_do_not_affect_the_field ... ok\ntest geometry_provider::enclosure_stencil_tests::range_enclosure_survives_cell_boundaries_and_multiple_scales ... ok\ntest geometry_provider::feature_cover::tests::a_tie_band_near_the_medial_axis_keeps_both_directions ... ok\ntest geometry_provider::feature_cover::tests::candidate_cover_contains_the_cusp_at_origin ... ok\ntest geometry_provider::feature_cover::tests::equal_distance_opposite_feet_are_both_retained ... ok\ntest geometry_provider::feature_cover::tests::incomplete_or_invalid_cover_cannot_certify ... ok\ntest geometry_provider::feature_cover::tests::rational_chart_seams_retain_known_stationary_feet ... ok\ntest geometry_provider::feature_cover::tests::regular_queries_have_complete_agreeing_direction_covers ... ok\ntest geometry_provider::feature_cover::tests::symmetric_medial_axis_and_boundary_do_not_certify_regular ... ok\ntest geometry_provider::interval::tests::arithmetic_encloses_exact_representable_endpoints ... ok\ntest geometry_provider::interval::tests::invalid_and_nonfinite_intervals_cannot_supply_finite_bounds ... ok\ntest geometry_provider::range_jet::tests::differential_uncertainty_is_scaled_into_the_existing_error_units ... ok\ntest geometry_provider::range_jet::tests::invalid_domains_cannot_supply_a_finite_certificate ... ok\ntest geometry_provider::range_jet::tests::invalid_operands_cannot_be_cancelled_to_finite_zero ... ok\ntest geometry_provider::range_jet::tests::multiplication_encloses_sampled_value_gradient_and_hessian ... ok\ntest geometry_provider::range_jet::tests::nonfinite_comparison_jets_cannot_supply_finite_errors ... ok\ntest geometry_provider::range_jet::tests::smoothstep_crossing_plateaus_encloses_constant_branch_derivatives ... ok\ntest geometry_provider::range_jet::tests::uncertain_nodal_values_enclose_affine_fields_and_their_derivatives ... ok\ntest geometry_provider::range_jet::tests::unknown_derivatives_disappear_only_on_a_proved_constant_plateau ... ok\ntest geometry_provider::ranged_integration_tests::component_value_and_enclosure_do_not_depend_on_cache_retention ... ok\ntest geometry_provider::ranged_integration_tests::interval_quintic_contains_the_actual_non_affine_scalar_and_derivatives ... ok\ntest geometry_provider::ranged_integration_tests::output_gate_accounts_for_retained_coefficient_uncertainty ... ok\ntest geometry_provider::uniform_box::affine_tests::affine_certificates_match_independent_ordinary_nodes ... ok\ntest geometry_provider::uniform_box::affine_tests::affine_exterior_obeys_the_preupdate_escape_budget ... ok\ntest geometry_provider::uniform_box::affine_tests::affine_interior_proves_a_whole_period_three_box ... ok\ntest geometry_provider::uniform_box::affine_tests::neutral_and_invalid_boxes_cannot_supply_affine_certificates ... ok\ntest geometry_provider::uniform_box::affine_tests::recorded_training_box_is_provably_outside ... ok\ntest geometry_provider::uniform_box::budget_tests::accepted_fine_budget_boxes_match_independent_ordinary_nodes ... ok\ntest geometry_provider::uniform_box::budget_tests::invalid_minimum_budgets_cannot_supply_certificates ... ok\ntest geometry_provider::uniform_box::budget_tests::minimum_budget_preserves_the_preupdate_escape_cutoff_and_cache_partition ... ok\ntest geometry_provider::uniform_box::memo_tests::exact_box_cache_matches_disabled_and_evicted_results ... ok\ntest geometry_provider::uniform_box::memo_tests::uncertain_boxes_are_retained_as_uncertain_cache_entries ... ok\ntest geometry_provider::uniform_box::tests::box_certificates_agree_with_all_ordinary_tile_nodes ... ok\ntest geometry_provider::uniform_box::tests::certificates_match_membership_across_the_map ... ok\ntest geometry_provider::uniform_box::tests::certifies_uniform_boxes_and_keeps_boundary_boxes_uncertain ... ok\ntest geometry_provider::uniform_box::tests::invalid_boxes_do_not_supply_certificates ... ok\ntest geometry_provider::uniform_box::tests::neutral_cycles_do_not_supply_an_interior_disk_certificate ... ok\ntest geometry_provider::uniform_box::tests::periodic_disk_proof_covers_conjugate_period_three_tiles ... ok\n\ntest result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.08s\n\n",
+      "last_stderr_lines": []
+    },
+    "budget-boxes-derivatives": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 8.031706799985841,
+        "timed_out": false
+      },
+      "data": {
+        "diagnostic_only": true,
+        "provider_version": "geometry-provider/6",
+        "epsilon": 0.0001,
+        "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+        "rows": [
+          {
+            "case": "inward_before",
+            "c": [
+              0.39494073887023606,
+              0.04996931486326729
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": 0.037347812483652515,
+              "grad_D": [
+                0.8543263502445528,
+                -0.524007598771997
+              ],
+              "hessian_D": [
+                [
+                  12.360941226469258,
+                  8.04127003844114
+                ],
+                [
+                  8.041270038441137,
+                  22.547170886631847
+                ]
+              ],
+              "resolved_scale": 6.103515625e-05,
+              "requested_scale": 0.003734794636006203,
+              "estimated_error": 8.15692112167421e-07,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6470:818:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": 0.8543263511802401,
+                "gradient_derivative": [
+                  12.360940609745796,
+                  8.041270527670008
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": -0.5240075992007931,
+                "gradient_derivative": [
+                  8.041270217806762,
+                  22.5471708375502
+                ]
+              }
+            ]
+          },
+          {
+            "case": "inward_before",
+            "c": [
+              0.39494073887023606,
+              0.04996931486326729
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": 0.037347812483652515,
+              "grad_D": [
+                0.8543263502445528,
+                -0.524007598771997
+              ],
+              "hessian_D": [
+                [
+                  12.360941226469258,
+                  8.04127003844114
+                ],
+                [
+                  8.041270038441137,
+                  22.547170886631847
+                ]
+              ],
+              "resolved_scale": 6.103515625e-05,
+              "requested_scale": 0.003734794636006203,
+              "estimated_error": 8.15692112167421e-07,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6470:818:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": 0.8543263503232867,
+                "gradient_derivative": [
+                  12.360941220035393,
+                  8.04127004316868
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": -0.5240075988052761,
+                "gradient_derivative": [
+                  8.041270040393123,
+                  22.547170885900414
+                ]
+              }
+            ]
+          },
+          {
+            "case": "inward_after",
+            "c": [
+              0.3948230501337527,
+              0.0499674412699672
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": 0.03724833555761885,
+              "grad_D": [
+                0.852896377688193,
+                -0.5250325241529211
+              ],
+              "hessian_D": [
+                [
+                  11.665524590938752,
+                  8.672406264900886
+                ],
+                [
+                  8.672406264900879,
+                  22.088567570463795
+                ]
+              ],
+              "resolved_scale": 6.103515625e-05,
+              "requested_scale": 0.0037248469791562886,
+              "estimated_error": 9.880031280537493e-07,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6468:818:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": 0.8528963786995358,
+                "gradient_derivative": [
+                  11.665523949655476,
+                  8.672406777154862
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": -0.5250325246092258,
+                "gradient_derivative": [
+                  8.672406451526449,
+                  22.088567521172386
+                ]
+              }
+            ]
+          },
+          {
+            "case": "inward_after",
+            "c": [
+              0.3948230501337527,
+              0.0499674412699672
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": 0.03724833555761885,
+              "grad_D": [
+                0.852896377688193,
+                -0.5250325241529211
+              ],
+              "hessian_D": [
+                [
+                  11.665524590938752,
+                  8.672406264900886
+                ],
+                [
+                  8.672406264900879,
+                  22.088567570463795
+                ]
+              ],
+              "resolved_scale": 6.103515625e-05,
+              "requested_scale": 0.0037248469791562886,
+              "estimated_error": 9.880031280537493e-07,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6468:818:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": 0.8528963777246212,
+                "gradient_derivative": [
+                  11.665524584647535,
+                  8.67240626978294
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  6.103515625e-05,
+                  6.103515625e-05
+                ],
+                "distance_derivative": -0.5250325241235032,
+                "gradient_derivative": [
+                  8.672406267007382,
+                  22.08856757057731
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_before",
+            "c": [
+              0.30007240651412576,
+              0.05348910097156354
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": -0.01952180482677382,
+              "grad_D": [
+                0.7440492699996565,
+                -0.6681247516820218
+              ],
+              "hessian_D": [
+                [
+                  2.7132028432586583,
+                  3.0215262365703768
+                ],
+                [
+                  3.0215262365703763,
+                  3.364887387190951
+                ]
+              ],
+              "resolved_scale": 1.52587890625e-05,
+              "requested_scale": 0.0019522060948953355,
+              "estimated_error": 6.344402058971247e-13,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:15",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": 0.7440492699722218,
+                "gradient_derivative": [
+                  2.7132028434517785,
+                  3.0215262369348572
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": -0.668124751680016,
+                "gradient_derivative": [
+                  3.0215262369903684,
+                  3.3648873869474016
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_before",
+            "c": [
+              0.30007240651412576,
+              0.05348910097156354
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": -0.01952180482677382,
+              "grad_D": [
+                0.7440492699996565,
+                -0.6681247516820218
+              ],
+              "hessian_D": [
+                [
+                  2.7132028432586583,
+                  3.0215262365703768
+                ],
+                [
+                  3.0215262365703763,
+                  3.364887387190951
+                ]
+              ],
+              "resolved_scale": 1.52587890625e-05,
+              "requested_scale": 0.0019522060948953355,
+              "estimated_error": 6.344402058971247e-13,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:15",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": 0.744049270008651,
+                "gradient_derivative": [
+                  2.7132028435072897,
+                  3.0215262369903684
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": -0.6681247517043021,
+                "gradient_derivative": [
+                  3.0215262358801454,
+                  3.364887387058424
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_after",
+            "c": [
+              0.3000728655316197,
+              0.05350153585945869
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": -0.019529771073840737,
+              "grad_D": [
+                0.744088086907672,
+                -0.6680815211619134
+              ],
+              "hessian_D": [
+                [
+                  2.7127783402992285,
+                  3.021406908427974
+                ],
+                [
+                  3.021406908427974,
+                  3.365147438815679
+                ]
+              ],
+              "resolved_scale": 1.52587890625e-05,
+              "requested_scale": 0.0019530027091548706,
+              "estimated_error": 5.67826134490077e-13,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:15",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": 0.7440880868837124,
+                "gradient_derivative": [
+                  2.7127783406299955,
+                  3.0214069083323025
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": -0.6680815211584229,
+                "gradient_derivative": [
+                  3.0214069082767914,
+                  3.3651474391493963
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_after",
+            "c": [
+              0.3000728655316197,
+              0.05350153585945869
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": -0.019529771073840737,
+              "grad_D": [
+                0.744088086907672,
+                -0.6680815211619134
+              ],
+              "hessian_D": [
+                [
+                  2.7127783402992285,
+                  3.021406908427974
+                ],
+                [
+                  3.021406908427974,
+                  3.365147438815679
+                ]
+              ],
+              "resolved_scale": 1.52587890625e-05,
+              "requested_scale": 0.0019530027091548706,
+              "estimated_error": 5.67826134490077e-13,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:15",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": 0.7440880869270805,
+                "gradient_derivative": [
+                  2.7127783402969285,
+                  3.0214069091094586
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  1.52587890625e-05,
+                  1.52587890625e-05
+                ],
+                "distance_derivative": -0.6680815211636271,
+                "gradient_derivative": [
+                  3.0214069079992356,
+                  3.365147439038374
+                ]
+              }
+            ]
+          },
+          {
+            "case": "regular_tile_boundary",
+            "c": [
+              -0.5,
+              0.1
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": -0.23815848417896582,
+              "grad_D": [
+                -0.9722992133095261,
+                0.23373968383153654
+              ],
+              "hessian_D": [
+                [
+                  0.1281147201091244,
+                  0.5329255200788632
+                ],
+                [
+                  0.5329255200788641,
+                  2.2168382166130964
+                ]
+              ],
+              "resolved_scale": 0.000244140625,
+              "requested_scale": 0.02381585051733881,
+              "estimated_error": 3.2716194793138884e-11,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:11",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  0.000244140625,
+                  0.000244140625
+                ],
+                "distance_derivative": -0.9722992133087693,
+                "gradient_derivative": [
+                  0.128114720387984,
+                  0.532925520102534
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  0.000244140625,
+                  0.000244140625
+                ],
+                "distance_derivative": 0.23373968384421406,
+                "gradient_derivative": [
+                  0.5329255202690675,
+                  2.2168382166065648
+                ]
+              }
+            ]
+          },
+          {
+            "case": "regular_tile_boundary",
+            "c": [
+              -0.5,
+              0.1
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": -0.23815848417896582,
+              "grad_D": [
+                -0.9722992133095261,
+                0.23373968383153654
+              ],
+              "hessian_D": [
+                [
+                  0.1281147201091244,
+                  0.5329255200788632
+                ],
+                [
+                  0.5329255200788641,
+                  2.2168382166130964
+                ]
+              ],
+              "resolved_scale": 0.000244140625,
+              "requested_scale": 0.02381585051733881,
+              "estimated_error": 3.2716194793138884e-11,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "component:11",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  0.000244140625,
+                  0.000244140625
+                ],
+                "distance_derivative": -0.9722992129479469,
+                "gradient_derivative": [
+                  0.12811471994389478,
+                  0.5329255198249783
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  0.000244140625,
+                  0.000244140625
+                ],
+                "distance_derivative": 0.23373968371931397,
+                "gradient_derivative": [
+                  0.5329255192698668,
+                  2.2168382168841205
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_tile_boundary",
+            "c": [
+              0.390625,
+              0.05
+            ],
+            "step": 1e-06,
+            "center": {
+              "D": 0.03372576179247228,
+              "grad_D": [
+                0.8161294051952259,
+                -0.5778445643869397
+              ],
+              "hessian_D": [
+                [
+                  9.904333458657334,
+                  13.980592335494748
+                ],
+                [
+                  13.980592335494748,
+                  19.75202694468546
+                ]
+              ],
+              "resolved_scale": 3.0517578125e-05,
+              "requested_scale": 0.0033725910046766465,
+              "estimated_error": 1.1435276247306891e-06,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6400:819:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  3.0517578125e-05,
+                  3.0517578125e-05
+                ],
+                "distance_derivative": 0.8161294050533507,
+                "gradient_derivative": [
+                  9.904333468480075,
+                  13.980592337092812
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  3.0517578125e-05,
+                  3.0517578125e-05
+                ],
+                "distance_derivative": -0.5778445642153074,
+                "gradient_derivative": [
+                  13.980592327600405,
+                  19.752026950425883
+                ]
+              }
+            ]
+          },
+          {
+            "case": "near_shore_tile_boundary",
+            "c": [
+              0.390625,
+              0.05
+            ],
+            "step": 1e-07,
+            "center": {
+              "D": 0.03372576179247228,
+              "grad_D": [
+                0.8161294051952259,
+                -0.5778445643869397
+              ],
+              "hessian_D": [
+                [
+                  9.904333458657334,
+                  13.980592335494748
+                ],
+                [
+                  13.980592335494748,
+                  19.75202694468546
+                ]
+              ],
+              "resolved_scale": 3.0517578125e-05,
+              "requested_scale": 0.0033725910046766465,
+              "estimated_error": 1.1435276247306891e-06,
+              "validity": "regular",
+              "singularity": "none",
+              "provider_version": "geometry-provider/6",
+              "tile_id": "scale-aware:14:6400:819:7.63e-6",
+              "is_bridge": false
+            },
+            "axes": [
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  3.0517578125e-05,
+                  3.0517578125e-05
+                ],
+                "distance_derivative": 0.816129405202537,
+                "gradient_derivative": [
+                  9.90433346004238,
+                  13.980592334927877
+                ]
+              },
+              {
+                "validities": [
+                  "regular",
+                  "regular"
+                ],
+                "resolved_scales": [
+                  3.0517578125e-05,
+                  3.0517578125e-05
+                ],
+                "distance_derivative": -0.5778445643853103,
+                "gradient_derivative": [
+                  13.980592336593212,
+                  19.752026945152323
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "last_stderr_lines": [
+        "[QUERY145] 0.39062400000000003 0.05000000000000000",
+        "[QUERY145] 0.39062599999999997 0.05000000000000000",
+        "[QUERY145] 0.39062500000000000 0.04999900000000000",
+        "[QUERY145] 0.39062500000000000 0.05000100000000000",
+        "[QUERY145] 0.39062490000000000 0.05000000000000000",
+        "[QUERY145] 0.39062510000000000 0.05000000000000000",
+        "[QUERY145] 0.39062500000000000 0.04999990000000000",
+        "[QUERY145] 0.39062500000000000 0.05000010000000001"
+      ]
+    },
+    "budget-boxes-recorded-point": {
+      "status": {
+        "terminal_result_not_yet_available": true
+      },
+      "output": "\nrunning 1 test\ntest geometry_provider::memo_point_test::recorded_next_driven_point_resolves ... ",
+      "last_stderr_lines": [
+        "[QUERY145] 0.32049988639807619 0.04733531447355364"
+      ]
+    },
+    "box-fifo-native": {
+      "status": {
+        "elapsed_s": 1200.3023232000414,
+        "timed_out": true,
+        "timeout_s": 1200
+      },
+      "output": "\nrunning 1 test\ntest manifold::tests::controls_drive_can_cross_shore_without_wall ... ",
+      "last_stderr_lines": [
+        "[QUERY145] 0.32044611078997798 0.04737110592695568",
+        "[QUERY145] 0.32045343227030088 0.04736626255921614",
+        "[QUERY145] 0.32046083605181780 0.04736134021833255",
+        "[QUERY145] 0.32046836178713117 0.04735631631919192",
+        "[QUERY145] 0.32047603816945730 0.04735117920338337",
+        "[QUERY145] 0.32048387198354267 0.04734593757421874",
+        "[QUERY145] 0.32049183886839694 0.04734062840921589",
+        "[QUERY145] 0.32049988639807619 0.04733531447355364"
+      ]
+    },
+    "box-cache-recorded-point": {
+      "status": {
+        "elapsed_s": 1200.2046290000435,
+        "timed_out": true,
+        "timeout_s": 1200
+      },
+      "output": "\nrunning 1 test\ntest geometry_provider::memo_point_test::recorded_next_driven_point_resolves ... ",
+      "last_stderr_lines": [
+        "[QUERY145] 0.32049988639807619 0.04733531447355364"
+      ]
+    }
+  },
+  "source_sha256": {
+    "runtime-core/src/geometry_provider.rs": "29bd81983c961a431f65b3f4d8e8c21ad68b35806c2e06d91b1201ea4e7b8298",
+    "runtime-core/src/geometry_provider/uniform_box.rs": "84de662042401bc67ca1a570813b6e88de7516a1295640d38ce6e062a0c17012"
+  },
+  "all_serialized_derivative_rows_identical": true
+}
