@@ -26,6 +26,7 @@ use num_complex::Complex64;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::hash::Hash;
 use std::sync::RwLock;
 
 mod uniform_box;
@@ -231,7 +232,7 @@ impl GeometryProvider for ScaleAwareGeometryProvider {
         false
     }
     fn query(&self, c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
-        query_scale_aware(c, epsilon)
+        query_geometry(c, epsilon)
     }
 }
 
@@ -316,32 +317,33 @@ struct ShoreTile {
     unstable_nodes: Vec<(f64, f64)>,
 }
 
-struct ShoreTileLru {
-    map: HashMap<TileKey, ShoreTile>,
-    order: VecDeque<TileKey>,
+struct LruCache<K, V> {
+    map: HashMap<K, V>,
+    order: VecDeque<K>,
     capacity: usize,
 }
 
-impl ShoreTileLru {
+impl<K: Clone + Eq + Hash, V: Clone> LruCache<K, V> {
     fn new(capacity: usize) -> Self {
+        assert!(capacity > 0);
         Self {
             map: HashMap::new(),
             order: VecDeque::new(),
             capacity,
         }
     }
-    fn get(&mut self, key: &TileKey) -> Option<ShoreTile> {
-        if let Some(tile) = self.map.get(key).cloned() {
+    fn get(&mut self, key: &K) -> Option<V> {
+        if let Some(value) = self.map.get(key).cloned() {
             if let Some(pos) = self.order.iter().position(|k| k == key) {
                 self.order.remove(pos);
             }
             self.order.push_back(key.clone());
-            Some(tile)
+            Some(value)
         } else {
             None
         }
     }
-    fn insert(&mut self, key: TileKey, tile: ShoreTile) {
+    fn insert(&mut self, key: K, value: V) {
         if self.map.contains_key(&key) {
             if let Some(pos) = self.order.iter().position(|k| k == &key) {
                 self.order.remove(pos);
@@ -352,12 +354,44 @@ impl ShoreTileLru {
             }
         }
         self.order.push_back(key.clone());
-        self.map.insert(key, tile);
+        self.map.insert(key, value);
     }
 }
 
+type ShoreTileLru = LruCache<TileKey, ShoreTile>;
 static SHORE_TILE_CACHE: Lazy<RwLock<ShoreTileLru>> =
     Lazy::new(|| RwLock::new(ShoreTileLru::new(SHORE_TILE_CACHE_CAPACITY)));
+
+// Physics and diagnostics often ask for the same complete jet several times.
+// Exact keys preserve arbitrarily close derivative samples and active epsilon.
+const GEOMETRY_JET_CACHE_CAPACITY: usize = 128;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct JetKey {
+    version: &'static str,
+    re: u64,
+    im: u64,
+    epsilon: u64,
+}
+
+impl JetKey {
+    fn new(c: Complex64, epsilon: f64) -> Self {
+        Self {
+            version: GEOMETRY_PROVIDER_VERSION,
+            re: c.re.to_bits(),
+            im: c.im.to_bits(),
+            epsilon: epsilon.to_bits(),
+        }
+    }
+}
+
+static GEOMETRY_JET_CACHE: Lazy<RwLock<LruCache<JetKey, GeometryJet>>> =
+    Lazy::new(|| RwLock::new(LruCache::new(GEOMETRY_JET_CACHE_CAPACITY)));
+
+#[cfg(test)]
+std::thread_local! {
+    static QUERY_EVALUATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[inline]
 fn dyadic_h(k: u32) -> f64 {
@@ -1310,6 +1344,8 @@ fn persistent_competition(a: &[NearestFeature], b: &[NearestFeature], coarse_h: 
 }
 
 fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+    #[cfg(test)]
+    QUERY_EVALUATIONS.with(|count| count.set(count.get() + 1));
     if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
         let mut failure = failure_jet(
             f64::NAN,
@@ -1609,7 +1645,22 @@ pub fn query_bridge_geometry_with_alpha(
 /// Direct dyadic Shore-contour provider (is_bridge=false), independent of the
 /// 1024² raster. RasterBridgeProvider remains explicit for tests/migration.
 pub fn query_geometry(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
-    query_scale_aware(c, epsilon)
+    if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
+        return query_scale_aware(c, epsilon);
+    }
+    let key = JetKey::new(c, epsilon);
+    if let Ok(mut cache) = GEOMETRY_JET_CACHE.write() {
+        if let Some(jet) = cache.get(&key) {
+            return Ok(jet);
+        }
+    }
+    // Never hold a cache lock while constructing geometry. Concurrent misses
+    // may duplicate work but cannot change the deterministic numerical result.
+    let jet = query_scale_aware(c, epsilon)?;
+    if let Ok(mut cache) = GEOMETRY_JET_CACHE.write() {
+        cache.insert(key, jet.clone());
+    }
+    Ok(jet)
 }
 
 /// Explicit legacy raster comparison; never used by destination Physics.
@@ -1990,6 +2041,50 @@ mod tests {
     }
 
     #[test]
+    fn complete_jet_cache_uses_exact_inputs_and_bounded_lru_retention() {
+        let c = Complex64::new(-0.5, 0.1);
+        let key = JetKey::new(c, 1e-4);
+        let neighbor = JetKey::new(Complex64::new(c.re.next_up(), c.im), 1e-4);
+        let changed_epsilon = JetKey::new(c, 1e-4_f64.next_up());
+        let changed_im = JetKey::new(Complex64::new(c.re, c.im.next_up()), 1e-4);
+        assert_ne!(key, neighbor);
+        assert_ne!(key, changed_epsilon);
+        assert_ne!(key, changed_im);
+        let mut cache = LruCache::new(2);
+        cache.insert(key.clone(), 10);
+        cache.insert(neighbor.clone(), 20);
+        assert_eq!(cache.get(&key), Some(10));
+        cache.insert(changed_epsilon.clone(), 30);
+        assert_eq!(cache.map.len(), 2);
+        assert_eq!(cache.get(&neighbor), None);
+        assert_eq!(cache.get(&key), Some(10));
+        assert_eq!(cache.get(&changed_epsilon), Some(30));
+        cache.insert(key.clone(), 40);
+        assert_eq!(cache.map.len(), 2);
+        assert_eq!(cache.order.len(), 2);
+        assert_eq!(cache.get(&key), Some(40));
+    }
+
+    #[test]
+    fn identical_queries_do_not_repeat_geometry_evaluation() {
+        let _lock = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let c = Complex64::new(-0.53125, 0.109375);
+        let epsilon = 1.23456789e-4;
+        let before = QUERY_EVALUATIONS.with(std::cell::Cell::get);
+        let first = query_geometry(c, epsilon).unwrap();
+        assert_eq!(first.validity, GeometryValidity::Regular);
+        assert_eq!(QUERY_EVALUATIONS.with(std::cell::Cell::get), before + 1);
+        let repeat = query_geometry(c, epsilon).unwrap();
+        assert_eq!(QUERY_EVALUATIONS.with(std::cell::Cell::get), before + 1);
+        assert_eq!(
+            serde_json::to_value(first).unwrap(),
+            serde_json::to_value(repeat).unwrap()
+        );
+    }
+
+    #[test]
     fn certified_uniform_tiles_do_not_evict_contour_tiles() {
         let tile_x = 10000;
         let tile = get_or_generate_shore_tile(0, tile_x, 0).unwrap();
@@ -2012,7 +2107,7 @@ mod tests {
             .unwrap_or_else(|e| e.into_inner());
         let c = Complex64::new(-0.5, 0.1);
         crate::distance_field::clear_distance_field();
-        let cold = query_geometry(c, 1e-4).unwrap();
+        let cold = query_scale_aware(c, 1e-4).unwrap();
         assert_eq!(cold.validity, GeometryValidity::Regular);
         let warm = query_geometry(c, 1e-4).unwrap();
         // Generate more unrelated tiles than the configured cache can retain.
@@ -2032,7 +2127,9 @@ mod tests {
             );
         }
         crate::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
-        let after = query_geometry(c, 1e-4).unwrap();
+        // Recompute after tile eviction; a retained complete jet would hide
+        // an ordering-dependent contour construction regression here.
+        let after = query_scale_aware(c, 1e-4).unwrap();
         assert_eq!(
             serde_json::to_string(&cold).unwrap(),
             serde_json::to_string(&warm).unwrap()
@@ -2224,6 +2321,12 @@ mod tests {
         // query_geometry should now be ScaleAware and succeed without raster, and must NOT auto-reload raster
         let jet = crate::geometry_provider::query_geometry(c, cfg.epsilon)
             .expect("scale-aware should succeed without raster");
+        let uncached = query_scale_aware(c, cfg.epsilon)
+            .expect("uncached scale-aware computation should succeed without raster");
+        assert_eq!(
+            serde_json::to_value(&jet).unwrap(),
+            serde_json::to_value(&uncached).unwrap()
+        );
         assert!(
             !jet.is_bridge,
             "query_geometry should be scale-aware (is_bridge=false)"

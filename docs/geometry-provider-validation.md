@@ -2,6 +2,14 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 continuation: exact-query reuse
+
+The public scale-aware query now retains up to 128 complete jets in an LRU keyed by provider version and the exact bits of both coordinates and epsilon. An identical query returns an owned copy. Different neighboring coordinates and epsilons remain distinct, invalid inputs bypass retention, and errors are not cached. Nonregular classifications retain their refusal information. The existing tile LRU and the new jet LRU share one implementation.
+
+The [comparison report](validation/geometry-145-jet-cache-cost.json) records **64 exactly identical serialized jets**. All **28 provider tests pass**. The sequential repeat regression failed before implementation; eviction and raster-independence tests explicitly use uncached construction so retention cannot hide their failures. Independent Standards, Spec and Health Regression reviews found no actionable findings. Immediate repeats often measure below the report's one-microsecond resolution. New trajectory positions still require geometry work, and concurrent misses may compute twice.
+
+This cost-only change leaves provider/controller versions, golden values, thresholds and crossing tests unchanged. It does not resolve the numerical merge blockers described below.
+
 ## October 23 continuation: reducing contour-query cost
 
 Two performance changes retain provider-6 semantics. Outward-rounded whole-box arithmetic proves a tile entirely inside the primary cardioid/period-two bulb, or proves every orbit in the box escapes within 64 iterations. Such a tile has no contour and needs neither 3,249 individual orbit states nor a retained cache entry. An uncertain proof falls back to ordinary tile construction with the existing budgets. Expansion also maintains its nearest-distance minimum as segments arrive, instead of rescanning every accumulated segment for every candidate tile.
