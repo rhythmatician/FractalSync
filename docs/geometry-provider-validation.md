@@ -1,5 +1,35 @@
 # Adaptive geometry validation
 
+## October 24 continuation: size-only refinement passes the derivative and energy probes
+
+An unshipped size-only C2 selector removes the disagreement correction weights that produced the sharp high-curvature transition. Its internal size target is `alpha/128` rather than `alpha/8`; the public scale/error acceptance parameters and energy limits are unchanged. A component shortcut builds eligible finer field models directly from the same scalar node data after a certified raw pair exists. Skipped contour levels clear the previous raw sample, so they cannot manufacture a consecutive raw pair.
+
+This candidate passes **all twelve derivative probes and all twelve energy cases**. The complete energy sweep takes 978.99 seconds. Every timestep refinement reduces both excursion and largest step change. The energy excursions are:
+
+| Case | Base timestep | Half timestep | Quarter timestep |
+|---|---:|---:|---:|
+| Low curvature | 0.000233371 | 0.000116703 | 0.0000583558 |
+| High curvature | 0.000731626 | 0.000389023 | 0.000194814 |
+| Near Shore | 0.00174442 | 0.000872962 | 0.000436668 |
+| Inward | 0.00280366 | 0.00140005 | 0.000698930 |
+
+A subsequent component-level variant also uses analytic scalar data and nearest-feature competition for raw levels whose complete nodal support lies in known components. It retains bit-identical distance, gradient and Hessian values at all twelve probe centers, passes the derivative report in 16.27 seconds, and separately passes all six near-Shore and inward energy replays. The recorded native point resolves in 11.886 milliseconds cold. The period-two center and primary cusp remain Singular. These results are not a universal runtime cost acceptance.
+
+The untouched native crossing test completes its undriven portion, then fails in the driven portion at `(0.32046083605181780, 0.04736134021833255)`, Unresolved with infinite error. An uncertified coarse field node at level 13 remains in the selector dependency graph. The original provider tests give **23 passes and one failure**: the recorded training point remains Unresolved after a search leaf limit. The recorded Python crossing point times out at 180 seconds. The eleven older correction-selector helper tests give four passes and seven failures under this changed selection rule and size target. Their fixtures and guarantees require reconciliation before adoption; passing the public derivative report does not replace that work.
+
+The [measurement report](validation/geometry-145-scale-component-levels.json) separates the variants, complete energy evidence, individual replays, original provider/crossing failures and legacy helper failures. The [incremental patch](validation/experiments/geometry-145-scale-component-levels.patch) applies after the preceding component-node patch. Production source and acceptance thresholds remain unchanged.
+
+The earlier full energy variant is independently preserved in the [shortcut patch](validation/experiments/geometry-145-scale-component-shortcut.patch). From production, apply the component-node patch followed by this shortcut patch, then run `rtk cargo run --release --jobs 1 -p runtime_core --example geometry_energy_report -- --check`. The shortcut and component-level patches are alternatives against the same component-node baseline. Both were checked to reconstruct their measured sources exactly in fresh isolated repositories.
+
+```text
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-component-nodes.patch
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-scale-component-levels.patch
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+rtk cargo test --release --jobs 1 -p runtime_core --lib controls_drive_can_cross_shore_without_wall
+```
+
+A separate [boundary upper-bound probe](validation/experiments/geometry-145-boundary-upper.rs) encloses rationally parameterized cardioid boundary points using outward-rounded intervals. Root guesses choose a valid boundary point; completeness of the root search is unnecessary for this upper bound. Its two interval tests and three included cardioid tests pass. At the new driven point, an ideal scalar-field range estimate suggests the level-13 size selector could be certified as saturated independently of the uncertain node values. This is not integrated: coefficient ranges, floating-point reconstruction and dependency propagation still need a complete argument. Merely observing a current weight of one would not supply that certificate. Analytic distance root completeness/roundoff, cache independence, training, both crossing trajectories and outside-component query cost also remain unaccepted.
+
 ## October 24 continuation: component node data recovers the derivative probes
 
 A new unshipped candidate uses distance to the main-cardioid boundary or period-two circle as scalar node data strictly inside those components. Every other active spline node independently seeks a stable contained contour search. The quintic field and its differentiated refinement weights retain the corrected selector-certification rules. The mathematical basis is that indifferent-cycle parameters lie on the Mandelbrot boundary, as stated in Proposition 7.7 of [Cheraghi's dynamics notes](https://www.ma.imperial.ac.uk/~dcheragh/Teaching/2014-S-DS-TCC/DS-TCC.pdf). Inside a component, its boundary is therefore the nearest Mandelbrot boundary. This is a geometric deduction, not a new empirical membership tolerance.
