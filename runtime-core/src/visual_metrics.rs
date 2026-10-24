@@ -202,6 +202,10 @@ pub(crate) struct MembershipOrbit {
     evaluated: usize,
     escaped_at: Option<usize>,
     safely_interior: bool,
+    periodic: bool,
+    cycle_anchor: num_complex::Complex64,
+    cycle_power: usize,
+    cycle_length: usize,
     #[cfg(test)]
     iterations: usize,
 }
@@ -214,13 +218,17 @@ impl MembershipOrbit {
             evaluated: 0,
             escaped_at: None,
             safely_interior: is_safely_interior(c),
+            periodic: false,
+            cycle_anchor: num_complex::Complex64::new(0.0, 0.0),
+            cycle_power: 1,
+            cycle_length: 0,
             #[cfg(test)]
             iterations: 0,
         }
     }
 
     pub(crate) fn inside_at(&mut self, max_iter: usize) -> bool {
-        if self.safely_interior {
+        if self.safely_interior || self.periodic {
             return true;
         }
         if let Some(escaped_at) = self.escaped_at {
@@ -238,6 +246,22 @@ impl MembershipOrbit {
             #[cfg(test)]
             {
                 self.iterations += 1;
+            }
+            self.cycle_length += 1;
+            // Brent's constant-space cycle detector compares exact machine
+            // states. A bounded repeated state follows the same deterministic
+            // updates forever; this is not a proximity/attraction heuristic.
+            if self.z.re.to_bits() == self.cycle_anchor.re.to_bits()
+                && self.z.im.to_bits() == self.cycle_anchor.im.to_bits()
+                && self.z.norm_sqr() <= 4.0
+            {
+                self.periodic = true;
+                return true;
+            }
+            if self.cycle_length == self.cycle_power {
+                self.cycle_anchor = self.z;
+                self.cycle_power = self.cycle_power.saturating_mul(2);
+                self.cycle_length = 0;
             }
         }
         true
@@ -318,6 +342,24 @@ mod tests {
                 points.push(num_complex::Complex64::new(x as f64 * 0.2, y as f64 * 0.2));
             }
         }
+        // Include irregular points and a dense patch around a delayed-escape
+        // Shore. The independent reference never detects or skips cycles.
+        let mut state = 0x145148_u64;
+        for index in 0..1024 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let x = (state >> 11) as f64 / (1_u64 << 53) as f64;
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let y = (state >> 11) as f64 / (1_u64 << 53) as f64;
+            points.push(if index % 2 == 0 {
+                num_complex::Complex64::new(-2.0 + 3.0 * x, -1.5 + 3.0 * y)
+            } else {
+                num_complex::Complex64::new(0.3 + 0.002 * (x - 0.5), 0.05 + 0.002 * (y - 0.5))
+            });
+        }
         for c in points {
             let mut orbit = MembershipOrbit::new(c);
             // Decreasing requests after exhaustion/escape must preserve the
@@ -334,8 +376,9 @@ mod tests {
 
     #[test]
     fn membership_budget_growth_does_not_replay_the_orbit() {
-        // Period-three interior, outside the exact cardioid/bulb shortcuts.
-        let c = num_complex::Complex64::new(-0.1225611668766536, 0.7448617666197442);
+        // A neutral orbit, outside the exact cardioid/bulb shortcuts, that
+        // has not entered an exact machine cycle within these budgets.
+        let c = num_complex::Complex64::new(0.25, 0.0);
         assert!(!is_safely_interior(c));
         let mut orbit = MembershipOrbit::new(c);
         for budget in [512, 1024, 2048] {
@@ -345,6 +388,50 @@ mod tests {
             orbit.iterations, 2048,
             "budget growth must resume the previous orbit"
         );
+    }
+
+    #[test]
+    fn exact_bounded_machine_cycle_ends_work_without_changing_membership() {
+        let c = num_complex::Complex64::new(-0.1225611668766536, 0.7448617666197442);
+        assert!(!is_safely_interior(c));
+        let mut orbit = MembershipOrbit::new(c);
+        assert!(orbit.inside_at(512));
+        assert!(orbit.periodic);
+        assert!(orbit.iterations < 512);
+        let iterations = orbit.iterations;
+        for budget in [1024, 32768, 1, 0] {
+            assert_eq!(
+                orbit.inside_at(budget),
+                orbit_membership_reference(c, budget)
+            );
+            assert_eq!(orbit.iterations, iterations);
+        }
+        assert!(orbit.inside_at(usize::MAX));
+        assert_eq!(orbit.iterations, iterations);
+    }
+
+    #[test]
+    fn delayed_escape_and_escape_radius_boundary_keep_original_semantics() {
+        let c = num_complex::Complex64::new(0.2500001, 0.0);
+        let mut escaping = MembershipOrbit::new(c);
+        assert!(!escaping.inside_at(32768));
+        assert!(
+            !escaping.periodic,
+            "A near-return must not become an exact cycle"
+        );
+        for budget in [0, 512, 16384, 32768] {
+            assert_eq!(
+                escaping.inside_at(budget),
+                orbit_membership_reference(c, budget)
+            );
+        }
+        let mut boundary = MembershipOrbit::new(num_complex::Complex64::new(-2.0, 0.0));
+        assert!(boundary.inside_at(512));
+        assert!(
+            boundary.periodic,
+            "The repeated +2 state remains at the allowed escape radius"
+        );
+        assert!(boundary.inside_at(usize::MAX));
     }
 
     #[test]

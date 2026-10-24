@@ -1,5 +1,17 @@
 # Adaptive geometry validation
 
+## October 24 continuation: exact machine cycles reduce repeated membership work
+
+Canonical membership now detects exact bounded floating-point cycles with Brent's constant-space detector. It compares both coordinate bit patterns, not a proximity tolerance. Once a bounded state repeats, subsequent deterministic machine updates repeat too. The shortcut preserves the original pre-update escape cutoff, including decreasing budget requests. It neither increases the membership cap nor claims a floating-point cycle proves a mathematical Mandelbrot interior.
+
+The regression fails when cycle detection is disabled. All seven membership tests pass, including comparison with the original non-skipping loop at 1,238 points and twelve budget requests per point, delayed escape, the escape-radius boundary and nonfinite inputs. The resume-work fixture now uses a neutral orbit that does not cycle within its tested budgets; the former attracting-cycle fixture is covered by the new early-termination regression.
+
+A fresh sequential paired sweep gives **64 identical serialized jets**. Summed cold-query time falls from 51.42 seconds to 24.85 seconds. Samples run in separate subprocesses with an initially empty cache, then immediately repeat the exact query. These machine/load-dependent measurements are not a live frame-budget acceptance. See the [paired report](validation/geometry-145-exact-cycle-cost.json).
+
+Current validation gives **252 Rust passes, one known crossing failure and one ignored test**. The broader 23-suite run passes 252 tests with the known native crossing test filtered; a separate full library run gives 89 passes and that same crossing failure. A freshly rebuilt and byte-verified Python extension gives 26 physics passes and the unchanged Python crossing refusal. Mandatory parity, architecture and canonical-surface gates pass. Production still fails all twelve derivative probes; all twelve production energy samples pass the existing 0.05 limits, with the previously recorded near-Shore nonvanishing step changes unchanged.
+
+This is a cost-only change. Provider/controller/snapshot stamps, golden numerical values, thresholds, iteration limits and both original crossing tests remain intact. It does not resolve the geometry acceptance failures or make PR #148 merge-ready.
+
 ## October 24 continuation: bounded membership tails do not resolve field certification
 
 An unshipped experiment reuses the canonical orbit state already computed at the 32,768-step cap. It attempts a bounded disk proof for the remaining machine-orbit tail, including rounding error. It adds no empirical membership iterations. Attracting-cycle, neutral-cycle, escaped-state and nonfinite-state tests exercise the helper. The experiment is preserved separately from production.
