@@ -2,9 +2,45 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 follow-up: orbit reuse and cache retention
+
+This performance change keeps `geometry-provider/5`, `orbit-controller/9`, all quality thresholds and both crossing assertions. It resumes each canonical critical orbit as the existing tile-certification budget doubles, rather than replaying its prefix. The construction states are discarded after each tile is generated. A deterministic work regression first counted 3,584 updates for budgets 512/1,024/2,048, then passed with exactly 2,048. A second regression compares 214 points at 12 increasing/decreasing budgets against the original evaluator, including escape cutoffs and nonfinite inputs.
+
+The bounded tile LRU now retains 256 entries instead of the initial plan's 64. A [trace replay](validation/geometry-145-cache-working-set.json) measured 103 distinct tiles for one cut-locus query and 134 for the live training refusal. At 64 entries, every repeated query missed all 103/134 tiles again. Even 128 entries thrashes on the latter case. This is evidence that the initial capacity is practically inadequate for these queries. The change increases retention, not membership budgets, footprint limits, refinement limits or acceptance tolerances. The eviction regression now generates more tiles than the configured capacity so it still exercises real eviction.
+
+All 44 matching jets in the pre-change report are identical after orbit reuse alone and after the cache increase, including floating-point values, scales, errors, classification and provenance. The [current report](validation/geometry-provider-145.json) adds the live training and kinetic crossing refusals: 13 cases at four epsilon values, 52 rows total. It checks strict Regular quality bounds and identical immediate-repeat jets.
+
+The [controlled cost report](validation/geometry-145-orbit-resume-cost.json) compares the baseline `30c9b9b`, orbit reuse with the old cache, and the final implementation. Each sample uses a fresh process followed by an immediate repeat, epsilon `1e-4`; the second repetition reverses variant order. Median times in milliseconds over two repetitions are:
+
+| Case | Baseline cold / repeat | Orbit reuse, 64 entries | Orbit reuse, 256 entries |
+|---|---:|---:|---:|
+| Regular Shore approach | 352.54 / 2.28 | 285.83 / 2.16 | 302.44 / 2.19 |
+| Crossing corridor | 584.01 / 2.96 | 542.84 / 2.78 | 519.07 / 3.55 |
+| Cut locus | 1951.48 / 2450.49 | 1654.06 / 1804.07 | 1608.76 / 10.49 |
+| Native crossing refusal | 415.83 / 420.72 | 386.13 / 394.84 | 401.25 / 3.66 |
+
+These are small machine/load-dependent samples. Cold cost improves modestly and remains far outside a live frame budget. In the separate final 52-row report, the live training refusal takes 1,684 ms cold and 3.52 ms on repeat. No successful training step or crossing follows from returning the same refusal faster.
+
+Separate fresh-worker Windows memory samples peaked at 4.8–5.8 MiB of working set across the three representative cases and variants. The final workers' peak commit was 1.20–2.49 MiB. These are whole-process peaks, not isolated cache payload or a worst-case bound; the cache can retain four times as many tiles. Orbit construction states remain outside the LRU. The report records source hashes, raw timings and memory measurements.
+
+The rebuilt Python extension still refuses seed 42 at the identical live coordinate and error recorded below. Standards, Spec and Health Regression reviews found no actionable code findings. Crossing, live training validity, differential consistency and cold query cost remain merge blockers.
+
+| Check | Orbit-reuse follow-up result |
+|---|---|
+| Membership regressions | All 5 visual-metrics tests pass, including exact cutoff equivalence and deterministic work count |
+| Complete release Rust suite | 240 passed, 1 failed, 1 ignored with `--jobs 1 --no-fail-fast -- --test-threads=1`; the sole failure is the unchanged native crossing refusal, and all 33 snapshot integration tests pass (586.19 seconds). Focused results overlap this total. |
+| Query report | 52 rows pass repeat determinism and strict Regular gates; all 44 pre-existing serialized jets exactly match both optimized variants |
+| Derivative diagnostic | Explicit `--check` remains nonzero on all 8 inconsistent probes |
+| Canonical preflight | All mandatory checks pass; manifold mirror maximum error `1.490e-8` |
+| Frontend / production build | 27 files / 116 tests pass; build passes with existing dependency/chunk-size warnings |
+| Rebuilt real WASM / GPU | Snapshot/startup contract passes; 16 projection cases, maximum error `5.411e-8`, 262,144 vertices, 531,502 triangles and 1,000 updates pass |
+| Structural checks | Architecture guardrail, canonical-surfaces gate, changed Rust formatting and diff whitespace checks pass |
+
+At code commit `7417c0a`, [CI run 40041861426](https://github.com/rhythmatician/FractalSync/actions/runs/40041861426) passes native/Python and WASM builds, artifacts and frontend/real-WASM/GPU checks. Separate type-check and generated-stub workflows pass. Rust CI reproduces the identical native crossing refusal (77 library passes, one failure) and stops before integration targets. Backend CI remains in progress at this checkpoint. The local Python run was stopped at 32% to rebuild a subsequent footprint repair; it had one training-smoke failure and no complete-suite verdict. Its partial passes are not a full validation claim.
+
 ## October 23 follow-up: reset validity and derivative reproducers
 
-This follow-up keeps production geometry at `geometry-provider/5` and `orbit-controller/9`. Geometry source, golden vectors, quality thresholds and both crossing test sources are unchanged from `cdcc2cd`. **Crossing, live training trajectories, differential consistency and synchronous query cost still prevent merging.**
+At this historical checkpoint, the reset follow-up kept production geometry at `geometry-provider/5` and `orbit-controller/9`. Geometry source, golden vectors, quality thresholds and both crossing test sources were unchanged from `cdcc2cd`. **Crossing, live training trajectories, differential consistency and synchronous query cost still prevent merging.** The performance follow-up above subsequently changes orbit evaluation and cache retention while preserving the reported jets.
 
 ### Training resets
 

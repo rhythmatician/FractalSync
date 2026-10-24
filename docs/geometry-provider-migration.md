@@ -4,6 +4,8 @@ This is the #84 migration record for the #145 Physics geometry seam. The archite
 
 October 23 follow-up: `geometry-provider/5` and `orbit-controller/9` add matching-position contour-field convergence to the projection/refinement repairs; `debug-snapshot/5` keeps the same nullable wire shape. The original rejected endpoint and corridor resolve. The inward false-convergence regression and original energy acceptance test pass; all sixteen sampled energy rollouts satisfy the unchanged limits, and inward drift decreases with timestep. Training now rejects invalid float32 reset proposals through Rust, with a bounded budget and explicit exhaustion. Later rollout failures remain visible. Native/Python crossing refusals, live training validity, spatial derivative consistency across queries and refinement levels, and synchronous query cost still prevent acceptance. See the [current validation evidence](geometry-provider-validation.md#october-23-follow-up-reset-validity-and-derivative-reproducers). No bridge or legacy deletion trigger has been satisfied by these changes.
 
+Orbit reuse and a measured cache-retention correction now reduce query cost without changing reported jets or versions. The tile LRU retains 256 entries: individual refusal queries touch 103 or 134 distinct tiles and previously thrashed the 64-entry cache on every repeat. Membership, refinement and quality budgets are unchanged. Cold queries remain expensive, and faster repeated refusals do not establish training or crossing acceptance. See the [latest performance evidence](geometry-provider-validation.md#october-23-follow-up-orbit-reuse-and-cache-retention).
+
 ## Migration rule
 
 Migration is one way:
