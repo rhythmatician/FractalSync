@@ -53,11 +53,17 @@ impl Interval {
         let lo = if self.lo <= 0.0 && self.hi >= 0.0 {
             0.0
         } else {
-            self.lo.abs().min(self.hi.abs()).powi(2).next_down()
+            {
+                let magnitude = self.lo.abs().min(self.hi.abs());
+                (magnitude * magnitude).next_down()
+            }
         };
         Self {
             lo,
-            hi: self.lo.abs().max(self.hi.abs()).powi(2).next_up(),
+            hi: {
+                let magnitude = self.lo.abs().max(self.hi.abs());
+                (magnitude * magnitude).next_up()
+            },
         }
     }
 
@@ -101,13 +107,13 @@ pub(super) fn membership(re0: f64, im0: f64, width: f64) -> Option<bool> {
         zr = next_re;
         zi = next_im;
         if !zr.finite() || !zi.finite() {
-            return disk_membership(re, im);
+            return disk_membership(re, im).or_else(|| affine_membership(re, im));
         }
         if zr.square().add(zi.square()).lo > 4.0 {
             return Some(false);
         }
     }
-    disk_membership(re, im)
+    disk_membership(re, im).or_else(|| affine_membership(re, im))
 }
 
 fn upper_add(a: f64, b: f64) -> f64 {
@@ -153,10 +159,7 @@ impl Ball {
         // machine orbit and this machine center, then double that bound.
         // Accepted proofs keep every disk within |z| <= 2; nonfinite results
         // cannot certify. Radius arithmetic below is rounded upward too.
-        let round = upper_add(
-            upper_mul(32. * f64::EPSILON, upper_add(upper_mul(a, a), c_bound)),
-            32. * f64::MIN_POSITIVE,
-        );
+        let round = machine_round_error(a, c_bound);
         let radius = upper_add(
             upper_add(
                 upper_mul(upper_mul(2., norm_upper(self.z)), self.radius),
@@ -195,36 +198,7 @@ fn disk_membership(re: Interval, im: Interval) -> Option<bool> {
     // Strict inclusion after p steps makes it forward invariant under f_c^p.
     // Every intervening disk must remain below the same escape radius, so
     // this also proves the ordinary finite-budget machine orbit stays inside.
-    let mut period = 1;
-    let mut separation = f64::INFINITY;
-    for p in 1..=64 {
-        let d = distance_upper(orbit.z, centers[64 - p]);
-        if d < separation {
-            period = p;
-            separation = d;
-        }
-    }
-    for factor in [2., 8., 32., 128.] {
-        let radius = upper_mul(factor, upper_add(orbit.radius, separation));
-        let start = Ball { z: orbit.z, radius };
-        if !start.bounded() {
-            continue;
-        }
-        let mut end = start;
-        let mut bounded = true;
-        for _ in 0..period {
-            let Some(next) = end.step(c, cr) else {
-                bounded = false;
-                break;
-            };
-            end = next;
-            bounded &= end.bounded();
-        }
-        if bounded && upper_add(distance_upper(end.z, start.z), end.radius) < radius {
-            return Some(true);
-        }
-    }
-    None
+    periodic_trap(orbit.z, orbit.radius, &centers, c, cr)
 }
 
 #[cfg(test)]
@@ -335,6 +309,266 @@ mod tests {
             (f64::MAX, 0.0, f64::MAX),
         ] {
             assert_eq!(membership(re0, im0, width), None);
+        }
+    }
+}
+
+// Retain the linear dependence on delta_c instead of adding the full
+// parameter radius independently at every iteration:
+// z(c) = z_center + derivative * delta_c + remainder_disk.
+// A result remains a whole-box certificate for the ordinary machine orbit.
+fn affine_membership(re: Interval, im: Interval) -> Option<bool> {
+    let c = [re.lo + (re.hi - re.lo) * 0.5, im.lo + (im.hi - im.lo) * 0.5];
+    if !c.iter().all(|x| x.is_finite()) {
+        return None;
+    }
+    let cr = norm_upper([
+        (re.lo - c[0]).abs().max((re.hi - c[0]).abs()).next_up(),
+        (im.lo - c[1]).abs().max((im.hi - c[1]).abs()).next_up(),
+    ]);
+    let mut z = [0.; 2];
+    let mut d = [0.; 2];
+    let mut remainder = 0.;
+    let mut centers = vec![z];
+    let mut all_bounded = true;
+    let mut radius = 0.;
+    for n in 1..=512 {
+        let magnitude = norm_upper(z);
+        let sensitivity = norm_upper(d);
+        let total = upper_add(upper_mul(sensitivity, cr), remainder);
+        let a = upper_add(magnitude, total);
+        let cb = upper_add(norm_upper(c), cr);
+        // Bounds both the machine critical-orbit update and center update.
+        let round = machine_round_error(a, cb);
+        let next = [z[0] * z[0] - z[1] * z[1] + c[0], 2. * z[0] * z[1] + c[1]];
+        let next_d = [
+            2. * (z[0] * d[0] - z[1] * d[1]) + 1.,
+            2. * (z[0] * d[1] + z[1] * d[0]),
+        ];
+        let p = Interval::point;
+        let dr = p(2.)
+            .mul(p(z[0]).mul(p(d[0])).sub(p(z[1]).mul(p(d[1]))))
+            .add(p(1.));
+        let di = p(2.).mul(p(z[0]).mul(p(d[1])).add(p(z[1]).mul(p(d[0]))));
+        let de = dr.sub(p(next_d[0]));
+        let ie = di.sub(p(next_d[1]));
+        let coefficient_error = de.square().add(ie.square()).hi.sqrt().next_up();
+        remainder = upper_add(
+            upper_add(
+                upper_mul(upper_mul(2., magnitude), remainder),
+                upper_mul(total, total),
+            ),
+            upper_add(round, upper_mul(coefficient_error, cr)),
+        );
+        z = next;
+        d = next_d;
+        radius = upper_add(upper_mul(norm_upper(d), cr), remainder);
+        if !radius.is_finite() || radius > 4. || !z.iter().all(|x| x.is_finite()) {
+            return None;
+        }
+        let low = p(z[0])
+            .square()
+            .add(p(z[1]).square())
+            .lo
+            .max(0.)
+            .sqrt()
+            .next_down();
+        // The ordinary 512-update query checks escape before each update.
+        if n < 512 && (low - radius).next_down() > 2. {
+            return Some(false);
+        }
+        all_bounded &= Ball { z, radius }.bounded();
+        centers.push(z);
+    }
+    if !all_bounded {
+        return None;
+    }
+    periodic_trap(z, radius, &centers, c, cr)
+}
+
+#[cfg(test)]
+fn affine_box(re0: f64, im0: f64, width: f64) -> Option<bool> {
+    if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width < 0. {
+        return None;
+    }
+    let re = Interval {
+        lo: re0.next_down(),
+        hi: (re0 + width).next_up(),
+    };
+    let im = Interval {
+        lo: im0.next_down(),
+        hi: (im0 + width).next_up(),
+    };
+    if !re.finite() || !im.finite() {
+        return None;
+    }
+    affine_membership(re, im)
+}
+
+fn periodic_trap(
+    z: [f64; 2],
+    radius: f64,
+    centers: &[[f64; 2]],
+    c: [f64; 2],
+    cr: f64,
+) -> Option<bool> {
+    let last = centers.len().checked_sub(1)?;
+    let mut period = 1;
+    let mut separation = f64::INFINITY;
+    for p in 1..=last {
+        let distance = distance_upper(z, centers[last - p]);
+        if distance < separation {
+            period = p;
+            separation = distance;
+        }
+    }
+    for factor in [2., 8., 32., 128.] {
+        let r = upper_mul(factor, upper_add(radius, separation));
+        let start = Ball { z, radius: r };
+        if !start.bounded() {
+            continue;
+        }
+        let mut end = start;
+        let mut bounded = true;
+        // The parameter box is fixed throughout this return; intermediate disks
+        // must remain bounded as well as the final disk lying strictly inside.
+        for _ in 0..period {
+            let Some(next) = end.step(c, cr) else {
+                bounded = false;
+                break;
+            };
+            end = next;
+            bounded &= end.bounded();
+        }
+        if bounded && upper_add(distance_upper(end.z, start.z), end.radius) < r {
+            return Some(true);
+        }
+    }
+    None
+}
+fn machine_round_error(a: f64, c_bound: f64) -> f64 {
+    // Encloses componentwise complex square/add rounding for both the actual
+    // machine update and the rounded center, including underflow allowances.
+    upper_add(
+        upper_mul(32. * f64::EPSILON, upper_add(upper_mul(a, a), c_bound)),
+        32. * f64::MIN_POSITIVE,
+    )
+}
+
+#[cfg(test)]
+mod affine_tests {
+    use super::*;
+    #[test]
+    fn recorded_training_box_is_provably_outside() {
+        let c = [0.3075204398270623, 0.02876420131721053];
+        let width = 56. * 2f64.powi(-22);
+        let re = c[0] - width / 2.;
+        let im = c[1] - width / 2.;
+        assert_eq!(affine_box(re, im, width), Some(false));
+        assert_eq!(membership(re, im, width), Some(false));
+        for y in 0..=16 {
+            for x in 0..=16 {
+                let point = num_complex::Complex64::new(
+                    re + width * x as f64 / 16.,
+                    im + width * y as f64 / 16.,
+                );
+                for budget in [512, 32768] {
+                    assert!(!crate::visual_metrics::mandelbrot_membership(point, budget));
+                }
+            }
+        }
+    }
+    #[test]
+    fn affine_certificates_match_independent_ordinary_nodes() {
+        let mut accepted = 0;
+        for y in -10..=10 {
+            for x in -15..=5 {
+                let re = x as f64 / 8.;
+                let im = y as f64 / 8.;
+                let width = 1. / 64.;
+                let Some(expected) = affine_box(re, im, width) else {
+                    continue;
+                };
+                accepted += 1;
+                for (dx, dy) in [(0., 0.), (1., 0.), (0., 1.), (1., 1.), (0.5, 0.5)] {
+                    let c = num_complex::Complex64::new(re + dx * width, im + dy * width);
+                    for budget in [512, 32768] {
+                        assert_eq!(
+                            crate::visual_metrics::mandelbrot_membership(c, budget),
+                            expected,
+                            "{c:?}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(accepted > 100);
+    }
+    #[test]
+    fn neutral_and_invalid_boxes_cannot_supply_affine_certificates() {
+        for x in [0.25, 0.2500001, -0.75] {
+            assert_eq!(affine_box(x, 0., 0.), None);
+        }
+        for (x, y, w) in [
+            (f64::NAN, 0., 1.),
+            (0., f64::INFINITY, 1.),
+            (0., 0., -1.),
+            (f64::MAX, 0., f64::MAX),
+        ] {
+            assert_eq!(affine_box(x, y, w), None);
+        }
+    }
+    #[test]
+    fn affine_exterior_obeys_the_preupdate_escape_budget() {
+        let fixtures = [
+            (511, 0.2500375092511157),
+            (512, 0.25003736342837773),
+            (513, 0.2500372184543587),
+        ];
+        for (first_escape, c) in fixtures {
+            let mut z = 0.;
+            let mut detected = None;
+            for n in 0..=513 {
+                if z * z > 4. {
+                    detected = Some(n);
+                    break;
+                }
+                z = z * z + c;
+            }
+            assert_eq!(detected, Some(first_escape));
+            let point = num_complex::Complex64::new(c, 0.);
+            assert_eq!(
+                crate::visual_metrics::mandelbrot_membership(point, 512),
+                first_escape >= 512
+            );
+            assert!(!crate::visual_metrics::mandelbrot_membership(point, 32768));
+            assert_eq!(
+                affine_box(c, 0., 0.),
+                if first_escape < 512 {
+                    Some(false)
+                } else {
+                    None
+                }
+            );
+        }
+    }
+    #[test]
+    fn affine_interior_proves_a_whole_period_three_box() {
+        let center = [-0.1225611668766536, 0.7448617666197442];
+        let width = 1e-7;
+        let re = center[0] - width / 2.;
+        let im = center[1] - width / 2.;
+        assert_eq!(affine_box(re, im, width), Some(true));
+        for y in 0..=8 {
+            for x in 0..=8 {
+                let point = num_complex::Complex64::new(
+                    re + width * x as f64 / 8.,
+                    im + width * y as f64 / 8.,
+                );
+                for budget in [512, 32768] {
+                    assert!(crate::visual_metrics::mandelbrot_membership(point, budget));
+                }
+            }
         }
     }
 }
