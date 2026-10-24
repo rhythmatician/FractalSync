@@ -2,13 +2,55 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 follow-up: bounded footprint repair
+
+The current candidate uses `geometry-provider/6` and `orbit-controller/10`; `debug-snapshot/5` is unchanged. A complete-tile expansion can now reach radius 5, at most 11 by 11 tiles, instead of radius 3, at most 7 by 7. Pruning, containment, membership/stability budgets, refinement limit, tie/angle thresholds and strict Regular quality gates are unchanged. Both crossing test sources are untouched. Regenerated golden vectors change only the controller stamp.
+
+The new three-point public-query regression failed with the old footprint and passes after expansion. It covers the recorded native endpoint, seed-42 live training point and kinetic crossing refusal. These now resolve as Regular at levels 8, 16 and 18 respectively. Seed 42's complete training smoke also passes through the rebuilt extension, in 12.02 seconds. This establishes progress at the recorded points, not trajectory-wide or general training acceptance.
+
+The native failure has a concrete coverage constraint. At level 8, the old square's maximum possible half-width is `0.095703125`, smaller than the roughly `0.1301` nearest-Shore distance even before adding the stencil margin. It cannot contain the query's distance neighborhood. An offline analytic main-cardioid comparison finds local minima at distances `0.130146833` and `0.130466164`, a gap of about `0.000319`. This is a diagnostic comparison with the cardioid boundary, not an independent exact-Mandelbrot acceptance rule. The expanded provider supplies the additional contour/refinement evidence under its existing gates.
+
+The unchanged native rollout gets past that endpoint, then refuses the next candidate `(0.21474166530729011,0.12774018997553147)` as Singular/CutLocus. Its requested scale is `0.01324554337`, resolved scale `0.00048828125`, and estimated error `0.000125463459`. Native crossing remains a blocker.
+
+Expanded refinement also changes the cache working set. The [provider-6 trace](validation/geometry-145-footprint-working-set.json) records 270 distinct tiles for the cut-locus stress query and 163, 161 and 210 for the repaired native, live-training and kinetic-crossing points. At 256 entries, replay misses all 270 tiles again on repeat; 384 and 512 both retain them. The final bound is 384, the smaller tested adequate capacity. This changes retention only. The existing eviction test still inserts more tiles than the actual capacity and passes with all 21 provider tests.
+
+Sampled retained tile payload at 256 entries was about 94 to 482 KiB across those cases. This counts tile structs and their allocated segment/unstable-node vectors, excluding keys, hash-map buckets, combined contours and temporary orbit states. The expansion ceiling grows from 49 to 121 tiles per level, about 2.47 times as many. Current-version timing and whole-process memory evidence is recorded separately from the historical provider-5 measurements below.
+
+The [final provider-6 cost report](validation/geometry-145-footprint-cost.json) uses the 384-entry executable, fresh processes and immediate repeats at epsilon `1e-4`. These samples were collected alongside acceptance work and are machine/load dependent.
+
+| Case | Classification | Cold / repeat milliseconds |
+|---|---|---:|
+| Cut-locus stress query | Singular | 5776.15 / 15.53 |
+| Recorded native endpoint | Regular | 1036.97 / 5.26 |
+| Recorded seed-42 live point | Regular | 1702.37 / 3.78 |
+| Recorded kinetic-crossing point | Regular | 987.99 / 3.94 |
+
+All 52 serialized jets exactly match between cache capacities 256 and 384. The retention correction removes the measured repeat thrashing; it does not recover the extra cold work introduced by broader refinement. Separate fresh-worker Windows samples peak at 5.0 to 6.4 MiB working set and 1.18 to 2.80 MiB commit across these four cases. These whole-process samples are not a worst-case memory bound.
+
+| Check | Footprint-repair result |
+|---|---|
+| Complete release Rust suite | 241 passed, 1 failed, 1 ignored with radius 5 and the initial 256-entry cache; all 33 snapshot integration tests pass, 660.44 seconds. The sole failure is the new native endpoint recorded above. |
+| Final 384-entry provider suite | All 21 tests pass, including the three-point regression, true singular/refusal coverage and capacity-relative eviction. These focused tests overlap the full Rust suite. |
+| Complete Python manifold-physics file | 26 passed, 1 failed with the rebuilt radius-5 extension at 256 entries. Energy tests pass; crossing reaches a new Unresolved point, detailed below. |
+| Final rebuilt 384-entry training validation | 9 passed across reset regressions, the complete Controls-v2 smoke file and both existing end-to-end workflows. Separate seed-42 and seed-123 smoke runs pass, 10.64 and 12.10 seconds respectively. Seeded runs repeat an existing test, not additional unique cases. |
+| Derivative diagnostic | Current-version report regenerated; explicit `--check` still fails all 8 inconsistent probes. |
+| Canonical preflight | All mandatory checks pass on the final rebuilt extension; manifold mirror maximum error `1.490e-8`. Goldens change only the controller stamp. |
+| Browser validation | 27 frontend files / 116 tests, final production build and final rebuilt real-WASM snapshot/startup contract pass. GPU checks pass 16 cases with maximum error `5.411e-8`, 262,144 vertices, 531,502 triangles and 1,000 updates. |
+| Structural checks and review | Architecture guardrail and canonical-surfaces gate pass. Provider Rust formatting and diff whitespace checks pass. Standards, Spec and Health Regression find no actionable source findings. |
+
+The Python crossing failure is now `(0.35659381055433242,0.06404656757776669)`, Unresolved at level 23, requested scale `1.00000152722e-5`, resolved scale `1.49011611938e-8`, estimated error infinity. The unchanged crossing test took 370.03 seconds and remains enabled. No complete provider-6 Python-suite result is claimed. The old provider-5 full run was stopped at 32% to rebuild this repair.
+
+At code commit `1e692d2`, [CI run 40044138353](https://github.com/rhythmatician/FractalSync/actions/runs/40044138353) passes Python/native and WASM builds and frontend checks. Separate type-check and generated-stub workflows pass. Rust CI reproduces the new native refusal. Backend CI and the artifacts job remain in progress at this checkpoint. These results do not establish merge acceptance.
+
+The generic [query report](validation/geometry-provider-145.json) now contains current provider-6 measurements. Earlier sections are historical checkpoints; the full provider-5 report is preserved in [commit f86cfaf](https://github.com/rhythmatician/FractalSync/blob/f86cfaf/docs/validation/geometry-provider-145.json).
+
 ## October 23 follow-up: orbit reuse and cache retention
 
 This performance change keeps `geometry-provider/5`, `orbit-controller/9`, all quality thresholds and both crossing assertions. It resumes each canonical critical orbit as the existing tile-certification budget doubles, rather than replaying its prefix. The construction states are discarded after each tile is generated. A deterministic work regression first counted 3,584 updates for budgets 512/1,024/2,048, then passed with exactly 2,048. A second regression compares 214 points at 12 increasing/decreasing budgets against the original evaluator, including escape cutoffs and nonfinite inputs.
 
 The bounded tile LRU now retains 256 entries instead of the initial plan's 64. A [trace replay](validation/geometry-145-cache-working-set.json) measured 103 distinct tiles for one cut-locus query and 134 for the live training refusal. At 64 entries, every repeated query missed all 103/134 tiles again. Even 128 entries thrashes on the latter case. This is evidence that the initial capacity is practically inadequate for these queries. The change increases retention, not membership budgets, footprint limits, refinement limits or acceptance tolerances. The eviction regression now generates more tiles than the configured capacity so it still exercises real eviction.
 
-All 44 matching jets in the pre-change report are identical after orbit reuse alone and after the cache increase, including floating-point values, scales, errors, classification and provenance. The [current report](validation/geometry-provider-145.json) adds the live training and kinetic crossing refusals: 13 cases at four epsilon values, 52 rows total. It checks strict Regular quality bounds and identical immediate-repeat jets.
+All 44 matching jets in the pre-change report are identical after orbit reuse alone and after the cache increase, including floating-point values, scales, errors, classification and provenance. The [provider-5 report at this checkpoint](https://github.com/rhythmatician/FractalSync/blob/f86cfaf/docs/validation/geometry-provider-145.json) adds the live training and kinetic crossing refusals: 13 cases at four epsilon values, 52 rows total. It checks strict Regular quality bounds and identical immediate-repeat jets.
 
 The [controlled cost report](validation/geometry-145-orbit-resume-cost.json) compares the baseline `30c9b9b`, orbit reuse with the old cache, and the final implementation. Each sample uses a fresh process followed by an immediate repeat, epsilon `1e-4`; the second repetition reverses variant order. Median times in milliseconds over two repetitions are:
 

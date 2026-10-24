@@ -1,6 +1,6 @@
 {
   "diagnostic_only": true,
-  "provider_version": "geometry-provider/5",
+  "provider_version": "geometry-provider/6",
   "epsilon": 0.0001,
   "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
   "rows": [
@@ -32,7 +32,7 @@
         "estimated_error": 2.7742650634397792e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:101:12:4.88e-4",
         "is_bridge": false
       },
@@ -97,7 +97,7 @@
         "estimated_error": 2.7742650634397792e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:101:12:4.88e-4",
         "is_bridge": false
       },
@@ -162,7 +162,7 @@
         "estimated_error": 2.7727579747532927e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:101:12:4.88e-4",
         "is_bridge": false
       },
@@ -227,7 +227,7 @@
         "estimated_error": 2.7727579747532927e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:101:12:4.88e-4",
         "is_bridge": false
       },
@@ -292,7 +292,7 @@
         "estimated_error": 6.106365434430105e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:76:13:4.88e-4",
         "is_bridge": false
       },
@@ -357,7 +357,7 @@
         "estimated_error": 6.106365434430105e-05,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:8:76:13:4.88e-4",
         "is_bridge": false
       },
@@ -422,7 +422,7 @@
         "estimated_error": 0.0002972549336971858,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:7:38:6:9.77e-4",
         "is_bridge": false
       },
@@ -487,7 +487,7 @@
         "estimated_error": 0.0002972549336971858,
         "validity": "regular",
         "singularity": "none",
-        "provider_version": "geometry-provider/5",
+        "provider_version": "geometry-provider/6",
         "tile_id": "scale-aware:7:38:6:9.77e-4",
         "is_bridge": false
       },
