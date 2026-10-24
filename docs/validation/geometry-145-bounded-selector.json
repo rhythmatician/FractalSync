@@ -1,0 +1,3443 @@
+{
+  "diagnostic_only": true,
+  "adopted": false,
+  "production_base": "d8ec37a",
+  "patch_composition_verified": true,
+  "patch_order": [
+    "geometry-145-component-nodes.patch",
+    "geometry-145-scale-component-levels.patch",
+    "geometry-145-bounded-selector.patch",
+    "geometry-145-shared-interval.patch",
+    "geometry-145-canonical-nodes.patch"
+  ],
+  "energy_variant": "Apply first three patches only. Full sweep belongs to bounded-selector before shared-interval/canonical-node changes.",
+  "bounded_skip_energy": {
+    "controller_version": "orbit-controller/10",
+    "diagnostic_only": true,
+    "limit": 0.05,
+    "provider_version": "geometry-provider/6",
+    "rows": [
+      {
+        "case": "low_curvature",
+        "completed": 150,
+        "dt": 0.002,
+        "error": null,
+        "max_excursion": 0.00023337093790476438,
+        "max_step_change": 1.8350395047939116e-06,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              -0.4919546346875556,
+              0.09880362520469112
+            ],
+            "jet": {
+              "D": -0.2462600118725182,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718970049817193,
+                0.23540648187257068
+              ],
+              "hessian_D": [
+                [
+                  0.13247445013205095,
+                  0.5469327823676835
+                ],
+                [
+                  0.5469327823676853,
+                  2.2580615851385346
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.02462600321762604,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.04396924620491805,
+              -0.008030289774135724
+            ]
+          },
+          "before": {
+            "c": [
+              -0.49204257317996547,
+              0.09881968578423939
+            ],
+            "jet": {
+              "D": -0.2461707639196086,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718998698437764,
+                0.23539465371507878
+              ],
+              "hessian_D": [
+                [
+                  0.1324328164199855,
+                  0.5467899761030228
+                ],
+                [
+                  0.5467899761030228,
+                  2.2575920841047052
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.024617078423071183,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.043729223827114555,
+              -0.007974043449290247
+            ]
+          }
+        },
+        "steps": 150
+      },
+      {
+        "case": "low_curvature",
+        "completed": 300,
+        "dt": 0.001,
+        "error": null,
+        "max_excursion": 0.00011670293058219094,
+        "max_step_change": 4.592098039601922e-07,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              -0.4919710577300352,
+              0.09880754687284855
+            ],
+            "jet": {
+              "D": -0.24624312718061203,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718970357251158,
+                0.23540635494559004
+              ],
+              "hessian_D": [
+                [
+                  0.13246895971781925,
+                  0.5469104265619169
+                ],
+                [
+                  0.546910426561916,
+                  2.257970576074184
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.024624314748574645,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.04397394049076793,
+              -0.008031117582373307
+            ]
+          },
+          "before": {
+            "c": [
+              -0.49201503167052596,
+              0.09881557799043093
+            ],
+            "jet": {
+              "D": -0.246198498454335,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718984684343033,
+                0.23540043979366942
+              ],
+              "hessian_D": [
+                [
+                  0.13244813928920962,
+                  0.5468390124824962
+                ],
+                [
+                  0.5468390124824953,
+                  2.2577357952188644
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.02461985187631502,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.043853872105011765,
+              -0.008002982975952996
+            ]
+          }
+        },
+        "steps": 300
+      },
+      {
+        "case": "low_curvature",
+        "completed": 600,
+        "dt": 0.0005,
+        "error": null,
+        "max_excursion": 5.835583024782487e-05,
+        "max_step_change": 1.1485882356332411e-07,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              -0.49197927021753624,
+              0.09880950787589651
+            ],
+            "jet": {
+              "D": -0.2462346838557734,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718970511314655,
+                0.23540629133901292
+              ],
+              "hessian_D": [
+                [
+                  0.13246621422975124,
+                  0.5468992477453734
+                ],
+                [
+                  0.546899247745376,
+                  2.257925069160266
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.024623470416160406,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.04397628866597168,
+              -0.008031531587215288
+            ]
+          },
+          "before": {
+            "c": [
+              -0.4920012583618692,
+              0.09881352364169012
+            ],
+            "jet": {
+              "D": -0.24621236830466653,
+              "estimated_error": 3.396234727763308e-11,
+              "grad_D": [
+                -0.9718977675556508,
+                0.23540333349455383
+              ],
+              "hessian_D": [
+                [
+                  0.13245580311433258,
+                  0.5468635379680364
+                ],
+                [
+                  0.5468635379680356,
+                  2.2578076711428787
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.024621238861233765,
+              "resolved_scale": 0.000244140625,
+              "singularity": "none",
+              "tile_id": "component:11",
+              "validity": "regular"
+            },
+            "v": [
+              0.043916240142809496,
+              -0.008017461416699394
+            ]
+          }
+        },
+        "steps": 600
+      },
+      {
+        "case": "high_curvature",
+        "completed": 150,
+        "dt": 0.002,
+        "error": null,
+        "max_excursion": 0.0007316262142542662,
+        "max_step_change": 0.0004735100894353028,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.40005254437338095,
+              0.052346361036568916
+            ],
+            "jet": {
+              "D": 0.04079230844649488,
+              "estimated_error": 5.6439946866271296e-05,
+              "grad_D": [
+                0.9190061704776713,
+                -0.46908456944559856
+              ],
+              "hessian_D": [
+                [
+                  -77.81800788436078,
+                  -64.76355432908053
+                ],
+                [
+                  -64.76355432908053,
+                  -35.41520055255921
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.004079243101843745,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.0011174165232121433,
+              0.01842155227846605
+            ]
+          },
+          "before": {
+            "c": [
+              0.40005030954033455,
+              0.05230951793201198
+            ],
+            "jet": {
+              "D": 0.0408074713657089,
+              "estimated_error": 5.811166068071111e-05,
+              "grad_D": [
+                0.9240127513439687,
+                -0.4648559374097503
+              ],
+              "hessian_D": [
+                [
+                  -189.99088108823344,
+                  -191.85192230692155
+                ],
+                [
+                  -191.85192230692155,
+                  -172.70185451773932
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0040807593892107285,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.0010118247437755341,
+              0.018488937749079466
+            ]
+          }
+        },
+        "steps": 150
+      },
+      {
+        "case": "high_curvature",
+        "completed": 300,
+        "dt": 0.001,
+        "error": null,
+        "max_excursion": 0.0003890231428258506,
+        "max_step_change": 0.0001320537374405184,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.4000521628270761,
+              0.052347163820331694
+            ],
+            "jet": {
+              "D": 0.04079158123248495,
+              "estimated_error": 5.6396669198668925e-05,
+              "grad_D": [
+                0.9189840701705132,
+                -0.469087770317458
+              ],
+              "hessian_D": [
+                [
+                  -76.47755488745213,
+                  -63.633935043749034
+                ],
+                [
+                  -63.633935043749034,
+                  -33.58119430717045
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.004079170380661266,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.0011297578568981587,
+              0.018416801296184743
+            ]
+          },
+          "before": {
+            "c": [
+              0.40005103306921924,
+              0.05232874701903551
+            ],
+            "jet": {
+              "D": 0.04079917052322173,
+              "estimated_error": 5.725741240048682e-05,
+              "grad_D": [
+                0.9208294358099586,
+                -0.46769382363279915
+              ],
+              "hessian_D": [
+                [
+                  -136.87646272708412,
+                  -125.59098877344672
+                ],
+                [
+                  -125.59098877344672,
+                  -106.82309737980086
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00407992930745488,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.0010918390212651015,
+              0.018443157093337065
+            ]
+          }
+        },
+        "steps": 300
+      },
+      {
+        "case": "high_curvature",
+        "completed": 600,
+        "dt": 0.0005,
+        "error": null,
+        "max_excursion": 0.00019481440771929037,
+        "max_step_change": 3.314567704970628e-05,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.40005140415267265,
+              0.05233835760937745
+            ],
+            "jet": {
+              "D": 0.040795012645022555,
+              "estimated_error": 5.6809816062604324e-05,
+              "grad_D": [
+                0.9197381039282387,
+                -0.46857912519273814
+              ],
+              "hessian_D": [
+                [
+                  -105.82779003054179,
+                  -92.50552383866852
+                ],
+                [
+                  -92.50552383866852,
+                  -68.89045704860564
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0040795135208840155,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.0011201288328128304,
+              0.018426024983619352
+            ]
+          },
+          "before": {
+            "c": [
+              0.40005084408825625,
+              0.052329144596885646
+            ],
+            "jet": {
+              "D": 0.04079881055783887,
+              "estimated_error": 5.7236300043762844e-05,
+              "grad_D": [
+                0.9208054705486883,
+                -0.4677124652826353
+              ],
+              "hessian_D": [
+                [
+                  -136.28399599750605,
+                  -124.80829502109009
+                ],
+                [
+                  -124.80829502109009,
+                  -105.97389003186004
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.004079893311024719,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3277:428:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              0.001101256378361181,
+              0.018439154791244406
+            ]
+          }
+        },
+        "steps": 600
+      },
+      {
+        "case": "near_shore",
+        "completed": 100,
+        "dt": 0.002,
+        "error": null,
+        "max_excursion": 0.001744422968623205,
+        "max_step_change": 1.8338951109253543e-05,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.300114054132725,
+              0.05461779336151382
+            ],
+            "jet": {
+              "D": -0.020242631717889155,
+              "estimated_error": 4.4835718007597955e-13,
+              "grad_D": [
+                0.7475656462153725,
+                -0.6641879286763839
+              ],
+              "hessian_D": [
+                [
+                  2.674717247780677,
+                  3.010483172445788
+                ],
+                [
+                  3.010483172445788,
+                  3.388399213916216
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.002024287871983854,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.0012837707287294165,
+              0.026433842798007735
+            ]
+          },
+          "before": {
+            "c": [
+              0.3001114865912676,
+              0.0545649256759178
+            ],
+            "jet": {
+              "D": -0.020209431892835722,
+              "estimated_error": 4.483558683198502e-13,
+              "grad_D": [
+                0.7473996046963098,
+                -0.664374766903491
+              ],
+              "hessian_D": [
+                [
+                  2.6765494257130626,
+                  3.011029228623727
+                ],
+                [
+                  3.011029228623727,
+                  3.3873082664096614
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.002020967930055214,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.0012659188570960699,
+              0.026359591846932623
+            ]
+          }
+        },
+        "steps": 100
+      },
+      {
+        "case": "near_shore",
+        "completed": 200,
+        "dt": 0.001,
+        "error": null,
+        "max_excursion": 0.000872961649132975,
+        "max_step_change": 4.5902068164238585e-06,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3001136923564001,
+              0.05461510583675243
+            ],
+            "jet": {
+              "D": -0.020241117132597856,
+              "estimated_error": 4.4835718007597955e-13,
+              "grad_D": [
+                0.7475565877516228,
+                -0.6641981241393204
+              ],
+              "hessian_D": [
+                [
+                  2.674822002829842,
+                  3.0105184140605274
+                ],
+                [
+                  3.0105184140605843,
+                  3.3883458068078767
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.002024136415302947,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.0012871497931711176,
+              0.026439730236129343
+            ]
+          },
+          "before": {
+            "c": [
+              0.3001124052066069,
+              0.0545886661065163
+            ],
+            "jet": {
+              "D": -0.020224516841743014,
+              "estimated_error": 4.4835614861461507e-13,
+              "grad_D": [
+                0.7474735433555438,
+                -0.6642915790393529
+              ],
+              "hessian_D": [
+                [
+                  2.675738544762055,
+                  3.0107917577420835
+                ],
+                [
+                  3.0107917577421404,
+                  3.387800149075872
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.002022476406492661,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.001278182653754351,
+              0.026402538907627282
+            ]
+          }
+        },
+        "steps": 200
+      },
+      {
+        "case": "near_shore",
+        "completed": 400,
+        "dt": 0.0005,
+        "error": null,
+        "max_excursion": 0.00043666847443724066,
+        "max_step_change": 1.148235383219287e-06,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3001135110226344,
+              0.054613760995976084
+            ],
+            "jet": {
+              "D": -0.020240359445285887,
+              "estimated_error": 4.4835718007597955e-13,
+              "grad_D": [
+                0.7475520540315352,
+                -0.6642032268171965
+              ],
+              "hessian_D": [
+                [
+                  2.674874440056044,
+                  3.010536060619131
+                ],
+                [
+                  3.010536060619131,
+                  3.3883190822076017
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0020240606474964474,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.0012888457008409105,
+              0.02644267983355433
+            ]
+          },
+          "before": {
+            "c": [
+              0.300112866599784,
+              0.05460053965605931
+            ],
+            "jet": {
+              "D": -0.020232059205932178,
+              "estimated_error": 4.4836126478020317e-13,
+              "grad_D": [
+                0.7475105259086575,
+                -0.664249963234304
+              ],
+              "hessian_D": [
+                [
+                  2.675332767296368,
+                  3.0106728446861553
+                ],
+                [
+                  3.0106728446860984,
+                  3.3880462275733976
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00202323063369539,
+              "resolved_scale": 3.0517578125e-05,
+              "singularity": "none",
+              "tile_id": "component:14",
+              "validity": "regular"
+            },
+            "v": [
+              0.0012843517794546365,
+              0.026424067664512794
+            ]
+          }
+        },
+        "steps": 400
+      },
+      {
+        "case": "inward",
+        "completed": 100,
+        "dt": 0.005,
+        "error": null,
+        "max_excursion": 0.002803661452436934,
+        "max_step_change": 6.05500376520407e-05,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.39985081886280005,
+              0.050000102858810534
+            ],
+            "jet": {
+              "D": 0.04172485542010754,
+              "estimated_error": 0.00012572581327726512,
+              "grad_D": [
+                0.935767165014782,
+                -0.509917398393684
+              ],
+              "hessian_D": [
+                [
+                  14.611255078309796,
+                  1.8203674485177714
+                ],
+                [
+                  1.8203674485177714,
+                  27.504742056592917
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.004172497525258556,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3275:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.029836227439990454,
+              2.057176210601771e-05
+            ]
+          },
+          "before": {
+            "c": [
+              0.4,
+              0.05
+            ],
+            "jet": {
+              "D": 0.04186466803069709,
+              "estimated_error": 0.00013363431304921902,
+              "grad_D": [
+                0.9379223745199605,
+                -0.5096419550713494
+              ],
+              "hessian_D": [
+                [
+                  14.284031597128262,
+                  1.911044617704448
+                ],
+                [
+                  1.911044617704448,
+                  27.439494156855147
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00418647874629798,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3276:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.03,
+              0.0
+            ]
+          }
+        },
+        "steps": 100
+      },
+      {
+        "case": "inward",
+        "completed": 200,
+        "dt": 0.0025,
+        "error": null,
+        "max_excursion": 0.0014000500483979383,
+        "max_step_change": 1.520674062316374e-05,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.39992520471570003,
+              0.050000025714702634
+            ],
+            "jet": {
+              "D": 0.04179454286008485,
+              "estimated_error": 0.0001296446805125473,
+              "grad_D": [
+                0.9368478674066245,
+                -0.5097824569799561
+              ],
+              "hessian_D": [
+                [
+                  14.448936432186542,
+                  1.8649993534425562
+                ],
+                [
+                  1.8649993534425562,
+                  27.472867203587242
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0041794662492757005,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3276:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.029918113719995226,
+              1.0285881053008856e-05
+            ]
+          },
+          "before": {
+            "c": [
+              0.4,
+              0.05
+            ],
+            "jet": {
+              "D": 0.04186466803069709,
+              "estimated_error": 0.00013363431304921902,
+              "grad_D": [
+                0.9379223745199605,
+                -0.5096419550713494
+              ],
+              "hessian_D": [
+                [
+                  14.284031597128262,
+                  1.911044617704448
+                ],
+                [
+                  1.911044617704448,
+                  27.439494156855147
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00418647874629798,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3276:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.03,
+              0.0
+            ]
+          }
+        },
+        "steps": 200
+      },
+      {
+        "case": "inward",
+        "completed": 400,
+        "dt": 0.00125,
+        "error": null,
+        "max_excursion": 0.0006989299468287413,
+        "max_step_change": 3.81030059659615e-06,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.39996255117892504,
+              0.050000006428675664
+            ],
+            "jet": {
+              "D": 0.041829550702165645,
+              "estimated_error": 0.00013163065272819852,
+              "grad_D": [
+                0.9373859154859612,
+                -0.5097129097701523
+              ],
+              "hessian_D": [
+                [
+                  14.3668015455616,
+                  1.8878489154630245
+                ],
+                [
+                  1.8878489154630245,
+                  27.45636616740711
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.004182967023471553,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3276:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.029959056859997613,
+              5.142940526504428e-06
+            ]
+          },
+          "before": {
+            "c": [
+              0.4,
+              0.05
+            ],
+            "jet": {
+              "D": 0.04186466803069709,
+              "estimated_error": 0.00013363431304921902,
+              "grad_D": [
+                0.9379223745199605,
+                -0.5096419550713494
+              ],
+              "hessian_D": [
+                [
+                  14.284031597128262,
+                  1.911044617704448
+                ],
+                [
+                  1.911044617704448,
+                  27.439494156855147
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00418647874629798,
+              "resolved_scale": 6.103515625e-05,
+              "singularity": "none",
+              "tile_id": "scale-aware:13:3276:409:1.53e-5",
+              "validity": "regular"
+            },
+            "v": [
+              -0.03,
+              0.0
+            ]
+          }
+        },
+        "steps": 400
+      }
+    ]
+  },
+  "bounded_skip_energy_status": {
+    "exit_code": 0,
+    "elapsed_s": 1091.9722027000971,
+    "timed_out": false,
+    "timeout_s": 1200
+  },
+  "canonical_targeted_tests": {
+    "passed": 26,
+    "failed": 0
+  },
+  "canonical_derivative_command": "geometry_derivative_report_canonical_nodes.exe --check",
+  "standalone_distance_enclosure_tests": {
+    "passed": 6,
+    "failed": 0,
+    "integrated": false
+  },
+  "bounded_selector_mutation_red": "\nrunning 1 test\n\nthread 'geometry_provider::bounded_selector_tests::independently_bounded_one_can_discard_an_uncertified_coarse_model' (35460) panicked at runtime-core\\src\\geometry_provider.rs:3236:3:\nassertion failed: bounded.closed && bounded.certified\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\ntest geometry_provider::bounded_selector_tests::independently_bounded_one_can_discard_an_uncertified_coarse_model ... FAILED\n\nfailures:\n\nfailures:\n    geometry_provider::bounded_selector_tests::independently_bounded_one_can_discard_an_uncertified_coarse_model\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 105 filtered out; finished in 0.00s\n\n",
+  "recorded_driven_point": {
+    "c": [
+      0.3204608360518178,
+      0.04736134021833255
+    ],
+    "passed": true,
+    "variant": "shared interval with query-source reuse"
+  },
+  "crossing_status": {
+    "geometry-145-bounded-selector-crossing": {
+      "elapsed_s": 1200.0141265999991,
+      "timed_out": true,
+      "timeout_s": 1200
+    },
+    "geometry-145-bounded-skip-crossing": {
+      "elapsed_s": 1200.016440599924,
+      "timed_out": true,
+      "timeout_s": 1200
+    },
+    "geometry-145-bounded-crossing-trace": {
+      "elapsed_s": 1200.036102800048,
+      "timed_out": true,
+      "timeout_s": 1200
+    },
+    "geometry-145-bounded-skip-python": {
+      "elapsed_s": 180.1115901999874,
+      "timed_out": true
+    }
+  },
+  "last_traced_query": [
+    0.3204998863980762,
+    0.04733531447355364
+  ],
+  "open": [
+    "Full native and Python crossing completion",
+    "Training point refusal",
+    "Certified analytic feature exclusion and integrating root-free distance enclosure",
+    "Latest canonical-node derivative and energy validation",
+    "Cache context and eviction validation",
+    "Full production gates after any adoption"
+  ],
+  "bounded-skip_derivatives_status": {
+    "exit_code": 0,
+    "elapsed_s": 19.600926999934018,
+    "timed_out": false
+  },
+  "bounded-skip_derivatives": {
+    "diagnostic_only": true,
+    "provider_version": "geometry-provider/6",
+    "epsilon": 0.0001,
+    "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+    "rows": [
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263511802401,
+            "gradient_derivative": [
+              12.360940609745796,
+              8.041270527670008
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075992007931,
+            "gradient_derivative": [
+              8.041270217806762,
+              22.5471708375502
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263503232867,
+            "gradient_derivative": [
+              12.360941220035393,
+              8.04127004316868
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075988052761,
+            "gradient_derivative": [
+              8.041270040393123,
+              22.547170885900414
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963786995358,
+            "gradient_derivative": [
+              11.665523949655476,
+              8.672406777154862
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325246092258,
+            "gradient_derivative": [
+              8.672406451526449,
+              22.088567521172386
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963777246212,
+            "gradient_derivative": [
+              11.665524584647535,
+              8.67240626978294
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325241235032,
+            "gradient_derivative": [
+              8.672406267007382,
+              22.08856757057731
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440492699722218,
+            "gradient_derivative": [
+              2.7132028434517785,
+              3.0215262369348572
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.668124751680016,
+            "gradient_derivative": [
+              3.0215262369903684,
+              3.3648873869474016
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.744049270008651,
+            "gradient_derivative": [
+              2.7132028435072897,
+              3.0215262369903684
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6681247517043021,
+            "gradient_derivative": [
+              3.0215262358801454,
+              3.364887387058424
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880868837124,
+            "gradient_derivative": [
+              2.7127783406299955,
+              3.0214069083323025
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211584229,
+            "gradient_derivative": [
+              3.0214069082767914,
+              3.3651474391493963
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880869270805,
+            "gradient_derivative": [
+              2.7127783402969285,
+              3.0214069091094586
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211636271,
+            "gradient_derivative": [
+              3.0214069079992356,
+              3.365147439038374
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992133087693,
+            "gradient_derivative": [
+              0.128114720387984,
+              0.532925520102534
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968384421406,
+            "gradient_derivative": [
+              0.5329255202690675,
+              2.2168382166065648
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992129479469,
+            "gradient_derivative": [
+              0.12811471994389478,
+              0.5329255198249783
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968371931397,
+            "gradient_derivative": [
+              0.5329255192698668,
+              2.2168382168841205
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.8161294050533507,
+            "gradient_derivative": [
+              9.904333468480075,
+              13.980592337092812
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445642153074,
+            "gradient_derivative": [
+              13.980592327600405,
+              19.752026950425883
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.816129405202537,
+            "gradient_derivative": [
+              9.90433346004238,
+              13.980592334927877
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445643853103,
+            "gradient_derivative": [
+              13.980592336593212,
+              19.752026945152323
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "shared-interval_derivatives_status": {
+    "exit_code": 0,
+    "elapsed_s": 15.280501000001095,
+    "timed_out": false
+  },
+  "shared-interval_derivatives": {
+    "diagnostic_only": true,
+    "provider_version": "geometry-provider/6",
+    "epsilon": 0.0001,
+    "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+    "rows": [
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263511802401,
+            "gradient_derivative": [
+              12.360940609745796,
+              8.041270527670008
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075992007931,
+            "gradient_derivative": [
+              8.041270217806762,
+              22.5471708375502
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263503232867,
+            "gradient_derivative": [
+              12.360941220035393,
+              8.04127004316868
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075988052761,
+            "gradient_derivative": [
+              8.041270040393123,
+              22.547170885900414
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963786995358,
+            "gradient_derivative": [
+              11.665523949655476,
+              8.672406777154862
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325246092258,
+            "gradient_derivative": [
+              8.672406451526449,
+              22.088567521172386
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963777246212,
+            "gradient_derivative": [
+              11.665524584647535,
+              8.67240626978294
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325241235032,
+            "gradient_derivative": [
+              8.672406267007382,
+              22.08856757057731
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440492699722218,
+            "gradient_derivative": [
+              2.7132028434517785,
+              3.0215262369348572
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.668124751680016,
+            "gradient_derivative": [
+              3.0215262369903684,
+              3.3648873869474016
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.744049270008651,
+            "gradient_derivative": [
+              2.7132028435072897,
+              3.0215262369903684
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6681247517043021,
+            "gradient_derivative": [
+              3.0215262358801454,
+              3.364887387058424
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880868837124,
+            "gradient_derivative": [
+              2.7127783406299955,
+              3.0214069083323025
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211584229,
+            "gradient_derivative": [
+              3.0214069082767914,
+              3.3651474391493963
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880869270805,
+            "gradient_derivative": [
+              2.7127783402969285,
+              3.0214069091094586
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211636271,
+            "gradient_derivative": [
+              3.0214069079992356,
+              3.365147439038374
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992133087693,
+            "gradient_derivative": [
+              0.128114720387984,
+              0.532925520102534
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968384421406,
+            "gradient_derivative": [
+              0.5329255202690675,
+              2.2168382166065648
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992129479469,
+            "gradient_derivative": [
+              0.12811471994389478,
+              0.5329255198249783
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968371931397,
+            "gradient_derivative": [
+              0.5329255192698668,
+              2.2168382168841205
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.8161294050533507,
+            "gradient_derivative": [
+              9.904333468480075,
+              13.980592337092812
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445642153074,
+            "gradient_derivative": [
+              13.980592327600405,
+              19.752026950425883
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.816129405202537,
+            "gradient_derivative": [
+              9.90433346004238,
+              13.980592334927877
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445643853103,
+            "gradient_derivative": [
+              13.980592336593212,
+              19.752026945152323
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "canonical_derivatives_status": {
+    "exit_code": 0,
+    "elapsed_s": 75.81176850001793,
+    "timed_out": false
+  },
+  "canonical_derivatives": {
+    "diagnostic_only": true,
+    "provider_version": "geometry-provider/6",
+    "epsilon": 0.0001,
+    "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+    "rows": [
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263511802401,
+            "gradient_derivative": [
+              12.360940609745796,
+              8.041270527670008
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075992007931,
+            "gradient_derivative": [
+              8.041270217806762,
+              22.5471708375502
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_before",
+        "c": [
+          0.39494073887023606,
+          0.04996931486326729
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.037347812483652515,
+          "grad_D": [
+            0.8543263502445528,
+            -0.524007598771997
+          ],
+          "hessian_D": [
+            [
+              12.360941226469258,
+              8.04127003844114
+            ],
+            [
+              8.041270038441137,
+              22.547170886631847
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.003734794636006203,
+          "estimated_error": 8.15692112167421e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6470:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8543263503232867,
+            "gradient_derivative": [
+              12.360941220035393,
+              8.04127004316868
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5240075988052761,
+            "gradient_derivative": [
+              8.041270040393123,
+              22.547170885900414
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963786995358,
+            "gradient_derivative": [
+              11.665523949655476,
+              8.672406777154862
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325246092258,
+            "gradient_derivative": [
+              8.672406451526449,
+              22.088567521172386
+            ]
+          }
+        ]
+      },
+      {
+        "case": "inward_after",
+        "c": [
+          0.3948230501337527,
+          0.0499674412699672
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03724833555761885,
+          "grad_D": [
+            0.852896377688193,
+            -0.5250325241529211
+          ],
+          "hessian_D": [
+            [
+              11.665524590938752,
+              8.672406264900886
+            ],
+            [
+              8.672406264900879,
+              22.088567570463795
+            ]
+          ],
+          "resolved_scale": 6.103515625e-05,
+          "requested_scale": 0.0037248469791562886,
+          "estimated_error": 9.880031280537493e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6468:818:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": 0.8528963777246212,
+            "gradient_derivative": [
+              11.665524584647535,
+              8.67240626978294
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              6.103515625e-05,
+              6.103515625e-05
+            ],
+            "distance_derivative": -0.5250325241235032,
+            "gradient_derivative": [
+              8.672406267007382,
+              22.08856757057731
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440492699722218,
+            "gradient_derivative": [
+              2.7132028434517785,
+              3.0215262369348572
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.668124751680016,
+            "gradient_derivative": [
+              3.0215262369903684,
+              3.3648873869474016
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_before",
+        "c": [
+          0.30007240651412576,
+          0.05348910097156354
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.01952180482677382,
+          "grad_D": [
+            0.7440492699996565,
+            -0.6681247516820218
+          ],
+          "hessian_D": [
+            [
+              2.7132028432586583,
+              3.0215262365703768
+            ],
+            [
+              3.0215262365703763,
+              3.364887387190951
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019522060948953355,
+          "estimated_error": 5.610463629222058e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.744049270008651,
+            "gradient_derivative": [
+              2.7132028435072897,
+              3.0215262369903684
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6681247517043021,
+            "gradient_derivative": [
+              3.0215262358801454,
+              3.364887387058424
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880868837124,
+            "gradient_derivative": [
+              2.7127783406299955,
+              3.0214069083323025
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211584229,
+            "gradient_derivative": [
+              3.0214069082767914,
+              3.3651474391493963
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_after",
+        "c": [
+          0.3000728655316197,
+          0.05350153585945869
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.019529771073840737,
+          "grad_D": [
+            0.744088086907672,
+            -0.6680815211619134
+          ],
+          "hessian_D": [
+            [
+              2.7127783402992285,
+              3.021406908427974
+            ],
+            [
+              3.021406908427974,
+              3.365147438815679
+            ]
+          ],
+          "resolved_scale": 1.52587890625e-05,
+          "requested_scale": 0.0019530027091548706,
+          "estimated_error": 5.610620055854939e-14,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:15",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": 0.7440880869270805,
+            "gradient_derivative": [
+              2.7127783402969285,
+              3.0214069091094586
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              1.52587890625e-05,
+              1.52587890625e-05
+            ],
+            "distance_derivative": -0.6680815211636271,
+            "gradient_derivative": [
+              3.0214069079992356,
+              3.365147439038374
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992133087693,
+            "gradient_derivative": [
+              0.128114720387984,
+              0.532925520102534
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968384421406,
+            "gradient_derivative": [
+              0.5329255202690675,
+              2.2168382166065648
+            ]
+          }
+        ]
+      },
+      {
+        "case": "regular_tile_boundary",
+        "c": [
+          -0.5,
+          0.1
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": -0.23815848417896582,
+          "grad_D": [
+            -0.9722992133095261,
+            0.23373968383153654
+          ],
+          "hessian_D": [
+            [
+              0.1281147201091244,
+              0.5329255200788632
+            ],
+            [
+              0.5329255200788641,
+              2.2168382166130964
+            ]
+          ],
+          "resolved_scale": 0.000244140625,
+          "requested_scale": 0.02381585051733881,
+          "estimated_error": 3.2716194793138884e-11,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "component:11",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": -0.9722992129479469,
+            "gradient_derivative": [
+              0.12811471994389478,
+              0.5329255198249783
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              0.000244140625,
+              0.000244140625
+            ],
+            "distance_derivative": 0.23373968371931397,
+            "gradient_derivative": [
+              0.5329255192698668,
+              2.2168382168841205
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-06,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.8161294050533507,
+            "gradient_derivative": [
+              9.904333468480075,
+              13.980592337092812
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445642153074,
+            "gradient_derivative": [
+              13.980592327600405,
+              19.752026950425883
+            ]
+          }
+        ]
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "c": [
+          0.390625,
+          0.05
+        ],
+        "step": 1e-07,
+        "center": {
+          "D": 0.03372576179247228,
+          "grad_D": [
+            0.8161294051952259,
+            -0.5778445643869397
+          ],
+          "hessian_D": [
+            [
+              9.904333458657334,
+              13.980592335494748
+            ],
+            [
+              13.980592335494748,
+              19.75202694468546
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0033725910046766465,
+          "estimated_error": 1.1435276247306891e-06,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:14:6400:819:7.63e-6",
+          "is_bridge": false
+        },
+        "axes": [
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": 0.816129405202537,
+            "gradient_derivative": [
+              9.90433346004238,
+              13.980592334927877
+            ]
+          },
+          {
+            "validities": [
+              "regular",
+              "regular"
+            ],
+            "resolved_scales": [
+              3.0517578125e-05,
+              3.0517578125e-05
+            ],
+            "distance_derivative": -0.5778445643853103,
+            "gradient_derivative": [
+              13.980592336593212,
+              19.752026945152323
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
