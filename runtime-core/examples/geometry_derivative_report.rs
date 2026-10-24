@@ -73,6 +73,21 @@ fn consistent(probe: &Probe) -> bool {
 }
 
 fn main() -> Result<(), String> {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    let mut selected_case = None;
+    let mut check = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--check" => check = true,
+            "--case" => {
+                index += 1;
+                selected_case = Some(args.get(index).ok_or("--case requires a name")?.as_str());
+            }
+            other => return Err(format!("unknown argument: {other}")),
+        }
+        index += 1;
+    }
     let mut rows = Vec::new();
     for (case, c) in [
         (
@@ -91,7 +106,12 @@ fn main() -> Result<(), String> {
             "near_shore_after",
             Complex64::new(0.3000728655316197, 0.05350153585945869),
         ),
+        ("regular_tile_boundary", Complex64::new(-0.5, 0.1)),
+        ("near_shore_tile_boundary", Complex64::new(0.390625, 0.05)),
     ] {
+        if selected_case.is_some_and(|selected| selected != case) {
+            continue;
+        }
         for step in [1e-6, 1e-7] {
             rows.push(Probe {
                 case,
@@ -101,6 +121,12 @@ fn main() -> Result<(), String> {
                 axes: [axis_probe(c, step, 0)?, axis_probe(c, step, 1)?],
             });
         }
+    }
+    if rows.is_empty() {
+        return Err(format!(
+            "unknown case: {}",
+            selected_case.unwrap_or_default()
+        ));
     }
     let failures = rows.iter().filter(|probe| !consistent(probe)).count();
     let report = Report {
@@ -115,7 +141,7 @@ fn main() -> Result<(), String> {
         "{}",
         serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
     );
-    if std::env::args().any(|arg| arg == "--check") && failures > 0 {
+    if check && failures > 0 {
         return Err(format!(
             "{failures} derivative probes disagree; see JSON report"
         ));

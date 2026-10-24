@@ -2,6 +2,73 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 follow-up: coherent scalar-field experiment
+
+The new candidate evaluates a globally anchored tensor quintic B-spline scalar field at each dyadic level. It accumulates scalar corrections through C2 refinement weights and differentiates the complete expression, including those weights, to obtain `D`, `grad_D` and `H_D`. This addresses the earlier moving-fit derivative mismatch and the discontinuous choice of accepted resolution. It is an **unshipped experiment**, not a replacement for provider 6. No production math, golden vector, quality threshold or crossing test changed. **PR #148 remains blocked.**
+
+The [experimental patch](validation/experiments/geometry-145-coherent-field.patch) preserves the radius-6 candidate against the provider source at `00da849`. Its [measurements](validation/geometry-145-coherent-field-experiment.json) include the alternative radius, refinement, error-weight and membership-budget runs. The patch retains baseline version stamps only to compare diagnostics; these stamps do not identify released experimental semantics. It must not be applied to the shipping branch without resolving the failures, adding production regression coverage, bumping versions and rebuilding parity artifacts.
+
+### What improved
+
+The initial eight public-query derivative probes all pass with the scalar-field candidate. Extending the report to twelve probes adds exact dyadic tile boundaries. The radius-12 replay passes ten; both probes at `(0.390625, 0.05)` are Unresolved, so the diagnostic correctly rejects them even though their finite-difference residuals are small. A single case can now be replayed with `--case NAME`; unknown arguments and case names fail explicitly. All derivative tolerances are unchanged.
+
+| Near-Shore timestep | Default excursion / largest change | Scalar-field excursion / largest change |
+|---|---:|---:|
+| 0.002 | 0.0217245 / 0.0246512 | 0.00694309 / 0.000933209 |
+| 0.001 | 0.0224304 / 0.0244727 | 0.00348478 / 0.000235352 |
+| 0.0005 | 0.0228863 / 0.0243545 | 0.00174712 / 0.0000589647 |
+
+All three candidate near-Shore rollouts complete under the unchanged 0.05 limits. Their excursion approximately halves and largest step approximately quarters as the timestep halves. The three high-curvature rollouts also pass. The recorded live-training point is Regular under the candidate with error about `1.149e-7`; this is a point query, not a live training acceptance run.
+
+### Why it cannot ship
+
+The inward rollouts stop after 73/100, 146/200 and 292/400 steps. Their energy errors decrease under timestep refinement up to refusal, but incomplete trajectories fail acceptance. The coarse-timestep refusal is now a named provider-report sample, `coherent_field_inward_refusal`, at `(0.39113334515997950, 0.04985151190569804)`.
+
+The trace separates early field termination from subsequent contour changes:
+
+| Level | Raw distance | Accumulated scalar distance | State |
+|---|---:|---:|---|
+| 7 | 0.0389900609 | 0.0389900609 | Refining |
+| 8 | 0.0390164990 | 0.0390164990 | Refining |
+| 9 | 0.0374549954 | 0.0390164989 | Representation stopped adding corrections |
+| 10 | 0.0366274154 | 0.0390164989 | Scalar/raw discrepancy about 0.00238908 |
+
+The output discrepancy exceeds the unchanged error bound. Agreement of levels 7 and 8 did not predict the later contour displacement. The output remains refused; accepting the earlier pair as sufficient for this field would hide the unresolved discrepancy. The restored default provider accepts this same coordinate as Regular at level 8, distance `0.0390165011`, with estimated error only `2.71734e-5`. Its strict reported gates pass, but the deeper candidate contour evidence shows that this first-pair agreement is not persistent. This is additional evidence of numerical false convergence, not an exact-distance certificate for the finer contour.
+
+The controlled alternatives did not repair this:
+
+- Expanding from radius 6 to 12 gives the same inward completion counts.
+- Resolving the representation twice as finely makes even the initial inward state Unresolved.
+- Keeping refinement active using a differentiable coarse/fine distance-disagreement weight also refuses the initial inward state and fails four of twelve derivative probes. It was not adopted.
+- Using a common 16,384-to-32,768 membership comparison for every tile gives exactly the same inward and near-Shore energy results as the original candidate. It does not explain this refusal. The iteration cap was unchanged.
+
+A viable replacement still needs a coherent refinement rule with sufficient contour and membership evidence throughout its active support. Tile coefficient consistency, uncertainty cancellation and active-level provenance also need production tests before adoption. Local derivative agreement alone does not establish those properties. The production source was restored byte for byte after every prototype build.
+
+Reproduce the archived candidate only in an isolated checkout whose provider source matches `00da849`:
+
+```text
+rtk git apply --check docs/validation/experiments/geometry-145-coherent-field.patch
+rtk git apply docs/validation/experiments/geometry-145-coherent-field.patch
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_energy_report -- --case inward --check
+```
+
+The expected verdict is failure. The experiment is retained to make the next refinement investigation reproducible, not to bypass acceptance.
+
+Fresh checks on the restored default provider:
+
+| Check | Result |
+|---|---|
+| Original native crossing | Same CutLocus refusal at `(0.21474166530729011, 0.12774018997553147)`, 18.37 seconds |
+| Complete original Python manifold-physics file | 26 passed, 1 failed; same Unresolved crossing endpoint `(0.35659381055433242, 0.06404656757776669)` at level 23 |
+| Expanded derivative diagnostic | All 12 probes fail; unchanged tolerances |
+| Near-Shore energy diagnostic | All three rollouts complete under unchanged 0.05 limits; recorded nonvanishing jumps reproduce exactly |
+| New inward point sample | Repeat determinism and strict Regular gates pass |
+| Diagnostic CLI | Selected case emits exactly two probes; missing case values, unknown cases and unknown arguments fail |
+| Build and source checks | All three release examples build; Rust formatting, patch applicability and diff whitespace pass; production source, goldens and both crossing test sources have no diff |
+| Independent review | No actionable Standards, Spec or Health Regression findings in this follow-up; variant measurements beyond the radius-6 patch are not independently archived implementations |
+
+
 ## October 23 investigation: new refusals and distance-field coherence
 
 Production geometry remains `geometry-provider/6`, `orbit-controller/10` and `debug-snapshot/5`. No production math, golden vector, quality threshold or crossing assertion changes in this investigation. **PR #148 is not ready to merge.** The current query report has 60 rows, adding the two new refusal coordinates at four epsilon values. All 52 matching serialized jets are exactly unchanged from the previous report.

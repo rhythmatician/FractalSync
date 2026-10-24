@@ -34,6 +34,10 @@ fn main() {
             Complex64::new(0.3948230501337527, 0.0499674412699672),
         ),
         (
+            "coherent_field_inward_refusal",
+            Complex64::new(0.39113334515997950, 0.04985151190569804),
+        ),
+        (
             "live_training_refusal",
             Complex64::new(0.30752043982706229, 0.02876420131721053),
         ),

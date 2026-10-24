@@ -1,0 +1,1086 @@
+{
+  "diagnostic_only": true,
+  "production_source_commit": "00da849",
+  "candidate_shipped": false,
+  "patch_variant": "quintic_radius6",
+  "energy_limit": 0.05,
+  "reports": {
+    "quintic_radius6_derivatives_8": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0015566154208955e-10,
+          "max_relative_hessian_error": 1.479572965956421e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 2.729727555106365e-11,
+          "max_relative_hessian_error": 4.7200648940562875e-11,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0073225586992862e-10,
+          "max_relative_hessian_error": 1.4942624282692501e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.817468646223233e-11,
+          "max_relative_hessian_error": 1.251609167239209e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.552356075964269e-09,
+          "max_relative_hessian_error": 5.765578133096841e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.802602759923502e-11,
+          "max_relative_hessian_error": 5.811356072299608e-09,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.6760166022276053e-09,
+          "max_relative_hessian_error": 4.3742893168313213e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.229805560309387e-11,
+          "max_relative_hessian_error": 4.400749893199756e-09,
+          "passed": true
+        }
+      ],
+      "passed": 8,
+      "failed": 0
+    },
+    "quintic_radius12_derivatives_12": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0015566154208955e-10,
+          "max_relative_hessian_error": 1.479572965956421e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 2.729727555106365e-11,
+          "max_relative_hessian_error": 4.7200648940562875e-11,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0073225586992862e-10,
+          "max_relative_hessian_error": 1.4942624282692501e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.817468646223233e-11,
+          "max_relative_hessian_error": 1.251609167239209e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.552356075964269e-09,
+          "max_relative_hessian_error": 5.765578133096841e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.802602759923502e-11,
+          "max_relative_hessian_error": 5.811356072299608e-09,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.6760166022276053e-09,
+          "max_relative_hessian_error": 4.3742893168313213e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.229805560309387e-11,
+          "max_relative_hessian_error": 4.400749893199756e-09,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 9.645160781168727e-10,
+          "max_relative_hessian_error": 1.0956113733879982e-07,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.244021966139712e-11,
+          "max_relative_hessian_error": 8.560501520465675e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.4663559255723158e-10,
+          "max_relative_hessian_error": 8.127881221111462e-10,
+          "passed": false
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.9512505206905644e-11,
+          "max_relative_hessian_error": 2.496429512295603e-11,
+          "passed": false
+        }
+      ],
+      "passed": 10,
+      "failed": 2
+    },
+    "quintic_radius6_near_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "near_shore",
+          "completed": 100,
+          "dt": 0.002,
+          "error": null,
+          "max_excursion": 0.006943087121477731,
+          "max_step_change": 0.0009332086697524389,
+          "passed": true,
+          "steps": 100
+        },
+        {
+          "case": "near_shore",
+          "completed": 200,
+          "dt": 0.001,
+          "error": null,
+          "max_excursion": 0.0034847824502337588,
+          "max_step_change": 0.00023535178061617756,
+          "passed": true,
+          "steps": 200
+        },
+        {
+          "case": "near_shore",
+          "completed": 400,
+          "dt": 0.0005,
+          "error": null,
+          "max_excursion": 0.0017471174160643699,
+          "max_step_change": 5.896474470157287e-05,
+          "passed": true,
+          "steps": 400
+        }
+      ]
+    },
+    "quintic_radius6_high_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "high_curvature",
+          "completed": 150,
+          "dt": 0.002,
+          "error": null,
+          "max_excursion": 0.00022937751681717522,
+          "max_step_change": 1.729421947427312e-06,
+          "passed": true,
+          "steps": 150
+        },
+        {
+          "case": "high_curvature",
+          "completed": 300,
+          "dt": 0.001,
+          "error": null,
+          "max_excursion": 0.00011468734309927342,
+          "max_step_change": 4.325774929370141e-07,
+          "passed": true,
+          "steps": 300
+        },
+        {
+          "case": "high_curvature",
+          "completed": 600,
+          "dt": 0.0005,
+          "error": null,
+          "max_excursion": 5.734330736650861e-05,
+          "max_step_change": 1.0817213302871664e-07,
+          "passed": true,
+          "steps": 600
+        }
+      ]
+    },
+    "quintic_radius6_inward_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "inward",
+          "completed": 73,
+          "dt": 0.005,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39113334515997950, 0.04985151190569804); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.0036627551868852314, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.002456957347468869,
+          "max_step_change": 4.429408565820303e-05,
+          "passed": false,
+          "steps": 100
+        },
+        {
+          "case": "inward",
+          "completed": 146,
+          "dt": 0.0025,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39116365937965714, 0.04985479304443342); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.003664987626389254, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.0012280607417989309,
+          "max_step_change": 1.1081853718675205e-05,
+          "passed": false,
+          "steps": 200
+        },
+        {
+          "case": "inward",
+          "completed": 292,
+          "dt": 0.00125,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39117896834604360, 0.04985641877761285); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.0036661173463792412, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.0006139188600251533,
+          "max_step_change": 2.771493146092041e-06,
+          "passed": false,
+          "steps": 400
+        }
+      ]
+    },
+    "quintic_radius12_inward_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "inward",
+          "completed": 73,
+          "dt": 0.005,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39113334515997950, 0.04985151190569804); provider=geometry-provider/6, tile=scale-aware:11:801:102:6.10e-5, requested=0.0036618582343403844, resolved=0.00006103515625, error=0.000009711633507110407",
+          "max_excursion": 0.002456957347468869,
+          "max_step_change": 4.429408565820303e-05,
+          "passed": false,
+          "steps": 100
+        },
+        {
+          "case": "inward",
+          "completed": 146,
+          "dt": 0.0025,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39116365937965714, 0.04985479304443342); provider=geometry-provider/6, tile=scale-aware:11:801:102:6.10e-5, requested=0.003664094607315215, resolved=0.00006103515625, error=0.000009711633507110407",
+          "max_excursion": 0.0012280607417989309,
+          "max_step_change": 1.1081853718675205e-05,
+          "passed": false,
+          "steps": 200
+        },
+        {
+          "case": "inward",
+          "completed": 292,
+          "dt": 0.00125,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39117896834604360, 0.04985641877761285); provider=geometry-provider/6, tile=scale-aware:11:801:102:6.10e-5, requested=0.0036652263072780447, resolved=0.00006103515625, error=0.000009641565560672416",
+          "max_excursion": 0.0006139188600251533,
+          "max_step_change": 2.771493146092041e-06,
+          "passed": false,
+          "steps": 400
+        }
+      ]
+    },
+    "quintic_size16_derivatives": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.1876166716717762e-10,
+          "max_relative_hessian_error": 7.628660280601222e-10,
+          "passed": false
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 5.463129948424239e-11,
+          "max_relative_hessian_error": 5.563366804016764e-11,
+          "passed": false
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.2150014327971803e-10,
+          "max_relative_hessian_error": 7.657245254240252e-10,
+          "passed": false
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.584999212577713e-11,
+          "max_relative_hessian_error": 4.4163180325627506e-11,
+          "passed": false
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 9.945848589154593e-10,
+          "max_relative_hessian_error": 2.256218892015845e-06,
+          "passed": false
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.3289480627065586e-11,
+          "max_relative_hessian_error": 2.2593178540110737e-08,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.5870490477354338e-09,
+          "max_relative_hessian_error": 3.931805335792168e-06,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.516431590355751e-11,
+          "max_relative_hessian_error": 3.9348975674489536e-08,
+          "passed": false
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.9704415599175462e-09,
+          "max_relative_hessian_error": 1.582944468972742e-07,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 8.347103563899338e-11,
+          "max_relative_hessian_error": 2.1280847598009225e-09,
+          "passed": true
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.458417830946246e-10,
+          "max_relative_hessian_error": 8.094029584996513e-10,
+          "passed": false
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.6025958338161672e-11,
+          "max_relative_hessian_error": 6.100427165156774e-11,
+          "passed": false
+        }
+      ],
+      "passed": 2,
+      "failed": 10
+    },
+    "quintic_error_gate_derivatives": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.333922972079904e-10,
+          "max_relative_hessian_error": 4.1165706946831016e-08,
+          "passed": true
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.890332500589011e-11,
+          "max_relative_hessian_error": 5.106637752262034e-10,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.3027245948649124e-10,
+          "max_relative_hessian_error": 4.4387451523933004e-08,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 7.4424910678772e-11,
+          "max_relative_hessian_error": 4.62101222458071e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.12507483954694e-07,
+          "max_relative_hessian_error": 0.0029917053043615302,
+          "passed": false
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.107137351385461e-09,
+          "max_relative_hessian_error": 2.991946866667511e-05,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.4261399927661955e-06,
+          "max_relative_hessian_error": 0.0009655028675976592,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.423467788086441e-08,
+          "max_relative_hessian_error": 9.655061837261863e-06,
+          "passed": false
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 9.645160781168727e-10,
+          "max_relative_hessian_error": 1.0956113733879982e-07,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.244021966139712e-11,
+          "max_relative_hessian_error": 8.560501520465675e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.458417830946246e-10,
+          "max_relative_hessian_error": 8.094029584996513e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.6025958338161672e-11,
+          "max_relative_hessian_error": 6.100427165156774e-11,
+          "passed": true
+        }
+      ],
+      "passed": 8,
+      "failed": 4
+    },
+    "quintic_fixed_budget_derivatives": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0015566154208955e-10,
+          "max_relative_hessian_error": 1.479572965956421e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 2.729727555106365e-11,
+          "max_relative_hessian_error": 4.7200648940562875e-11,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.0073225586992862e-10,
+          "max_relative_hessian_error": 1.4942624282692501e-09,
+          "passed": true
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.817468646223233e-11,
+          "max_relative_hessian_error": 1.251609167239209e-10,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.552356075964269e-09,
+          "max_relative_hessian_error": 5.765578133096841e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 4.802602759923502e-11,
+          "max_relative_hessian_error": 5.811356072299608e-09,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 3.6760166022276053e-09,
+          "max_relative_hessian_error": 4.3742893168313213e-07,
+          "passed": true
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.229805560309387e-11,
+          "max_relative_hessian_error": 4.400749893199756e-09,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 6.195730595237592e-10,
+          "max_relative_hessian_error": 2.8216895007455048e-08,
+          "passed": true
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.7216672532072153e-10,
+          "max_relative_hessian_error": 1.4468393150224301e-09,
+          "passed": true
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.458417830946246e-10,
+          "max_relative_hessian_error": 8.094029584996513e-10,
+          "passed": false
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "unresolved",
+          "all_regular": false,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 1.6025958338161672e-11,
+          "max_relative_hessian_error": 6.100427165156774e-11,
+          "passed": false
+        }
+      ],
+      "passed": 10,
+      "failed": 2
+    },
+    "quintic_fixed_budget_inward_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "inward",
+          "completed": 73,
+          "dt": 0.005,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39113334515997950, 0.04985151190569804); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.0036627551868852314, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.002456957347468869,
+          "max_step_change": 4.429408565820303e-05,
+          "passed": false,
+          "steps": 100
+        },
+        {
+          "case": "inward",
+          "completed": 146,
+          "dt": 0.0025,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39116365937965714, 0.04985479304443342); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.003664987626389254, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.0012280607417989309,
+          "max_step_change": 1.1081853718675205e-05,
+          "passed": false,
+          "steps": 200
+        },
+        {
+          "case": "inward",
+          "completed": 292,
+          "dt": 0.00125,
+          "error": "geometry not regular: Unresolved (singularity=None) at c=(0.39117896834604360, 0.04985641877761285); provider=geometry-provider/6, tile=scale-aware:10:400:51:1.22e-4, requested=0.0036661173463792412, resolved=0.0001220703125, error=0.0009829642578257497",
+          "max_excursion": 0.0006139188600251533,
+          "max_step_change": 2.771493146092041e-06,
+          "passed": false,
+          "steps": 400
+        }
+      ]
+    },
+    "quintic_fixed_budget_near_energy": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "near_shore",
+          "completed": 100,
+          "dt": 0.002,
+          "error": null,
+          "max_excursion": 0.006943087121477731,
+          "max_step_change": 0.0009332086697524389,
+          "passed": true,
+          "steps": 100
+        },
+        {
+          "case": "near_shore",
+          "completed": 200,
+          "dt": 0.001,
+          "error": null,
+          "max_excursion": 0.0034847824502337588,
+          "max_step_change": 0.00023535178061617756,
+          "passed": true,
+          "steps": 200
+        },
+        {
+          "case": "near_shore",
+          "completed": 400,
+          "dt": 0.0005,
+          "error": null,
+          "max_excursion": 0.0017471174160643699,
+          "max_step_change": 5.896474470157287e-05,
+          "passed": true,
+          "steps": 400
+        }
+      ]
+    },
+    "default_provider6_derivatives_12": {
+      "diagnostic_only": true,
+      "provider_version": "geometry-provider/6",
+      "epsilon": 0.0001,
+      "method": "Centered differences of public query_geometry D and grad_D; never used by Physics.",
+      "rows": [
+        {
+          "case": "inward_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00017456386035963334,
+          "max_relative_hessian_error": 0.0006503028226249239,
+          "passed": false
+        },
+        {
+          "case": "inward_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00017456403383198094,
+          "max_relative_hessian_error": 0.0006503023781481984,
+          "passed": false
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00017498204396526607,
+          "max_relative_hessian_error": 0.0006517076387241022,
+          "passed": false
+        },
+        {
+          "case": "inward_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00017498213417088682,
+          "max_relative_hessian_error": 0.0006517073628437558,
+          "passed": false
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.004265530625695013,
+          "max_relative_hessian_error": 0.6959740813495469,
+          "passed": false
+        },
+        {
+          "case": "near_shore_before",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.004265531092335628,
+          "max_relative_hessian_error": 0.6959740865198164,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.0059172412403392105,
+          "max_relative_hessian_error": 3.0335338724778715,
+          "passed": false
+        },
+        {
+          "case": "near_shore_after",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00591724168442842,
+          "max_relative_hessian_error": 3.0335338959590885,
+          "passed": false
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.045079131664133465,
+          "max_relative_hessian_error": 2.8154051928143495,
+          "passed": false
+        },
+        {
+          "case": "regular_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.44125294207437205,
+          "max_relative_hessian_error": 28.17052908421617,
+          "passed": false
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-06,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00019000326685381097,
+          "max_relative_hessian_error": 0.0006992719483769469,
+          "passed": false
+        },
+        {
+          "case": "near_shore_tile_boundary",
+          "step": 1e-07,
+          "center_validity": "regular",
+          "all_regular": true,
+          "same_reported_scale": true,
+          "max_distance_derivative_error": 0.00019000345767339333,
+          "max_relative_hessian_error": 0.0006992709881504123,
+          "passed": false
+        }
+      ],
+      "passed": 0,
+      "failed": 12
+    },
+    "default_provider6_near_energy_rerun": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "near_shore",
+          "completed": 100,
+          "dt": 0.002,
+          "error": null,
+          "max_excursion": 0.021724498906376066,
+          "max_step_change": 0.02465116333709716,
+          "passed": true,
+          "steps": 100
+        },
+        {
+          "case": "near_shore",
+          "completed": 200,
+          "dt": 0.001,
+          "error": null,
+          "max_excursion": 0.0224304214728428,
+          "max_step_change": 0.02447274849844039,
+          "passed": true,
+          "steps": 200
+        },
+        {
+          "case": "near_shore",
+          "completed": 400,
+          "dt": 0.0005,
+          "error": null,
+          "max_excursion": 0.02288633842000598,
+          "max_step_change": 0.02435451712070913,
+          "passed": true,
+          "steps": 400
+        }
+      ]
+    }
+  },
+  "inward_refusal_trace": [
+    "TRACE k=1 cert=true raw=0.0618909832139518 rms=0.016029955908257145 field_error=0.016900084212604305 raw_error=0.04402412806090996 sum=0.0618909832139518 h=0.0625 prod=1 closed=false fcert=true output_error=0.04402412806090996 requested=0.006189106400111137 detail=1 ties=true",
+    "TRACE k=2 cert=true raw=0.05654096811326431 rms=0.008341409512675493 field_error=0.01748319543541263 raw_error=0.04024874782616766 sum=0.05654096811326431 h=0.03125 prod=1 closed=false fcert=true output_error=0.04024874782616766 requested=0.005654105654464879 detail=1 ties=true",
+    "TRACE k=3 cert=true raw=0.057507898473325735 rms=0.0018919829826279516 field_error=0.022093732683127656 raw_error=0.022093732683127656 sum=0.057507898473325735 h=0.015625 prod=1 closed=false fcert=true output_error=0.022093732683127656 requested=0.005750798541783863 detail=0 ties=true",
+    "TRACE k=4 cert=true raw=0.04765450777698031 rms=0.0009453806542608212 field_error=0.01178777037335639 raw_error=0.01178777037335639 sum=0.04765450777698031 h=0.0078125 prod=1 closed=false fcert=true output_error=0.01178777037335639 requested=0.004765461269873334 detail=1 ties=false",
+    "TRACE k=5 cert=true raw=0.04715924593838611 rms=0.0003590833928760035 field_error=0.0034743552459846547 raw_error=0.0034743552459846547 sum=0.04715924593838611 h=0.00390625 prod=1 closed=false fcert=true output_error=0.0034743552459846547 requested=0.004715935196201478 detail=0.039123954422414634 ties=false",
+    "TRACE k=6 cert=true raw=0.046475207447734514 rms=0.0003006651106800286 field_error=0.0057319641926239645 raw_error=0.0057319641926239645 sum=0.046475207447734514 h=0.001953125 prod=1 closed=false fcert=true output_error=0.0057319641926239645 requested=0.004647531503185275 detail=0 ties=false",
+    "TRACE k=7 cert=true raw=0.038990060872159275 rms=0.000001604958442612908 field_error=0.007910365379926725 raw_error=0.007910365379926725 sum=0.038990060872159275 h=0.0009765625 prod=1 closed=false fcert=true output_error=0.007910365379926725 requested=0.003899018910975793 detail=0 ties=false",
+    "TRACE k=8 cert=true raw=0.03901649895525495 rms=0.00000019760716262482318 field_error=0.00002738175724316394 raw_error=0.00002738175724316394 sum=0.03901649895525495 h=0.00048828125 prod=1 closed=false fcert=true output_error=0.00002738175724316394 requested=0.0039016627105958436 detail=0 ties=false",
+    "TRACE k=9 cert=true raw=0.03745499543278492 rms=0.000000030289877489304456 field_error=0.0017471323851816004 raw_error=0.0017471323851816004 sum=0.0390164989299214 h=0.00048828125 prod=0.000000016223816179383732 closed=true fcert=true output_error=0.0017471323851816004 requested=0.0039016627080624973 detail=0 ties=false",
+    "TRACE k=10 cert=true raw=0.03662741535933796 rms=0.0000000031735310969565228 field_error=0.0009829642578257497 raw_error=0.0009829642578257497 sum=0.0390164989299214 h=0.00048828125 prod=0.000000016223816179383732 closed=true fcert=true output_error=0.002389083570583442 requested=0.0039016627080624973 detail=0 ties=false"
+  ],
+  "initial_refusal_variants": {
+    "size16": "Error: \"geometry not regular: Unresolved (singularity=None) at c=(0.40000000000000002, 0.05000000000000000); provider=geometry-provider/6, tile=scale-aware:9:204:25:2.44e-4, requested=0.004574299948811965, resolved=0.000244140625, error=0.0015442618751610807\"",
+    "error_gate": "Error: \"geometry not regular: Unresolved (singularity=None) at c=(0.40000000000000002, 0.05000000000000000); provider=geometry-provider/6, tile=scale-aware:10:409:51:1.22e-4, requested=0.004397724368951608, resolved=0.0001220703125, error=0.001852716836966986\""
+  },
+  "default_inward_point_query": {
+    "c": [
+      0.3911333451599795,
+      0.04985151190569804
+    ],
+    "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+    "case": "coherent_field_inward_refusal",
+    "cold_us": 1024119,
+    "epsilon": 0.0001,
+    "jet": {
+      "D": 0.039016501059165494,
+      "estimated_error": 2.7173415285422498e-05,
+      "grad_D": [
+        0.8661909214178639,
+        -0.49937956813181694
+      ],
+      "hessian_D": [
+        [
+          6.392016486953253,
+          11.083068934861785
+        ],
+        [
+          11.083068934861785,
+          19.233580298885954
+        ]
+      ],
+      "is_bridge": false,
+      "provider_version": "geometry-provider/6",
+      "requested_scale": 0.003901662920986207,
+      "resolved_scale": 0.00048828125,
+      "singularity": "none",
+      "tile_id": "scale-aware:8:100:12:4.88e-4",
+      "validity": "regular"
+    },
+    "warm_us": 6158
+  },
+  "default_native_crossing": {
+    "passed": false,
+    "seconds": 18.37,
+    "failure": "CutLocus at (0.21474166530729011,0.12774018997553147); original test unchanged"
+  },
+  "report_format": "Summaries of example JSON outputs; derivative pass predicate and tolerance 1e-4 match geometry_derivative_report.rs. Energy summaries omit peak-transition jets; the refusal trace retains per-level field data.",
+  "default_python_physics": {
+    "command": "RUNTIME_CORE_NO_BUILD=1 .venv/Scripts/python.exe -m pytest backend/tests/test_manifold_physics.py -q",
+    "passed": 26,
+    "failed": 1,
+    "failure": "TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+    "endpoint": [
+      0.3565938105543324,
+      0.0640465675777667
+    ],
+    "validity": "unresolved",
+    "level": 23,
+    "crossing_test_changed": false
+  }
+}
