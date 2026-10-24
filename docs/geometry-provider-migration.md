@@ -8,6 +8,8 @@ Orbit reuse avoids replaying critical-orbit prefixes during membership certifica
 
 ## Migration rule
 
+The latest investigation separates suspected native nonsmoothness from Python membership exhaustion. The native step switches nearest minima in an analytic cardioid comparison; the Python point lacks consecutive certified levels at the existing orbit budget. A fixed smooth-contour distance prototype passed local derivative probes but failed energy acceptance, including a nearest-foot branch change at one level. It is not shipped. See the [current refusal and coherence evidence](geometry-provider-validation.md#october-23-investigation-new-refusals-and-distance-field-coherence). Production semantics and deletion triggers are unchanged.
+
 Migration is one way:
 
 ```text

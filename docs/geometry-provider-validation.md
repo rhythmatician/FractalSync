@@ -2,6 +2,58 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 investigation: new refusals and distance-field coherence
+
+Production geometry remains `geometry-provider/6`, `orbit-controller/10` and `debug-snapshot/5`. No production math, golden vector, quality threshold or crossing assertion changes in this investigation. **PR #148 is not ready to merge.** The current query report has 60 rows, adding the two new refusal coordinates at four epsilon values. All 52 matching serialized jets are exactly unchanged from the previous report.
+
+### Native refusal: near-tie crossing, then exhausted coverage
+
+The [actual refinement trace](validation/geometry-145-new-refusal-traces.json) retains competing features through level 8 at `(0.21474166530729011,0.12774018997553147)`. Level 9 cannot contain the distance neighborhood within the bounded footprint, so the provider returns the last suspected CutLocus result. It does not stop merely because the estimated error passed.
+
+An [analytic main-cardioid comparison](validation/geometry-145-native-cardioid-switch.json) distinguishes this case from the earlier false refusal. At the last accepted position, distance to the curved boundary is `0.130146833` and to the cusp is `0.130466164`. At the rejected endpoint, the cusp is nearer: `0.132516815` versus `0.132589169`. The two control-geometry minima tie about 81.264% along the step, near `(0.2150824864,0.1274343911)`, with distance directions differing by about 30.646 degrees. This is evidence supporting suspected nonsmoothness, not a certificate for the full Mandelbrot boundary. It does not justify forcing the endpoint to Regular or weakening the angle/tie rules.
+
+### Python crossing refusal: missing consecutive membership certification
+
+At `(0.35659381055433242,0.06404656757776669)`, membership certification fails at levels 17, 18, 19, 22 and 24. The instrumented tiles at levels 18 through 23 reach the existing 32,768-iteration limit with changing nodes. A changing node only invalidates the query when the existing neighborhood/stability rules require it, so some intervening levels still produce provisional fits.
+
+Level 21 retains suspected competing features. Level 22 resets the convergence history because membership is unresolved. Level 23 has no competing normals, but it is the first certified sample after that reset; its infinite estimated error is therefore intentional. Level 24 again fails membership. Accepting level 23 would remove the required consecutive-level evidence. The [trace report](validation/geometry-145-new-refusal-traces.json) records the budgets, unstable-node counts and final jet. No budget, stability band or refusal rule was changed.
+
+### Rejected derivative experiment: smooth curves still have distance cut loci
+
+A temporary Rust prototype evaluated distance to fixed uniform cubic B-spline contour pieces, with analytic closest-point gradient and Hessian. Existing raw-field convergence and acceptance gates were retained. It passed all eight [local derivative probes](validation/geometry-145-fixed-curve-derivatives.json), unlike production. It was then **rejected** by the unchanged conservative-energy limits. The [controlled comparison](validation/geometry-145-fixed-curve-experiment.json) records all twelve trajectory/timestep pairs for production and the unshipped candidate.
+
+| Near-Shore timestep | Production excursion / largest change | Rejected curve excursion / largest change |
+|---|---:|---:|
+| 0.002 | 0.0217245 / 0.0246512 | 0.246369 / 0.145100 |
+| 0.001 | 0.0224304 / 0.0244727 | 0.246652 / 0.145128 |
+| 0.0005 | 0.0228863 / 0.0243545 | 0.246792 / 0.145143 |
+
+The candidate's peak stays at level 8 and the same tile ID on both sides. At timestep `0.0005`, the query moves only `1.1761e-5`, while the nearest foot inferred from `c - D*grad_D` changes by about `0.0019066` and the unit gradient turns about 5.614 degrees. Thus this candidate has a nearest-point branch change inside one accepted resolution region. Making the contour curve C2 does not make its distance field C2 throughout that region. This diagnosis is specific to the rejected model, not proof that every production energy defect has the same cause. The production peak still changes refinement levels. A safe representation must address both accepted-region distance-field coherence and transitions between levels; passing a few local derivative probes is insufficient.
+
+The prototype and trace instrumentation were removed from production source byte for byte. Experimental binaries retain baseline version stamps for comparison but are not released geometry. Goldens and Python/WASM bindings retain their existing semantics.
+
+### Reproducers and current verdicts
+
+The new [Rust energy report](../runtime-core/examples/geometry_energy_report.rs) calls canonical `integrate_step`, `total_energy` and public geometry queries. It records before/after jets at each trajectory's largest energy change. The 0.05 limits are diagnostic copies of the existing energy acceptance limits; this report changes no CI test. Filtering a case shortens diagnosis without altering the original tests.
+
+```text
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_energy_report -- --check
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_energy_report -- --case near_shore --check
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+```
+
+| Check | Fresh result |
+|---|---|
+| Native crossing, original test | Same CutLocus refusal, 19.44 seconds; no assertion changes |
+| Python crossing, original test and final rebuilt provider | Same level-23 Unresolved refusal, 415.09 seconds |
+| Production derivative check | Still fails all 8 probes |
+| Production energy report | All 12 trajectory/timestep pairs complete under unchanged limits; targeted three-case near-Shore replay also passes, but its nonvanishing jumps remain visible |
+| Rejected curve report | 8 derivative probes pass; 3 of 12 energy cases fail; not shipped |
+| Query report | 60 rows pass repeat determinism and strict Regular gates; all 52 prior jets match exactly |
+| Checks and review | Both diagnostic examples build and pass Rust formatting; diff whitespace passes; unknown energy-case names fail explicitly. Independent Standards, Spec and Health Regression reviews find no actionable source findings. |
+
+CI at production code `1e692d2` has now completed: native/Python and WASM builds, artifacts, frontend/GPU, types and stubs pass. [Backend CI](https://github.com/rhythmatician/FractalSync/actions/runs/40044138353) reports **187 passed, 1 failed** in 1,303.13 seconds, with the identical crossing refusal. Rust CI reports 78 library passes and the same native failure, stopping before integration targets. The prior local full Rust result below remains 241 passed, one failed and one ignored. No new complete local Python suite is claimed for these diagnostics-only changes.
+
 ## October 23 follow-up: bounded footprint repair
 
 The current candidate uses `geometry-provider/6` and `orbit-controller/10`; `debug-snapshot/5` is unchanged. A complete-tile expansion can now reach radius 5, at most 11 by 11 tiles, instead of radius 3, at most 7 by 7. Pruning, containment, membership/stability budgets, refinement limit, tie/angle thresholds and strict Regular quality gates are unchanged. Both crossing test sources are untouched. Regenerated golden vectors change only the controller stamp.

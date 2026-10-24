@@ -41,6 +41,14 @@ fn main() {
             "kinetic_crossing_refusal",
             Complex64::new(0.35714730438616327, 0.06380885577340460),
         ),
+        (
+            "new_native_crossing_refusal",
+            Complex64::new(0.21474166530729011, 0.12774018997553147),
+        ),
+        (
+            "new_kinetic_crossing_refusal",
+            Complex64::new(0.35659381055433242, 0.06404656757776669),
+        ),
     ] {
         for epsilon in [1e-2, 1e-4, 1e-6, 1e-8] {
             // Each child owns an initially empty cache. Timings exclude process

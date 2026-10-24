@@ -1,0 +1,1031 @@
+{
+  "provider_version": "geometry-provider/6",
+  "source_commit": "44015d8",
+  "diagnostic_only": true,
+  "protocol": "Temporary instrumentation of the actual query and tile certification, removed after compiling the trace executable. First cold query only. Fitted jets are provisional, not accepted Regular samples. A null estimated_error encodes positive infinity.",
+  "rows": [
+    {
+      "case": "new_native",
+      "c": [
+        0.2147416653072901,
+        0.12774018997553147
+      ],
+      "epsilon": 0.0001,
+      "levels": [
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.13016667786313446,
+            "estimated_error": null,
+            "grad_D": [
+              0.7985558410435808,
+              0.11033702467343257
+            ],
+            "hessian_D": [
+              [
+                0.7229870621063422,
+                -0.33319858629735
+              ],
+              [
+                -0.33319858629735,
+                0.4853302898433821
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013016671627541743,
+            "resolved_scale": 0.125,
+            "singularity": "none",
+            "tile_id": "scale-aware:0:0:0:1.25e-1",
+            "validity": "regular"
+          },
+          "k": 0,
+          "ties": 3
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.1153827106773909,
+            "estimated_error": 0.044043569864419214,
+            "grad_D": [
+              0.8369058591115371,
+              -0.23991828661236922
+            ],
+            "hessian_D": [
+              [
+                0.1069777125206095,
+                0.3851375522783127
+              ],
+              [
+                0.3851375522783127,
+                0.5440042033770773
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.011538275401143145,
+            "resolved_scale": 0.0625,
+            "singularity": "none",
+            "tile_id": "scale-aware:1:0:0:6.25e-2",
+            "validity": "regular"
+          },
+          "k": 1,
+          "ties": 5
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.12406379750637823,
+            "estimated_error": 0.0202566917694628,
+            "grad_D": [
+              0.7613685054780247,
+              -0.5550999801408153
+            ],
+            "hessian_D": [
+              [
+                0.6177975386498593,
+                1.849197763439109
+              ],
+              [
+                1.849197763439109,
+                2.707716119345192
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.01240638378082172,
+            "resolved_scale": 0.03125,
+            "singularity": "none",
+            "tile_id": "scale-aware:2:0:0:3.12e-2",
+            "validity": "regular"
+          },
+          "k": 2,
+          "ties": 9
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.12892332052849603,
+            "estimated_error": 0.006590587291313503,
+            "grad_D": [
+              0.6516502858798869,
+              -0.6832374737401278
+            ],
+            "hessian_D": [
+              [
+                4.066128726886516,
+                4.6549796364088465
+              ],
+              [
+                4.6549796364088465,
+                4.219383876461201
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.012892335931123317,
+            "resolved_scale": 0.015625,
+            "singularity": "none",
+            "tile_id": "scale-aware:3:1:1:1.56e-2",
+            "validity": "regular"
+          },
+          "k": 3,
+          "ties": 14
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.1309977272627817,
+            "estimated_error": 0.0024766859385761857,
+            "grad_D": [
+              0.5828817037624461,
+              -0.7448941597341345
+            ],
+            "hessian_D": [
+              [
+                11.15729859683045,
+                9.497630430606733
+              ],
+              [
+                9.497630430606733,
+                6.611824137862712
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013099776543137726,
+            "resolved_scale": 0.0078125,
+            "singularity": "none",
+            "tile_id": "scale-aware:4:3:2:7.81e-3",
+            "validity": "regular"
+          },
+          "k": 4,
+          "ties": 22
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.13176654450705344,
+            "estimated_error": 0.0010727853820068182,
+            "grad_D": [
+              0.5462762217003311,
+              -0.7839890414609018
+            ],
+            "hessian_D": [
+              [
+                24.656798292350686,
+                17.066855187034307
+              ],
+              [
+                17.066855187034307,
+                10.091922592528846
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013176658245294707,
+            "resolved_scale": 0.00390625,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:5:6:4:3.91e-3",
+            "validity": "singular"
+          },
+          "k": 5,
+          "ties": 38
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.1321852791936056,
+            "estimated_error": 0.0005133945700618328,
+            "grad_D": [
+              0.5156101452865962,
+              -0.8083100657124578
+            ],
+            "hessian_D": [
+              [
+                50.67978398390858,
+                31.50025953301315
+              ],
+              [
+                31.50025953301315,
+                16.27250003060726
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013218531701929478,
+            "resolved_scale": 0.001953125,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:6:13:8:1.95e-3",
+            "validity": "singular"
+          },
+          "k": 6,
+          "ties": 42
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.13235260658286602,
+            "estimated_error": 0.00024827727235604823,
+            "grad_D": [
+              0.5014008857826289,
+              -0.8202025230241698
+            ],
+            "hessian_D": [
+              [
+                101.1280712786097,
+                59.39767165653893
+              ],
+              [
+                59.39767165653893,
+                27.866372228399996
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013235264436073391,
+            "resolved_scale": 0.0009765625,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:7:27:16:9.77e-4",
+            "validity": "singular"
+          },
+          "k": 7,
+          "ties": 54
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -0.1324553959593034,
+            "estimated_error": 0.00012546345913724634,
+            "grad_D": [
+              0.478223042205582,
+              -0.830966660436335
+            ],
+            "hessian_D": [
+              [
+                201.29291497944178,
+                117.080456119279
+              ],
+              [
+                117.080456119279,
+                52.76410044098702
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.013245543370785455,
+            "resolved_scale": 0.00048828125,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:8:54:32:4.88e-4",
+            "validity": "singular"
+          },
+          "k": 8,
+          "ties": 68
+        },
+        {
+          "k": 9,
+          "event": "footprint_unresolved"
+        }
+      ],
+      "membership_budget_summary_at_k18_and_above": [],
+      "final": {
+        "D": -0.1324553959593034,
+        "estimated_error": 0.00012546345913724634,
+        "grad_D": [
+          0.478223042205582,
+          -0.830966660436335
+        ],
+        "hessian_D": [
+          [
+            201.29291497944178,
+            117.080456119279
+          ],
+          [
+            117.080456119279,
+            52.76410044098702
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.013245543370785455,
+        "resolved_scale": 0.00048828125,
+        "singularity": "cut_locus",
+        "tile_id": "scale-aware:8:54:32:4.88e-4",
+        "validity": "singular"
+      }
+    },
+    {
+      "case": "new_kinetic",
+      "c": [
+        0.3565938105543324,
+        0.0640465675777667
+      ],
+      "epsilon": 0.0001,
+      "levels": [
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.004768227739342268,
+            "estimated_error": null,
+            "grad_D": [
+              0.8883515596616569,
+              0.03621797275407219
+            ],
+            "hessian_D": [
+              [
+                0.3948255647094395,
+                -0.05498547501561779
+              ],
+              [
+                -0.05498547501561779,
+                0.03702586504575295
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0004769276231697329,
+            "resolved_scale": 0.125,
+            "singularity": "none",
+            "tile_id": "scale-aware:0:0:0:1.25e-1",
+            "validity": "regular"
+          },
+          "k": 0,
+          "ties": 2
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.027691621069339853,
+            "estimated_error": 0.04153353017756796,
+            "grad_D": [
+              0.8782623436598629,
+              -0.13028119737718458
+            ],
+            "hessian_D": [
+              [
+                0.7426190119877552,
+                0.4348059203825637
+              ],
+              [
+                0.4348059203825637,
+                -2.5056082589380564
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0027691801628783688,
+            "resolved_scale": 0.0625,
+            "singularity": "none",
+            "tile_id": "scale-aware:1:0:0:6.25e-2",
+            "validity": "regular"
+          },
+          "k": 1,
+          "ties": 2
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.023474679185626846,
+            "estimated_error": 0.017819718893694447,
+            "grad_D": [
+              0.8482470803675896,
+              -0.3691476230302969
+            ],
+            "hessian_D": [
+              [
+                1.2268890101392094,
+                1.3918110051547774
+              ],
+              [
+                1.3918110051547774,
+                -2.012143244758149
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0023474892180116664,
+            "resolved_scale": 0.03125,
+            "singularity": "none",
+            "tile_id": "scale-aware:2:1:0:3.12e-2",
+            "validity": "regular"
+          },
+          "k": 2,
+          "ties": 4
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.0204242164808333,
+            "estimated_error": 0.011668960007003237,
+            "grad_D": [
+              0.8509513640408094,
+              -0.4920518974871311
+            ],
+            "hessian_D": [
+              [
+                0.3288710446747023,
+                0.8490249311891371
+              ],
+              [
+                0.8490249311891371,
+                1.123834759671051
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.002042446128679879,
+            "resolved_scale": 0.015625,
+            "singularity": "none",
+            "tile_id": "scale-aware:3:2:0:1.56e-2",
+            "validity": "regular"
+          },
+          "k": 3,
+          "ties": 4
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.013591903299167731,
+            "estimated_error": 0.010852591410489578,
+            "grad_D": [
+              0.7038276788721123,
+              -0.45461395322643694
+            ],
+            "hessian_D": [
+              [
+                3.565059149466778,
+                -0.49080954660489384
+              ],
+              [
+                -0.49080954660489384,
+                8.192710442338923
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0013592271160255988,
+            "resolved_scale": 0.0078125,
+            "singularity": "none",
+            "tile_id": "scale-aware:4:5:1:7.81e-3",
+            "validity": "regular"
+          },
+          "k": 4,
+          "ties": null
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.010246733212121054,
+            "estimated_error": 0.003345170087046677,
+            "grad_D": [
+              0.7562838968868454,
+              -0.4270277181445641
+            ],
+            "hessian_D": [
+              [
+                25.48299107008858,
+                20.540119903615548
+              ],
+              [
+                20.540119903615548,
+                45.246079400803325
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0010247221160899409,
+            "resolved_scale": 0.00390625,
+            "singularity": "none",
+            "tile_id": "scale-aware:5:11:2:3.91e-3",
+            "validity": "regular"
+          },
+          "k": 5,
+          "ties": null
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.009166351447649518,
+            "estimated_error": 0.0010803817644715365,
+            "grad_D": [
+              0.8237878544467222,
+              -0.45575922396100543
+            ],
+            "hessian_D": [
+              [
+                27.691465309480037,
+                36.92075908740939
+              ],
+              [
+                36.92075908740939,
+                82.94394912344129
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0009166896904723343,
+            "resolved_scale": 0.001953125,
+            "singularity": "none",
+            "tile_id": "scale-aware:6:22:4:1.95e-3",
+            "validity": "regular"
+          },
+          "k": 6,
+          "ties": null
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.005195250433320103,
+            "estimated_error": 0.007898459713878684,
+            "grad_D": [
+              -0.030561975007079516,
+              -0.953964076191009
+            ],
+            "hessian_D": [
+              [
+                149.1858173404042,
+                -5.997734947415189
+              ],
+              [
+                -5.997734947415189,
+                15.785281329185537
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0005196212761705655,
+            "resolved_scale": 0.0009765625,
+            "singularity": "none",
+            "tile_id": "scale-aware:7:45:8:9.77e-4",
+            "validity": "regular"
+          },
+          "k": 7,
+          "ties": null
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.005086450713521153,
+            "estimated_error": 0.00018355808701067157,
+            "grad_D": [
+              -0.06528225570101134,
+              -0.9807259367253514
+            ],
+            "hessian_D": [
+              [
+                194.4928915637612,
+                -10.325135899258555
+              ],
+              [
+                -10.325135899258555,
+                5.104722013365517
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 0.0005087433622277528,
+            "resolved_scale": 0.00048828125,
+            "singularity": "none",
+            "tile_id": "scale-aware:8:91:16:4.88e-4",
+            "validity": "regular"
+          },
+          "k": 8,
+          "ties": null
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 0.0002180616807314058,
+            "estimated_error": 0.005164657602709176,
+            "grad_D": [
+              0.18863738249099915,
+              -0.08939364679691084
+            ],
+            "hessian_D": [
+              [
+                1629.1539561623522,
+                -25.637485305769843
+              ],
+              [
+                -25.637485305769843,
+                1359.7745371572382
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 2.3989767944564524e-05,
+            "resolved_scale": 0.000244140625,
+            "singularity": "none",
+            "tile_id": "scale-aware:9:182:32:2.44e-4",
+            "validity": "regular"
+          },
+          "k": 9,
+          "ties": 4
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 5.985116912670893e-05,
+            "estimated_error": 0.00015821051160469688,
+            "grad_D": [
+              0.2605928679733223,
+              -0.15310995537367067
+            ],
+            "hessian_D": [
+              [
+                2556.4852970419183,
+                83.86739370517131
+              ],
+              [
+                83.86739370517131,
+                3138.639204288497
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.1654253492109187e-05,
+            "resolved_scale": 0.0001220703125,
+            "singularity": "none",
+            "tile_id": "scale-aware:10:365:65:1.22e-4",
+            "validity": "regular"
+          },
+          "k": 10,
+          "ties": 4
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 2.0541012911022544e-05,
+            "estimated_error": 4.0421649587073935e-05,
+            "grad_D": [
+              0.45846379259512204,
+              -0.28484328860236885
+            ],
+            "hessian_D": [
+              [
+                2383.9292212758933,
+                559.9710336844325
+              ],
+              [
+                559.9710336844325,
+                5760.728145194267
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.020878700503189e-05,
+            "resolved_scale": 6.103515625e-05,
+            "singularity": "none",
+            "tile_id": "scale-aware:11:730:131:6.10e-5",
+            "validity": "regular"
+          },
+          "k": 11,
+          "ties": 3
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 1.0570278355807712e-05,
+            "estimated_error": 1.673491462810296e-05,
+            "grad_D": [
+              0.43944164652436374,
+              -0.4817551936536669
+            ],
+            "hessian_D": [
+              [
+                1106.045802646781,
+                1829.7374334585402
+              ],
+              [
+                1829.7374334585402,
+                8976.399776999895
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0055710210879816e-05,
+            "resolved_scale": 3.0517578125e-05,
+            "singularity": "none",
+            "tile_id": "scale-aware:12:1460:262:3.05e-5",
+            "validity": "regular"
+          },
+          "k": 12,
+          "ties": 2
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 2.930490274073781e-06,
+            "estimated_error": 1.5005659019916523e-05,
+            "grad_D": [
+              0.08984767142851666,
+              -0.7477779230651019
+            ],
+            "hessian_D": [
+              [
+                10410.1131174889,
+                746.0258896742964
+              ],
+              [
+                746.0258896742964,
+                9002.966904192594
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0004292965145735e-05,
+            "resolved_scale": 1.52587890625e-05,
+            "singularity": "none",
+            "tile_id": "scale-aware:13:2921:524:1.53e-5",
+            "validity": "regular"
+          },
+          "k": 13,
+          "ties": 2
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -6.653631607317395e-08,
+            "estimated_error": 7.841234983623483e-06,
+            "grad_D": [
+              -0.09019893666486155,
+              -0.8308911496940701
+            ],
+            "hessian_D": [
+              [
+                25029.05643012533,
+                3448.267972185377
+              ],
+              [
+                3448.267972185377,
+                1807.5584609413609
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0000002213540434e-05,
+            "resolved_scale": 7.62939453125e-06,
+            "singularity": "none",
+            "tile_id": "scale-aware:14:5842:1049:7.63e-6",
+            "validity": "regular"
+          },
+          "k": 14,
+          "ties": 3
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 2.7233360940343996e-07,
+            "estimated_error": 3.855858524884629e-06,
+            "grad_D": [
+              -0.09818735682250998,
+              -0.7785622627643638
+            ],
+            "hessian_D": [
+              [
+                -7552.196488294277,
+                4299.432247353239
+              ],
+              [
+                4299.432247353239,
+                -307.443180370723
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.000003708272865e-05,
+            "resolved_scale": 3.814697265625e-06,
+            "singularity": "none",
+            "tile_id": "scale-aware:15:11684:2098:3.81e-6",
+            "validity": "regular"
+          },
+          "k": 15,
+          "ties": 2
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": 7.770828768151586e-07,
+            "estimated_error": 1.559603390366633e-06,
+            "grad_D": [
+              0.025116719166143657,
+              -0.8030174766151602
+            ],
+            "hessian_D": [
+              [
+                3229.2949849766956,
+                -9170.664581480325
+              ],
+              [
+                -9170.664581480325,
+                -31152.64148567882
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0000301924340805e-05,
+            "resolved_scale": 1.9073486328125e-06,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:16:23369:4197:1.91e-6",
+            "validity": "singular"
+          },
+          "k": 16,
+          "ties": 3
+        },
+        {
+          "k": 17,
+          "event": "membership_unresolved"
+        },
+        {
+          "k": 18,
+          "event": "membership_unresolved"
+        },
+        {
+          "k": 19,
+          "event": "membership_unresolved"
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -1.9314864598743698e-07,
+            "estimated_error": null,
+            "grad_D": [
+              -0.4938204148903602,
+              -0.7018508175218207
+            ],
+            "hessian_D": [
+              [
+                1416335.1063112486,
+                -236249.85452698544
+              ],
+              [
+                -236249.85452698544,
+                -393269.4574799702
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0000018653182327e-05,
+            "resolved_scale": 1.1920928955078125e-07,
+            "singularity": "none",
+            "tile_id": "scale-aware:20:373915:67157:1.19e-7",
+            "validity": "regular"
+          },
+          "k": 20,
+          "ties": 5
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -1.7895730609776116e-07,
+            "estimated_error": 6.674158956642264e-08,
+            "grad_D": [
+              -0.46494830984884006,
+              -0.8621923000752023
+            ],
+            "hessian_D": [
+              [
+                1005703.494003797,
+                -510911.5448986046
+              ],
+              [
+                -510911.5448986046,
+                325696.05719295517
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0000016012845883e-05,
+            "resolved_scale": 5.960464477539063e-08,
+            "singularity": "cut_locus",
+            "tile_id": "scale-aware:21:747831:134315:5.96e-8",
+            "validity": "singular"
+          },
+          "k": 21,
+          "ties": 6
+        },
+        {
+          "k": 22,
+          "event": "membership_unresolved"
+        },
+        {
+          "event": "fitted",
+          "jet": {
+            "D": -1.747698836941361e-07,
+            "estimated_error": null,
+            "grad_D": [
+              -0.47880035768857376,
+              -0.8722130802400265
+            ],
+            "hessian_D": [
+              [
+                237364.96447450668,
+                -85489.35425177589
+              ],
+              [
+                -85489.35425177589,
+                57792.931410904974
+              ]
+            ],
+            "is_bridge": false,
+            "provider_version": "geometry-provider/6",
+            "requested_scale": 1.0000015272244462e-05,
+            "resolved_scale": 1.4901161193847656e-08,
+            "singularity": "none",
+            "tile_id": "scale-aware:23:2991325:537261:1.49e-8",
+            "validity": "regular"
+          },
+          "k": 23,
+          "ties": null
+        },
+        {
+          "k": 24,
+          "event": "membership_unresolved"
+        }
+      ],
+      "membership_budget_summary_at_k18_and_above": [
+        {
+          "k": 18,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 1
+        },
+        {
+          "k": 19,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 2
+        },
+        {
+          "k": 20,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 4
+        },
+        {
+          "k": 21,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 3
+        },
+        {
+          "k": 22,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 1
+        },
+        {
+          "k": 23,
+          "generated_tiles": 1,
+          "minimum_budget": 32768,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 1,
+          "maximum_unstable_nodes": 1
+        },
+        {
+          "k": 24,
+          "generated_tiles": 5,
+          "minimum_budget": 4096,
+          "maximum_budget": 32768,
+          "tiles_with_unstable_nodes": 4,
+          "maximum_unstable_nodes": 62
+        }
+      ],
+      "final": {
+        "D": -1.747698836941361e-07,
+        "estimated_error": null,
+        "grad_D": [
+          -0.47880035768857376,
+          -0.8722130802400265
+        ],
+        "hessian_D": [
+          [
+            237364.96447450668,
+            -85489.35425177589
+          ],
+          [
+            -85489.35425177589,
+            57792.931410904974
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 1.0000015272244462e-05,
+        "resolved_scale": 1.4901161193847656e-08,
+        "singularity": "none",
+        "tile_id": "scale-aware:23:2991325:537261:1.49e-8",
+        "validity": "unresolved"
+      }
+    }
+  ]
+}
