@@ -101,10 +101,127 @@ pub(super) fn membership(re0: f64, im0: f64, width: f64) -> Option<bool> {
         zr = next_re;
         zi = next_im;
         if !zr.finite() || !zi.finite() {
-            return None;
+            return disk_membership(re, im);
         }
         if zr.square().add(zi.square()).lo > 4.0 {
             return Some(false);
+        }
+    }
+    disk_membership(re, im)
+}
+
+fn upper_add(a: f64, b: f64) -> f64 {
+    (a + b).next_up()
+}
+fn upper_mul(a: f64, b: f64) -> f64 {
+    (a * b).next_up()
+}
+fn norm_upper(z: [f64; 2]) -> f64 {
+    Interval::point(z[0])
+        .square()
+        .add(Interval::point(z[1]).square())
+        .hi
+        .sqrt()
+        .next_up()
+}
+fn distance_upper(a: [f64; 2], b: [f64; 2]) -> f64 {
+    let re = Interval::point(a[0]).sub(Interval::point(b[0]));
+    let im = Interval::point(a[1]).sub(Interval::point(b[1]));
+    re.square().add(im.square()).hi.sqrt().next_up()
+}
+#[derive(Clone, Copy)]
+struct Ball {
+    z: [f64; 2],
+    radius: f64,
+}
+impl Ball {
+    fn bounded(self) -> bool {
+        upper_add(norm_upper(self.z), self.radius) <= 2.
+    }
+    fn step(self, c: [f64; 2], cr: f64) -> Option<Self> {
+        let z = [
+            self.z[0] * self.z[0] - self.z[1] * self.z[1] + c[0],
+            2. * self.z[0] * self.z[1] + c[1],
+        ];
+        let a = upper_add(norm_upper(self.z), self.radius);
+        let c_bound = upper_add(norm_upper(c), cr);
+        // Let A bound |z| and C bound |c|. Each real/imaginary component
+        // uses at most four rounded operations, so gamma_4 < 4*EPSILON bounds
+        // its error by 4*EPSILON*(A^2+C) plus four MIN_POSITIVE terms for
+        // underflow. Summing component magnitudes bounds the complex error
+        // by 8*EPSILON*(A^2+C) + 8*MIN_POSITIVE. Account for both the actual
+        // machine orbit and this machine center, then double that bound.
+        // Accepted proofs keep every disk within |z| <= 2; nonfinite results
+        // cannot certify. Radius arithmetic below is rounded upward too.
+        let round = upper_add(
+            upper_mul(32. * f64::EPSILON, upper_add(upper_mul(a, a), c_bound)),
+            32. * f64::MIN_POSITIVE,
+        );
+        let radius = upper_add(
+            upper_add(
+                upper_mul(upper_mul(2., norm_upper(self.z)), self.radius),
+                upper_mul(self.radius, self.radius),
+            ),
+            upper_add(cr, round),
+        );
+        (radius.is_finite() && radius <= 4. && z.iter().all(|x| x.is_finite()))
+            .then_some(Self { z, radius })
+    }
+}
+fn disk_membership(re: Interval, im: Interval) -> Option<bool> {
+    let c = [re.lo + (re.hi - re.lo) * 0.5, im.lo + (im.hi - im.lo) * 0.5];
+    if !c.iter().all(|x| x.is_finite()) {
+        return None;
+    }
+    let cr = norm_upper([
+        (re.lo - c[0]).abs().max((re.hi - c[0]).abs()).next_up(),
+        (im.lo - c[1]).abs().max((im.hi - c[1]).abs()).next_up(),
+    ]);
+    let mut orbit = Ball {
+        z: [0.; 2],
+        radius: 0.,
+    };
+    let mut centers = [[0.; 2]; 65];
+    let mut bounded = true;
+    for slot in centers.iter_mut().skip(1) {
+        orbit = orbit.step(c, cr)?;
+        *slot = orbit.z;
+        bounded &= orbit.bounded();
+    }
+    if !bounded {
+        return None;
+    }
+    // A returned disk must contain the entire current critical-orbit disk.
+    // Strict inclusion after p steps makes it forward invariant under f_c^p.
+    // Every intervening disk must remain below the same escape radius, so
+    // this also proves the ordinary finite-budget machine orbit stays inside.
+    let mut period = 1;
+    let mut separation = f64::INFINITY;
+    for p in 1..=64 {
+        let d = distance_upper(orbit.z, centers[64 - p]);
+        if d < separation {
+            period = p;
+            separation = d;
+        }
+    }
+    for factor in [2., 8., 32., 128.] {
+        let radius = upper_mul(factor, upper_add(orbit.radius, separation));
+        let start = Ball { z: orbit.z, radius };
+        if !start.bounded() {
+            continue;
+        }
+        let mut end = start;
+        let mut bounded = true;
+        for _ in 0..period {
+            let Some(next) = end.step(c, cr) else {
+                bounded = false;
+                break;
+            };
+            end = next;
+            bounded &= end.bounded();
+        }
+        if bounded && upper_add(distance_upper(end.z, start.z), end.radius) < radius {
+            return Some(true);
         }
     }
     None
@@ -179,6 +296,34 @@ mod tests {
         }
         assert!(certified > 100);
         assert!(uncertain > 0);
+    }
+
+    #[test]
+    fn periodic_disk_proof_covers_conjugate_period_three_tiles() {
+        for im in [-0.7448617666197442, 0.7448617666197442] {
+            let re0 = -0.1225611668766536 - 0.0005;
+            let im0 = im - 0.0005;
+            let width = 0.001;
+            assert_eq!(membership(re0, im0, width), Some(true));
+            for y in 0..=56 {
+                for x in 0..=56 {
+                    let c = num_complex::Complex64::new(
+                        re0 + x as f64 * width / 56.0,
+                        im0 + y as f64 * width / 56.0,
+                    );
+                    for budget in [512, 32768] {
+                        assert!(crate::visual_metrics::mandelbrot_membership(c, budget));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn neutral_cycles_do_not_supply_an_interior_disk_certificate() {
+        for re in [0.25, 0.2500001, -0.75] {
+            assert_eq!(membership(re, 0.0, 0.0), None);
+        }
     }
 
     #[test]

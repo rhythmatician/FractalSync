@@ -2,6 +2,14 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 continuation: certified periodic interiors
+
+Whole-box certification now also attempts an outward-bounded disk enclosure. After 64 critical-orbit steps, a candidate disk must contain that entire enclosure, stay below the ordinary escape radius at every step of its candidate period, and map strictly into itself. Parameter uncertainty and machine-rounding bounds are included. Unsuccessful searches use ordinary tile construction. The search adds at most 320 disk steps; membership budgets and acceptance thresholds are unchanged.
+
+The new conjugate period-three tile test was red before implementation. All **30 provider tests pass**, including every node of both 57-by-57 tiles against canonical 512- and 32,768-step membership. Neutral cycles and mixed boxes remain uncertified. A separate 32,361-box map sweep also agrees with canonical membership at sampled corners and centers. Independent reviews cleared the bounded delta; the implementation documents the rounding-operation bound supporting its proof.
+
+The [64-query comparison](validation/geometry-145-periodic-box-cost.json) gives exactly identical serialized jets. Summed cold times are 54.14 seconds before and 55.06 seconds after under concurrent validation load; this mixed report establishes no general speedup. The new proof avoids point-orbit construction in additional periodic interiors while adding bounded overhead to uncertain boxes. Production versions, golden values and crossing tests remain unchanged.
+
 ## October 23 continuation: exact-query reuse
 
 The public scale-aware query now retains up to 128 complete jets in an LRU keyed by provider version and the exact bits of both coordinates and epsilon. An identical query returns an owned copy. Different neighboring coordinates and epsilons remain distinct, invalid inputs bypass retention, and errors are not cached. Nonregular classifications retain their refusal information. The existing tile LRU and the new jet LRU share one implementation.
