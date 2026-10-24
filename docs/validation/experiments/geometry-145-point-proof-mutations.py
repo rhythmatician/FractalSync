@@ -14,7 +14,7 @@ try:
   p.write_bytes(source.replace(old,new,1).encode())
   result=subprocess.run(command+[test,'--','--nocapture'],capture_output=True,text=True,encoding='utf-8')
   Path(f'tmp/geometry-145-point-proof-mutation-{name}.log').write_text(result.stdout+result.stderr,encoding='utf-8')
-  results.append({'mutation':name,'exit_code':result.returncode,'caught':result.returncode!=0})
+  results.append({'mutation':name,'exit_code':result.returncode,'caught':result.returncode!=0 and 'test result: FAILED' in result.stdout})
 finally:p.write_bytes(original)
 Path('tmp/geometry-145-point-proof-mutations.json').write_text(json.dumps(results,indent=2))
 print(json.dumps(results))

@@ -1,3 +1,6 @@
+mod affine_box_proof;
+mod proof_support;
+mod quadratic_box_proof;
 use astro_float::{BigFloat, RoundingMode};
 mod point_proof;
 fn escape(c: [f64; 2], precision: usize) -> Option<usize> {
@@ -26,6 +29,29 @@ fn escape(c: [f64; 2], precision: usize) -> Option<usize> {
     None
 }
 fn main() {
+    let selection = std::env::args().nth(1);
+    if matches!(selection.as_deref(), Some("boxes" | "quadratic-boxes")) {
+        for (name, c) in [
+            ("native", [0.32049988639807619, 0.04733531447355364]),
+            ("blocking", [0.3204946517944336, 0.04734092950820923]),
+            ("python", [0.35659381055433242, 0.06404656757776669]),
+        ] {
+            for q in [20, 24, 28, 32, 40] {
+                let width = 2f64.powi(-q);
+                let x = (c[0] / width).floor() * width;
+                let y = (c[1] / width).floor() * width;
+                let start = std::time::Instant::now();
+                let result = if selection.as_deref() == Some("quadratic-boxes") {
+                    quadratic_box_proof::membership(x, y, width, 128, 32768)
+                } else {
+                    affine_box_proof::membership(x, y, width, 128, 32768)
+                };
+                println!("[HP_BOX145] name={name} q={q} x={x:.17} y={y:.17} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
+            }
+        }
+        return;
+    }
+
     if std::env::args().nth(1).as_deref() == Some("proof") {
         for p in [128, 256, 512] {
             assert_eq!(point_proof::escape([1., 0.], p, 32768).unwrap().update, 3);

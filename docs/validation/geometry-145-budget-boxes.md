@@ -33,6 +33,8 @@ certificates** in that sample. Existing certificates remain unchanged. This does
 not establish a useful cost improvement. The separate recorded-point query's
 terminal status is preserved in [the JSON report](geometry-145-budget-boxes.json).
 
+The budget-aware isolated recorded-point query also timed out after 1200.28 seconds.
+
 The preceding FIFO candidate's full original native crossing test times out at
 1200 seconds at the same recorded difficult point. Its cache-only predecessor's
 isolated point query also times out at 1200 seconds. These are failures to

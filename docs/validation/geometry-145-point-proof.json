@@ -38,5 +38,10 @@
   "python_crossing_inside": {
     "prefix": 2048,
     "period": 308
-  }
+  },
+  "current_experiment_tests": {
+    "passed": 15,
+    "suites": 2
+  },
+  "current_field_experiment": "geometry-145-component-field.json"
 }

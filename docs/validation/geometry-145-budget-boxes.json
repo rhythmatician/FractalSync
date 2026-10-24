@@ -1019,7 +1019,9 @@
     },
     "budget-boxes-recorded-point": {
       "status": {
-        "terminal_result_not_yet_available": true
+        "elapsed_s": 1200.2808291000547,
+        "timed_out": true,
+        "timeout_s": 1200
       },
       "output": "\nrunning 1 test\ntest geometry_provider::memo_point_test::recorded_next_driven_point_resolves ... ",
       "last_stderr_lines": [

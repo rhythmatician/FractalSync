@@ -8,3 +8,7 @@ publish = false
 
 [dependencies]
 astro-float = "=0.9.6"
+
+[[bin]]
+name = "component_probe"
+path = "src/component_probe.rs"

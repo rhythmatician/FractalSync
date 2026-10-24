@@ -17,20 +17,25 @@ pub enum MembershipProof {
     },
 }
 #[derive(Clone)]
-struct Complex {
-    re: BigFloat,
-    im: BigFloat,
+pub(super) struct Complex {
+    pub(super) re: BigFloat,
+    pub(super) im: BigFloat,
 }
 impl Complex {
-    fn norm_squared(&self, p: usize, round: R) -> BigFloat {
+    pub(super) fn norm_squared(&self, p: usize, round: R) -> BigFloat {
         self.re
             .mul(&self.re, p, round)
             .add(&self.im.mul(&self.im, p, round), p, round)
     }
-    fn norm_upper(&self, p: usize) -> BigFloat {
+    pub(super) fn norm_upper(&self, p: usize) -> BigFloat {
         self.norm_squared(p, R::Up).sqrt(p, R::Up)
     }
-    fn advance(&self, radius: &BigFloat, c: &Self, p: usize) -> Option<(Self, BigFloat)> {
+    pub(super) fn advance(
+        &self,
+        radius: &BigFloat,
+        c: &Self,
+        p: usize,
+    ) -> Option<(Self, BigFloat)> {
         let (next, error) = self.step(c, p)?;
         let next_radius = BigFloat::from(2u8)
             .mul(&self.norm_upper(p), p, R::Up)
@@ -42,7 +47,7 @@ impl Complex {
         }
         Some((next, next_radius))
     }
-    fn distance_upper(&self, other: &Self, p: usize) -> Option<BigFloat> {
+    pub(super) fn distance_upper(&self, other: &Self, p: usize) -> Option<BigFloat> {
         let component = |a: &BigFloat, b: &BigFloat| {
             let abs = |mut v: BigFloat| {
                 if v.sign() == Some(Sign::Neg) {
@@ -68,7 +73,7 @@ impl Complex {
         .norm_upper(p);
         (!result.is_nan() && !result.is_inf()).then_some(result)
     }
-    fn step(&self, c: &Self, p: usize) -> Option<(Self, BigFloat)> {
+    pub(super) fn step(&self, c: &Self, p: usize) -> Option<(Self, BigFloat)> {
         // Outward intervals enclose the exact operation on the stored centers.
         // Their differences from the rounded center supply its local error ball.
         let two = BigFloat::from(2u8);
@@ -146,12 +151,13 @@ fn strictly_inside(distance: &BigFloat, radius: &BigFloat, outer: &BigFloat, p: 
         .cmp(outer)
         .is_some_and(|v| v < 0)
 }
-fn trap(
+pub(super) fn trap(
     z: &Complex,
     radius: &BigFloat,
     centers: &VecDeque<Complex>,
     c: &Complex,
     p: usize,
+    parameter_radius: &BigFloat,
 ) -> Option<usize> {
     let last = centers.len().checked_sub(1)?;
     let mut candidate = None;
@@ -192,7 +198,7 @@ fn trap(
                 break;
             };
             center = next;
-            bound = next_radius;
+            bound = next_radius.add(parameter_radius, p, R::Up);
             if center
                 .norm_upper(p)
                 .add(&bound, p, R::Up)
@@ -249,7 +255,7 @@ pub fn membership(c: [f64; 2], p: usize, budget: usize) -> Option<MembershipProo
             centers.pop_front();
         }
         if n + 1 >= 512 && (n + 1).is_power_of_two() {
-            if let Some(period) = trap(&z, &radius, &centers, &parameter, p) {
+            if let Some(period) = trap(&z, &radius, &centers, &parameter, p, &BigFloat::new(p)) {
                 return Some(MembershipProof::Inside {
                     prefix: n + 1,
                     period,

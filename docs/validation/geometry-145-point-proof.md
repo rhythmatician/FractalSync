@@ -14,10 +14,12 @@ Run from the repository root:
 
 ```powershell
 rtk cargo test --release --jobs 1 --manifest-path docs/validation/experiments/geometry-145-point-proof/Cargo.toml --target-dir target/geometry145-precision
-rtk cargo run --release --jobs 1 --manifest-path docs/validation/experiments/geometry-145-point-proof/Cargo.toml --target-dir target/geometry145-precision -- proof
+rtk cargo run --release --jobs 1 --manifest-path docs/validation/experiments/geometry-145-point-proof/Cargo.toml --target-dir target/geometry145-precision --bin geometry145_precision_probe -- proof
 .venv/Scripts/python.exe docs/validation/experiments/geometry-145-point-proof-mutations.py
 ```
 
 The mutation script restores the source in a finally block and writes logs under `tmp`. Do not run it concurrently with builds of the same experimental crate.
 
 Remaining work is to obtain tight certified distance intervals at the difficult nodes, feed those intervals into one coherent distance/gradient/Hessian representation, and validate the original crossings, live training and query cost. Point membership alone does not close these requirements. Runtime adoption also requires dependency and WASM review, version and golden-vector updates, and the full project validation.
+
+The subsequent whole-box and component-distance experiments are recorded in [geometry-145-component-field.md](geometry-145-component-field.md).
