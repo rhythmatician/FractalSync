@@ -1,0 +1,954 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -286,7 +286,6 @@
+ // Keep the footprint bounded, but allow the next level to separate recorded
+ // near ties and converge the small Shore features found during live rollouts.
+ // Radius 3 truncated those queries before their unchanged quality gates passed.
+-const SHORE_TILE_EXPANSION_RADIUS: i64 = 5;
+-
++
+ #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+ struct TileKey {
+@@ -1068,9 +1067,331 @@
+ }
+-
++
+ struct FittedJet {
++    detail: FieldJet,
+     jet: GeometryJet,
+     fit_rms: f64,
+     stencil: Vec<(f64, f64, f64)>,
++}
++
++// Unshipped scalar-field experiment. All derivatives include blend weights.
++#[derive(Clone, Copy)]
++struct FieldJet {
++    d: f64,
++    g: [f64; 2],
++    h: [[f64; 2]; 2],
++}
++impl FieldJet {
++    fn constant(d: f64) -> Self {
++        Self {
++            d,
++            g: [0.0; 2],
++            h: [[0.0; 2]; 2],
++        }
++    }
++    fn from_geometry(jet: &GeometryJet) -> Self {
++        Self {
++            d: jet.d,
++            g: jet.grad_d,
++            h: jet.hessian_d,
++        }
++    }
++    fn add(self, other: Self) -> Self {
++        let mut result = self;
++        result.d += other.d;
++        for i in 0..2 {
++            result.g[i] += other.g[i];
++            for j in 0..2 {
++                result.h[i][j] += other.h[i][j];
++            }
++        }
++        result
++    }
++    fn scale(self, factor: f64) -> Self {
++        let mut result = self;
++        result.d *= factor;
++        for i in 0..2 {
++            result.g[i] *= factor;
++            for j in 0..2 {
++                result.h[i][j] *= factor;
++            }
++        }
++        result
++    }
++    fn mul(self, other: Self) -> Self {
++        let mut result = Self::constant(self.d * other.d);
++        for i in 0..2 {
++            result.g[i] = self.g[i] * other.d + self.d * other.g[i];
++            for j in 0..2 {
++                result.h[i][j] = self.h[i][j] * other.d
++                    + self.g[i] * other.g[j]
++                    + self.g[j] * other.g[i]
++                    + self.d * other.h[i][j];
++            }
++        }
++        result
++    }
++    fn compose(self, value: f64, first: f64, second: f64) -> Self {
++        let mut result = Self::constant(value);
++        for i in 0..2 {
++            result.g[i] = first * self.g[i];
++            for j in 0..2 {
++                result.h[i][j] = first * self.h[i][j] + second * self.g[i] * self.g[j];
++            }
++        }
++        result
++    }
++    fn reciprocal(self) -> Self {
++        self.compose(1.0 / self.d, -1.0 / self.d.powi(2), 2.0 / self.d.powi(3))
++    }
++    fn sqrt(self) -> Self {
++        let v = self.d.sqrt();
++        self.compose(v, 0.5 / v, -0.25 / (self.d * v))
++    }
++    fn smoothstep(self) -> Self {
++        if self.d <= 0.0 {
++            return Self::constant(0.0);
++        }
++        if self.d >= 1.0 {
++            return Self::constant(1.0);
++        }
++        let x = self.d;
++        self.compose(
++            x.powi(3) * (10.0 - 15.0 * x + 6.0 * x * x),
++            30.0 * x * x * (x - 1.0).powi(2),
++            60.0 * x * (2.0 * x * x - 3.0 * x + 1.0),
++        )
++    }
++}
++
++struct FieldModel {
++    field: FieldJet,
++    h: f64,
++    detail: FieldJet,
++    certified: bool,
++}
++struct FieldHierarchy {
++    models: Vec<FieldModel>,
++    sum: FieldJet,
++    product: FieldJet,
++    effective_h: f64,
++    closed: bool,
++    certified: bool,
++}
++fn field_zero(field: FieldJet) -> bool {
++    field.d == 0. && field.g == [0.; 2] && field.h == [[0.; 2]; 2]
++}
++impl FieldHierarchy {
++    fn next_weight(previous: FieldJet, h: f64, epsilon: f64, detail: FieldJet) -> FieldJet {
++        let rho = previous
++            .mul(previous)
++            .add(FieldJet::constant(epsilon * epsilon))
++            .sqrt();
++        let size = rho
++            .reciprocal()
++            .scale(h / (GEOMETRY_SCALE_ALPHA / 8.))
++            .add(FieldJet::constant(-1.))
++            .smoothstep();
++        Self::either(size, detail)
++    }
++    fn either(a: FieldJet, b: FieldJet) -> FieldJet {
++        FieldJet::constant(1.).add(
++            FieldJet::constant(1.)
++                .add(a.scale(-1.))
++                .mul(FieldJet::constant(1.).add(b.scale(-1.)))
++                .scale(-1.),
++        )
++    }
++    fn disagreement(coarse: FieldJet, fine: FieldJet, epsilon: f64) -> FieldJet {
++        let delta = fine.add(coarse.scale(-1.));
++        let rho2 = coarse
++            .mul(coarse)
++            .add(FieldJet::constant(epsilon * epsilon));
++        delta
++            .mul(delta)
++            .mul(rho2.reciprocal())
++            .scale(16. / (GEOMETRY_SCALE_ALPHA * DYADIC_FIT_ERROR_FACTOR).powi(2))
++            .add(FieldJet::constant(-1.))
++            .smoothstep()
++    }
++    fn new(jet: &GeometryJet, _epsilon: f64, certified: bool, detail: FieldJet) -> Self {
++        let field = FieldJet::from_geometry(jet);
++        Self {
++            models: vec![FieldModel {
++                field,
++                h: jet.resolved_scale,
++                detail,
++                certified,
++            }],
++            sum: field,
++            product: FieldJet::constant(1.),
++            effective_h: jet.resolved_scale,
++            closed: false,
++            certified,
++        }
++    }
++    fn advance(&mut self, jet: &GeometryJet, epsilon: f64, certified: bool, detail: FieldJet) {
++        self.models.push(FieldModel {
++            field: FieldJet::from_geometry(jet),
++            h: jet.resolved_scale,
++            detail,
++            certified,
++        });
++        let mut prefix = FieldJet::constant(0.);
++        let mut prefix_h: f64 = 0.;
++        let mut prefix_certified = true;
++        let mut weights_certified = true;
++        let mut product = FieldJet::constant(1.);
++        self.sum = self.models[0].field;
++        self.effective_h = self.models[0].h;
++        self.certified = self.models[0].certified;
++        self.closed = false;
++        for i in 0..self.models.len().saturating_sub(2) {
++            let coarse = &self.models[i];
++            let first = &self.models[i + 1];
++            let second = &self.models[i + 2];
++            let size = Self::next_weight(coarse.field, coarse.h, epsilon, coarse.detail);
++            let error1 = Self::disagreement(coarse.field, first.field, epsilon);
++            let error2 = Self::disagreement(coarse.field, second.field, epsilon);
++            let weight = Self::either(size, Self::either(error1, error2));
++            let next = if weight.d == 1. && weight.g == [0.; 2] && weight.h == [[0.; 2]; 2] {
++                product
++            } else if field_zero(weight) {
++                FieldJet::constant(0.)
++            } else {
++                product.mul(weight)
++            };
++            let one = |v: FieldJet| v.d == 1. && v.g == [0.; 2] && v.h == [[0.; 2]; 2];
++            // A flat coefficient alone cannot certify the inputs selecting it.
++            // A certified operand that independently forces OR to one can
++            // dominate other unknown operands; a zero plateau cannot.
++            weights_certified &= coarse.certified
++                && (one(size)
++                    || (first.certified && one(error1))
++                    || (second.certified && one(error2))
++                    || (first.certified && second.certified));
++            let retained = product.add(next.scale(-1.));
++            if !field_zero(retained) {
++                prefix = prefix.add(retained.mul(coarse.field));
++                prefix_h = prefix_h.max(coarse.h);
++                prefix_certified &= coarse.certified;
++            }
++            self.sum = prefix.add(next.mul(first.field));
++            self.product = next;
++            self.closed = field_zero(next);
++            self.effective_h = prefix_h.max(if self.closed { 0. } else { first.h });
++            self.certified =
++                prefix_certified && weights_certified && (self.closed || first.certified);
++            if self.closed {
++                break;
++            }
++            product = next;
++        }
++    }
++    fn output(&self, raw: &GeometryJet, epsilon: f64) -> GeometryJet {
++        let mut result = raw.clone();
++        let ge = (self.sum.g[0] - raw.grad_d[0]).hypot(self.sum.g[1] - raw.grad_d[1]);
++        let he = ((self.sum.h[0][0] - raw.hessian_d[0][0]).powi(2)
++            + 2. * (self.sum.h[0][1] - raw.hessian_d[0][1]).powi(2)
++            + (self.sum.h[1][1] - raw.hessian_d[1][1]).powi(2))
++        .sqrt();
++        let comparison_h = self.effective_h.max(2. * raw.resolved_scale);
++        result.estimated_error = result
++            .estimated_error
++            .max((self.sum.d - raw.d).abs())
++            .max(comparison_h * ge)
++            .max(comparison_h * comparison_h * he);
++        result.d = self.sum.d;
++        result.grad_d = self.sum.g;
++        result.hessian_d = self.sum.h;
++        result.resolved_scale = self.effective_h;
++        result.requested_scale =
++            GEOMETRY_SCALE_ALPHA * (self.sum.d * self.sum.d + epsilon * epsilon).sqrt();
++        result
++    }
++}
++
++fn distance_stencil(c: Complex64, h: f64) -> impl Iterator<Item = Complex64> {
++    let x = (c.re / h).floor();
++    let y = (c.im / h).floor();
++    (-4..=4).flat_map(move |dy| {
++        (-4..=4).map(move |dx| Complex64::new((x + dx as f64) * h, (y + dy as f64) * h))
++    })
++}
++
++// Exact integer coefficient polynomials, ordered from t^0 through t^5.
++fn quintic_basis(t: f64) -> [[f64; 6]; 5] {
++    const P: [[f64; 6]; 6] = [
++        [1., -5., 10., -10., 5., -1.],
++        [26., -50., 20., 20., -20., 5.],
++        [66., 0., -60., 0., 30., -10.],
++        [26., 50., 20., -20., -20., 10.],
++        [1., 5., 10., 10., 5., -5.],
++        [0., 0., 0., 0., 0., 1.],
++    ];
++    let mut result = [[0.; 6]; 5];
++    for derivative in 0..5 {
++        for basis in 0..6 {
++            let mut value = 0.;
++            for power in (derivative..6).rev() {
++                let factor = (0..derivative).fold(1., |product, i| product * (power - i) as f64);
++                value = value * t + P[basis][power] * factor;
++            }
++            result[derivative][basis] = value / 120.;
++        }
++    }
++    result
++}
++
++fn quintic_field(c: Complex64, h: f64, nodes: &[(f64, f64, f64)]) -> (FieldJet, FieldJet) {
++    let tx = c.re / h - (c.re / h).floor();
++    let ty = c.im / h - (c.im / h).floor();
++    let wx = quintic_basis(tx);
++    let wy = quintic_basis(ty);
++    let reference = nodes[40].2;
++    let sx = (nodes[41].2 - nodes[39].2) * 0.5;
++    let sy = (nodes[49].2 - nodes[31].2) * 0.5;
++    let mut derivatives = [[0.; 5]; 5];
++    for y in 0..6 {
++        for x in 0..6 {
++            let index = (y + 2) * 9 + x + 2;
++            let center = nodes[index].2;
++            let laplacian = (nodes[index - 1].2 - center)
++                + (nodes[index + 1].2 - center)
++                + (nodes[index - 9].2 - center)
++                + (nodes[index + 9].2 - center);
++            let coefficient =
++                center - 0.25 * laplacian - reference - sx * (x as f64 - 2.) - sy * (y as f64 - 2.);
++            for dx in 0..5 {
++                for dy in 0..5 - dx {
++                    derivatives[dx][dy] +=
++                        wx[dx][x] * wy[dy][y] * coefficient / h.powi((dx + dy) as i32);
++                }
++            }
++        }
++    }
++    derivatives[0][0] += reference + sx * tx + sy * ty;
++    derivatives[1][0] += sx / h;
++    derivatives[0][1] += sy / h;
++    let component = |dx: usize, dy: usize| FieldJet {
++        d: derivatives[dx][dy],
++        g: [derivatives[dx + 1][dy], derivatives[dx][dy + 1]],
++        h: [
++            [derivatives[dx + 2][dy], derivatives[dx + 1][dy + 1]],
++            [derivatives[dx + 1][dy + 1], derivatives[dx][dy + 2]],
++        ],
++    };
++    let xx = component(2, 0);
++    let xy = component(1, 1);
++    let yy = component(0, 2);
++    let jump = 2. * (0.5 * DYADIC_CUT_NORMAL_DEGREES.to_radians()).sin();
++    let detail = xx
++        .mul(xx)
++        .add(xy.mul(xy).scale(2.))
++        .add(yy.mul(yy))
++        .scale(36. * h * h / (jump * jump))
++        .add(FieldJet::constant(-1.))
++        .smoothstep();
++    (component(0, 0), detail)
+ }
+-
++
+ fn compute_jet_at_level(
+@@ -1085,21 +1406,20 @@
+     }
+     // The same signed-distance evaluator owns fitting and convergence.
+     let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
+-    for dy in -3..=3 {
+-        for dx in -3..=3 {
+-            let x = dx as f64 * h;
+-            let y = dy as f64 * h;
+-            let distance = signed_shore_distance(c + Complex64::new(x, y), h, &tile.segments)?;
+-            stencil.push((x, y, distance));
+-        }
+-    }
+-    let (coeff_n, rms) = fit_quadratic_jet(&stencil)?;
+-    let d = coeff_n[0];
+-    let grad = [coeff_n[1] / h, coeff_n[2] / h];
+-    let hess = [
+-        [2.0 * coeff_n[3] / (h * h), coeff_n[4] / (h * h)],
+-        [coeff_n[4] / (h * h), 2.0 * coeff_n[5] / (h * h)],
+-    ];
++    for sample in distance_stencil(c, h) {
++        let value = signed_shore_distance(sample, h, &tile.segments)?;
++        stencil.push((sample.re - c.re, sample.im - c.im, value));
++    }
++    let center_stencil: Vec<_> = (1..8)
++        .flat_map(|y| (1..8).map(move |x| (y, x)))
++        .map(|(y, x)| stencil[y * 9 + x])
++        .collect();
++    let (_, rms) = fit_quadratic_jet(&center_stencil)?;
++    let (field, detail) = quintic_field(c, h, &stencil);
++    let d = field.d;
++    let grad = field.g;
++    let hess = field.h;
++    let rms = rms.max((d - signed_shore_distance(c, h, &tile.segments)?).abs());
+     // For cut locus we need per-point nearest segments, but we approximate via stencil
+     // Return jet with temporary validity Regular, will be refined by caller
+     let rho = (d * d + epsilon * epsilon).sqrt();
+@@ -1124,6 +1444,7 @@
+         is_bridge: false,
+     };
+     Some(FittedJet {
++        detail,
+         jet,
+         fit_rms: rms,
+         stencil,
+@@ -1143,9 +1464,10 @@
+         .min(tile.origin_re + cells as f64 * tile.h - c.re)
+         .min(c.im - tile.origin_im)
+         .min(tile.origin_im + cells as f64 * tile.h - c.im);
+-    nearest_shore_distance(c, tile) + (3.0 * 2.0_f64.sqrt() + 4.0) * tile.h < margin
+-}
+-
++    nearest_shore_distance(c, tile) + (5.0 * 2.0_f64.sqrt() + 4.0) * tile.h < margin
++}
++
++#[cfg(test)]
+ fn contour_contained(c: Complex64, tile: &ShoreTile, cells: usize) -> bool {
+     contour_footprint_contains(c, tile, cells) && stencil_membership_stable(c, tile)
+ }
+@@ -1154,28 +1476,28 @@
+     if tile.unstable_nodes.is_empty() {
+         return true;
+     }
+-    for dy in -3..=3 {
+-        for dx in -3..=3 {
+-            let sample = c + Complex64::new(dx as f64 * tile.h, dy as f64 * tile.h);
+-            let Some((distance, projection)) = tile
+-                .segments
+-                .iter()
+-                .map(|s| point_to_segment_distance(sample.re, sample.im, s))
+-                .min_by(|a, b| a.0.total_cmp(&b.0))
+-            else {
++    for sample in distance_stencil(c, tile.h).filter(|sample| {
++        sample.re >= ((c.re / tile.h).floor() - 3.) * tile.h
++            && sample.im >= ((c.im / tile.h).floor() - 3.) * tile.h
++    }) {
++        let Some((distance, projection)) = tile
++            .segments
++            .iter()
++            .map(|s| point_to_segment_distance(sample.re, sample.im, s))
++            .min_by(|a, b| a.0.total_cmp(&b.0))
++        else {
++            return false;
++        };
++        for &(x, y) in &tile.unstable_nodes {
++            // A changing node can alter any adjacent cell. Its one-cell
++            // box must be farther than the currently nearest Shore, not
++            // merely farther than the query's center distance.
++            let box_dx = ((sample.re - x).abs() - tile.h).max(0.0);
++            let box_dy = ((sample.im - y).abs() - tile.h).max(0.0);
++            let in_stability_band = (projection.0 - x).abs().max((projection.1 - y).abs())
++                <= DYADIC_STABILITY_BAND_CELLS as f64 * tile.h;
++            if box_dx.hypot(box_dy) <= distance || in_stability_band {
+                 return false;
+-            };
+-            for &(x, y) in &tile.unstable_nodes {
+-                // A changing node can alter any adjacent cell. Its one-cell
+-                // box must be farther than the currently nearest Shore, not
+-                // merely farther than the query's center distance.
+-                let box_dx = ((sample.re - x).abs() - tile.h).max(0.0);
+-                let box_dy = ((sample.im - y).abs() - tile.h).max(0.0);
+-                let in_stability_band = (projection.0 - x).abs().max((projection.1 - y).abs())
+-                    <= DYADIC_STABILITY_BAND_CELLS as f64 * tile.h;
+-                if box_dx.hypot(box_dy) <= distance || in_stability_band {
+-                    return false;
+-                }
+             }
+         }
+     }
+@@ -1187,70 +1509,155 @@
+     FootprintUnresolved,
+ }
+-
++
+-fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
++#[derive(Clone, Copy)]
++struct SearchRegion {
++    lower: f64,
++    bounds: [i64; 4],
++}
++impl PartialEq for SearchRegion {
++    fn eq(&self, other: &Self) -> bool {
++        self.lower == other.lower && self.bounds == other.bounds
++    }
++}
++impl Eq for SearchRegion {}
++impl PartialOrd for SearchRegion {
++    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
++        Some(self.cmp(other))
++    }
++}
++impl Ord for SearchRegion {
++    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
++        other
++            .lower
++            .total_cmp(&self.lower)
++            .then_with(|| other.bounds.cmp(&self.bounds))
++    }
++}
++const FIELD_REGION_VISIT_LIMIT: usize = 131072;
++const FIELD_LEAF_TILE_LIMIT: usize = 16384;
++const FIELD_SEARCH_RADIUS: i64 = 4096;
++struct RegionSearch {
++    visits: usize,
++    leaves: usize,
++    nearest: f64,
++}
++impl RegionSearch {
++    fn visit(
++        &mut self,
++        c: Complex64,
++        k: u32,
++        base: (i64, i64),
++        bounds: [i64; 4],
++        output: &mut ShoreTile,
++    ) -> Result<(), TileQueryError> {
++        let h = output.h;
++        let stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
++        let origin = |g: i64, b: i64| {
++            ((b + g * stride) * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h
++        };
++        let lower = |r: [i64; 4]| {
++            let re = origin(r[0], base.0);
++            let im = origin(r[2], base.1);
++            let w = (r[1] - r[0] + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
++            let ht = (r[3] - r[2] + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
++            (re - c.re)
++                .max(c.re - re - w)
++                .max(0.)
++                .hypot((im - c.im).max(c.im - im - ht).max(0.))
++        };
++        let mut heap = std::collections::BinaryHeap::new();
++        heap.push(SearchRegion {
++            lower: lower(bounds),
++            bounds,
++        });
++        while let Some(region) = heap.pop() {
++            self.visits += 1;
++            if self.visits > FIELD_REGION_VISIT_LIMIT {
++                eprintln!(
++                    "REGION_LIMIT k={k} leaves={} visits={}",
++                    self.leaves, self.visits
++                );
++                return Err(TileQueryError::FootprintUnresolved);
++            }
++            if region.lower > self.nearest + (10. * 2_f64.sqrt() + 4.) * h {
++                break;
++            }
++            let [x0, x1, y0, y1] = region.bounds;
++            let re0 = origin(x0, base.0);
++            let im0 = origin(y0, base.1);
++            let width = (x1 - x0 + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
++            let height = (y1 - y0 + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
++            if uniform_box::membership(re0, im0, width.max(height)).is_some() {
++                continue;
++            }
++            if x0 == x1 && y0 == y1 {
++                self.leaves += 1;
++                if self.leaves > FIELD_LEAF_TILE_LIMIT {
++                    eprintln!(
++                        "LEAF_LIMIT k={k} leaves={} visits={}",
++                        self.leaves, self.visits
++                    );
++                    return Err(TileQueryError::FootprintUnresolved);
++                }
++                let tile =
++                    get_or_generate_shore_tile(k, base.0 + x0 * stride, base.1 + y0 * stride)
++                        .ok_or(TileQueryError::MembershipUnresolved)?;
++                self.nearest = tile.segments.iter().fold(self.nearest, |d, s| {
++                    d.min(point_to_segment_distance(c.re, c.im, s).0)
++                });
++                output.segments.extend(tile.segments);
++                output.unstable_nodes.extend(tile.unstable_nodes);
++                continue;
++            }
++            let (a, b) = if x1 - x0 >= y1 - y0 {
++                let mid = (x0 + x1).div_euclid(2);
++                ([x0, mid, y0, y1], [mid + 1, x1, y0, y1])
++            } else {
++                let mid = (y0 + y1).div_euclid(2);
++                ([x0, x1, y0, mid], [x0, x1, mid + 1, y1])
++            };
++            heap.push(SearchRegion {
++                lower: lower(a),
++                bounds: a,
++            });
++            heap.push(SearchRegion {
++                lower: lower(b),
++                bounds: b,
++            });
++        }
++        Ok(())
++    }
++}
++fn contained_tile(c: Complex64, k: u32) -> Result<(ShoreTile, bool), TileQueryError> {
+     let h = dyadic_h(k);
+     let (ix, iy, _, _) = dyadic_tile_origin(c, h);
+-    let tile = get_or_generate_shore_tile(k, ix, iy).ok_or(TileQueryError::MembershipUnresolved)?;
+-    if contour_contained(c, &tile, DYADIC_TILE_CELLS) {
+-        return Ok(tile);
+-    }
+-    if contour_footprint_contains(c, &tile, DYADIC_TILE_CELLS) {
+-        return Err(TileQueryError::MembershipUnresolved);
+-    }
+-    // One bounded expansion, at most 11x11 complete tiles (121 derived entries).
+-    // Adjacent complete tiles are seven core strides apart. Offsetting by one
+-    // core stride mostly overlaps the same samples and loses the Shore as h
+-    // shrinks, even when the finer local jet would satisfy the error bound.
+-    let tile_stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
+-    let mut expanded = ShoreTile {
++    let stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
++    let center = (DYADIC_HALO_CELLS / DYADIC_CORE_CELLS) as i64;
++    let base = (
++        (ix + center).div_euclid(stride) * stride,
++        (iy + center).div_euclid(stride) * stride,
++    );
++    let origin =
++        |index: i64| (index * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
++    let radius = FIELD_SEARCH_RADIUS;
++    let width = (2 * radius + 1) as usize * DYADIC_TILE_CELLS;
++    let mut search = RegionSearch {
++        visits: 0,
++        leaves: 0,
++        nearest: f64::INFINITY,
++    };
++    let mut tile = ShoreTile {
+         k,
+         h,
+-        origin_re: tile.origin_re,
+-        origin_im: tile.origin_im,
++        origin_re: origin(base.0) - radius as f64 * DYADIC_TILE_CELLS as f64 * h,
++        origin_im: origin(base.1) - radius as f64 * DYADIC_TILE_CELLS as f64 * h,
+         segments: Vec::new(),
+         unstable_nodes: Vec::new(),
+     };
+-    let mut nearest_distance = f64::INFINITY;
+-    for radius in 0_i64..=SHORE_TILE_EXPANSION_RADIUS {
+-        for dy in -radius..=radius {
+-            for dx in -radius..=radius {
+-                if dx.abs().max(dy.abs()) != radius {
+-                    continue;
+-                }
+-                let search_radius = nearest_distance + (6.0 * 2.0_f64.sqrt() + 4.0) * h;
+-                let tx = ix + dx * tile_stride;
+-                let ty = iy + dy * tile_stride;
+-                let re0 = (tx * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
+-                let im0 = (ty * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
+-                let width = DYADIC_TILE_CELLS as f64 * h;
+-                let delta_re = (re0 - c.re).max(c.re - re0 - width).max(0.0);
+-                let delta_im = (im0 - c.im).max(c.im - im0 - width).max(0.0);
+-                // A tile beyond this ball cannot supply a nearer point to any
+-                // stencil sample. Do not let unrelated distant membership ambiguity
+-                // invalidate the local query or spend budget on that tile.
+-                if delta_re.hypot(delta_im) > search_radius {
+-                    continue;
+-                }
+-                let next = get_or_generate_shore_tile(k, tx, ty)
+-                    .ok_or(TileQueryError::MembershipUnresolved)?;
+-                nearest_distance =
+-                    next.segments
+-                        .iter()
+-                        .fold(nearest_distance, |distance, segment| {
+-                            distance.min(point_to_segment_distance(c.re, c.im, segment).0)
+-                        });
+-                expanded.segments.extend(next.segments);
+-                expanded.unstable_nodes.extend(next.unstable_nodes);
+-            }
+-        }
+-        expanded.origin_re = tile.origin_re - radius as f64 * DYADIC_TILE_CELLS as f64 * h;
+-        expanded.origin_im = tile.origin_im - radius as f64 * DYADIC_TILE_CELLS as f64 * h;
+-        if contour_contained(c, &expanded, (2 * radius as usize + 1) * DYADIC_TILE_CELLS) {
+-            return Ok(expanded);
+-        }
+-        if contour_footprint_contains(c, &expanded, (2 * radius as usize + 1) * DYADIC_TILE_CELLS) {
+-            return Err(TileQueryError::MembershipUnresolved);
+-        }
++    search.visit(c, k, base, [-radius, radius, -radius, radius], &mut tile)?;
++    if contour_footprint_contains(c, &tile, width) {
++        let stable = stencil_membership_stable(c, &tile);
++        return Ok((tile, stable));
+     }
+     Err(TileQueryError::FootprintUnresolved)
+ }
+@@ -1384,6 +1791,8 @@
+         return Ok(jet);
+     }
+     let mut previous: Option<PreviousLevel> = None;
++    let mut hierarchy: Option<FieldHierarchy> = None;
++    let mut pending: Option<GeometryJet> = None;
+     let mut last = failure_jet(
+         f64::NAN,
+         dyadic_h(0),
+@@ -1395,19 +1804,21 @@
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
+-        let tile = match contained_tile(c, k) {
++        let (tile, certified) = match contained_tile(c, k) {
+             Ok(tile) => tile,
+             Err(TileQueryError::FootprintUnresolved) => return Ok(last),
+             Err(TileQueryError::MembershipUnresolved) => {
+                 // An unstable level is not a convergence sample. A finer
+                 // spatial neighborhood may exclude its uncertain nodes; require
+                 // a fresh pair of consecutive stable levels before acceptance.
+-                previous = None;
+-                k += 1;
+-                continue;
++                return Ok(last);
+             }
+         };
++        if !certified {
++            previous = None;
++        }
+         let Some(FittedJet {
++            detail,
+             mut jet,
+             fit_rms: rms,
+             stencil,
+@@ -1415,8 +1826,37 @@
+         else {
+             return Ok(last);
+         };
++        if let Some(field) = &mut hierarchy {
++            field.advance(&jet, epsilon, certified, detail);
++        } else {
++            hierarchy = Some(FieldHierarchy::new(&jet, epsilon, certified, detail));
++        }
+         let segs = tile.segments;
+         let ties = competing_normals(c, &segs, h);
++        if ties.is_some() {
++            pending = None;
++        }
++        // Fixed lookahead dependencies cannot become certified by appending
++        // still finer models after this prefix has closed. Fail explicitly.
++        if hierarchy
++            .as_ref()
++            .is_some_and(|field| field.closed && !field.certified)
++            && ties.is_none()
++        {
++            jet.validity = GeometryValidity::Unresolved;
++            jet.estimated_error = f64::INFINITY;
++            return Ok(jet);
++        }
++        if let Some(field) = hierarchy.as_ref().filter(|f| f.closed && f.certified) {
++            if let Some(raw) = &pending {
++                let output = field.output(raw, epsilon);
++                if output.resolved_scale <= output.requested_scale
++                    && output.estimated_error <= DYADIC_FIT_ERROR_FACTOR * output.requested_scale
++                {
++                    return Ok(output);
++                }
++            }
++        }
+         if let Some(previous) = &previous {
+             let prev = &previous.jet;
+             let Some(field_error) =
+@@ -1457,7 +1897,17 @@
+                     && prev.resolved_scale <= jet.requested_scale
+                     && jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale
+                 {
+-                    return Ok(jet);
++                    pending = Some(jet.clone());
++                    let field = hierarchy.as_ref().unwrap();
++                    let output = field.output(&jet, epsilon);
++                    if field.closed
++                        && field.certified
++                        && output.resolved_scale <= output.requested_scale
++                        && output.estimated_error
++                            <= DYADIC_FIT_ERROR_FACTOR * output.requested_scale
++                    {
++                        return Ok(output);
++                    }
+                 }
+             }
+         } else {
+@@ -1470,7 +1920,7 @@
+         // An unconverged coarse D is not a safe lower bound on distance.
+         // Skipping levels can jump to a tile too small to contain the Shore.
+         // Refine monotonically one level at a time until the ruler and error agree.
+-        previous = Some(PreviousLevel {
++        previous = certified.then_some(PreviousLevel {
+             jet,
+             fit_rms: rms,
+             ties,
+@@ -2348,3 +2798,185 @@
+         );
+     }
+ }
++
++#[cfg(test)]
++mod coherent_field_tests {
++    use super::*;
++    fn jet(d: f64, h: f64) -> GeometryJet {
++        GeometryJet {
++            d,
++            grad_d: [0.; 2],
++            hessian_d: [[0.; 2]; 2],
++            resolved_scale: h,
++            requested_scale: GEOMETRY_SCALE_ALPHA * d,
++            estimated_error: 0.,
++            validity: GeometryValidity::Regular,
++            singularity: SingularityKind::None,
++            provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
++            tile_id: "coherent-fixture".to_string(),
++            is_bridge: false,
++        }
++    }
++    #[test]
++    fn agreeing_pair_does_not_hide_later_distance_change() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00005), 1e-4, true, zero);
++        f.advance(&jet(0.035, 0.000025), 1e-4, true, zero);
++        assert!(!f.closed);
++        f.advance(&jet(0.035, 0.0000125), 1e-4, true, zero);
++        assert!(!f.closed);
++        f.advance(&jet(0.035, 0.00000625), 1e-4, true, zero);
++        assert!(f.closed && f.certified);
++        assert_eq!(f.sum.d, 0.035);
++    }
++    #[test]
++    fn discarded_values_still_taint_a_dependent_gate() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.125), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.0625), 1e-4, false, zero);
++        f.advance(&jet(0.04, 0.03125), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.015625), 1e-4, true, zero);
++        assert!(!f.certified);
++        assert_eq!(f.effective_h, 0.03125);
++    }
++    #[test]
++    fn uncertified_zero_weight_lookahead_is_refused() {
++        for coarse_cert in [false, true] {
++            let zero = FieldJet::constant(0.);
++            let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, coarse_cert, zero);
++            f.advance(&jet(0.04, 0.00005), 1e-4, false, zero);
++            f.advance(&jet(0.04, 0.000025), 1e-4, false, zero);
++            assert!(f.closed);
++            assert!(!f.certified);
++        }
++    }
++    fn field_at(x: f64) -> FieldJet {
++        let make = |a: f64, h: f64| GeometryJet {
++            d: a + 0.2 * x + 0.1 * x * x,
++            grad_d: [0.2 + 0.2 * x, 0.],
++            hessian_d: [[0.2, 0.], [0., 0.]],
++            resolved_scale: h,
++            requested_scale: 0.,
++            estimated_error: 0.,
++            ..jet(a, h)
++        };
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&make(0.04, 0.0007), 1e-4, true, zero);
++        for (a, h) in [
++            (0.0401, 0.00035),
++            (0.04015, 0.000175),
++            (0.0402, 0.0000875),
++            (0.0403, 0.00004375),
++        ] {
++            f.advance(&make(a, h), 1e-4, true, zero);
++        }
++        assert!(f.closed && f.certified);
++        f.sum
++    }
++    #[test]
++    fn refinement_weight_derivatives_match_the_scalar_field() {
++        let x = 0.00003;
++        let step = 1e-6;
++        let center = field_at(x);
++        let minus = field_at(x - step);
++        let plus = field_at(x + step);
++        assert!(((plus.d - minus.d) / (2. * step) - center.g[0]).abs() < 1e-8);
++        assert!(((plus.g[0] - minus.g[0]) / (2. * step) - center.h[0][0]).abs() < 1e-6);
++    }
++
++    #[test]
++    fn uncertified_disagreement_invalidates_a_partial_size_weight() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0007), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00035), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.000175), 1e-4, false, zero);
++        f.advance(&jet(0.04, 0.0000875), 1e-4, false, zero);
++        assert!(f.closed && !f.certified);
++    }
++    #[test]
++    fn partial_disagreement_with_uncertain_data_is_refused() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00005), 1e-4, true, zero);
++        f.advance(&jet(0.0403, 0.000025), 1e-4, false, zero);
++        assert!(!f.certified);
++    }
++
++    #[test]
++    fn uncertified_lookahead_cannot_certify_a_zero_refinement_plateau() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00005), 1e-4, false, zero);
++        f.advance(&jet(0.04, 0.000025), 1e-4, false, zero);
++        assert!(f.closed);
++        assert!(!f.certified, "Uncertified inputs selected the zero plateau");
++    }
++
++    #[test]
++    fn already_certified_closure_does_not_depend_on_later_unused_models() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00005), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.000025), 1e-4, true, zero);
++        assert!(f.closed && f.certified);
++        f.advance(&jet(0.03, 0.0000125), 1e-4, false, zero);
++        assert!(f.closed && f.certified);
++    }
++    #[test]
++    fn certified_size_saturation_can_dominate_unknown_disagreement() {
++        let zero = FieldJet::constant(0.);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0011), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.00055), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.000275), 1e-4, false, zero);
++        assert!(!f.closed && f.certified);
++    }
++
++    #[test]
++    fn unused_outer_row_and_column_do_not_affect_the_field() {
++        let c = Complex64::new(0.39265, 0.05016);
++        let h = 0.0001;
++        let mut nodes: Vec<_> = distance_stencil(c, h)
++            .map(|p| {
++                (
++                    p.re - c.re,
++                    p.im - c.im,
++                    p.re * p.re + 0.3 * p.im * p.im + 0.2 * p.re * p.im,
++                )
++            })
++            .collect();
++        let (before, detail) = quintic_field(c, h, &nodes);
++        for i in 0..9 {
++            nodes[i].2 += 100.;
++            nodes[i * 9].2 -= 50.;
++        }
++        let (after, after_detail) = quintic_field(c, h, &nodes);
++        assert_eq!(before.d, after.d);
++        assert_eq!(before.g, after.g);
++        assert_eq!(before.h, after.h);
++        assert_eq!(detail.d, after_detail.d);
++        assert_eq!(detail.g, after_detail.g);
++        assert_eq!(detail.h, after_detail.h);
++    }
++    #[test]
++    fn quintic_reproduces_quadratics_and_derivatives() {
++        let c = Complex64::new(0.39265, 0.05016);
++        let h = 0.001;
++        let nodes: Vec<_> = distance_stencil(c, h)
++            .map(|p| {
++                (
++                    p.re - c.re,
++                    p.im - c.im,
++                    p.re * p.re + 0.3 * p.im * p.im + 0.2 * p.re * p.im,
++                )
++            })
++            .collect();
++        let (f, _) = quintic_field(c, h, &nodes);
++        assert!((f.d - (c.re * c.re + 0.3 * c.im * c.im + 0.2 * c.re * c.im)).abs() < 1e-13);
++        assert!((f.g[0] - (2. * c.re + 0.2 * c.im)).abs() < 1e-11);
++        assert!((f.g[1] - (0.6 * c.im + 0.2 * c.re)).abs() < 1e-11);
++        assert!((f.h[0][0] - 2.).abs() < 1e-8);
++        assert!((f.h[0][1] - 0.2).abs() < 1e-8);
++        assert!((f.h[1][1] - 0.6).abs() < 1e-8);
++    }
++}

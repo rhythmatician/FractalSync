@@ -2,6 +2,45 @@
 
 PR #148 was rebased onto main at `32ddb065d943374b68deba18816404acef9029bc`, including the transported camera fix. This record describes the repairs following that rebase. **Issue #145 remains open and PR #148 is not ready to merge.**
 
+## October 23 continuation: refinement certification remains blocking
+
+The three reviewed cost changes are in production at `fb33fd2`. The restored provider passes **250 Rust tests**, fails the original native crossing and ignores one test. This combines 87 library passes with 163 integration passes. The complete rebuilt Python physics file gives **26 passed, 1 failed** at the same recorded crossing. All mandatory preflight checks pass, with manifold parity error `1.490e-8`; architecture and canonical-surface gates pass locally. The production derivative report still fails all twelve probes. Its twelve energy samples pass the unchanged 0.05 limits, but the near-Shore step changes remain nonvanishing under timestep refinement.
+
+CI on `fb33fd2` is complete. Rust has 87 library passes and the same crossing failure. Backend has **187 passed, 1 failed** in 1,158.24 seconds, with the identical Python crossing refusal. Python/WASM builds, artifacts, frontend, real-WASM startup/snapshot, GPU acceptance, types and stubs pass. Backend's subsequent architecture/surface steps were skipped after pytest failed; both were run successfully locally. [Run](https://github.com/rhythmatician/FractalSync/actions/runs/40060148221).
+
+### Field progress and the certification defect
+
+A globally anchored quintic field, two-level lookahead and differentiated C2 correction weights made substantial numerical progress. The more conservative disagreement trigger completed all inward rollouts:
+
+| Timestep | Energy excursion | Largest step change |
+|---|---:|---:|
+| 0.005 | 0.00347426 | 0.0000505549 |
+| 0.0025 | 0.00173678 | 0.0000126491 |
+| 0.00125 | 0.000868299 | 0.00000316357 |
+
+It also passed twelve local derivative probes. These are **rejected-candidate measurements**, not acceptance. Independent review found that uncertified lookahead values could select a saturated zero weight, then disappear from the dependency certificate because their final coefficients were zero. Removing a contribution after selecting a weight does not certify the inputs that selected it. A standalone regression was observed red, and the corrected implementation now requires certified selector inputs unless an independently certified OR operand forces the result to one.
+
+All **eleven tests against the actual experimental Rust helpers pass**, including that regression, partial/saturated dependency cases, scalar-weight derivatives, quadratic reproduction and unused-support checks. The corrected public report passes six probes and explicitly refuses six, covering the near-Shore pair and regular tile-boundary point. The recorded live-training and Python-crossing points are also Unresolved. A closed uncertified fixed-lookahead prefix now fails explicitly rather than spending further work that cannot repair its existing dependencies.
+
+### Coverage and high-curvature energy are separate failures
+
+The rectangular prototype still refused high-curvature geometry. An unshipped hierarchical search over globally aligned complete tiles recovered the recorded high-curvature point. It uses uniform-box proofs and distance-bound pruning; the wider diagnostic limits allow 16,384 leaves and 131,072 region visits, versus production's 121-tile ceiling. Those are experimental compute bounds, not accepted live-runtime limits. A cold high-curvature point takes about 1.2 seconds; a wider native-point replay takes 360.65 seconds and remains Unresolved. Best-first region ordering alone does not resolve the membership/certification problem.
+
+With more coverage, the predecessor completed all high-curvature trajectories but **failed energy acceptance**. Excursion is `0.319856`, `0.102757`, and `0.0638537` at timesteps `0.002`, `0.001`, and `0.0005`, all above 0.05. Peak blended Hessians are of order 40,000. Thus the passing inward replay did not establish stable behavior across other refinement transitions. The unchanged native test also fails under that predecessor, now at `(0.22024251973434336, 0.12264820255135506)`, Unresolved. None of these results justifies adopting the candidate or weakening a gate.
+
+The [evidence report](validation/geometry-145-field-certification.json) distinguishes production, the unsound predecessor and the corrected failing candidate. The [corrected experimental patch](validation/experiments/geometry-145-field-certification.patch) is against `fb33fd2` and includes the eleven tests. It is unshipped and retains baseline stamps solely for comparison. Source restoration and a final rebuild of the default diagnostics were verified. No production formula, version, golden value, threshold or crossing test changed in this investigation.
+
+Reproduce only in an isolated checkout at that base. `--ignore-space-change` handles the Windows source line endings; it changes no test criterion:
+
+```text
+rtk git apply --check --ignore-space-change docs/validation/experiments/geometry-145-field-certification.patch
+rtk git apply --ignore-space-change docs/validation/experiments/geometry-145-field-certification.patch
+rtk cargo test --release --jobs 1 -p runtime_core --lib coherent_field_tests
+rtk cargo run --release --jobs 1 -p runtime_core --example geometry_derivative_report -- --check
+```
+
+The eleven helper tests pass; the public check fails six probes. Remaining work is certified shared coefficient data and refinement selectors, coherence checks across weight transitions and neighboring query partitions, high-curvature energy acceptance, both original crossings, training validity and live-query cost. Adoption also requires version/golden/binding updates and full acceptance validation. **PR #148 remains unready to merge.**
+
 ## October 23 continuation: certified periodic interiors
 
 Whole-box certification now also attempts an outward-bounded disk enclosure. After 64 critical-orbit steps, a candidate disk must contain that entire enclosure, stay below the ordinary escape radius at every step of its candidate period, and map strictly into itself. Parameter uncertainty and machine-rounding bounds are included. Unsuccessful searches use ordinary tile construction. The search adds at most 320 disk steps; membership budgets and acceptance thresholds are unchanged.
