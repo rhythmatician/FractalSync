@@ -1,0 +1,62 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -3429,3 +3429,13 @@
+   }
+  }
+ }
++
++#[cfg(test)] mod memo_point_test {
++ use super::*;
++ #[test] fn recorded_next_driven_point_resolves() {
++  let jet=query_geometry(Complex64::new(0.32049988639807619,0.04733531447355364),1e-4).unwrap();
++  assert_eq!(jet.validity,GeometryValidity::Regular,"{jet:?}");
++  assert!(jet.resolved_scale<=jet.requested_scale);
++  assert!(jet.estimated_error<=DYADIC_FIT_ERROR_FACTOR*jet.requested_scale);
++ }
++}
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -5,7 +5,20 @@
+ /// `Some` proves that every point has the same membership. `None` is only a
+ /// failed shortcut, never a membership refusal. Outward-rounded intervals may
+ /// overestimate the orbit enclosure, which costs work but cannot hide a Shore.
+-pub(super) fn membership(re0: f64, im0: f64, width: f64) -> Option<bool> {
++type BoxCache=super::RwLock<super::LruCache<(u64,u64,u64),Option<bool>>>;
++static BOX_CACHE:super::Lazy<BoxCache>=super::Lazy::new(||super::RwLock::new(super::LruCache::new(4096)));
++pub(super) fn membership(re0:f64,im0:f64,width:f64)->Option<bool> {
++    membership_using(re0,im0,width,Some(&*BOX_CACHE))
++}
++fn membership_using(re0:f64,im0:f64,width:f64,cache:Option<&BoxCache>)->Option<bool> {
++    if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width<0. {return None;}
++    let key=(re0.to_bits(),im0.to_bits(),width.to_bits());
++    if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {if let Some(result)=guard.get(&key) {return result;}}}
++    let result=membership_uncached(re0,im0,width);
++    if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {guard.insert(key,result);}}
++    result
++}
++fn membership_uncached(re0: f64, im0: f64, width: f64) -> Option<bool> {
+     if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width < 0.0 {
+         return None;
+     }
+@@ -370,3 +383,21 @@
+   }}
+  }
+ }
++
++#[cfg(test)] mod memo_tests {
++ use super::*;
++ #[test] fn exact_box_cache_matches_disabled_and_evicted_results() {
++  let cache=super::super::RwLock::new(super::super::LruCache::new(1));
++  let fixtures=[(-0.1,-0.1,0.2),(0.8,0.5,0.1),(0.25,0.,0.),(0.25f64.next_up(),0.,0.),(0.32049988639807619,0.04733531447355364,1e-8)];
++  for _ in 0..2 {for &(x,y,w) in fixtures.iter().rev() {
++   let expected=membership_using(x,y,w,None);
++   assert_eq!(membership_using(x,y,w,Some(&cache)),expected);
++   assert_eq!(membership_using(x,y,w,Some(&cache)),expected);
++  }}
++ }
++ #[test] fn uncertain_boxes_are_retained_as_uncertain_cache_entries() {
++  let cache=super::super::RwLock::new(super::super::LruCache::new(1));
++  assert_eq!(membership_using(0.25,0.,0.,Some(&cache)),None);
++  assert_eq!(cache.write().unwrap().get(&(0.25f64.to_bits(),0f64.to_bits(),0f64.to_bits())),Some(None));
++ }
++}

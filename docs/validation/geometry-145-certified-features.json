@@ -1746,6 +1746,266 @@
     "log": "low_curvature, dt=0.002: 150/150 steps, excursion=0.00023337093790476438, largest change=0.0000018350395047939116, passed=true\nlow_curvature, dt=0.001: 300/300 steps, excursion=0.00011670293058219094, largest change=0.0000004592098039601922, passed=true\nlow_curvature, dt=0.0005: 600/600 steps, excursion=0.00005835583024782487, largest change=0.00000011485882356332411, passed=true\nhigh_curvature, dt=0.002: 150/150 steps, excursion=0.0007316262142542662, largest change=0.0004735100894353028, passed=true\nhigh_curvature, dt=0.001: 300/300 steps, excursion=0.0003890231428258506, largest change=0.0001320537374405184, passed=true\nhigh_curvature, dt=0.0005: 600/600 steps, excursion=0.00019481440771929037, largest change=0.00003314567704970628, passed=true\nnear_shore, dt=0.002: 100/100 steps, excursion=0.001744422968623205, largest change=0.000018338951109253543, passed=true\nnear_shore, dt=0.001: 200/200 steps, excursion=0.000872961649132975, largest change=0.0000045902068164238585, passed=true\nnear_shore, dt=0.0005: 400/400 steps, excursion=0.00043666847443724066, largest change=0.000001148235383219287, passed=true\ninward, dt=0.005: 100/100 steps, excursion=0.002803661452436934, largest change=0.0000605500376520407, passed=true\ninward, dt=0.0025: 200/200 steps, excursion=0.0014000500483979383, largest change=0.00001520674062316374, passed=true\n"
   },
   "affine-features-inward": {
-    "terminal_result_not_yet_available": true
+    "status": {
+      "exit_code": 0,
+      "elapsed_s": 532.0280184999574,
+      "timed_out": false,
+      "timeout_s": 1200
+    },
+    "data": {
+      "controller_version": "orbit-controller/10",
+      "diagnostic_only": true,
+      "limit": 0.05,
+      "provider_version": "geometry-provider/6",
+      "rows": [
+        {
+          "case": "inward",
+          "completed": 100,
+          "dt": 0.005,
+          "error": null,
+          "max_excursion": 0.002803661452436934,
+          "max_step_change": 6.05500376520407e-05,
+          "passed": true,
+          "peak_transition": {
+            "after": {
+              "c": [
+                0.39985081886280005,
+                0.050000102858810534
+              ],
+              "jet": {
+                "D": 0.04172485542010754,
+                "estimated_error": 0.00012572581327726512,
+                "grad_D": [
+                  0.935767165014782,
+                  -0.509917398393684
+                ],
+                "hessian_D": [
+                  [
+                    14.611255078309796,
+                    1.8203674485177714
+                  ],
+                  [
+                    1.8203674485177714,
+                    27.504742056592917
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.004172497525258556,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3275:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.029836227439990454,
+                2.057176210601771e-05
+              ]
+            },
+            "before": {
+              "c": [
+                0.4,
+                0.05
+              ],
+              "jet": {
+                "D": 0.04186466803069709,
+                "estimated_error": 0.00013363431304921902,
+                "grad_D": [
+                  0.9379223745199605,
+                  -0.5096419550713494
+                ],
+                "hessian_D": [
+                  [
+                    14.284031597128262,
+                    1.911044617704448
+                  ],
+                  [
+                    1.911044617704448,
+                    27.439494156855147
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.00418647874629798,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3276:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.03,
+                0.0
+              ]
+            }
+          },
+          "steps": 100
+        },
+        {
+          "case": "inward",
+          "completed": 200,
+          "dt": 0.0025,
+          "error": null,
+          "max_excursion": 0.0014000500483979383,
+          "max_step_change": 1.520674062316374e-05,
+          "passed": true,
+          "peak_transition": {
+            "after": {
+              "c": [
+                0.39992520471570003,
+                0.050000025714702634
+              ],
+              "jet": {
+                "D": 0.04179454286008485,
+                "estimated_error": 0.0001296446805125473,
+                "grad_D": [
+                  0.9368478674066245,
+                  -0.5097824569799561
+                ],
+                "hessian_D": [
+                  [
+                    14.448936432186542,
+                    1.8649993534425562
+                  ],
+                  [
+                    1.8649993534425562,
+                    27.472867203587242
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.0041794662492757005,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3276:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.029918113719995226,
+                1.0285881053008856e-05
+              ]
+            },
+            "before": {
+              "c": [
+                0.4,
+                0.05
+              ],
+              "jet": {
+                "D": 0.04186466803069709,
+                "estimated_error": 0.00013363431304921902,
+                "grad_D": [
+                  0.9379223745199605,
+                  -0.5096419550713494
+                ],
+                "hessian_D": [
+                  [
+                    14.284031597128262,
+                    1.911044617704448
+                  ],
+                  [
+                    1.911044617704448,
+                    27.439494156855147
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.00418647874629798,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3276:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.03,
+                0.0
+              ]
+            }
+          },
+          "steps": 200
+        },
+        {
+          "case": "inward",
+          "completed": 400,
+          "dt": 0.00125,
+          "error": null,
+          "max_excursion": 0.0006989299468287413,
+          "max_step_change": 3.81030059659615e-06,
+          "passed": true,
+          "peak_transition": {
+            "after": {
+              "c": [
+                0.39996255117892504,
+                0.050000006428675664
+              ],
+              "jet": {
+                "D": 0.041829550702165645,
+                "estimated_error": 0.00013163065272819852,
+                "grad_D": [
+                  0.9373859154859612,
+                  -0.5097129097701523
+                ],
+                "hessian_D": [
+                  [
+                    14.3668015455616,
+                    1.8878489154630245
+                  ],
+                  [
+                    1.8878489154630245,
+                    27.45636616740711
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.004182967023471553,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3276:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.029959056859997613,
+                5.142940526504428e-06
+              ]
+            },
+            "before": {
+              "c": [
+                0.4,
+                0.05
+              ],
+              "jet": {
+                "D": 0.04186466803069709,
+                "estimated_error": 0.00013363431304921902,
+                "grad_D": [
+                  0.9379223745199605,
+                  -0.5096419550713494
+                ],
+                "hessian_D": [
+                  [
+                    14.284031597128262,
+                    1.911044617704448
+                  ],
+                  [
+                    1.911044617704448,
+                    27.439494156855147
+                  ]
+                ],
+                "is_bridge": false,
+                "provider_version": "geometry-provider/6",
+                "requested_scale": 0.00418647874629798,
+                "resolved_scale": 6.103515625e-05,
+                "singularity": "none",
+                "tile_id": "scale-aware:13:3276:409:1.53e-5",
+                "validity": "regular"
+              },
+              "v": [
+                -0.03,
+                0.0
+              ]
+            }
+          },
+          "steps": 400
+        }
+      ]
+    },
+    "log": "inward, dt=0.005: 100/100 steps, excursion=0.002803661452436934, largest change=0.0000605500376520407, passed=true\ninward, dt=0.0025: 200/200 steps, excursion=0.0014000500483979383, largest change=0.00001520674062316374, passed=true\ninward, dt=0.00125: 400/400 steps, excursion=0.0006989299468287413, largest change=0.00000381030059659615, passed=true\n"
   }
 }

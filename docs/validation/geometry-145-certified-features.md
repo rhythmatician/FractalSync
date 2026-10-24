@@ -66,9 +66,10 @@ acceptance or an acceptable live-query cost.
 Every serialized derivative-probe row also matches when cases run in reverse
 order, each in a fresh process. This checks the sampled cache-context behavior.
 The original native crossing run and the full energy sweep both time out at
-1200 seconds. Eleven energy cases finish and pass before the timeout; the final
-inward case remains incomplete in that run. A separate inward-only sweep is in
-progress. The original provider suite and recorded Python crossing query time
+1200 seconds. Eleven energy cases finish and pass before that combined timeout.
+Separate low-curvature, high-curvature, near-Shore and inward sweeps now complete
+and pass all twelve cases with the unchanged 0.05 energy limit. The inward-only
+sweep completes in 532.03 seconds. The original provider suite and recorded Python crossing query time
 out at 180 seconds. None of these timeouts is a passing validation result.
 
 ## Isolated production proof
@@ -103,3 +104,7 @@ results from pending work and preserves exact variant ownership. The
 hashes and the separate timing measurements. Original crossing completion,
 the recorded Python crossing query, full field certification and live cost remain
 merge blockers.
+
+The subsequent [enclosure follow-up](geometry-145-ranged-field.md) propagates
+analytic coefficient uncertainty through the reconstructed field and output
+error gate. Its validation is recorded separately from this candidate.
