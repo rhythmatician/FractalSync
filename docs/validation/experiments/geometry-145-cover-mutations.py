@@ -12,6 +12,8 @@ cases = [
     ("query-separation", "if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0) {\n                return Err(Refusal::QueryNotSeparated);", "if false {\n                return Err(Refusal::QueryNotSeparated);", "intersecting_query_refuses_a_closed_certified_path"),
     ("connector-separation", "for capsule in [&a.capsule, &connector]", "for capsule in [&a.capsule]", "connector_separation_is_required_independently"),
     ("nonzero-winding", "if winding == 0", "if false", "open_or_non_enclosing_paths_refuse"),
+    ("reused-connector-separation", "for capsule in [&a.capsule, &connector]", "for capsule in [&a.capsule]", "reused_query_requires_winding_and_connector_separation"),
+    ("reused-nonzero-winding", "if winding == 0", "if false", "reused_query_requires_winding_and_connector_separation"),
     ("orientation", "Err(Refusal::AmbiguousOrientation)\n    }", "Ok(0)\n    }", "uncertain_ray_orientation_refuses"),
     ("region-budget", "if self.attempted >= self.max_regions", "if false", "exhausted_builder_does_not_return_an_accepted_prefix"),
     ("requested-refinement", ".cmp(&self.minimum_clearance)", ".cmp(&B::new(P))", "requested_clearance_is_proved_or_refused"),

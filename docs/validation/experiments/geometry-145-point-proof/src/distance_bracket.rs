@@ -1,5 +1,5 @@
 //! Interior distance enclosure from independent inside and outside evidence.
-use super::{ClosedCover, B, P};
+use super::{ClosedCover, CurveClearance, B, P};
 use crate::complex_ball::Complex;
 use crate::point_proof::{escape, EscapeProof};
 use astro_float::RoundingMode as R;
@@ -86,6 +86,33 @@ impl DistanceBracket {
         // crosses the boundary. Directed endpoint distance is thus an upper bound.
         InteriorDistanceDomain::certify(cover, outside).at(cover.query())
     }
+    pub(crate) fn at_cover(
+        cover: &ClosedCover,
+        outside: &OutsideWitness,
+        query: &crate::C,
+    ) -> Option<Self> {
+        let clearance = cover.clearance_at(query).ok()?;
+        Self::from_clearance(&clearance, outside)
+    }
+    pub(crate) fn from_clearance(
+        clearance: &CurveClearance,
+        outside: &OutsideWitness,
+    ) -> Option<Self> {
+        let q = clearance.query();
+        let upper = outside.endpoint_distance_upper(q)?;
+        let lower = clearance.mandelbrot_interior_distance_lower().clone();
+        if !upper.cmp(&lower).is_some_and(|v| v >= 0) {
+            return None;
+        }
+        Some(Self {
+            lower,
+            upper,
+            query: Complex {
+                re: q.re.clone(),
+                im: q.im.clone(),
+            },
+        })
+    }
     pub(crate) fn lower(&self) -> &B {
         &self.lower
     }
@@ -121,6 +148,25 @@ impl std::fmt::Debug for DistanceBracket {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reused_cover_accepts_queries_outside_original_transport_disk() {
+        let origin = crate::C::new(0., 0.);
+        let cover = super::super::build(&origin, 1, 0.5, 16, 128).unwrap();
+        let original_lower = cover.distance_lower().clone();
+        let outside = OutsideWitness::certify([0.3, 0.], 128, 512).unwrap();
+        let moved = crate::C::new(-0.2, 0.);
+        assert!(InteriorDistanceDomain::certify(&cover, &outside)
+            .at(&moved)
+            .is_none());
+        let bracket = DistanceBracket::at_cover(&cover, &outside, &moved).unwrap();
+        assert!(bracket.lower().cmp(&B::new(P)).is_some_and(|v| v > 0));
+        assert_eq!(bracket.query.re.cmp(&moved.re), Some(0));
+        assert_eq!(bracket.query.im.cmp(&moved.im), Some(0));
+        assert_eq!(cover.distance_lower().cmp(&original_lower), Some(0));
+        for q in [crate::C::new(2., 0.), crate::C::new(f64::NAN, 0.)] {
+            assert!(DistanceBracket::at_cover(&cover, &outside, &q).is_none());
+        }
+    }
     #[test]
     fn independently_certified_endpoints_enclose_known_cardioid_distance() {
         let cover = super::super::build(&crate::C::new(0., 0.), 1, 0.5, 16, 128).unwrap();

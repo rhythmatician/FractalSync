@@ -39,6 +39,22 @@ pub(crate) struct ClosedCover {
     lower: B,
     winding: i32,
 }
+pub(crate) struct CurveClearance {
+    query: C,
+    lower: B,
+    winding: i32,
+}
+impl CurveClearance {
+    pub(crate) fn query(&self) -> &C {
+        &self.query
+    }
+    pub(crate) fn mandelbrot_interior_distance_lower(&self) -> &B {
+        &self.lower
+    }
+    pub(crate) fn winding(&self) -> i32 {
+        self.winding
+    }
+}
 impl std::fmt::Debug for ClosedCover {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClosedCover")
@@ -70,6 +86,11 @@ impl ClosedCover {
     }
     pub(crate) fn query(&self) -> &C {
         &self.query
+    }
+    /// Reuse the already-validated attracting curve. Only query-dependent
+    /// capsule separation and winding are recomputed, never periodic roots.
+    pub(crate) fn clearance_at(&self, query: &C) -> Result<CurveClearance, Refusal> {
+        curve_clearance(&self.edges, query)
     }
 }
 fn max(a: B, b: B) -> Option<B> {
@@ -247,8 +268,6 @@ pub(crate) fn closed(edges: Vec<Edge>, q: &C) -> Result<ClosedCover, Refusal> {
     if edges.len() > 65536 {
         return Err(Refusal::WorkLimit);
     }
-    let mut lower: Option<B> = None;
-    let mut winding = 0i32;
     for i in 0..edges.len() {
         let a = &edges[i];
         let b = &edges[(i + 1) % edges.len()];
@@ -256,6 +275,24 @@ pub(crate) fn closed(edges: Vec<Edge>, q: &C) -> Result<ClosedCover, Refusal> {
             return Err(Refusal::OpenParameterPath);
         }
         join(&a.patch, &b.patch, &a.end).map_err(|_| Refusal::UnprovedJoin)?;
+    }
+    let clearance = curve_clearance(&edges, q)?;
+    Ok(ClosedCover {
+        edges,
+        query: clearance.query,
+        lower: clearance.lower,
+        winding: clearance.winding,
+    })
+}
+fn curve_clearance(edges: &[Edge], q: &C) -> Result<CurveClearance, Refusal> {
+    if !q.finite() {
+        return Err(Refusal::InvalidInput);
+    }
+    let mut lower: Option<B> = None;
+    let mut winding = 0i32;
+    for i in 0..edges.len() {
+        let a = &edges[i];
+        let b = &edges[(i + 1) % edges.len()];
         // The actual common endpoint lies in both endpoint disks. Their convex
         // hull is inside this connector capsule, so it also controls the homotopy
         // from the actual joined curve to the centerline reference polygon.
@@ -283,8 +320,7 @@ pub(crate) fn closed(edges: Vec<Edge>, q: &C) -> Result<ClosedCover, Refusal> {
     if winding == 0 {
         return Err(Refusal::ZeroWinding);
     }
-    Ok(ClosedCover {
-        edges,
+    Ok(CurveClearance {
         query: q.clone(),
         lower: lower.ok_or(Refusal::InvalidInput)?,
         winding,
@@ -744,6 +780,32 @@ mod tests {
         assert!(matches!(
             closed(edges, &query),
             Err(Refusal::QueryNotSeparated)
+        ));
+    }
+    #[test]
+    fn reused_query_requires_winding_and_connector_separation() {
+        let mut edges = cardioid_edges(false);
+        let query = edges[0].capsule.b.add(&C::new(-0.1, -0.1));
+        let capsule = &mut edges[1].capsule;
+        // This widened translation still encloses the certified arc. The
+        // origin remains separated, but a second query meets its connector.
+        capsule.a = capsule.a.add(&C::new(0., 0.1));
+        capsule.b = capsule.b.add(&C::new(0., 0.1));
+        capsule.radius = capsule.radius.add(&B::from_f64(0.151, P), P, R::Up);
+        for item in &edges {
+            assert!(capsule_distance_lower(&item.capsule, &query)
+                .unwrap()
+                .cmp(&B::new(P))
+                .is_some_and(|v| v > 0));
+        }
+        let cover = closed(edges, &C::new(0., 0.)).unwrap();
+        assert!(matches!(
+            cover.clearance_at(&query),
+            Err(Refusal::QueryNotSeparated)
+        ));
+        assert!(matches!(
+            cover.clearance_at(&C::new(2., 0.)),
+            Err(Refusal::ZeroWinding)
         ));
     }
     #[test]

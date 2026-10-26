@@ -727,21 +727,22 @@ fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<
         0.
     };
     let cover = construct_cover(&query, period, minimum_clearance)?;
-    let mut best: Option<(InteriorDistanceDomain, BigFloat)> = None;
-    for witness in witnesses {
-        let bracket = validated_branch::cover::bracket::DistanceBracket::certify(&cover, &witness)?;
+    let mut best: Option<(InteriorDistanceDomain, BigFloat, usize)> = None;
+    for (index, witness) in witnesses.iter().enumerate() {
+        let bracket = validated_branch::cover::bracket::DistanceBracket::certify(&cover, witness)?;
         println!("[DISTANCE_BRACKET145] name={name} bracket={bracket:?}");
         if best
             .as_ref()
-            .is_none_or(|(_, old)| bracket.upper().cmp(old).is_some_and(|v| v < 0))
+            .is_none_or(|(_, old, _)| bracket.upper().cmp(old).is_some_and(|v| v < 0))
         {
             best = Some((
-                InteriorDistanceDomain::certify(&cover, &witness),
+                InteriorDistanceDomain::certify(&cover, witness),
                 bracket.upper().clone(),
+                index,
             ));
         }
     }
-    let (domain, _) = best?;
+    let (domain, _, best_index) = best?;
     if let Some(width) = requested_width {
         let validation_start = std::time::Instant::now();
         domain.at(&query)?.require_width(width)?;
@@ -758,10 +759,67 @@ fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<
         std::hint::black_box(domain.at(&q)?);
     }
     println!("[DOMAIN_COST145] name={name} accepted_queries=10000 query_box_half_width={radius} elapsed_s={} operation=scalar_bounds_only",start.elapsed().as_secs_f64());
+    let full_radius = number(cover.mandelbrot_interior_distance_lower()) * 1.25;
+    let samples: Vec<_> = (0..100)
+        .map(|j| {
+            let q = C::new(
+                origin[0] + full_radius * ((j % 10) as f64 - 4.5) / 4.5,
+                origin[1] + full_radius * ((j / 10) as f64 - 4.5) / 4.5,
+            );
+            let compact = domain.at(&q).is_some();
+            (q, compact)
+        })
+        .collect();
+    let (mut accepted, mut additional, mut within_width) = (0, 0, 0);
+    let start = std::time::Instant::now();
+    for (q, compact) in &samples {
+        if let Some(bracket) = validated_branch::cover::bracket::DistanceBracket::at_cover(
+            &cover,
+            &witnesses[best_index],
+            q,
+        ) {
+            accepted += 1;
+            if !compact {
+                additional += 1;
+            }
+            if requested_width.is_some_and(|width| bracket.meets_width(width)) {
+                within_width += 1;
+            }
+            std::hint::black_box(bracket);
+        }
+    }
+    println!("[COVER_REUSE_COST145] name={name} queries=100 accepted={accepted} beyond_transport={additional} within_requested_width={within_width} query_box_half_width={full_radius} elapsed_s={} operation=scalar_bounds_and_width_check",start.elapsed().as_secs_f64());
     Some(())
+}
+fn norm_cost() {
+    let samples: Vec<_> = (1..=128u64)
+        .map(|k| complex_ball::Complex {
+            re: BigFloat::from_word(k, P).div(&BigFloat::from(37u8), P, R::ToEven),
+            im: BigFloat::from_word(k * k + 1, P).div(&BigFloat::from(53u8), P, R::ToEven),
+        })
+        .collect();
+    for fast in [false, true] {
+        let start = std::time::Instant::now();
+        for j in 0..10000 {
+            let q = &samples[j % samples.len()];
+            std::hint::black_box(if fast {
+                q.norm_upper(P)
+            } else {
+                q.norm_upper_precise(P)
+            });
+        }
+        println!(
+            "[NORM_COST145] fast={fast} calls=10000 elapsed_s={}",
+            start.elapsed().as_secs_f64()
+        );
+    }
 }
 fn main() {
     let selection = std::env::args().nth(1).unwrap_or("native".into());
+    if selection == "norm-cost" {
+        norm_cost();
+        return;
+    }
     if ![
         "cardioid",
         "native",

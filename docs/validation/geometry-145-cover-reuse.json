@@ -1,0 +1,358 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "cbe6de2",
+  "production_adoption": false,
+  "scope": "Reusable mathematical Mandelbrot scalar enclosures; no coherent production distance field or canonical floating-orbit equivalence.",
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "ed0f9a6e017e04b34c72c86f9bf0511e28def920e6e33e65a41a17363c9b643c",
+    "docs/validation/experiments/geometry-145-point-proof/src/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "b455aaca6e6f2d373f0ffb87f41c3adfba394295200f5c720dca5043f70ac1d6",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "636d2f5cb87dbd5a55fec45c57764fc719b0708ce20dc08644f09530573dd634",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6"
+  },
+  "frozen_binaries_sha256": {
+    "geometry145_reuse_20261026a.exe": "3ef1602981871830c0b6b3b2213481a701b86dbd0fd551d3fe4f55d93afc084a",
+    "geometry145_reuse_20261026b.exe": "aca273fec450b031826dda2b1af250923e2d3431696cb6dd33322905b52c46a9"
+  },
+  "runs": [
+    {
+      "name": "norm-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 0.571045899996534,
+        "timed_out": false
+      },
+      "stdout": "[NORM_COST145] fast=false calls=10000 elapsed_s=0.1159073\n[NORM_COST145] fast=true calls=10000 elapsed_s=0.0008779\n",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0
+    },
+    {
+      "name": "cardioid-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.2016100001055747,
+        "timed_out": false
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=cardioid jet=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] } step=0.00023815848417896567 gradient_error=0.00000003250299013268787 distance_scaled_hessian_error=0.00000005828187588315019\n[WITNESS_JET145] name=cardioid numerical_only=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] }\n[SCREEN_PREPARATION_COST145] name=cardioid elapsed_s=0.0550413 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=cardioid candidates=443 numerical_only=true\n[SCREENED_WITNESS145] name=cardioid rank=0 precision=128 offset=0.0001 tangent=0 numerical_update=5695 point=[-0.7315844629408805, 0.15567265550266585] elapsed_s=0.1166941 escape_update=Some(5695)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=64 minimum_clearance=0.22818230002738363 elapsed_s=0.1247893 result=Ok(ClosedCover { edges: 64, winding: 1, curve_distance_lower: 0.23640311671742023 })\n[DISTANCE_BRACKET145] name=cardioid bracket=DistanceBracket { query: [-0.5, 0.1], lower: 0.23640311671742023, upper: 0.2381823000273836, width: 0.0017791833099633707 }\n[BRACKET_ACCURACY145] name=cardioid requested_width=0.01 proved=true validation_elapsed_s=0.000014\n[DOMAIN_COST145] name=cardioid accepted_queries=10000 query_box_half_width=0.00023640311671742023 elapsed_s=0.2351273 operation=scalar_bounds_only\n[COVER_REUSE_COST145] name=cardioid queries=100 accepted=83 beyond_transport=39 within_requested_width=10 query_box_half_width=0.2955038958967753 elapsed_s=0.2410725 operation=scalar_bounds_and_width_check\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.7748489\n",
+      "stderr_sha256": "aafa7f906998db9b64da03ccb7566a09cfb2eb4cc841c1c7d4edbdf2e7df2e00",
+      "stderr_bytes": 18206
+    },
+    {
+      "name": "native-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 25.978634800063446,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[SCREEN_PREPARATION_COST145] name=native elapsed_s=0.4327206 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.2590184 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=69 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=131 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=257 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=192 regions=312 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=224 regions=344 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007618852001752011 elapsed_s=23.9317245 result=Ok(ClosedCover { edges: 248, winding: 1, curve_distance_lower: 7.6196702978027105e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.6196702978027105e-6, upper: 7.66885200175201e-6, width: 4.9181703949299435e-8 }\n[BRACKET_ACCURACY145] name=native requested_width=0.00000005 proved=true validation_elapsed_s=0.0000102\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007619670297802711 elapsed_s=0.208926 operation=scalar_bounds_only\n[COVER_REUSE_COST145] name=native queries=100 accepted=85 beyond_transport=41 within_requested_width=0 query_box_half_width=0.000009524587872253389 elapsed_s=0.6873484 operation=scalar_bounds_and_width_check\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=25.5227376\n",
+      "stderr_sha256": "58195c0dd4610f25066155f9ca0d459f72ecf2e04e6c800f5b5948cb476225bf",
+      "stderr_bytes": 148526
+    },
+    {
+      "name": "python-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 25.97183439997025,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[SCREEN_PREPARATION_COST145] name=python elapsed_s=0.6770004 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=0.3264663 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017259496124937463 elapsed_s=23.8540565 result=Ok(ClosedCover { edges: 173, winding: 1, curve_distance_lower: 1.7262428611786167e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7262428611786167e-7, upper: 1.7309496124937462e-7, width: 4.706751315129253e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.0000000005 proved=true validation_elapsed_s=0.0000182\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017262428611786168 elapsed_s=0.1846478 operation=scalar_bounds_only\n[COVER_REUSE_COST145] name=python queries=100 accepted=86 beyond_transport=42 within_requested_width=0 query_box_half_width=0.0000002157803576473271 elapsed_s=0.473113 operation=scalar_bounds_and_width_check\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=25.5199875\n",
+      "stderr_sha256": "75b64cccb181fb44aadf001201433914b9acc5cd96963013f0e8e7b79f9fd29a",
+      "stderr_bytes": 84277
+    },
+    {
+      "name": "native-final",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 29.397027000086382,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[SCREEN_PREPARATION_COST145] name=native elapsed_s=0.4443436 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.2834683 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=69 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=131 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=257 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=192 regions=312 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=224 regions=344 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007618852001752011 elapsed_s=26.9694191 result=Ok(ClosedCover { edges: 248, winding: 1, curve_distance_lower: 7.6196702978027105e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.6196702978027105e-6, upper: 7.66885200175201e-6, width: 4.9181703949299435e-8 }\n[BRACKET_ACCURACY145] name=native requested_width=0.00000005 proved=true validation_elapsed_s=0.0000132\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007619670297802711 elapsed_s=0.2354066 operation=scalar_bounds_only\n[COVER_REUSE_COST145] name=native queries=100 accepted=85 beyond_transport=41 within_requested_width=0 query_box_half_width=0.000009524587872253389 elapsed_s=0.9395554 operation=scalar_bounds_and_width_check\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=28.875284100000002\n",
+      "stderr_sha256": "58195c0dd4610f25066155f9ca0d459f72ecf2e04e6c800f5b5948cb476225bf",
+      "stderr_bytes": 148526
+    },
+    {
+      "name": "python-final",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 29.404151000082493,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[SCREEN_PREPARATION_COST145] name=python elapsed_s=0.7268611 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=0.3834413 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017259496124937463 elapsed_s=26.977028400000002 result=Ok(ClosedCover { edges: 173, winding: 1, curve_distance_lower: 1.7262428611786167e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7262428611786167e-7, upper: 1.7309496124937462e-7, width: 4.706751315129253e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.0000000005 proved=true validation_elapsed_s=0.0000141\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017262428611786168 elapsed_s=0.2686739 operation=scalar_bounds_only\n[COVER_REUSE_COST145] name=python queries=100 accepted=86 beyond_transport=42 within_requested_width=0 query_box_half_width=0.0000002157803576473271 elapsed_s=0.5881129 operation=scalar_bounds_and_width_check\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=28.9462184\n",
+      "stderr_sha256": "75b64cccb181fb44aadf001201433914b9acc5cd96963013f0e8e7b79f9fd29a",
+      "stderr_bytes": 84277
+    }
+  ],
+  "mutations": {
+    "point-proof": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "component": [
+      {
+        "mutation": "trap-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "affine-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-multiplier-second-derivative",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-hessian-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-interior-orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-escape-cutoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-point-binding",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "branch": [
+      {
+        "mutation": "self-inclusion",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "contraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "operation-roundoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-remainder",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "remainder-transport",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-parameter-domain",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-c-identity",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-cycle-phase",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-attraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-domain",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "cover": [
+      {
+        "mutation": "closed-parameter-path",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cycle-joins",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "reused-connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "reused-nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "region-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-refinement",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-clearance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-construction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-left",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-right",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-clearance",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "bracket": [
+      {
+        "mutation": "outside-proof",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-distance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "travel-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "subtraction-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-interior",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-binding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "upper-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "mantissa-tail",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "sqrt-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cover-query-binding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-width",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "test_output": "cargo test: 66 passed (2 suites, 0.72s)\n",
+  "original_native_crossing": "\nrunning 1 test\ntest manifold::tests::controls_drive_can_cross_shore_without_wall ... FAILED\n\nfailures:\n\nfailures:\n    manifold::tests::controls_drive_can_cross_shore_without_wall\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 94 filtered out; finished in 1.74s\n\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n    Blocking waiting for file lock on package cache\n   Compiling runtime_core v0.1.0 (C:\\Users\\JeffHall\\git\\FractalSync\\runtime-core)\n    Finished `release` profile [optimized] target(s) in 42.88s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (88272) panicked at runtime-core\\src\\manifold.rs:972:41:\nundriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `--lib`\n",
+  "original_python_crossing": "F                                                                        [100%]\n================================== FAILURES ===================================\n_ TestShoreCrossings.test_shore_ridge_reflects_below_barrier_and_crosses_above_it _\n\nself = <test_manifold_physics.TestShoreCrossings object at 0x00000220526A2FD0>\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\n\n    def test_shore_ridge_reflects_below_barrier_and_crosses_above_it(self, rc):\n        \"\"\"Scale-relative kinetic energy can carry a native Shore crossing.\"\"\"\n        config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        shore_y = 0.05\n        c0 = (0.4, shore_y)\n        x_shore = _locate_shore_x(rc, y=shore_y, x_lo=0.2, x_hi=0.5)\n        assert 0.2 < x_shore < 0.5\n    \n        u0 = rc.manifold_potential_energy(complex(*c0), rc_config)\n        u_crest = rc.manifold_potential_energy(complex(x_shore, shore_y), rc_config)\n        barrier = u_crest - u0\n        assert barrier > 0.0\n    \n        g0 = rc.manifold_induced_metric(complex(*c0), rc_config)\n        g_xx = g0[0][0]\n        assert math.isfinite(g_xx) and g_xx > 0.0\n    \n        def _vx_for_ke(target_ke):\n            # For v=(-vx,0), K = 1/2 * G_xx(c0) * vx^2.\n            vx = math.sqrt(2.0 * target_ke / g_xx)\n            measured = rc.manifold_kinetic_energy(vx, 0.0, complex(*c0), rc_config)\n            assert measured == pytest.approx(target_ke, rel=1e-9, abs=1e-12)\n            return vx\n    \n        def _crest_attempt(vx, dt):\n            c = c0\n            v = (-vx, 0.0)\n            crossed = False\n            min_d = math.inf\n            energy_log = []\n            guard_fired = False\n            crossing_time = None\n            for step in range(round(5.0 / dt)):\n                # The |c| < 2 hard invariant (outer-domain wall) may fail the\n                # step closed if the trajectory would leave the valid disk.\n                # That is a defined outcome (\"did not cross\"), not a crash.\n                try:\n                    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n                        rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n>       attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nbackend\\tests\\test_manifold_physics.py:531: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\nbackend\\tests\\test_manifold_physics.py:496: in _crest_attempt\n    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\nc = (0.35659512991586934, 0.06404443350221226)\nv = (-0.0006602770310771159, 0.0010669118815194072), q = (0.0, 0.0), beta = 0.0\ndt = 0.002\nconfig = ManifoldConfig(d_ref=0.1, epsilon=0.0001, lambda_sq=1.0, kappa=0.1, mu=0.3183098861837907)\n\n    def _rust_step(rc, c, v, q, beta, dt, config):\n        \"\"\"Call the Rust scalar binding with a Python config mirror.\"\"\"\n        rc_config = rc.ManifoldConfig(\n            config.d_ref, config.epsilon, config.lambda_sq, config.kappa\n        )\n>       return rc.manifold_integrate_step(\n            c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config\n        )\nE       RuntimeError: geometry not regular: Unresolved (singularity=None) at c=(0.35659381055433242, 0.06404656757776669); provider=geometry-provider/6, tile=scale-aware:23:2991325:537261:1.49e-8, requested=0.000010000015272244462, resolved=0.000000014901161193847656, error=inf\n\nbackend\\tests\\test_manifold_physics.py:68: RuntimeError\n=========================== short test summary info ===========================\nFAILED backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it\n",
+  "python_extension_sha256": "4ea8182db4bd310d594ab3567c47003ed47d360457f5732fe2499ac6dc607548"
+}

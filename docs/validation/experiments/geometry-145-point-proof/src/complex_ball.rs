@@ -1,5 +1,7 @@
 //! Shared high-precision complex-ball arithmetic.
 use astro_float::{BigFloat, RoundingMode as R, Sign};
+#[path = "directed_norm.rs"]
+mod directed_norm;
 #[derive(Clone)]
 pub(super) struct Complex {
     pub(super) re: BigFloat,
@@ -12,6 +14,9 @@ impl Complex {
             .add(&self.im.mul(&self.im, p, round), p, round)
     }
     pub(super) fn norm_upper(&self, p: usize) -> BigFloat {
+        directed_norm::upper(&self.re, &self.im, p).unwrap_or_else(|| self.norm_upper_precise(p))
+    }
+    pub(super) fn norm_upper_precise(&self, p: usize) -> BigFloat {
         self.norm_squared(p, R::Up).sqrt(p, R::Up)
     }
     pub(super) fn advance(
@@ -54,7 +59,7 @@ impl Complex {
             re: component(&self.re, &other.re)?,
             im: component(&self.im, &other.im)?,
         }
-        .norm_upper(p);
+        .norm_upper_precise(p);
         (!result.is_nan() && !result.is_inf()).then_some(result)
     }
     pub(super) fn step(&self, c: &Self, p: usize) -> Option<(Self, BigFloat)> {
