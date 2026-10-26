@@ -8,6 +8,8 @@ cases=[
  ("curve-multiplier-second-derivative","component_probe.rs","let rhs_g = mu.scale(-1.).sub(&m2);","let rhs_g = mu.scale(0.).sub(&m2);","component_probe","cardioid_curve_derivatives_match_closed_form"),
  ("curve-hessian-sign","component_probe.rs","let factor = -k / (1. - k * d);","let factor = k / (1. - k * d);","component_probe","period_two_distance_jet_matches_circle"),
  ("curve-interior-orientation","component_probe.rs","|| inward_alignment <= 0.","|| false","component_probe","period_two_cut_locus_and_exterior_refuse"),
+ ("screen-escape-cutoff","component_probe.rs","if x * x + y * y > 4.","if x * x + y * y >= 4.","component_probe","numerical_screen_preserves_pre_update_cutoff_without_proof_authority"),
+ ("screen-point-binding","component_probe.rs","let witness = OutsideWitness::certify(point, precision, 32768);","let witness = OutsideWitness::certify([1.,0.], precision, 32768);","component_probe","fabricated_numerical_escape_metadata_cannot_issue_a_witness"),
 ]
 original={root/"src"/case[1]:(root/"src"/case[1]).read_bytes() for case in cases}
 rows=[]

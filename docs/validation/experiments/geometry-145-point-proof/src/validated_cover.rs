@@ -201,8 +201,42 @@ fn join(a: &Certificate, b: &Certificate, parameter: &C) -> Result<(), Refusal> 
     if glue(a, b, parameter).is_ok() || glue(b, a, parameter).is_ok() {
         Ok(())
     } else {
+        // Unequal arc sizes can make their endpoint error disks too wide for
+        // direct inclusion. Prove a root at the exact shared multiplier and
+        // connect both arcs to that certificate; numerical agreement alone
+        // never establishes the join.
+        let point = (|| {
+            let (z, _) = predictor(&a.model, parameter, 0)?;
+            let (c, _) = predictor(&a.model, parameter, 1)?;
+            let (z, c) = super::super::solve(z, c, a.period(), parameter)?;
+            let (point, _) = super::certify_auto(&z, &c, parameter, a.period(), 0.).ok()?;
+            Some(point)
+        })()
+        .ok_or(Refusal::UnprovedJoin)?;
+        point_join(a, b, &point, parameter)
+    }
+}
+fn point_join(
+    a: &Certificate,
+    b: &Certificate,
+    point: &Certificate,
+    parameter: &C,
+) -> Result<(), Refusal> {
+    let connects = |patch: &Certificate| {
+        glue(patch, point, parameter).is_ok() || glue(point, patch, parameter).is_ok()
+    };
+    if connects(a) && connects(b) {
+        Ok(())
+    } else {
         Err(Refusal::UnprovedJoin)
     }
+}
+fn connector_capsule(a: &Edge, b: &Edge) -> Option<Capsule> {
+    Some(Capsule {
+        a: a.capsule.b.clone(),
+        b: b.capsule.a.clone(),
+        radius: max(a.capsule.radius.clone(), b.capsule.radius.clone())?,
+    })
 }
 /// Verify an exactly closed parameter path, all cycle joins, curve separation,
 /// and nonzero winding of the actual continuous parameter curve around q.
@@ -225,12 +259,7 @@ pub(crate) fn closed(edges: Vec<Edge>, q: &C) -> Result<ClosedCover, Refusal> {
         // The actual common endpoint lies in both endpoint disks. Their convex
         // hull is inside this connector capsule, so it also controls the homotopy
         // from the actual joined curve to the centerline reference polygon.
-        let connector = Capsule {
-            a: a.capsule.b.clone(),
-            b: b.capsule.a.clone(),
-            radius: max(a.capsule.radius.clone(), b.capsule.radius.clone())
-                .ok_or(Refusal::NumericalFailure)?,
-        };
+        let connector = connector_capsule(a, b).ok_or(Refusal::NumericalFailure)?;
         for capsule in [&a.capsule, &connector] {
             let bound = capsule_distance_lower(capsule, q).ok_or(Refusal::NumericalFailure)?;
             if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0) {
@@ -275,6 +304,7 @@ pub(crate) enum BuildReason {
     NumericalSeed,
     RegionBudget,
     DepthBudget,
+    ClearanceTarget,
     FinalCover(Refusal),
 }
 struct Builder {
@@ -284,6 +314,7 @@ struct Builder {
     attempted: usize,
     maximum_depth: u32,
     max_regions: usize,
+    minimum_clearance: B,
 }
 impl Builder {
     fn failure(&self, reason: BuildReason, depth: u32) -> BuildFailure {
@@ -329,14 +360,21 @@ impl Builder {
             (zm, cm) = super::super::solve(best, cm, self.period, &mu)?;
             let (patch, attempts) = super::certify_auto(&zm, &cm, &mu, self.period, h).ok()?;
             let item = edge(&patch, start, end).ok()?;
-            if !capsule_distance_lower(&item.capsule, &self.query)?
-                .cmp(&B::new(P))
-                .is_some_and(|v| v > 0)
+            let bound = capsule_distance_lower(&item.capsule, &self.query)?;
+            if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
+                || !bound.cmp(&self.minimum_clearance).is_some_and(|v| v >= 0)
             {
                 return None;
             }
             if let Some(previous) = self.edges.last() {
                 join(&previous.patch, &patch, start).ok()?;
+                let connector = connector_capsule(previous, &item)?;
+                if !capsule_distance_lower(&connector, &self.query)?
+                    .cmp(&self.minimum_clearance)
+                    .is_some_and(|v| v >= 0)
+                {
+                    return None;
+                }
             }
             let (ze, ce) = super::super::solve(zm, cm, self.period, end)?;
             Some((item, ze, ce, attempts))
@@ -377,6 +415,14 @@ pub(crate) fn build(
 
 /// Numerical loop proposal only; every edge and the completed winding still
 /// require the same proof. A local inward dent avoids the parabolic root.
+pub(crate) struct CoverRequest {
+    pub(crate) radius: f64,
+    pub(crate) root_radius: f64,
+    pub(crate) root_width: f64,
+    pub(crate) initial_edges: usize,
+    pub(crate) max_regions: usize,
+    pub(crate) minimum_clearance: f64,
+}
 pub(crate) fn build_with_root_radius(
     query: &C,
     period: usize,
@@ -386,6 +432,32 @@ pub(crate) fn build_with_root_radius(
     initial_edges: usize,
     max_regions: usize,
 ) -> Result<ClosedCover, BuildFailure> {
+    build_requested(
+        query,
+        period,
+        CoverRequest {
+            radius,
+            root_radius,
+            root_width,
+            initial_edges,
+            max_regions,
+            minimum_clearance: 0.,
+        },
+    )
+}
+pub(crate) fn build_requested(
+    query: &C,
+    period: usize,
+    request: CoverRequest,
+) -> Result<ClosedCover, BuildFailure> {
+    let CoverRequest {
+        radius,
+        root_radius,
+        root_width,
+        initial_edges,
+        max_regions,
+        minimum_clearance,
+    } = request;
     let invalid = || BuildFailure {
         reason: BuildReason::InvalidRequest,
         attempted: 0,
@@ -404,6 +476,8 @@ pub(crate) fn build_with_root_radius(
         || !root_width.is_finite()
         || root_width <= 0.
         || root_width > 1.
+        || !minimum_clearance.is_finite()
+        || minimum_clearance < 0.
         || initial_edges < 8
         || initial_edges > 8192
         || max_regions < initial_edges
@@ -418,6 +492,7 @@ pub(crate) fn build_with_root_radius(
         attempted: 0,
         maximum_depth: 0,
         max_regions,
+        minimum_clearance: B::from_f64(minimum_clearance, P),
     };
     let mut z = C::new(0., 0.);
     for _ in 0..32768 {
@@ -455,18 +530,51 @@ pub(crate) fn build_with_root_radius(
         (z, c) = builder.extend(start, end, &z, &c, 0)?;
     }
     let attempted = builder.attempted;
-    let accepted = builder.edges.len();
     let depth = builder.maximum_depth;
-    closed(builder.edges, query).map_err(|reason| BuildFailure {
+    finish_cover(
+        builder.edges,
+        query,
+        &B::from_f64(minimum_clearance, P),
+        attempted,
+        depth,
+    )
+}
+fn finish_cover(
+    edges: Vec<Edge>,
+    query: &C,
+    minimum_clearance: &B,
+    attempted: usize,
+    depth: u32,
+) -> Result<ClosedCover, BuildFailure> {
+    let accepted = edges.len();
+    let cover = closed(edges, query).map_err(|reason| BuildFailure {
         reason: BuildReason::FinalCover(reason),
         attempted,
         accepted,
         depth,
-    })
+    })?;
+    if !cover
+        .distance_lower()
+        .cmp(minimum_clearance)
+        .is_some_and(|v| v >= 0)
+    {
+        return Err(BuildFailure {
+            reason: BuildReason::ClearanceTarget,
+            attempted,
+            accepted,
+            depth,
+        });
+    }
+    Ok(cover)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn period_three_patch(seed: C) -> Certificate {
+        let zero = C::new(0., 0.);
+        let (z, c) = super::super::super::solve(zero.clone(), seed, 3, &zero).unwrap();
+        super::super::certify(&z, &c, &zero, 3, 1e-6, 1e-9, 1e-9).unwrap()
+    }
     fn cardioid_edges(reverse: bool) -> Vec<Edge> {
         let mut vertices = Vec::new();
         for k in 0..8 {
@@ -558,8 +666,7 @@ mod tests {
     fn closed_multiplier_path_cannot_join_distinct_components() {
         let zero = C::new(0., 0.);
         let make = |seed: C| {
-            let (z, c) = super::super::super::solve(zero.clone(), seed, 3, &zero).unwrap();
-            let patch = super::super::certify(&z, &c, &zero, 3, 1e-6, 1e-9, 1e-9).unwrap();
+            let patch = period_three_patch(seed);
             edge(&patch, &zero, &zero).unwrap()
         };
         let a = make(C::new(-1.7548776662466927, 0.));
@@ -567,6 +674,54 @@ mod tests {
         assert!(matches!(
             closed(vec![a.clone(), b, a], &C::new(2., 0.)),
             Err(Refusal::UnprovedJoin)
+        ));
+    }
+    #[test]
+    fn point_bridge_requires_both_independent_cycle_links() {
+        let a = period_three_patch(C::new(-1.7548776662466927, 0.));
+        let b = period_three_patch(C::new(-0.1225611668766536, 0.7448617666197442));
+        let zero = C::new(0., 0.);
+        assert!(point_join(&a, &a, &a, &zero).is_ok());
+        assert_eq!(point_join(&a, &b, &a, &zero), Err(Refusal::UnprovedJoin));
+        assert_eq!(point_join(&a, &b, &b, &zero), Err(Refusal::UnprovedJoin));
+        assert_eq!(
+            point_join(&a, &a, &a, &C::new(0.01, 0.)),
+            Err(Refusal::UnprovedJoin)
+        );
+    }
+    #[test]
+    fn final_clearance_checks_the_closing_geometry_independently() {
+        let mut edges = cardioid_edges(false);
+        let query = edges[0].capsule.b.add(&C::new(-0.1, -0.1));
+        let capsule = &mut edges[1].capsule;
+        // Safe widened enclosure, as in the independent connector refusal
+        // fixture, but now the connector stays positive while missing target.
+        capsule.a = capsule.a.add(&C::new(0., 0.1));
+        capsule.b = capsule.b.add(&C::new(0., 0.1));
+        capsule.radius = capsule.radius.add(&B::from_f64(0.101, P), P, R::Up);
+        edges.rotate_left(1);
+        let target = B::from_f64(0.01, P);
+        for item in &edges {
+            assert!(capsule_distance_lower(&item.capsule, &query)
+                .unwrap()
+                .cmp(&target)
+                .is_some_and(|v| v > 0));
+        }
+        for pair in edges.windows(2) {
+            let connector = connector_capsule(&pair[0], &pair[1]).unwrap();
+            assert!(capsule_distance_lower(&connector, &query)
+                .unwrap()
+                .cmp(&target)
+                .is_some_and(|v| v > 0));
+        }
+        let cover = closed(edges.clone(), &query).unwrap();
+        assert!(cover.distance_lower().cmp(&target).is_some_and(|v| v < 0));
+        assert!(matches!(
+            finish_cover(edges, &query, &target, 8, 0),
+            Err(BuildFailure {
+                reason: BuildReason::ClearanceTarget,
+                ..
+            })
         ));
     }
     #[test]
@@ -624,6 +779,39 @@ mod tests {
         }
     }
     #[test]
+    fn requested_clearance_is_proved_or_refused() {
+        let q = C::new(0., 0.);
+        let request = |minimum_clearance, max_regions| CoverRequest {
+            radius: 0.5,
+            root_radius: 0.5,
+            root_width: 0.25,
+            initial_edges: 8,
+            max_regions,
+            minimum_clearance,
+        };
+        let coarse = build_requested(&q, 1, request(0., 128)).unwrap();
+        let target = (crate::number(coarse.distance_lower()) + 0.1875) * 0.5;
+        assert!(coarse
+            .distance_lower()
+            .cmp(&B::from_f64(target, P))
+            .is_some_and(|v| v < 0));
+        let cover = build_requested(&q, 1, request(target, 128)).unwrap();
+        assert!(cover
+            .distance_lower()
+            .cmp(&B::from_f64(target, P))
+            .is_some_and(|v| v >= 0));
+        assert!(build_requested(&q, 1, request(0.3, 32)).is_err());
+        for target in [f64::NAN, f64::INFINITY, -0.1] {
+            assert!(matches!(
+                build_requested(&q, 1, request(target, 128)),
+                Err(BuildFailure {
+                    reason: BuildReason::InvalidRequest,
+                    ..
+                })
+            ));
+        }
+    }
+    #[test]
     fn exhausted_builder_does_not_return_an_accepted_prefix() {
         let edges = cardioid_edges(false);
         let start = edges[0].start.clone();
@@ -635,6 +823,7 @@ mod tests {
             attempted: 8,
             maximum_depth: 0,
             max_regions: 8,
+            minimum_clearance: B::new(P),
         };
         let result = builder.extend(&start, &end, &C::new(0., 0.), &C::new(0., 0.), 0);
         assert!(matches!(

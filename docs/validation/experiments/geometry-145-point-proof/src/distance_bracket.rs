@@ -22,6 +22,15 @@ impl OutsideWitness {
     pub(crate) fn escape_update(&self) -> usize {
         self.proof.update
     }
+    /// Endpoint distance only. It becomes a boundary-distance upper bound
+    /// when paired with independently proved interior membership.
+    pub(crate) fn endpoint_distance_upper(&self, query: &crate::C) -> Option<B> {
+        Complex {
+            re: query.re.clone(),
+            im: query.im.clone(),
+        }
+        .distance_upper(&self.point, P)
+    }
 }
 pub(crate) struct DistanceBracket {
     lower: B,
@@ -86,6 +95,17 @@ impl DistanceBracket {
     pub(crate) fn width(&self) -> B {
         self.upper.sub(&self.lower, P, R::Up)
     }
+    pub(crate) fn meets_width(&self, requested: f64) -> bool {
+        requested.is_finite()
+            && requested > 0.
+            && self
+                .width()
+                .cmp(&B::from_f64(requested, P))
+                .is_some_and(|v| v <= 0)
+    }
+    pub(crate) fn require_width(self, requested: f64) -> Option<Self> {
+        self.meets_width(requested).then_some(self)
+    }
 }
 impl std::fmt::Debug for DistanceBracket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -119,6 +139,18 @@ mod tests {
             .cmp(&B::from_f64(0.3, P))
             .is_some_and(|v| v == 0));
         assert!(bracket.width().cmp(&B::new(P)).is_some_and(|v| v > 0));
+        assert!(bracket.meets_width(1.));
+        for width in [f64::NAN, f64::INFINITY, 0., -1., 1e-10] {
+            assert!(!bracket.meets_width(width));
+        }
+        assert!(DistanceBracket::certify(&cover, &outside)
+            .unwrap()
+            .require_width(1e-10)
+            .is_none());
+        assert!(DistanceBracket::certify(&cover, &outside)
+            .unwrap()
+            .require_width(1.)
+            .is_some());
         assert!(outside.escape_update() > 0);
     }
     #[test]

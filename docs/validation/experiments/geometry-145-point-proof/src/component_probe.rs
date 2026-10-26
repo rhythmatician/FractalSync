@@ -487,7 +487,11 @@ fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
     }
     Some(())
 }
-fn construct_cover(query: &C, period: usize) -> Option<validated_branch::cover::ClosedCover> {
+fn construct_cover(
+    query: &C,
+    period: usize,
+    minimum_clearance: f64,
+) -> Option<validated_branch::cover::ClosedCover> {
     let radius = std::env::args()
         .nth(2)
         .map(|text| text.parse::<f64>())
@@ -513,27 +517,31 @@ fn construct_cover(query: &C, period: usize) -> Option<validated_branch::cover::
         .transpose()
         .ok()?
         .unwrap_or(0.25);
-    let result = validated_branch::cover::build_with_root_radius(
+    let result = validated_branch::cover::build_requested(
         query,
         period,
-        radius,
-        root_radius,
-        root_width,
-        vertices,
-        8192,
+        validated_branch::cover::CoverRequest {
+            radius,
+            root_radius,
+            root_width,
+            initial_edges: vertices,
+            max_regions: 8192,
+            minimum_clearance,
+        },
     );
-    println!("[CLOSED_COVER145] period={period} radius={radius} root_radius={root_radius} root_width={root_width} initial_edges={vertices} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
+    println!("[CLOSED_COVER145] period={period} radius={radius} root_radius={root_radius} root_width={root_width} initial_edges={vertices} minimum_clearance={minimum_clearance} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
     result.ok()
 }
 fn probe_cover(query: C, period: usize) -> Option<()> {
-    construct_cover(&query, period).map(|_| ())
+    let target = std::env::args()
+        .nth(6)
+        .map(|x| x.parse::<f64>())
+        .transpose()
+        .ok()?
+        .unwrap_or(0.);
+    construct_cover(&query, period, target).map(|_| ())
 }
-fn propose_witnesses(
-    name: &str,
-    query: &C,
-    period: usize,
-) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
-    use validated_branch::cover::bracket::OutsideWitness;
+fn witness_jet(name: &str, query: &C, period: usize) -> Option<DistanceJet> {
     let (mut z, initial) = critical_cycle_seed(query, period)?;
     let mut c = query.clone();
     let theta: f64 = match name {
@@ -550,6 +558,15 @@ fn propose_witnesses(
     let jet = projection(query, &z, &c, period, theta)?;
     check_distance_derivatives(name, query, &z, &c, period, theta)?;
     println!("[WITNESS_JET145] name={name} numerical_only={jet:?}");
+    Some(jet)
+}
+fn propose_witnesses(
+    name: &str,
+    query: &C,
+    period: usize,
+) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
+    use validated_branch::cover::bracket::OutsideWitness;
+    let jet = witness_jet(name, query, period)?;
     let mut witnesses = Vec::new();
     for offset in [1., 0.1, 0.01, 0.001] {
         let point = query
@@ -588,10 +605,128 @@ fn propose_witnesses(
     }
     (!witnesses.is_empty()).then_some(witnesses)
 }
-fn probe_bracket(name: &str, query: C, period: usize) -> Option<()> {
+/// Non-authoritative proposal screen; all selected points still need escape proof.
+fn numerical_escape(point: [f64; 2], budget: usize) -> Option<usize> {
+    if !point.iter().all(|x| x.is_finite()) || budget > 32768 {
+        return None;
+    }
+    let (mut x, mut y) = (0., 0.);
+    for k in 0..budget {
+        if x * x + y * y > 4. {
+            return Some(k);
+        }
+        (x, y) = (x * x - y * y + point[0], 2. * x * y + point[1]);
+    }
+    None
+}
+fn screened_witnesses(
+    name: &str,
+    query: &C,
+    period: usize,
+) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
+    let preparation_start = std::time::Instant::now();
+    let jet = witness_jet(name, query, period)?;
+    let q = query.f64();
+    let mut candidates = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for offset in [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1] {
+        for k in -40..=40 {
+            let tangent = k as f64 * 0.005;
+            let point = query
+                .add(&C::new(
+                    -jet.g[0] * jet.d * (1. + offset) - jet.g[1] * jet.d * tangent,
+                    -jet.g[1] * jet.d * (1. + offset) + jet.g[0] * jet.d * tangent,
+                ))
+                .f64();
+            if !seen.insert((point[0].to_bits(), point[1].to_bits())) {
+                continue;
+            }
+            if let Some(update) = numerical_escape(point, 32768) {
+                candidates.push(WitnessProposal {
+                    distance: (point[0] - q[0]).hypot(point[1] - q[1]),
+                    point,
+                    offset,
+                    tangent,
+                    numerical_update: update,
+                });
+            }
+        }
+    }
+    println!("[SCREEN_PREPARATION_COST145] name={name} elapsed_s={} includes=numerical_jet_derivative_checks_and_screen",preparation_start.elapsed().as_secs_f64());
+    certify_witness_proposals(name, candidates)
+}
+struct WitnessProposal {
+    distance: f64,
+    point: [f64; 2],
+    offset: f64,
+    tangent: f64,
+    numerical_update: usize,
+}
+fn certify_witness_proposals(
+    name: &str,
+    mut candidates: Vec<WitnessProposal>,
+) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
+    use validated_branch::cover::bracket::OutsideWitness;
+    candidates.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+    println!(
+        "[WITNESS_SCREEN145] name={name} candidates={} numerical_only=true",
+        candidates.len()
+    );
+    for (rank, proposal) in candidates.into_iter().take(32).enumerate() {
+        let WitnessProposal {
+            point,
+            offset,
+            tangent,
+            numerical_update: update,
+            ..
+        } = proposal;
+        for precision in [128, 256] {
+            let start = std::time::Instant::now();
+            let witness = OutsideWitness::certify(point, precision, 32768);
+            println!("[SCREENED_WITNESS145] name={name} rank={rank} precision={precision} offset={offset} tangent={tangent} numerical_update={update} point={point:?} elapsed_s={} escape_update={:?}",start.elapsed().as_secs_f64(),witness.as_ref().map(OutsideWitness::escape_update));
+            if let Some(witness) = witness {
+                return Some(vec![witness]);
+            }
+        }
+    }
+    None
+}
+fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<()> {
     use validated_branch::cover::bracket::InteriorDistanceDomain;
-    let witnesses = propose_witnesses(name, &query, period)?;
-    let cover = construct_cover(&query, period)?;
+    let witnesses = if screened {
+        screened_witnesses(name, &query, period)?
+    } else {
+        propose_witnesses(name, &query, period)?
+    };
+    let requested_width = std::env::args()
+        .nth(6)
+        .map(|x| x.parse::<f64>())
+        .transpose()
+        .ok()?;
+    let minimum_clearance = if let Some(width) = requested_width {
+        if !width.is_finite() || width <= 0. {
+            return None;
+        }
+        let mut upper: Option<BigFloat> = None;
+        for witness in &witnesses {
+            let bound = witness.endpoint_distance_upper(&query)?;
+            if upper
+                .as_ref()
+                .is_none_or(|old| bound.cmp(old).is_some_and(|v| v < 0))
+            {
+                upper = Some(bound);
+            }
+        }
+        let required = upper?.sub(&BigFloat::from_f64(width, P), P, R::Up);
+        if required.cmp(&BigFloat::new(P)).is_some_and(|v| v > 0) {
+            number(&required).next_up()
+        } else {
+            0.
+        }
+    } else {
+        0.
+    };
+    let cover = construct_cover(&query, period, minimum_clearance)?;
     let mut best: Option<(InteriorDistanceDomain, BigFloat)> = None;
     for witness in witnesses {
         let bracket = validated_branch::cover::bracket::DistanceBracket::certify(&cover, &witness)?;
@@ -607,6 +742,11 @@ fn probe_bracket(name: &str, query: C, period: usize) -> Option<()> {
         }
     }
     let (domain, _) = best?;
+    if let Some(width) = requested_width {
+        let validation_start = std::time::Instant::now();
+        domain.at(&query)?.require_width(width)?;
+        println!("[BRACKET_ACCURACY145] name={name} requested_width={width} proved=true validation_elapsed_s={}",validation_start.elapsed().as_secs_f64());
+    }
     let origin = query.f64();
     let radius = number(cover.mandelbrot_interior_distance_lower()) * 1e-3;
     let start = std::time::Instant::now();
@@ -638,6 +778,12 @@ fn main() {
         "bracket-cardioid",
         "bracket-native",
         "bracket-python",
+        "tight-witness-cardioid",
+        "tight-witness-native",
+        "tight-witness-python",
+        "tight-bracket-cardioid",
+        "tight-bracket-native",
+        "tight-bracket-python",
     ]
     .contains(&selection.as_str())
     {
@@ -662,13 +808,18 @@ fn main() {
                 .or_else(|| selection.strip_prefix("cover-"))
                 .or_else(|| selection.strip_prefix("witness-"))
                 .or_else(|| selection.strip_prefix("bracket-"))
+                .or_else(|| selection.strip_prefix("tight-witness-"))
+                .or_else(|| selection.strip_prefix("tight-bracket-"))
                 .unwrap_or(&selection)
         {
             continue;
         }
         let start = std::time::Instant::now();
-        let result = if selection.starts_with("bracket-") {
-            probe_bracket(name, c, p)
+        let result = if selection.starts_with("tight-bracket-") || selection.starts_with("bracket-")
+        {
+            probe_bracket(name, c, p, selection.starts_with("tight-"))
+        } else if selection.starts_with("tight-witness-") {
+            screened_witnesses(name, &c, p).map(|_| ())
         } else if selection.starts_with("witness-") {
             propose_witnesses(name, &c, p).map(|_| ())
         } else if selection.starts_with("cover-") {
@@ -692,6 +843,34 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn numerical_screen_preserves_pre_update_cutoff_without_proof_authority() {
+        assert_eq!(numerical_escape([1., 0.], 3), None);
+        assert_eq!(numerical_escape([1., 0.], 4), Some(3));
+        assert_eq!(numerical_escape([2., 0.], 2), None);
+        assert_eq!(numerical_escape([2., 0.], 3), Some(2));
+        for point in [[0., 0.], [f64::NAN, 0.], [0., f64::INFINITY]] {
+            assert_eq!(numerical_escape(point, 512), None);
+        }
+        assert_eq!(numerical_escape([1., 0.], 32769), None);
+    }
+    #[test]
+    fn fabricated_numerical_escape_metadata_cannot_issue_a_witness() {
+        let proposal = |point| WitnessProposal {
+            point,
+            distance: 0.,
+            offset: 0.,
+            tangent: 0.,
+            numerical_update: 3,
+        };
+        assert!(certify_witness_proposals("test", vec![proposal([0., 0.])]).is_none());
+        assert!(certify_witness_proposals("test", vec![proposal([f64::NAN, 0.])]).is_none());
+        let result =
+            certify_witness_proposals("test", vec![proposal([0., 0.]), proposal([1., 0.])])
+                .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].escape_update(), 3);
+    }
     #[test]
     fn cardioid_curve_derivatives_match_closed_form() {
         let mu = C::new(-0.4, 0.6);

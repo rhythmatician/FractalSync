@@ -13,6 +13,9 @@ cases = [
     ("transport-interior", "distance_bracket.rs", "if !lower.cmp(&B::new(P)).is_some_and(|v| v > 0)", "if false", "compact_domain_transports_bounds_and_refuses_its_boundary"),
     ("query-binding", "distance_bracket.rs", "let upper = query.distance_upper(&self.outside, P)?;", "let upper = self.origin.distance_upper(&self.outside, P)?;", "compact_domain_transports_bounds_and_refuses_its_boundary"),
     ("upper-rounding", "complex_ball.rs", ".norm_upper(p);\n        (!result.is_nan()", ".norm_squared(p, R::Down).sqrt(p, R::Down);\n        (!result.is_nan()", "upper_distance_is_outward_for_irrational_endpoint_norm"),
+    ("requested-width", "distance_bracket.rs", ".cmp(&B::from_f64(requested, P))\n                .is_some_and(|v| v <= 0)", ".cmp(&B::from_f64(requested, P))\n                .is_some_and(|_| true)", "independently_certified_endpoints_enclose_known_cardioid_distance"),
+    ("requested-finite-width", "distance_bracket.rs", "requested.is_finite()", "true", "independently_certified_endpoints_enclose_known_cardioid_distance"),
+    ("final-width", "distance_bracket.rs", "self.meets_width(requested).then_some(self)", "Some(self)", "independently_certified_endpoints_enclose_known_cardioid_distance"),
 ]
 rows = []
 try:
