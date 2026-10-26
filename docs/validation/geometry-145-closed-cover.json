@@ -1,0 +1,528 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "823449d",
+  "production_adoption": false,
+  "scope": "Certified Mandelbrot interior lower bounds; no upper bound or distance jet.",
+  "exact_queries": {
+    "native": [
+      0.3204998863980762,
+      0.04733531447355364
+    ],
+    "python": [
+      0.3565938105543324,
+      0.0640465675777667
+    ]
+  },
+  "binary_sha256": {
+    "geometry145_closed_cover_20261026a.exe": "88faad84f6a27fde2192b12116f1fe1668d02a33738c65f74b1effa406eda237",
+    "geometry145_closed_cover_20261026b.exe": "50527d2168a0b8b7ef0a22f9c245fce613a61df8ead0ae907b6d719fec6d8ccb",
+    "geometry145_closed_cover_20261026c.exe": "b62b6432c738dca5f84916a65d41b3d0b168f45ba56c88b8699a372a0a3ba056"
+  },
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "ac58c91f74330822e85ffc6560b0ba790de917582b619435344479c44761ebff",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "6eaed420fe4ce359e3f906908d509958eb3bfe706369577aabb72e6a6015b1d1",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "0e36d47149b9f011e267037a0b3fed425dd85f6a78a60debfea35e0f47ae9dcc"
+  },
+  "binary_provenance": {
+    "a": "Initial circular cover implementation, before added tests and theorem accessor.",
+    "b": "Added tests/theorem accessor and root dent with fixed width 0.25.",
+    "c": "Current archived source, configurable root width; repeat using Cargo.lock."
+  },
+  "build": [
+    "cargo",
+    "build",
+    "--release",
+    "--jobs",
+    "1",
+    "--manifest-path",
+    "docs\\validation\\experiments\\geometry-145-point-proof\\Cargo.toml",
+    "--target-dir",
+    "target/geometry145-precision",
+    "--bin",
+    "component_probe"
+  ],
+  "cli": "component_probe cover-{cardioid,native,python} radius initial_edges [root_radius=radius] [root_width=0.25]",
+  "concurrent_load": true,
+  "runs": [
+    {
+      "name": "cardioid-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 0.21370660001412034,
+        "timed_out": false
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.9 initial_edges=64 elapsed_s=0.1951297 result=Ok(ClosedCover { edges: 64, winding: 1, curve_distance_lower: 0.13947984197411006 })\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.1952236\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006165 contraction=441.6090689467605 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006165 contraction=0.000000000000000000004528892499354708 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400797 contraction=441.6090689467687 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400797 contraction=0.0000000000000000000045288924993546246 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006225 contraction=441.6090689467608 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006225 contraction=0.000000000000000000004528892499354706 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006133 contraction=441.6090689467604 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444006133 contraction=0.0000000000000000000045288924993547096 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444007943 contraction=441.60906894676856 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00048754642444007943 contraction=0.000000000000000000004528892499354626 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400627 contraction=441.609068946761 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400627 contraction=0.0000000000000000000045288924993547035 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400621 contraction=441.6090689467607 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400621 contraction=0.0000000000000000000045288924993547066 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400658 contraction=441.60906894676236 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0004875464244400658 contraction=0.000000000000000000004528892499354689 included=true contracting=true"
+      ],
+      "stderr_sha256": "ea827b7de61a7b3baa6fab6fede55e5ed1014425ff1de9d6cf39272a88178140",
+      "stderr_bytes": 17929
+    },
+    {
+      "name": "native-v1",
+      "status": {
+        "elapsed_s": 1200.2259269000497,
+        "timed_out": true,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=96 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=128 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=160 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=192 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=224 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=256 regions=263 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=288 regions=324 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=320 regions=387 max_depth=6 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=352 regions=452 max_depth=7 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=384 regions=516 max_depth=8 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=416 regions=579 max_depth=8 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=448 regions=645 max_depth=9 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=480 regions=709 max_depth=9 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=512 regions=774 max_depth=10 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=544 regions=837 max_depth=10 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=576 regions=903 max_depth=10 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=608 regions=965 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=640 regions=1028 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=672 regions=1093 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=704 regions=1156 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=736 regions=1220 max_depth=11 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=768 regions=1286 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=800 regions=1349 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=832 regions=1416 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=864 regions=1479 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=896 regions=1543 max_depth=12 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=928 regions=1608 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=960 regions=1671 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=992 regions=1737 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1024 regions=1800 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1056 regions=1864 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1088 regions=1927 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1120 regions=1992 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1152 regions=2055 max_depth=13 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=1184 regions=2114 max_depth=14 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1216 regions=2179 max_depth=14 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=1248 regions=2242 max_depth=14 latest_proof_attempts=2\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000006784024457374987 inclusion_c=0.000000000006017533007757659 contraction=0.000539084607270839 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000011332133021415244 inclusion_c=0.000000000010052472554870563 contraction=0.0006531735544552526 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935325327027368 inclusion_c=0.00000000009678339003919668 contraction=0.002698250406603878 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00005182552097657372 inclusion_c=0.00000000045869377066460063 contraction=0.007272881342001473 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0004749577177387329 inclusion_c=0.000000004201544465380854 contraction=0.04256328034788469 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.03123474393886825 inclusion_c=0.0000002744768844170652 contraction=2.127124849088357 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000002725173273264866 inclusion_c=0.000000000024141297977386462 contraction=0.001169018616584536 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000006861311588221087 inclusion_c=0.00000000006078719804037288 contraction=0.001871258634859703 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000016728506957235407 inclusion_c=0.00000000014820723753190826 contraction=0.003315658454196752 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000057776143183713106 inclusion_c=0.0000000005118277631455675 contraction=0.007890320033779262 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0004949338018521011 inclusion_c=0.000000004381986606260551 contraction=0.044115954725179 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.03326991751134717 inclusion_c=0.0000002925361013287799 contraction=2.2632650126282376 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000006802145694511102 inclusion_c=0.000000000006028523409702285 contraction=0.0005397016230348831 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000113715881668764 inclusion_c=0.000000000010078973568159049 contraction=0.0006542139363746877 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000006820332648690389 inclusion_c=0.000000000006039544339388725 contraction=0.0005403200583495855 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000011411231181455867 inclusion_c=0.000000000010105581006625561 contraction=0.0006552576679329457 included=true contracting=true"
+      ],
+      "stderr_sha256": "db12fea42543302711ba2e10108f86e8c023c880c72005df232393ea962eb363",
+      "stderr_bytes": 1168555
+    },
+    {
+      "name": "python-v1",
+      "status": {
+        "elapsed_s": 1200.0206420000177,
+        "timed_out": true,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=96 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=128 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=160 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=192 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=224 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=256 regions=260 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=288 regions=323 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=320 regions=388 max_depth=7 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=352 regions=449 max_depth=8 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=384 regions=516 max_depth=9 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=416 regions=579 max_depth=10 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=448 regions=645 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=480 regions=709 max_depth=11 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=512 regions=772 max_depth=11 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=544 regions=837 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=576 regions=900 max_depth=12 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=608 regions=965 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=640 regions=1028 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=672 regions=1092 max_depth=13 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=704 regions=1155 max_depth=13 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=736 regions=1222 max_depth=14 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=768 regions=1285 max_depth=14 latest_proof_attempts=2\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00004011895732119973 inclusion_c=0.0000000001645214229794456 contraction=0.06794713802502943 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0039030403839736215 inclusion_c=0.000000015947651739527125 contraction=3.635035897774801 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000003978682380443619 inclusion_c=0.00000000000016337960279369882 contraction=0.0033611929851766614 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000006740018910892104 inclusion_c=0.0000000000002767626941867182 contraction=0.001398890168490177 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000004001975582178844 inclusion_c=0.0000000000001640536478693768 contraction=0.003373410041238279 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000006791925033173054 inclusion_c=0.00000000000027841471349580244 contraction=0.0014036995956324533 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000016151449982027386 inclusion_c=0.0000000000006603794374078823 contraction=0.006854401261420822 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000004182842123382303 inclusion_c=0.0000000000017101322190979276 contraction=0.0037235987572779 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000010735208437449988 inclusion_c=0.000000000004388816500562413 contraction=0.006390769023760055 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000004121687930733492 inclusion_c=0.000000000016849072931555958 contraction=0.014350899540180533 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00004441110260829841 inclusion_c=0.00000000018149220281580993 contraction=0.07329504887999838 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.004820589833102264 inclusion_c=0.000000019620176808051127 contraction=4.451442413886128 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000004025458693848271 inclusion_c=0.00000000000016473201433537908 contraction=0.0033857018284391047 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000006844388838863082 inclusion_c=0.00000000000028008195117039107 contraction=0.0014085418523038316 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000004049133701235214 inclusion_c=0.0000000000001654147398002318 contraction=0.003398068981925521 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000000689741796180398 inclusion_c=0.00000000000028176459381282017 contraction=0.0014134172657821128 included=true contracting=true"
+      ],
+      "stderr_sha256": "3f1d6de3c220c9064a59f2b9ce5b44cd7b1d0b55fee2d118e6df987c1857f872",
+      "stderr_bytes": 656473
+    },
+    {
+      "name": "native-inner-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 90.5832394999452,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=1 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=96 regions=127 max_depth=3 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=128 regions=166 max_depth=3 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=198 max_depth=3 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.9 initial_edges=128 elapsed_s=90.5521764 result=Ok(ClosedCover { edges: 166, winding: 1, curve_distance_lower: 2.8772785041210325e-6 })\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=90.5563324\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000766455078281141 inclusion_c=0.000000021184312163884262 contraction=0.37389756939626634 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008669477061764978 inclusion_c=0.00000002390571339542115 contraction=0.025636518024932376 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007639279576293688 inclusion_c=0.00000002106748893303647 contraction=0.37671312640757826 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000863712735290967 inclusion_c=0.00000002376456079056041 contraction=0.025790905843486218 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007626681792982349 inclusion_c=0.000000020985381473493546 contraction=0.37937710388930446 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008620180522100285 inclusion_c=0.000000023665759356995328 contraction=0.025942001852780408 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007630031385604124 inclusion_c=0.000000020947199794440138 contraction=0.38188714282576497 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008622607679604615 inclusion_c=0.00000002362051983772979 contraction=0.02609012793128593 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007649375891790783 inclusion_c=0.000000020954360513960365 contraction=0.38423579674456476 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008644496118568054 inclusion_c=0.000000023630444688729874 contraction=0.026234124076655943 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007681679076754352 inclusion_c=0.000000021000698490521452 contraction=0.38641092479435535 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008682224113777133 inclusion_c=0.000000023687849605843285 contraction=0.026371603105314514 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007724691078671025 inclusion_c=0.000000021081788051293263 contraction=0.38840173038447495 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000873312520684388 inclusion_c=0.000000023787262667171193 contraction=0.02650079890582093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007777182478121659 inclusion_c=0.00000002119550568309965 contraction=0.3901990721431592 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008795765289537688 inclusion_c=0.00000002392609473546757 contraction=0.026620678699645663 included=true contracting=true"
+      ],
+      "stderr_sha256": "08cc7369bc991c54fa1a64c5bb5c79dd7b62a98b6eb2c0887b5ba5cb06488acd",
+      "stderr_bytes": 76584
+    },
+    {
+      "name": "python-inner-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 111.07164690014906,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=66 max_depth=1 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=110 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=142 max_depth=2 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.9 initial_edges=128 elapsed_s=111.042991 result=Ok(ClosedCover { edges: 142, winding: 1, curve_distance_lower: 9.329120433167717e-8 })\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=111.0431816\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022443908738139878 inclusion_c=0.00000000022294083837661553 contraction=0.1014484669107701 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000000241567242442797 inclusion_c=0.0000000002393127444901895 contraction=0.020310575514092096 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022263026307188504 inclusion_c=0.00000000022087489330623334 contraction=0.1016126709350013 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002395268154298683 inclusion_c=0.00000000023701271147528465 contraction=0.020319596192964674 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022110934783112134 inclusion_c=0.00000000021912114070626462 contraction=0.10176632903470884 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002378117840796428 inclusion_c=0.00000000023506220213109994 contraction=0.020329816939965228 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021986691015665187 inclusion_c=0.00000000021767623223175208 contraction=0.1019098516030336 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023641135899158003 inclusion_c=0.00000000023345680334260217 contraction=0.020340956256884604 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002188944420859354 inclusion_c=0.0000000002165370458992778 contraction=0.10204360166684665 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002353158644627317 inclusion_c=0.00000000023219247559599727 contraction=0.02035276136208811 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021818452554278092 inclusion_c=0.00000000021570076520419205 contraction=0.10216788657550033 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023451691243633503 inclusion_c=0.00000000023126563987039453 contraction=0.02036501501240941 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002177309656526676 inclusion_c=0.00000000021516493770549517 contraction=0.10228295040915232 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023400754088627001 inclusion_c=0.0000000002306732406766264 contraction=0.020377541139192882 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021752888002126156 inclusion_c=0.000000000214927506442984 contraction=0.10238896724079662 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023378230485604605 inclusion_c=0.0000000002304127781866469 contraction=0.02039020905393957 included=true contracting=true"
+      ],
+      "stderr_sha256": "19c76fcb5c50f85b925bc54df2684f73921743092d5c7a6472bbca08aa7a0116",
+      "stderr_bytes": 55328
+    },
+    {
+      "name": "native-inner-v2",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 104.17339230002835,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=1 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=96 regions=127 max_depth=3 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=128 regions=166 max_depth=3 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=198 max_depth=3 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.9 root_radius=0.9 initial_edges=128 elapsed_s=104.1438488 result=Ok(ClosedCover { edges: 166, winding: 1, curve_distance_lower: 2.8772785041210325e-6 })\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=104.1442281\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000766455078281141 inclusion_c=0.000000021184312163884262 contraction=0.37389756939626634 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008669477061764978 inclusion_c=0.00000002390571339542115 contraction=0.025636518024932376 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007639279576293688 inclusion_c=0.00000002106748893303647 contraction=0.37671312640757826 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000863712735290967 inclusion_c=0.00000002376456079056041 contraction=0.025790905843486218 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007626681792982349 inclusion_c=0.000000020985381473493546 contraction=0.37937710388930446 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008620180522100285 inclusion_c=0.000000023665759356995328 contraction=0.025942001852780408 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007630031385604124 inclusion_c=0.000000020947199794440138 contraction=0.38188714282576497 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008622607679604615 inclusion_c=0.00000002362051983772979 contraction=0.02609012793128593 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007649375891790783 inclusion_c=0.000000020954360513960365 contraction=0.38423579674456476 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008644496118568054 inclusion_c=0.000000023630444688729874 contraction=0.026234124076655943 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007681679076754352 inclusion_c=0.000000021000698490521452 contraction=0.38641092479435535 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008682224113777133 inclusion_c=0.000000023687849605843285 contraction=0.026371603105314514 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007724691078671025 inclusion_c=0.000000021081788051293263 contraction=0.38840173038447495 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000873312520684388 inclusion_c=0.000000023787262667171193 contraction=0.02650079890582093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000007777182478121659 inclusion_c=0.00000002119550568309965 contraction=0.3901990721431592 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000008795765289537688 inclusion_c=0.00000002392609473546757 contraction=0.026620678699645663 included=true contracting=true"
+      ],
+      "stderr_sha256": "08cc7369bc991c54fa1a64c5bb5c79dd7b62a98b6eb2c0887b5ba5cb06488acd",
+      "stderr_bytes": 76584
+    },
+    {
+      "name": "python-inner-v2",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 126.85435950011015,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=66 max_depth=1 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=110 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=142 max_depth=2 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.9 root_radius=0.9 initial_edges=128 elapsed_s=126.8219897 result=Ok(ClosedCover { edges: 142, winding: 1, curve_distance_lower: 9.329120433167717e-8 })\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=126.8221671\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022443908738139878 inclusion_c=0.00000000022294083837661553 contraction=0.1014484669107701 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000000241567242442797 inclusion_c=0.0000000002393127444901895 contraction=0.020310575514092096 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022263026307188504 inclusion_c=0.00000000022087489330623334 contraction=0.1016126709350013 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002395268154298683 inclusion_c=0.00000000023701271147528465 contraction=0.020319596192964674 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000022110934783112134 inclusion_c=0.00000000021912114070626462 contraction=0.10176632903470884 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002378117840796428 inclusion_c=0.00000000023506220213109994 contraction=0.020329816939965228 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021986691015665187 inclusion_c=0.00000000021767623223175208 contraction=0.1019098516030336 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023641135899158003 inclusion_c=0.00000000023345680334260217 contraction=0.020340956256884604 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002188944420859354 inclusion_c=0.0000000002165370458992778 contraction=0.10204360166684665 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002353158644627317 inclusion_c=0.00000000023219247559599727 contraction=0.02035276136208811 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021818452554278092 inclusion_c=0.00000000021570076520419205 contraction=0.10216788657550033 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023451691243633503 inclusion_c=0.00000000023126563987039453 contraction=0.02036501501240941 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002177309656526676 inclusion_c=0.00000000021516493770549517 contraction=0.10228295040915232 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023400754088627001 inclusion_c=0.0000000002306732406766264 contraction=0.020377541139192882 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000021752888002126156 inclusion_c=0.000000000214927506442984 contraction=0.10238896724079662 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000023378230485604605 inclusion_c=0.0000000002304127781866469 contraction=0.02039020905393957 included=true contracting=true"
+      ],
+      "stderr_sha256": "19c76fcb5c50f85b925bc54df2684f73921743092d5c7a6472bbca08aa7a0116",
+      "stderr_bytes": 55328
+    },
+    {
+      "name": "native-dented-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 117.46017450001091,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=69 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=3 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=175 max_depth=3 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=207 max_depth=3 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 initial_edges=128 elapsed_s=116.9905782 result=Ok(ClosedCover { edges: 175, winding: 1, curve_distance_lower: 4.791160347921405e-6 })\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=116.9940253\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_sha256": "32e09c9d14622b9708944a45a02c6e37aa84e8f23db3bd5a2d9bbd523aedbc2b",
+      "stderr_bytes": 85038
+    },
+    {
+      "name": "python-dented-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 141.64078309992328,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=67 max_depth=1 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=114 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=146 max_depth=2 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 initial_edges=128 elapsed_s=141.1745051 result=Ok(ClosedCover { edges: 146, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=141.1746907\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_sha256": "b099c3d535ecc1e96fdcc969296f56ee1d7fef4a998d73da469d006c928f181b",
+      "stderr_bytes": 59581
+    },
+    {
+      "name": "native-narrow-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 170.01597309997305,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=69 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=132 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=194 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=256 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=298 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=330 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 elapsed_s=169.606797 result=Ok(ClosedCover { edges: 234, winding: 1, curve_distance_lower: 6.95629739922484e-6 })\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=169.6070137\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_sha256": "93febb63e1746ed556518dbce9e1b48c38aa139c37d5bad0ed71592beae00317",
+      "stderr_bytes": 139732
+    },
+    {
+      "name": "python-narrow-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 175.60151430009864,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 elapsed_s=175.1905487 result=Ok(ClosedCover { edges: 172, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=175.1909232\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_sha256": "e87c76fc37e6390482d1e6e7412779dab4f5bab641295aa2d6b9e82f75557704",
+      "stderr_bytes": 83622
+    }
+  ],
+  "tests": "cargo test: 39 passed (2 suites, 1.38s)\n",
+  "mutations": {
+    "point-proof": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "component": [
+      {
+        "mutation": "trap-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "affine-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-multiplier-second-derivative",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-hessian-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-interior-orientation",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "branch": [
+      {
+        "mutation": "self-inclusion",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "contraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "operation-roundoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-remainder",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "remainder-transport",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-parameter-domain",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-c-identity",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-cycle-phase",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-attraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-domain",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "cover": [
+      {
+        "mutation": "closed-parameter-path",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cycle-joins",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "region-budget",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "production_validation": {
+    "native": "\nrunning 1 test\ntest manifold::tests::controls_drive_can_cross_shore_without_wall ... FAILED\n\nfailures:\n\nfailures:\n    manifold::tests::controls_drive_can_cross_shore_without_wall\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 94 filtered out; finished in 1.99s\n\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n    Blocking waiting for file lock on package cache\n    Finished `release` profile [optimized] target(s) in 5.47s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (35492) panicked at runtime-core\\src\\manifold.rs:972:41:\nundriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `--lib`\n",
+    "python": "F                                                                        [100%]\n================================== FAILURES ===================================\n_ TestShoreCrossings.test_shore_ridge_reflects_below_barrier_and_crosses_above_it _\n\nself = <test_manifold_physics.TestShoreCrossings object at 0x000001FDCEA3B230>\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\n\n    def test_shore_ridge_reflects_below_barrier_and_crosses_above_it(self, rc):\n        \"\"\"Scale-relative kinetic energy can carry a native Shore crossing.\"\"\"\n        config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        shore_y = 0.05\n        c0 = (0.4, shore_y)\n        x_shore = _locate_shore_x(rc, y=shore_y, x_lo=0.2, x_hi=0.5)\n        assert 0.2 < x_shore < 0.5\n    \n        u0 = rc.manifold_potential_energy(complex(*c0), rc_config)\n        u_crest = rc.manifold_potential_energy(complex(x_shore, shore_y), rc_config)\n        barrier = u_crest - u0\n        assert barrier > 0.0\n    \n        g0 = rc.manifold_induced_metric(complex(*c0), rc_config)\n        g_xx = g0[0][0]\n        assert math.isfinite(g_xx) and g_xx > 0.0\n    \n        def _vx_for_ke(target_ke):\n            # For v=(-vx,0), K = 1/2 * G_xx(c0) * vx^2.\n            vx = math.sqrt(2.0 * target_ke / g_xx)\n            measured = rc.manifold_kinetic_energy(vx, 0.0, complex(*c0), rc_config)\n            assert measured == pytest.approx(target_ke, rel=1e-9, abs=1e-12)\n            return vx\n    \n        def _crest_attempt(vx, dt):\n            c = c0\n            v = (-vx, 0.0)\n            crossed = False\n            min_d = math.inf\n            energy_log = []\n            guard_fired = False\n            crossing_time = None\n            for step in range(round(5.0 / dt)):\n                # The |c| < 2 hard invariant (outer-domain wall) may fail the\n                # step closed if the trajectory would leave the valid disk.\n                # That is a defined outcome (\"did not cross\"), not a crash.\n                try:\n                    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n                        rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n>       attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nbackend\\tests\\test_manifold_physics.py:531: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\nbackend\\tests\\test_manifold_physics.py:496: in _crest_attempt\n    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\nc = (0.35659512991586934, 0.06404443350221226)\nv = (-0.0006602770310771159, 0.0010669118815194072), q = (0.0, 0.0), beta = 0.0\ndt = 0.002\nconfig = ManifoldConfig(d_ref=0.1, epsilon=0.0001, lambda_sq=1.0, kappa=0.1, mu=0.3183098861837907)\n\n    def _rust_step(rc, c, v, q, beta, dt, config):\n        \"\"\"Call the Rust scalar binding with a Python config mirror.\"\"\"\n        rc_config = rc.ManifoldConfig(\n            config.d_ref, config.epsilon, config.lambda_sq, config.kappa\n        )\n>       return rc.manifold_integrate_step(\n            c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config\n        )\nE       RuntimeError: geometry not regular: Unresolved (singularity=None) at c=(0.35659381055433242, 0.06404656757776669); provider=geometry-provider/6, tile=scale-aware:23:2991325:537261:1.49e-8, requested=0.000010000015272244462, resolved=0.000000014901161193847656, error=inf\n\nbackend\\tests\\test_manifold_physics.py:68: RuntimeError\n=========================== short test summary info ===========================\nFAILED backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it\n",
+    "python_extension_sha256": "a3e5b449b1b2a62d418ea6bc6f4e872e8f08c6b128bf6448b27999487334c619",
+    "python_setup": "Separate maturin process rebuilt extension, then imported and hashed it, then stamped fixture commit marker; no production source changes."
+  }
+}

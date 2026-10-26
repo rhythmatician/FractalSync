@@ -483,6 +483,44 @@ fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
     }
     Some(())
 }
+fn probe_cover(query: C, period: usize) -> Option<()> {
+    let radius = std::env::args()
+        .nth(2)
+        .map(|text| text.parse::<f64>())
+        .transpose()
+        .ok()?
+        .unwrap_or(0.999999);
+    let vertices = std::env::args()
+        .nth(3)
+        .map(|text| text.parse::<usize>())
+        .transpose()
+        .ok()?
+        .unwrap_or(512);
+    let start = std::time::Instant::now();
+    let root_radius = std::env::args()
+        .nth(4)
+        .map(|text| text.parse::<f64>())
+        .transpose()
+        .ok()?
+        .unwrap_or(radius);
+    let root_width = std::env::args()
+        .nth(5)
+        .map(|text| text.parse::<f64>())
+        .transpose()
+        .ok()?
+        .unwrap_or(0.25);
+    let result = validated_branch::cover::build_with_root_radius(
+        &query,
+        period,
+        radius,
+        root_radius,
+        root_width,
+        vertices,
+        8192,
+    );
+    println!("[CLOSED_COVER145] period={period} radius={radius} root_radius={root_radius} root_width={root_width} initial_edges={vertices} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
+    result.ok().map(|_| ())
+}
 fn main() {
     let selection = std::env::args().nth(1).unwrap_or("native".into());
     if ![
@@ -492,6 +530,9 @@ fn main() {
         "branch-cardioid",
         "branch-native",
         "branch-python",
+        "cover-cardioid",
+        "cover-native",
+        "cover-python",
     ]
     .contains(&selection.as_str())
     {
@@ -510,11 +551,18 @@ fn main() {
             154,
         ),
     ] {
-        if name != selection.strip_prefix("branch-").unwrap_or(&selection) {
+        if name
+            != selection
+                .strip_prefix("branch-")
+                .or_else(|| selection.strip_prefix("cover-"))
+                .unwrap_or(&selection)
+        {
             continue;
         }
         let start = std::time::Instant::now();
-        let result = if selection.starts_with("branch-") {
+        let result = if selection.starts_with("cover-") {
+            probe_cover(c, p)
+        } else if selection.starts_with("branch-") {
             probe_branch(name, c, p)
         } else {
             trace(name, c, p)

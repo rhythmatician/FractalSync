@@ -5,6 +5,8 @@ use super::proof_support::{error, finite};
 use super::{cycle, C, P};
 use astro_float::{BigFloat, RoundingMode as R};
 
+#[path = "validated_cover.rs"]
+pub(super) mod cover;
 type B = BigFloat;
 fn zero() -> C {
     C::new(0., 0.)
@@ -255,6 +257,18 @@ pub(super) fn certify(
     z_error: f64,
     c_error: f64,
 ) -> Result<Certificate, Refusal> {
+    certify_observed(z, c, mu, period, mu_radius, z_error, c_error, |_, _| {})
+}
+fn certify_observed(
+    z: &C,
+    c: &C,
+    mu: &C,
+    period: usize,
+    mu_radius: f64,
+    z_error: f64,
+    c_error: f64,
+    mut observe: impl FnMut(&[B; 2], &B),
+) -> Result<Certificate, Refusal> {
     if !z.finite()
         || !c.finite()
         || !mu.finite()
@@ -269,7 +283,7 @@ pub(super) fn certify(
     {
         return Err(Refusal::InvalidRequest);
     }
-    let numerical = || -> Option<Certificate> {
+    let mut numerical = || -> Option<Certificate> {
         let j = cycle(z, c, period)?;
         let one = C::new(1., 0.);
         let det = j.m.sub(&one).mul(&j.d).sub(&j.a.mul(&j.b));
@@ -345,6 +359,7 @@ pub(super) fn certify(
         let included = inclusion[0].cmp(&radii[1]).is_some_and(|v| v < 0)
             && inclusion[1].cmp(&radii[2]).is_some_and(|v| v < 0);
         let contracting = contraction.cmp(&B::from(1u8)).is_some_and(|v| v < 0);
+        observe(&inclusion, &contraction);
         let conversion = |x: &B| super::number(x);
         eprintln!("[BRANCH_BOUNDS145] inclusion_z={} inclusion_c={} contraction={} included={included} contracting={contracting}",conversion(&inclusion[0]),conversion(&inclusion[1]),conversion(&contraction));
         Some(Certificate {
@@ -367,6 +382,58 @@ pub(super) fn certify(
     };
     // Failure is conservative. Diagnostic distinctions are intentionally limited.
     numerical().ok_or(Refusal::NumericalFailure)
+}
+
+/// Choose root-error radii from rejected outward residual bounds. This is a
+/// bounded search for a proof domain, not a different acceptance threshold.
+/// No rejected candidate or unverified model is returned to the caller.
+pub(super) fn certify_auto(
+    z: &C,
+    c: &C,
+    mu: &C,
+    period: usize,
+    mu_radius: f64,
+) -> Result<(Certificate, usize), Refusal> {
+    let mut errors = [1e-22f64, 1e-26];
+    for attempt in 1..=12 {
+        let mut measured: Option<[B; 2]> = None;
+        let result = certify_observed(
+            z,
+            c,
+            mu,
+            period,
+            mu_radius,
+            errors[0],
+            errors[1],
+            |bounds, _| measured = Some(bounds.clone()),
+        );
+        if let Ok(certificate) = result {
+            return Ok((certificate, attempt));
+        }
+        if matches!(result, Err(Refusal::InvalidRequest)) {
+            return Err(Refusal::InvalidRequest);
+        }
+        let bounds = measured.ok_or(Refusal::NumericalFailure)?;
+        let mut changed = false;
+        for index in 0..2 {
+            let suggested = bounds[index].mul(&B::from(2u8), P, R::Up);
+            if !finite(&suggested) {
+                return Err(Refusal::NumericalFailure);
+            }
+            let value = super::number(&suggested).next_up();
+            if !value.is_finite() {
+                return Err(Refusal::NumericalFailure);
+            }
+            if value > errors[index] {
+                errors[index] = value;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Err(Refusal::NumericalFailure);
+        }
+    }
+    Err(Refusal::NumericalFailure)
 }
 
 fn subtract(a: &C, b: &C) -> Option<(C, B)> {
@@ -747,6 +814,27 @@ mod tests {
             1e-12
         )
         .is_err());
+    }
+    #[test]
+    fn automatic_domains_keep_the_same_strict_proof_gates() {
+        let mu = C::new(-0.4, 0.6);
+        let z = mu.scale(0.5);
+        let c = mu.scale(0.5).sub(&mu.mul(&mu).scale(0.25));
+        let (patch, attempts) = certify_auto(&z, &c, &mu, 1, 1e-3).unwrap();
+        assert!(attempts > 1 && attempts <= 12);
+        assert!(patch.contraction < 1.);
+        assert!(certify_auto(
+            &C::new(-0.5, 0.),
+            &C::new(-0.75, 0.),
+            &C::new(1., 0.),
+            2,
+            0.
+        )
+        .is_err());
+        assert!(matches!(
+            certify_auto(&z, &c, &mu, 1, f64::NAN),
+            Err(Refusal::InvalidRequest)
+        ));
     }
     #[test]
     fn wrong_center_or_invalid_input_refuses() {
