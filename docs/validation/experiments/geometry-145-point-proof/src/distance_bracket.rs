@@ -97,6 +97,9 @@ impl InteriorDistanceDomain {
     }
 }
 impl DistanceBracket {
+    pub(crate) fn query(&self) -> &Complex {
+        &self.query
+    }
     pub(crate) fn certifies_value(&self, value: f64, error: f64) -> bool {
         if !value.is_finite() || !error.is_finite() || error < 0. {
             return false;

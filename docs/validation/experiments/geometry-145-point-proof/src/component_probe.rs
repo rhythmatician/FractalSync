@@ -2,6 +2,7 @@
 mod complex_ball;
 mod point_proof;
 mod proof_support;
+mod quintic_field;
 mod validated_branch;
 use astro_float::{BigFloat, RoundingMode as R};
 const P: usize = 128;
@@ -564,10 +565,43 @@ fn witness_jet(name: &str, query: &C, period: usize) -> Option<DistanceJet> {
         let mu = initial.scale(1. - t).add(&target.scale(t));
         (z, c) = solve(z, c, period, &mu)?;
     }
-    let jet = projection(query, &z, &c, period, theta)?;
-    check_distance_derivatives(name, query, &z, &c, period, theta)?;
+    let (jet, selected_theta) = projection_multistart(query, &z, &c, period, theta)?;
+    check_distance_derivatives(name, query, &z, &c, period, selected_theta)?;
+    println!(
+        "[WITNESS_PROPOSAL_SEED145] name={name} selected_theta={selected_theta} fixed_seed={theta}"
+    );
     println!("[WITNESS_JET145] name={name} numerical_only={jet:?}");
     Some(jet)
+}
+fn projection_multistart(
+    query: &C,
+    z: &C,
+    c: &C,
+    period: usize,
+    theta: f64,
+) -> Option<(DistanceJet, f64)> {
+    // Proposal search only. Keep every local solve's original step, iteration,
+    // orientation and curvature guards; scalar certificates decide acceptance.
+    for offset in [
+        0.,
+        -0.1,
+        0.1,
+        -0.2,
+        0.2,
+        -0.4,
+        0.4,
+        -0.8,
+        0.8,
+        -1.6,
+        1.6,
+        std::f64::consts::PI,
+    ] {
+        let angle = theta + offset;
+        if let Some(jet) = projection(query, z, c, period, angle) {
+            return Some((jet, angle));
+        }
+    }
+    None
 }
 fn propose_witnesses(
     name: &str,
@@ -719,6 +753,23 @@ fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<
         .map(|x| x.parse::<f64>())
         .transpose()
         .ok()?;
+    if std::env::args().nth(8).as_deref() == Some("stencil") {
+        let width = requested_width?;
+        if !width.is_finite() || width <= 0. {
+            return None;
+        }
+        let step = std::env::args().nth(7)?.parse::<f64>().ok()?;
+        return probe_node_grid(
+            name,
+            &query,
+            period,
+            None,
+            &witnesses[0],
+            width,
+            step,
+            NodeLayout::Quintic,
+        );
+    }
     let minimum_clearance = if let Some(width) = requested_width {
         if !width.is_finite() || width <= 0. {
             return None;
@@ -814,45 +865,105 @@ fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<
             name,
             &query,
             period,
-            &cover,
+            Some(&cover),
             &witnesses[best_index],
             requested_width?,
             step,
+            match std::env::args().nth(8).as_deref() {
+                None => NodeLayout::Nine,
+                Some("stencil") => NodeLayout::Quintic,
+                _ => return None,
+            },
         )?;
     }
     Some(())
+}
+#[derive(Clone, Copy, Debug)]
+enum NodeLayout {
+    Nine,
+    Quintic,
+}
+fn grid_nodes(query: &C, step: f64, layout: NodeLayout) -> Option<Vec<C>> {
+    if !step.is_normal() || step <= 0. || step.log2().fract() != 0. {
+        return None;
+    }
+    let q = query.f64();
+    let mut origin = [0.; 2];
+    for axis in 0..2 {
+        let index = q[axis] / step;
+        if !index.is_finite() || index.abs() > (1u64 << 50) as f64 {
+            return None;
+        }
+        origin[axis] = match layout {
+            NodeLayout::Nine => index.round(),
+            NodeLayout::Quintic => index.floor(),
+        } * step;
+    }
+    let radius = match layout {
+        NodeLayout::Nine => 1,
+        NodeLayout::Quintic => 4,
+    };
+    Some(
+        (-radius..=radius)
+            .flat_map(|y| {
+                (-radius..=radius)
+                    .map(move |x| C::new(origin[0] + x as f64 * step, origin[1] + y as f64 * step))
+            })
+            .collect(),
+    )
 }
 fn probe_node_grid(
     name: &str,
     query: &C,
     period: usize,
-    cover: &validated_branch::cover::ClosedCover,
+    cover: Option<&validated_branch::cover::ClosedCover>,
     original_witness: &validated_branch::cover::bracket::OutsideWitness,
     width: f64,
     step: f64,
+    layout: NodeLayout,
 ) -> Option<()> {
     use validated_branch::cover::bracket::DistanceBracket;
-    let origin = query.f64().map(|x| (x / step).round() * step);
+    let grid = grid_nodes(query, step, layout)?;
+    let node_count = grid.len();
     let start = std::time::Instant::now();
     let mut accepted = 0;
     let mut nodes = Vec::new();
     let mut all_witnesses = Vec::new();
-    for y in -1..=1 {
-        for x in -1..=1 {
-            let node = C::new(origin[0] + x as f64 * step, origin[1] + y as f64 * step);
+    for node in grid {
+        let before = if let Some(cover) = cover {
+            let clearance = match cover.clearance_at(&node) {
+                Ok(clearance) => clearance,
+                Err(reason) => {
+                    println!("[NODE_GRID_REFUSAL145] name={name} layout={layout:?} node={:?} stage=initial_cover reason={reason:?}",node.f64());
+                    return None;
+                }
+            };
+            Some(DistanceBracket::from_clearance(
+                &clearance,
+                original_witness,
+            )?)
+        } else {
+            None
+        };
+        let (witnesses, candidate) = match screened_witnesses_with_distance(name, &node, period) {
+            Some(result) => result,
+            None => {
+                println!("[NODE_GRID_REFUSAL145] name={name} layout={layout:?} node={:?} stage=witness_search",node.f64());
+                return None;
+            }
+        };
+        if let (Some(cover), Some(before)) = (cover, before) {
             let clearance = cover.clearance_at(&node).ok()?;
-            let before = DistanceBracket::from_clearance(&clearance, original_witness)?;
-            let (witnesses, candidate) = screened_witnesses_with_distance(name, &node, period)?;
             let after = DistanceBracket::from_clearance(&clearance, &witnesses[0])?;
             let meets = after.meets_width(width);
             accepted += usize::from(meets);
             println!("[NODE_GRID145] name={name} node={:?} step={step} lower={} original_upper={} new_upper={} original_width={} new_width={} requested_width={width} meets={meets}",node.f64(),number(after.lower()),number(before.upper()),number(after.upper()),number(&before.width()),number(&after.width()));
-            nodes.push((node, candidate));
-            all_witnesses.extend(witnesses);
         }
+        nodes.push((node, candidate));
+        all_witnesses.extend(witnesses);
     }
     println!(
-        "[NODE_GRID_STATUS145] name={name} nodes=9 within_requested_width={accepted} elapsed_s={}",
+        "[NODE_GRID_STATUS145] name={name} layout={layout:?} nodes={node_count} within_requested_width={accepted} elapsed_s={}",
         start.elapsed().as_secs_f64()
     );
     let witnesses: Vec<_> = std::iter::once(original_witness)
@@ -882,6 +993,7 @@ fn probe_node_grid(
     let refined = construct_cover_at(query, period, 0., &targets)?;
     let quantum = 2f64.powi((2. * width).log2().floor() as i32);
     let mut canonical = 0;
+    let mut samples = Vec::new();
     for (node, candidate) in &nodes {
         let clearance = refined.clearance_at(node).ok()?;
         let mut best: Option<DistanceBracket> = None;
@@ -898,6 +1010,9 @@ fn probe_node_grid(
         if !bracket.certifies_value(*candidate, width) {
             return None;
         }
+        samples.push(quintic_field::Sample::certify(
+            node, *candidate, width, &bracket,
+        )?);
         println!("[NODE_GRID_CANDIDATE145] name={name} node={:?} value={candidate} absolute_error_upper={width} proved=true proposal_inputs=query_period_and_fixed_seed_only",node.f64());
         if let Some(sample) = bracket.dyadic_sample(quantum) {
             assert_eq!(sample.query().re.cmp(&node.re), Some(0));
@@ -913,11 +1028,77 @@ fn probe_node_grid(
         println!("[NODE_GRID_REFINED145] name={name} node={:?} bracket={bracket:?} requested_width={width} proved=true",node.f64());
     }
     println!(
-        "[NODE_GRID_REFINED_STATUS145] name={name} nodes=9 within_requested_width=9 elapsed_s={}",
+        "[NODE_GRID_REFINED_STATUS145] name={name} nodes={node_count} within_requested_width={node_count} elapsed_s={}",
         refinement_start.elapsed().as_secs_f64()
     );
-    println!("[NODE_GRID_DYADIC_STATUS145] name={name} nodes=9 certified_samples={canonical} quantum={quantum}");
+    println!("[NODE_GRID_DYADIC_STATUS145] name={name} nodes={node_count} certified_samples={canonical} quantum={quantum}");
+    if matches!(layout, NodeLayout::Quintic) {
+        let assignment = quintic_field::NodalField::new(step, samples)?;
+        let cell = assignment.cell(query.f64())?;
+        let jet = cell.evaluate(query.f64())?;
+        println!("[CERTIFIED_NODE_FIELD145] name={name} jet={jet:?} scope=ideal_nodal_reconstruction_uncertainty_only");
+        check_reconstruction_derivatives(name, &cell, query.f64(), step)?;
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            std::hint::black_box(cell.evaluate(query.f64())?);
+        }
+        println!("[NODE_FIELD_COST145] name={name} queries=1000 elapsed_s={} scope=polynomial_and_nodal_uncertainty_only",start.elapsed().as_secs_f64());
+    }
     Some(())
+}
+fn check_reconstruction_derivatives(
+    name: &str,
+    cell: &quintic_field::Cell,
+    query: [f64; 2],
+    h: f64,
+) -> Option<()> {
+    let center = cell.evaluate(query)?;
+    let t = query.map(|x| x / h - (x / h).floor());
+    let room = t.into_iter().map(|x| x.min(1. - x)).fold(1f64, f64::min) * h;
+    let step = (h * 1e-3).min(room * 0.25);
+    if !step.is_finite() || step <= 0. {
+        return None;
+    }
+    let (mut gradient_error, mut hessian_error) = (0f64, 0f64);
+    for axis in 0..2 {
+        let mut plus = query;
+        plus[axis] += step;
+        let mut minus = query;
+        minus[axis] -= step;
+        if plus[axis] == minus[axis] {
+            return None;
+        }
+        let a = cell.evaluate(plus)?;
+        let b = cell.evaluate(minus)?;
+        let actual_step = plus[axis] - minus[axis];
+        let error =
+            ((a.components[0] - b.components[0]) / actual_step - center.components[1 + axis]).abs();
+        if !error.is_finite() {
+            return None;
+        }
+        gradient_error = gradient_error.max(error);
+        for row in 0..2 {
+            let index = match (row, axis) {
+                (0, 0) => 3,
+                (1, 1) => 5,
+                _ => 4,
+            };
+            let error = ((a.components[1 + row] - b.components[1 + row]) / actual_step
+                - center.components[index])
+                .abs()
+                * center.components[0].abs();
+            if !error.is_finite() {
+                return None;
+            }
+            hessian_error = hessian_error.max(error);
+        }
+    }
+    println!("[CERTIFIED_NODE_FIELD_DERIVATIVES145] name={name} gradient_error={gradient_error} distance_scaled_hessian_error={hessian_error} step={step}");
+    (gradient_error.is_finite()
+        && hessian_error.is_finite()
+        && gradient_error < 1e-5
+        && hessian_error < 1e-5)
+        .then_some(())
 }
 fn norm_cost() {
     let samples: Vec<_> = (1..=128u64)
@@ -975,7 +1156,7 @@ fn main() {
     {
         std::process::exit(2);
     }
-    for (name, c, p) in [
+    for (name, mut c, p) in [
         ("cardioid", C::new(-0.5, 0.1), 1),
         (
             "native",
@@ -999,6 +1180,23 @@ fn main() {
                 .unwrap_or(&selection)
         {
             continue;
+        }
+        if selection.starts_with("tight-witness-") {
+            if let Some(argument) = std::env::args().nth(2) {
+                if argument != "at" {
+                    std::process::exit(2);
+                }
+                let coordinate = |index| {
+                    std::env::args()
+                        .nth(index)
+                        .and_then(|x| x.parse::<f64>().ok())
+                        .filter(|x| x.is_finite())
+                };
+                c = match (coordinate(3), coordinate(4)) {
+                    (Some(x), Some(y)) => C::new(x, y),
+                    _ => std::process::exit(2),
+                };
+            }
         }
         let start = std::time::Instant::now();
         let result = if selection.starts_with("tight-bracket-") || selection.starts_with("bracket-")
@@ -1029,6 +1227,52 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bounded_multistart_recovers_a_local_step_refusal_but_keeps_the_cut() {
+        let query = C::new(-0.9, 0.05);
+        let mut z = C::new(0., 0.);
+        for _ in 0..4096 {
+            z = z.mul(&z).add(&query);
+        }
+        let theta = 0.05f64.atan2(0.1);
+        let start = theta + 0.25;
+        assert!(projection(&query, &z, &query, 2, start).is_none());
+        let (jet, selected) = projection_multistart(&query, &z, &query, 2, start).unwrap();
+        assert_ne!(selected, start);
+        assert!((jet.d - (0.25 - 0.1f64.hypot(0.05))).abs() < 1e-14);
+        assert!(
+            projection_multistart(&C::new(-1., 0.), &C::new(0., 0.), &C::new(-1., 0.), 2, 0.)
+                .is_none()
+        );
+    }
+    #[test]
+    fn quintic_grid_matches_the_entire_canonical_stencil() {
+        for query in [
+            C::new(0.32049988639807619, 0.04733531447355364),
+            C::new(-0.5, -0.1),
+        ] {
+            let step = 2f64.powi(-20);
+            let q = query.f64();
+            let nodes = grid_nodes(&query, step, NodeLayout::Quintic).unwrap();
+            assert_eq!(nodes.len(), 81);
+            for y in 0..9 {
+                for x in 0..9 {
+                    assert_eq!(
+                        nodes[y * 9 + x].f64(),
+                        [
+                            ((q[0] / step).floor() + x as f64 - 4.) * step,
+                            ((q[1] / step).floor() + y as f64 - 4.) * step
+                        ]
+                    );
+                }
+            }
+        }
+        for step in [0., -1., 0.1, f64::INFINITY, f64::from_bits(1)] {
+            assert!(grid_nodes(&C::new(0., 0.), step, NodeLayout::Quintic).is_none());
+        }
+        assert!(grid_nodes(&C::new(f64::NAN, 0.), 1., NodeLayout::Quintic).is_none());
+        assert!(grid_nodes(&C::new(1e30, 0.), 1., NodeLayout::Quintic).is_none());
+    }
     #[test]
     fn numerical_screen_preserves_pre_update_cutoff_without_proof_authority() {
         assert_eq!(numerical_escape([1., 0.], 3), None);
