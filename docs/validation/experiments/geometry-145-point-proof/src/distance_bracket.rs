@@ -42,6 +42,22 @@ pub(crate) struct InteriorDistanceDomain {
     lower: B,
     outside: Complex,
 }
+pub(crate) struct DyadicSample {
+    query: Complex,
+    value: f64,
+    quantum: f64,
+}
+impl DyadicSample {
+    pub(crate) fn query(&self) -> &Complex {
+        &self.query
+    }
+    pub(crate) fn value(&self) -> f64 {
+        self.value
+    }
+    pub(crate) fn quantum(&self) -> f64 {
+        self.quantum
+    }
+}
 impl InteriorDistanceDomain {
     pub(crate) fn certify(cover: &ClosedCover, outside: &OutsideWitness) -> Self {
         let q = cover.query();
@@ -81,6 +97,55 @@ impl InteriorDistanceDomain {
     }
 }
 impl DistanceBracket {
+    pub(crate) fn certifies_value(&self, value: f64, error: f64) -> bool {
+        if !value.is_finite() || !error.is_finite() || error < 0. {
+            return false;
+        }
+        let value = B::from_f64(value, P);
+        let error = B::from_f64(error, P);
+        let candidate_low = value.sub(&error, P, R::Up);
+        let candidate_high = value.add(&error, P, R::Down);
+        self.lower.cmp(&candidate_low).is_some_and(|v| v >= 0)
+            && self.upper.cmp(&candidate_high).is_some_and(|v| v <= 0)
+    }
+    // Numerical proposal only; exact bin containment determines acceptance.
+    // The accepted value depends on the distance and quantum, not the cover.
+    pub(crate) fn dyadic_sample(&self, quantum: f64) -> Option<DyadicSample> {
+        if !quantum.is_normal() || quantum <= 0. || quantum.to_bits() & ((1u64 << 52) - 1) != 0 {
+            return None;
+        }
+        let midpoint =
+            self.lower
+                .add(&self.upper, P, R::ToEven)
+                .mul(&B::from_f64(0.5, P), P, R::ToEven);
+        let candidate = (format!("{midpoint}").parse::<f64>().ok()? / quantum).round();
+        if !candidate.is_finite() || candidate.abs() > (1u64 << 52) as f64 {
+            return None;
+        }
+        let value = candidate * quantum;
+        if !value.is_finite() {
+            return None;
+        }
+        let q = B::from_f64(quantum, P);
+        let exact = B::from_f64(candidate, P).mul(&q, P, R::ToEven);
+        let rounded = B::from_f64(value, P);
+        if exact.cmp(&rounded) != Some(0) {
+            return None;
+        }
+        let half = q.mul(&B::from_f64(0.5, P), P, R::ToEven);
+        let low = rounded.sub(&half, P, R::Up);
+        let high = rounded.add(&half, P, R::Down);
+        if !self.lower.cmp(&low).is_some_and(|v| v >= 0)
+            || !self.upper.cmp(&high).is_some_and(|v| v < 0)
+        {
+            return None;
+        }
+        Some(DyadicSample {
+            query: self.query.clone(),
+            value,
+            quantum,
+        })
+    }
     pub(crate) fn certify(cover: &ClosedCover, outside: &OutsideWitness) -> Option<Self> {
         // The segment from an interior query to a proved exterior parameter
         // crosses the boundary. Directed endpoint distance is thus an upper bound.
@@ -148,6 +213,53 @@ impl std::fmt::Debug for DistanceBracket {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn candidate_error_requires_both_endpoints() {
+        let bracket = DistanceBracket {
+            query: Complex {
+                re: B::new(P),
+                im: B::new(P),
+            },
+            lower: B::from_f64(0.13, P),
+            upper: B::from_f64(0.16, P),
+        };
+        assert!(bracket.certifies_value(0.15, 0.03));
+        assert!(!bracket.certifies_value(0.1, 0.05));
+        assert!(!bracket.certifies_value(0.2, 0.05));
+        for (value, error) in [
+            (f64::NAN, 1.),
+            (f64::INFINITY, 1.),
+            (0.15, f64::INFINITY),
+            (0.15, -0.1),
+        ] {
+            assert!(!bracket.certifies_value(value, error));
+        }
+    }
+    #[test]
+    fn dyadic_sample_is_canonical_and_refuses_bin_crossings() {
+        let bracket = |lower, upper| DistanceBracket {
+            query: Complex {
+                re: B::new(P),
+                im: B::new(P),
+            },
+            lower: B::from_f64(lower, P),
+            upper: B::from_f64(upper, P),
+        };
+        let a = bracket(0.13, 0.16).dyadic_sample(0.125).unwrap();
+        let b = bracket(0.15, 0.18).dyadic_sample(0.125).unwrap();
+        assert_eq!(a.value(), b.value());
+        assert_eq!(a.value(), 0.125);
+        assert_eq!(a.quantum(), 0.125);
+        assert_eq!(a.query().re.cmp(&B::new(P)), Some(0));
+        assert_eq!(a.query().im.cmp(&B::new(P)), Some(0));
+        assert!(bracket(0.18, 0.20).dyadic_sample(0.125).is_none());
+        assert!(bracket(0.125, 0.1875).dyadic_sample(0.125).is_none());
+        assert!(bracket(0.0625, 0.125).dyadic_sample(0.125).is_some());
+        for quantum in [0., -0.125, 0.1, f64::NAN, f64::INFINITY, f64::from_bits(1)] {
+            assert!(bracket(0.13, 0.16).dyadic_sample(quantum).is_none());
+        }
+        assert!(bracket(1., 1.).dyadic_sample(2f64.powi(-100)).is_none());
+    }
     #[test]
     fn reused_cover_accepts_queries_outside_original_transport_disk() {
         let origin = crate::C::new(0., 0.);

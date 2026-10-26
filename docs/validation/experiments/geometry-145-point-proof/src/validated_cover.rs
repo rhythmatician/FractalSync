@@ -351,6 +351,7 @@ struct Builder {
     maximum_depth: u32,
     max_regions: usize,
     minimum_clearance: B,
+    extra_targets: Vec<(C, B)>,
 }
 impl Builder {
     fn failure(&self, reason: BuildReason, depth: u32) -> BuildFailure {
@@ -410,6 +411,23 @@ impl Builder {
                     .is_some_and(|v| v >= 0)
                 {
                     return None;
+                }
+            }
+            let connector = match self.edges.last() {
+                Some(previous) => Some(connector_capsule(previous, &item)?),
+                None => None,
+            };
+            for (query, minimum) in &self.extra_targets {
+                for capsule in std::iter::once(&item.capsule).chain(connector.as_ref()) {
+                    let bound = capsule_distance_lower(capsule, query)?;
+                    if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
+                        || !bound.cmp(minimum).is_some_and(|v| v >= 0)
+                    {
+                        if depth == 24 {
+                            eprintln!("[COVER_TARGET_REFUSAL145] query={:?} bound={bound} minimum={minimum} mu_start={:?} mu_end={:?}",query.f64(),item.start.f64(),item.end.f64());
+                        }
+                        return None;
+                    }
                 }
             }
             let (ze, ce) = super::super::solve(zm, cm, self.period, end)?;
@@ -486,6 +504,14 @@ pub(crate) fn build_requested(
     period: usize,
     request: CoverRequest,
 ) -> Result<ClosedCover, BuildFailure> {
+    build_requested_at(query, period, request, &[])
+}
+pub(crate) fn build_requested_at(
+    query: &C,
+    period: usize,
+    request: CoverRequest,
+    extra_targets: &[(C, B)],
+) -> Result<ClosedCover, BuildFailure> {
     let CoverRequest {
         radius,
         root_radius,
@@ -501,6 +527,10 @@ pub(crate) fn build_requested(
         depth: 0,
     };
     if !query.finite()
+        || extra_targets.len() > 1024
+        || extra_targets.iter().any(|(q, minimum)| {
+            !q.finite() || !finite(minimum) || !minimum.cmp(&B::new(P)).is_some_and(|v| v >= 0)
+        })
         || period == 0
         || period > 4096
         || !radius.is_finite()
@@ -529,6 +559,7 @@ pub(crate) fn build_requested(
         maximum_depth: 0,
         max_regions,
         minimum_clearance: B::from_f64(minimum_clearance, P),
+        extra_targets: extra_targets.to_vec(),
     };
     let mut z = C::new(0., 0.);
     for _ in 0..32768 {
@@ -567,13 +598,42 @@ pub(crate) fn build_requested(
     }
     let attempted = builder.attempted;
     let depth = builder.maximum_depth;
-    finish_cover(
+    let cover = finish_cover(
         builder.edges,
         query,
         &B::from_f64(minimum_clearance, P),
         attempted,
         depth,
-    )
+    )?;
+    finish_targets(cover, extra_targets, attempted, depth)
+}
+fn finish_targets(
+    cover: ClosedCover,
+    targets: &[(C, B)],
+    attempted: usize,
+    depth: u32,
+) -> Result<ClosedCover, BuildFailure> {
+    for (query, minimum) in targets {
+        let clearance = cover.clearance_at(query).map_err(|reason| BuildFailure {
+            reason: BuildReason::FinalCover(reason),
+            attempted,
+            accepted: cover.edge_count(),
+            depth,
+        })?;
+        if !clearance
+            .mandelbrot_interior_distance_lower()
+            .cmp(minimum)
+            .is_some_and(|v| v >= 0)
+        {
+            return Err(BuildFailure {
+                reason: BuildReason::ClearanceTarget,
+                attempted,
+                accepted: cover.edge_count(),
+                depth,
+            });
+        }
+    }
+    Ok(cover)
 }
 fn finish_cover(
     edges: Vec<Edge>,
@@ -874,6 +934,61 @@ mod tests {
         }
     }
     #[test]
+    fn multiple_queries_require_independent_refinement_and_final_targets() {
+        let origin = C::new(0., 0.);
+        let node = C::new(0.05, 0.);
+        let request = || CoverRequest {
+            radius: 0.5,
+            root_radius: 0.5,
+            root_width: 0.25,
+            initial_edges: 8,
+            max_regions: 128,
+            minimum_clearance: 0.,
+        };
+        let coarse = build_requested(&origin, 1, request()).unwrap();
+        let before = coarse.clearance_at(&node).unwrap();
+        let target =
+            before
+                .lower
+                .add(&B::from_f64(0.1375, P), P, R::Up)
+                .mul(&B::from_f64(0.5, P), P, R::Up);
+        assert!(before.lower.cmp(&target).is_some_and(|v| v < 0));
+        assert!(matches!(
+            finish_targets(
+                coarse,
+                &[(origin.clone(), B::new(P)), (node.clone(), target.clone())],
+                8,
+                0
+            ),
+            Err(BuildFailure {
+                reason: BuildReason::ClearanceTarget,
+                ..
+            })
+        ));
+        let cover =
+            build_requested_at(&origin, 1, request(), &[(node.clone(), target.clone())]).unwrap();
+        assert!(cover
+            .clearance_at(&node)
+            .unwrap()
+            .lower
+            .cmp(&target)
+            .is_some_and(|v| v >= 0));
+        for (q, target) in [
+            (C::new(f64::NAN, 0.), B::new(P)),
+            (node.clone(), B::from_f64(-1., P)),
+            (node.clone(), B::from_f64(f64::INFINITY, P)),
+        ] {
+            assert!(matches!(
+                build_requested_at(&origin, 1, request(), &[(q, target)]),
+                Err(BuildFailure {
+                    reason: BuildReason::InvalidRequest,
+                    ..
+                })
+            ));
+        }
+        assert!(build_requested_at(&origin, 1, request(), &[(C::new(2., 0.), B::new(P))]).is_err());
+    }
+    #[test]
     fn exhausted_builder_does_not_return_an_accepted_prefix() {
         let edges = cardioid_edges(false);
         let start = edges[0].start.clone();
@@ -886,6 +1001,7 @@ mod tests {
             maximum_depth: 0,
             max_regions: 8,
             minimum_clearance: B::new(P),
+            extra_targets: Vec::new(),
         };
         let result = builder.extend(&start, &end, &C::new(0., 0.), &C::new(0., 0.), 0);
         assert!(matches!(

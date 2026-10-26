@@ -6,6 +6,10 @@ import subprocess
 root = Path("docs/validation/experiments/geometry-145-point-proof")
 sources = {name:(root/"src"/name).read_bytes() for name in ["distance_bracket.rs","complex_ball.rs","directed_norm.rs","validated_cover.rs"]}
 cases = [
+    ("candidate-lower", "distance_bracket.rs", "self.lower.cmp(&candidate_low).is_some_and(|v| v >= 0)", "true", "candidate_error_requires_both_endpoints"),
+    ("candidate-upper", "distance_bracket.rs", "self.upper.cmp(&candidate_high).is_some_and(|v| v <= 0)", "true", "candidate_error_requires_both_endpoints"),
+    ("dyadic-lower-bin", "distance_bracket.rs", "!self.lower.cmp(&low).is_some_and(|v| v >= 0)", "false", "dyadic_sample_is_canonical_and_refuses_bin_crossings"),
+    ("dyadic-upper-bin", "distance_bracket.rs", "!self.upper.cmp(&high).is_some_and(|v| v < 0)", "false", "dyadic_sample_is_canonical_and_refuses_bin_crossings"),
     ("outside-proof", "distance_bracket.rs", "let proof = escape(point, precision, budget)?;", "let proof = escape([1.,0.],128,4)?;", "absence_of_escape_is_not_an_exterior_witness"),
     ("transport-distance", "distance_bracket.rs", "let lower = self.lower.sub(&travel, P, R::Down);", "let lower = self.lower.clone();", "compact_domain_transports_bounds_and_refuses_its_boundary"),
     ("travel-rounding", "distance_bracket.rs", "let travel = query.distance_upper(&self.origin, P)?;", "let travel = Complex{re:query.re.sub(&self.origin.re,P,R::Down),im:query.im.sub(&self.origin.im,P,R::Down)}.norm_squared(P,R::Down).sqrt(P,R::Down);", "diagonal_transport_rounds_travel_outward_near_clearance_boundary"),

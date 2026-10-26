@@ -492,6 +492,14 @@ fn construct_cover(
     period: usize,
     minimum_clearance: f64,
 ) -> Option<validated_branch::cover::ClosedCover> {
+    construct_cover_at(query, period, minimum_clearance, &[])
+}
+fn construct_cover_at(
+    query: &C,
+    period: usize,
+    minimum_clearance: f64,
+    targets: &[(C, BigFloat)],
+) -> Option<validated_branch::cover::ClosedCover> {
     let radius = std::env::args()
         .nth(2)
         .map(|text| text.parse::<f64>())
@@ -517,7 +525,7 @@ fn construct_cover(
         .transpose()
         .ok()?
         .unwrap_or(0.25);
-    let result = validated_branch::cover::build_requested(
+    let result = validated_branch::cover::build_requested_at(
         query,
         period,
         validated_branch::cover::CoverRequest {
@@ -528,6 +536,7 @@ fn construct_cover(
             max_regions: 8192,
             minimum_clearance,
         },
+        targets,
     );
     println!("[CLOSED_COVER145] period={period} radius={radius} root_radius={root_radius} root_width={root_width} initial_edges={vertices} minimum_clearance={minimum_clearance} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
     result.ok()
@@ -624,6 +633,13 @@ fn screened_witnesses(
     query: &C,
     period: usize,
 ) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
+    screened_witnesses_with_distance(name, query, period).map(|(witnesses, _)| witnesses)
+}
+fn screened_witnesses_with_distance(
+    name: &str,
+    query: &C,
+    period: usize,
+) -> Option<(Vec<validated_branch::cover::bracket::OutsideWitness>, f64)> {
     let preparation_start = std::time::Instant::now();
     let jet = witness_jet(name, query, period)?;
     let q = query.f64();
@@ -653,7 +669,7 @@ fn screened_witnesses(
         }
     }
     println!("[SCREEN_PREPARATION_COST145] name={name} elapsed_s={} includes=numerical_jet_derivative_checks_and_screen",preparation_start.elapsed().as_secs_f64());
-    certify_witness_proposals(name, candidates)
+    Some((certify_witness_proposals(name, candidates)?, jet.d))
 }
 struct WitnessProposal {
     distance: f64,
@@ -789,6 +805,118 @@ fn probe_bracket(name: &str, query: C, period: usize, screened: bool) -> Option<
         }
     }
     println!("[COVER_REUSE_COST145] name={name} queries=100 accepted={accepted} beyond_transport={additional} within_requested_width={within_width} query_box_half_width={full_radius} elapsed_s={} operation=scalar_bounds_and_width_check",start.elapsed().as_secs_f64());
+    if let Some(text) = std::env::args().nth(7) {
+        let step = text.parse::<f64>().ok()?;
+        if !step.is_finite() || step <= 0. || step.log2().fract() != 0. {
+            return None;
+        }
+        probe_node_grid(
+            name,
+            &query,
+            period,
+            &cover,
+            &witnesses[best_index],
+            requested_width?,
+            step,
+        )?;
+    }
+    Some(())
+}
+fn probe_node_grid(
+    name: &str,
+    query: &C,
+    period: usize,
+    cover: &validated_branch::cover::ClosedCover,
+    original_witness: &validated_branch::cover::bracket::OutsideWitness,
+    width: f64,
+    step: f64,
+) -> Option<()> {
+    use validated_branch::cover::bracket::DistanceBracket;
+    let origin = query.f64().map(|x| (x / step).round() * step);
+    let start = std::time::Instant::now();
+    let mut accepted = 0;
+    let mut nodes = Vec::new();
+    let mut all_witnesses = Vec::new();
+    for y in -1..=1 {
+        for x in -1..=1 {
+            let node = C::new(origin[0] + x as f64 * step, origin[1] + y as f64 * step);
+            let clearance = cover.clearance_at(&node).ok()?;
+            let before = DistanceBracket::from_clearance(&clearance, original_witness)?;
+            let (witnesses, candidate) = screened_witnesses_with_distance(name, &node, period)?;
+            let after = DistanceBracket::from_clearance(&clearance, &witnesses[0])?;
+            let meets = after.meets_width(width);
+            accepted += usize::from(meets);
+            println!("[NODE_GRID145] name={name} node={:?} step={step} lower={} original_upper={} new_upper={} original_width={} new_width={} requested_width={width} meets={meets}",node.f64(),number(after.lower()),number(before.upper()),number(after.upper()),number(&before.width()),number(&after.width()));
+            nodes.push((node, candidate));
+            all_witnesses.extend(witnesses);
+        }
+    }
+    println!(
+        "[NODE_GRID_STATUS145] name={name} nodes=9 within_requested_width={accepted} elapsed_s={}",
+        start.elapsed().as_secs_f64()
+    );
+    let witnesses: Vec<_> = std::iter::once(original_witness)
+        .chain(all_witnesses.iter())
+        .collect();
+    let mut targets = Vec::new();
+    for (node, _) in &nodes {
+        let mut upper: Option<BigFloat> = None;
+        for witness in &witnesses {
+            let value = witness.endpoint_distance_upper(node)?;
+            if upper
+                .as_ref()
+                .is_none_or(|old| value.cmp(old).is_some_and(|v| v < 0))
+            {
+                upper = Some(value);
+            }
+        }
+        let target = upper?.sub(&BigFloat::from_f64(width, P), P, R::Up);
+        let target = if target.cmp(&BigFloat::new(P)).is_some_and(|v| v > 0) {
+            target
+        } else {
+            BigFloat::new(P)
+        };
+        targets.push((node.clone(), target));
+    }
+    let refinement_start = std::time::Instant::now();
+    let refined = construct_cover_at(query, period, 0., &targets)?;
+    let quantum = 2f64.powi((2. * width).log2().floor() as i32);
+    let mut canonical = 0;
+    for (node, candidate) in &nodes {
+        let clearance = refined.clearance_at(node).ok()?;
+        let mut best: Option<DistanceBracket> = None;
+        for witness in &witnesses {
+            let bracket = DistanceBracket::from_clearance(&clearance, witness)?;
+            if best
+                .as_ref()
+                .is_none_or(|old| bracket.upper().cmp(old.upper()).is_some_and(|v| v < 0))
+            {
+                best = Some(bracket);
+            }
+        }
+        let bracket = best?.require_width(width)?;
+        if !bracket.certifies_value(*candidate, width) {
+            return None;
+        }
+        println!("[NODE_GRID_CANDIDATE145] name={name} node={:?} value={candidate} absolute_error_upper={width} proved=true proposal_inputs=query_period_and_fixed_seed_only",node.f64());
+        if let Some(sample) = bracket.dyadic_sample(quantum) {
+            assert_eq!(sample.query().re.cmp(&node.re), Some(0));
+            assert_eq!(sample.query().im.cmp(&node.im), Some(0));
+            canonical += 1;
+            println!(
+                "[NODE_GRID_DYADIC145] name={name} node={:?} value={} quantum={} proved=true",
+                node.f64(),
+                sample.value(),
+                sample.quantum()
+            );
+        }
+        println!("[NODE_GRID_REFINED145] name={name} node={:?} bracket={bracket:?} requested_width={width} proved=true",node.f64());
+    }
+    println!(
+        "[NODE_GRID_REFINED_STATUS145] name={name} nodes=9 within_requested_width=9 elapsed_s={}",
+        refinement_start.elapsed().as_secs_f64()
+    );
+    println!("[NODE_GRID_DYADIC_STATUS145] name={name} nodes=9 certified_samples={canonical} quantum={quantum}");
     Some(())
 }
 fn norm_cost() {

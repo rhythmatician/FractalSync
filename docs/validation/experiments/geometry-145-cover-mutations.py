@@ -7,6 +7,8 @@ root = Path("docs/validation/experiments/geometry-145-point-proof")
 path = root / "src/validated_cover.rs"
 original = path.read_bytes()
 cases = [
+    ("multi-query-refinement", "for (query, minimum) in &self.extra_targets", "for (query, minimum) in self.extra_targets.iter().take(0)", "multiple_queries_require_independent_refinement_and_final_targets"),
+    ("multi-query-final-target", ".cmp(minimum)\n            .is_some_and(|v| v >= 0)", ".cmp(minimum)\n            .is_some_and(|_| true)", "multiple_queries_require_independent_refinement_and_final_targets"),
     ("closed-parameter-path", "if !equal(&a.end, &b.start)", "if false", "open_or_non_enclosing_paths_refuse"),
     ("cycle-joins", "join(&a.patch, &b.patch, &a.end).map_err(|_| Refusal::UnprovedJoin)?;", "", "closed_multiplier_path_cannot_join_distinct_components"),
     ("query-separation", "if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0) {\n                return Err(Refusal::QueryNotSeparated);", "if false {\n                return Err(Refusal::QueryNotSeparated);", "intersecting_query_refuses_a_closed_certified_path"),
