@@ -1,4 +1,7 @@
 //! High-precision numerical component tracing. Not a validated boundary cover.
+mod complex_ball;
+mod proof_support;
+mod validated_branch;
 use astro_float::{BigFloat, RoundingMode as R};
 const P: usize = 128;
 #[derive(Clone)]
@@ -416,9 +419,82 @@ fn trace(name: &str, query: C, p: usize) -> Option<()> {
     }
     Some(())
 }
+fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
+    let mut z = C::new(0., 0.);
+    for _ in 0..32768 {
+        z = z.mul(&z).add(&query);
+        if !z.finite() {
+            return None;
+        }
+    }
+    // Choosing a cycle phase changes the numerical conditioning, not the root
+    // equations or their independently checked existence/uniqueness certificate.
+    let mut current = z.clone();
+    let mut best = z.clone();
+    for _ in 0..period {
+        if current.norm() < best.norm() {
+            best = current.clone();
+        }
+        current = current.mul(&current).add(&query);
+    }
+    z = best;
+    let initial = cycle(&z, &query, period)?.m;
+    let mut c = query;
+    let angle: f64 = match name {
+        "native" => 6.082737765539512,
+        "python" => 2.759060151063184,
+        _ => 2.8,
+    };
+    let target = C::new(0.999999 * angle.cos(), 0.999999 * angle.sin());
+    for k in 1..=64 {
+        let t = k as f64 / 64.;
+        let mu = initial.scale(1. - t).add(&target.scale(t));
+        (z, c) = solve(z, c, period, &mu)?;
+    }
+    let point = validated_branch::certify(&z, &c, &target, period, 0., 1e-23, 1e-27).ok()?;
+    println!("[BRANCH_POINT145] name={name} certificate={point:?}");
+    for radius in [1e-8f64, 1e-6, 1e-4, 1e-3] {
+        let start = std::time::Instant::now();
+        let ez = (radius * radius * 10.).max(1e-23);
+        let c_scale = if name == "cardioid" { 0.5 } else { 1e-2 };
+        let ec = (radius * radius * c_scale).max(1e-27);
+        let result = validated_branch::certify(&z, &c, &target, period, radius, ez, ec);
+        println!("[BRANCH_PATCH145] name={name} radius={radius} z_error={ez} c_error={ec} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
+        let patch = result.ok()?;
+        if radius == 1e-3 {
+            let a = patch;
+            let adjacent = C::new(
+                0.999999 * (angle + 1e-3).cos(),
+                0.999999 * (angle + 1e-3).sin(),
+            );
+            let (zb, cb) = solve(z.clone(), c.clone(), period, &adjacent)?;
+            let b = validated_branch::certify(&zb, &cb, &adjacent, period, radius, ez, ec).ok()?;
+            let middle = C::new(
+                0.999999 * (angle + 0.5e-3).cos(),
+                0.999999 * (angle + 0.5e-3).sin(),
+            );
+            let first = validated_branch::attracting_segment(&a, &target, &middle).ok()?;
+            let second = validated_branch::attracting_segment(&b, &middle, &adjacent).ok()?;
+            let glue = validated_branch::glue(&a, &b, &middle).ok()?;
+            println!(
+                "[BRANCH_GLUE145] name={name} first={first:?} second={second:?} glue={glue:?}"
+            );
+        }
+    }
+    Some(())
+}
 fn main() {
     let selection = std::env::args().nth(1).unwrap_or("native".into());
-    if !["cardioid", "native", "python"].contains(&selection.as_str()) {
+    if ![
+        "cardioid",
+        "native",
+        "python",
+        "branch-cardioid",
+        "branch-native",
+        "branch-python",
+    ]
+    .contains(&selection.as_str())
+    {
         std::process::exit(2);
     }
     for (name, c, p) in [
@@ -434,11 +510,15 @@ fn main() {
             154,
         ),
     ] {
-        if name != selection {
+        if name != selection.strip_prefix("branch-").unwrap_or(&selection) {
             continue;
         }
         let start = std::time::Instant::now();
-        let result = trace(name, c, p);
+        let result = if selection.starts_with("branch-") {
+            probe_branch(name, c, p)
+        } else {
+            trace(name, c, p)
+        };
         println!(
             "[HP_COMPONENT_STATUS145] name={name} complete={} elapsed_s={}",
             result.is_some(),
@@ -475,7 +555,14 @@ mod tests {
         let center = C::new(-1., 0.);
         let zero = C::new(0., 0.);
         assert!(projection(&center, &zero, &center, 2, std::f64::consts::PI).is_none());
-        assert!(projection(&C::new(-1., 0.3), &zero, &center, 2, std::f64::consts::FRAC_PI_2).is_none());
+        assert!(projection(
+            &C::new(-1., 0.3),
+            &zero,
+            &center,
+            2,
+            std::f64::consts::FRAC_PI_2
+        )
+        .is_none());
     }
     #[test]
     fn period_two_distance_jet_matches_circle() {

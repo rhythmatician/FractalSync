@@ -322,5 +322,7 @@
     "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6",
     "docs/validation/experiments/geometry-145-component-mutations.py": "7294c7e349cf802e81ec0580a110fb7e78da617466417cf7164ff206c64d018d",
     "docs/validation/experiments/geometry-145-point-proof-mutations.py": "f09428c458e2eba3abb54bde0847a94272cb0dc6eabea4c467d33c5104374c42"
-  }
+  },
+  "recorded_commit": "1972547",
+  "subsequent_experiment": "geometry-145-validated-branches.json"
 }

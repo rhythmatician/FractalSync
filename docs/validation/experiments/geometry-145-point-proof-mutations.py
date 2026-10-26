@@ -10,7 +10,7 @@ try:
   ('nonstrict-radius','is_some_and(|order| order > 0)','is_some_and(|order| order >= 0)','strict_escape_budget_and_radius'),
   ('nonstrict-trap','.cmp(outer)\n        .is_some_and(|v| v < 0)','.cmp(outer)\n        .is_some_and(|v| v <= 0)','interior_requires_a_strict_trap'),
  ]:
-  source=original.decode();assert old in source
+  source=original.decode().replace("\r\n","\n");assert old in source
   p.write_bytes(source.replace(old,new,1).encode())
   result=subprocess.run(command+[test,'--','--nocapture'],capture_output=True,text=True,encoding='utf-8')
   Path(f'tmp/geometry-145-point-proof-mutation-{name}.log').write_text(result.stdout+result.stderr,encoding='utf-8')

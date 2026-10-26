@@ -52,3 +52,5 @@ A production component representation must supply distance/error capability, ret
 ## Production gate rerun
 
 The original native `manifold::tests::controls_drive_can_cross_shore_without_wall` test still fails after rebuilding production: zero passed, one failed, 94 filtered out, 2.54 seconds in the test. It reports the same CutLocus refusal at `(0.21474166530729011, 0.12774018997553147)` with provider version 6. The command and complete output are preserved in the JSON report. The numerical component prototype has not changed this production result.
+
+The subsequent local branch, joining, and attracting-segment proofs are recorded in [geometry-145-validated-branches.md](geometry-145-validated-branches.md). The measurements and source hashes above describe commit `1972547`.

@@ -13,7 +13,7 @@ original={root/"src"/case[1]:(root/"src"/case[1]).read_bytes() for case in cases
 rows=[]
 try:
  for name,file,old,new,bin,test in cases:
-  p=root/"src"/file;source=original[p].decode();assert source.count(old)==1,(name,source.count(old))
+  p=root/"src"/file;source=original[p].decode().replace("\r\n","\n");assert source.count(old)==1,(name,source.count(old))
   p.write_bytes(source.replace(old,new,1).encode())
   result=subprocess.run(["cargo","test","--release","--jobs","1","--manifest-path",str(root/"Cargo.toml"),"--target-dir","target/geometry145-precision","--bin",bin,test,"--","--nocapture"],capture_output=True,text=True,encoding="utf-8")
   Path("tmp/geometry-145-component-mutation-"+name+".log").write_text(result.stdout+result.stderr,encoding="utf-8")

@@ -1,5 +1,5 @@
 //! Shared directed-rounding primitives for parameter enclosures.
-use super::point_proof::Complex;
+use super::complex_ball::Complex;
 use astro_float::{BigFloat, RoundingMode as R, Sign};
 pub(super) fn finite(x: &BigFloat) -> bool {
     !x.is_nan() && !x.is_inf()

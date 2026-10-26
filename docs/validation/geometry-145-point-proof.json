@@ -40,8 +40,8 @@
     "period": 308
   },
   "current_experiment_tests": {
-    "passed": 15,
+    "passed": 28,
     "suites": 2
   },
-  "current_field_experiment": "geometry-145-component-field.json"
+  "current_field_experiment": "geometry-145-validated-branches.json"
 }
