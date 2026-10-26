@@ -4,6 +4,8 @@ use super::{
     abs, attracting_segment, distance, finite, glue, mul, predictor, subtract, Certificate, B, C, P,
 };
 use astro_float::RoundingMode as R;
+#[path = "distance_bracket.rs"]
+pub(crate) mod bracket;
 
 #[derive(Clone)]
 struct Capsule {

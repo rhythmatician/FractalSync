@@ -1,5 +1,6 @@
 //! High-precision numerical component tracing. Not a validated boundary cover.
 mod complex_ball;
+mod point_proof;
 mod proof_support;
 mod validated_branch;
 use astro_float::{BigFloat, RoundingMode as R};
@@ -419,7 +420,7 @@ fn trace(name: &str, query: C, p: usize) -> Option<()> {
     }
     Some(())
 }
-fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
+fn critical_cycle_seed(query: &C, period: usize) -> Option<(C, C)> {
     let mut z = C::new(0., 0.);
     for _ in 0..32768 {
         z = z.mul(&z).add(&query);
@@ -437,8 +438,11 @@ fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
         }
         current = current.mul(&current).add(&query);
     }
-    z = best;
-    let initial = cycle(&z, &query, period)?.m;
+    let initial = cycle(&best, query, period)?.m;
+    Some((best, initial))
+}
+fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
+    let (mut z, initial) = critical_cycle_seed(&query, period)?;
     let mut c = query;
     let angle: f64 = match name {
         "native" => 6.082737765539512,
@@ -483,7 +487,7 @@ fn probe_branch(name: &str, query: C, period: usize) -> Option<()> {
     }
     Some(())
 }
-fn probe_cover(query: C, period: usize) -> Option<()> {
+fn construct_cover(query: &C, period: usize) -> Option<validated_branch::cover::ClosedCover> {
     let radius = std::env::args()
         .nth(2)
         .map(|text| text.parse::<f64>())
@@ -510,7 +514,7 @@ fn probe_cover(query: C, period: usize) -> Option<()> {
         .ok()?
         .unwrap_or(0.25);
     let result = validated_branch::cover::build_with_root_radius(
-        &query,
+        query,
         period,
         radius,
         root_radius,
@@ -519,7 +523,102 @@ fn probe_cover(query: C, period: usize) -> Option<()> {
         8192,
     );
     println!("[CLOSED_COVER145] period={period} radius={radius} root_radius={root_radius} root_width={root_width} initial_edges={vertices} elapsed_s={} result={result:?}",start.elapsed().as_secs_f64());
-    result.ok().map(|_| ())
+    result.ok()
+}
+fn probe_cover(query: C, period: usize) -> Option<()> {
+    construct_cover(&query, period).map(|_| ())
+}
+fn propose_witnesses(
+    name: &str,
+    query: &C,
+    period: usize,
+) -> Option<Vec<validated_branch::cover::bracket::OutsideWitness>> {
+    use validated_branch::cover::bracket::OutsideWitness;
+    let (mut z, initial) = critical_cycle_seed(query, period)?;
+    let mut c = query.clone();
+    let theta: f64 = match name {
+        "native" => 6.082737765539512,
+        "python" => 2.759060151063184,
+        _ => 3.0,
+    };
+    let target = C::new(theta.cos(), theta.sin());
+    for k in 1..=64 {
+        let t = k as f64 / 64.;
+        let mu = initial.scale(1. - t).add(&target.scale(t));
+        (z, c) = solve(z, c, period, &mu)?;
+    }
+    let jet = projection(query, &z, &c, period, theta)?;
+    check_distance_derivatives(name, query, &z, &c, period, theta)?;
+    println!("[WITNESS_JET145] name={name} numerical_only={jet:?}");
+    let mut witnesses = Vec::new();
+    for offset in [1., 0.1, 0.01, 0.001] {
+        let point = query
+            .sub(&C::new(
+                jet.g[0] * jet.d * (1. + offset),
+                jet.g[1] * jet.d * (1. + offset),
+            ))
+            .f64();
+        let start = std::time::Instant::now();
+        let witness = OutsideWitness::certify(point, 128, 32768);
+        println!("[OUTSIDE_WITNESS145] name={name} offset={offset} point={point:?} elapsed_s={} escape_update={:?}",start.elapsed().as_secs_f64(),witness.as_ref().map(OutsideWitness::escape_update));
+        if let Some(witness) = witness {
+            witnesses.push(witness);
+        }
+    }
+    if witnesses.is_empty() {
+        for offset in [0.01, 0.1, 0.001] {
+            for tangent in [-0.04, 0.04, -0.08, 0.08, -0.16, 0.16] {
+                let point = query
+                    .add(&C::new(
+                        -jet.g[0] * jet.d * (1. + offset) - jet.g[1] * jet.d * tangent,
+                        -jet.g[1] * jet.d * (1. + offset) + jet.g[0] * jet.d * tangent,
+                    ))
+                    .f64();
+                let start = std::time::Instant::now();
+                let witness = OutsideWitness::certify(point, 128, 32768);
+                println!("[TANGENTIAL_WITNESS145] name={name} offset={offset} tangent={tangent} point={point:?} elapsed_s={} escape_update={:?}",start.elapsed().as_secs_f64(),witness.as_ref().map(OutsideWitness::escape_update));
+                if let Some(witness) = witness {
+                    witnesses.push(witness);
+                }
+            }
+            if !witnesses.is_empty() {
+                break;
+            }
+        }
+    }
+    (!witnesses.is_empty()).then_some(witnesses)
+}
+fn probe_bracket(name: &str, query: C, period: usize) -> Option<()> {
+    use validated_branch::cover::bracket::InteriorDistanceDomain;
+    let witnesses = propose_witnesses(name, &query, period)?;
+    let cover = construct_cover(&query, period)?;
+    let mut best: Option<(InteriorDistanceDomain, BigFloat)> = None;
+    for witness in witnesses {
+        let bracket = validated_branch::cover::bracket::DistanceBracket::certify(&cover, &witness)?;
+        println!("[DISTANCE_BRACKET145] name={name} bracket={bracket:?}");
+        if best
+            .as_ref()
+            .is_none_or(|(_, old)| bracket.upper().cmp(old).is_some_and(|v| v < 0))
+        {
+            best = Some((
+                InteriorDistanceDomain::certify(&cover, &witness),
+                bracket.upper().clone(),
+            ));
+        }
+    }
+    let (domain, _) = best?;
+    let origin = query.f64();
+    let radius = number(cover.mandelbrot_interior_distance_lower()) * 1e-3;
+    let start = std::time::Instant::now();
+    for j in 0..10000 {
+        let q = C::new(
+            origin[0] + radius * ((j % 17) as f64 - 8.) / 8.,
+            origin[1] + radius * ((j % 19) as f64 - 9.) / 9.,
+        );
+        std::hint::black_box(domain.at(&q)?);
+    }
+    println!("[DOMAIN_COST145] name={name} accepted_queries=10000 query_box_half_width={radius} elapsed_s={} operation=scalar_bounds_only",start.elapsed().as_secs_f64());
+    Some(())
 }
 fn main() {
     let selection = std::env::args().nth(1).unwrap_or("native".into());
@@ -533,6 +632,12 @@ fn main() {
         "cover-cardioid",
         "cover-native",
         "cover-python",
+        "witness-cardioid",
+        "witness-native",
+        "witness-python",
+        "bracket-cardioid",
+        "bracket-native",
+        "bracket-python",
     ]
     .contains(&selection.as_str())
     {
@@ -555,12 +660,18 @@ fn main() {
             != selection
                 .strip_prefix("branch-")
                 .or_else(|| selection.strip_prefix("cover-"))
+                .or_else(|| selection.strip_prefix("witness-"))
+                .or_else(|| selection.strip_prefix("bracket-"))
                 .unwrap_or(&selection)
         {
             continue;
         }
         let start = std::time::Instant::now();
-        let result = if selection.starts_with("cover-") {
+        let result = if selection.starts_with("bracket-") {
+            probe_bracket(name, c, p)
+        } else if selection.starts_with("witness-") {
+            propose_witnesses(name, &c, p).map(|_| ())
+        } else if selection.starts_with("cover-") {
             probe_cover(c, p)
         } else if selection.starts_with("branch-") {
             probe_branch(name, c, p)
