@@ -26,6 +26,8 @@ directory=root/'runtime-core/src/geometry_provider'
 provider=(root/'runtime-core/src/geometry_provider.rs').read_text(encoding='utf-8')
 visual=(root/'runtime-core/src/visual_metrics.rs').read_text(encoding='utf-8')
 proposal=(directory/'periodic_boundary.rs').read_text(encoding='utf-8')
+branch_path=directory/'periodic_boundary/branch.rs'
+branch=branch_path.read_text(encoding='utf-8') if branch_path.exists() else ''
 
 def item(text:str,marker:str)->str:
     start=text.index(marker)
@@ -69,12 +71,36 @@ mutations=[
      'g: [derivatives[dx + 1][dy]*1.01, derivatives[dx][dy + 1]],',
      prefix+'generic_scalar_nodes_keep_quintic_derivatives_and_cell_joins_coherent'),
 ]
+if branch:
+    branch_prefix='geometry_provider::periodic_boundary::branch::tests::'
+    mutations.extend([
+        ('branch-center-roundoff','branch', 'fn round(center: C, re: I, im: I) -> f64 {',
+         'fn round(center: C, re: I, im: I) -> f64 { return 0.;',
+         branch_prefix+'arithmetic_encloses_lost_center_bits_and_remainder_products'),
+        ('branch-nonlinear-remainder','branch',
+         'up_mul(self.perturbation(r), b.perturbation(r))','0.',
+         branch_prefix+'exact_cardioid_predictor_certifies_and_bad_remainders_refuse'),
+        ('branch-contraction','branch','&& proof.contraction < 1.','&& true',
+         branch_prefix+'self_inclusion_without_contraction_refuses'),
+        ('branch-inclusion','branch',
+         'proof.inclusion[0] < r[1] && proof.inclusion[1] < r[2]','true',
+         branch_prefix+'singular_wrong_and_invalid_inputs_refuse'),
+        ('branch-parameter-domain','branch','if !self.contains(parameter) {','if false {',
+         branch_prefix+'endpoint_enclosures_cover_exact_cardioid_and_glue_cycle_phases'),
+        ('branch-cycle-phase','branch','0..old.period','0..1',
+         branch_prefix+'endpoint_enclosures_cover_exact_cardioid_and_glue_cycle_phases'),
+        ('branch-singleton-domain','branch','parameter == self.parameter ||','',
+         branch_prefix+'singleton_multiplier_domains_evaluate_and_join_at_the_exact_center'),
+    ])
 
 with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
     tmp=Path(name)
     (tmp/'periodic_boundary_cases.rs').write_bytes((directory/'periodic_boundary_cases.rs').read_bytes())
-    def write_sources(proposal_text:str,kernel_text:str)->None:
+    (tmp/'periodic_boundary').mkdir()
+    def write_sources(proposal_text:str,kernel_text:str,branch_text:str=branch)->None:
         (tmp/'proposal.rs').write_text(proposal_text,encoding='utf-8')
+        if branch_text:
+            (tmp/'periodic_boundary/branch.rs').write_text(branch_text,encoding='utf-8')
         harness='mod visual_metrics {\n'+orbit+'\n}\nmod geometry_provider {\nuse num_complex::Complex64;\n'
         for module,filename in [('interval','interval.rs'),('uniform_box','uniform_box.rs')]:
             harness+=f'#[path="{(directory/filename).as_posix()}"] mod {module};\n'
@@ -100,22 +126,26 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
     baseline=result.stdout+result.stderr
     rows=[]
     for label,target,old,new,test in mutations:
-        source=proposal if target=='proposal' else kernel
-        assert source.count(old)==1,(label,source.count(old))
-        altered=source.replace(old,new)
-        write_sources(altered if target=='proposal' else proposal,altered if target=='kernel' else kernel)
+        source={'proposal':proposal,'kernel':kernel,'branch':branch}[target]
+        expected=3 if label=='branch-contraction' else 2 if label=='branch-inclusion' else 1
+        assert source.count(old)==expected,(label,source.count(old))
+        altered=source.replace(old,new,2 if target=='branch' else -1)
+        write_sources(altered if target=='proposal' else proposal,altered if target=='kernel' else kernel,
+                      altered if target=='branch' else branch)
         exe=build(label)
         result=subprocess.run([str(exe),'--exact',test,'--nocapture'],capture_output=True,text=True)
         caught=result.returncode!=0 and 'test result: FAILED' in result.stdout
         rows.append({'mutation':label,'caught':caught,'output':result.stdout+result.stderr})
         assert caught,label
     assert selected is not None
-    record={'scope':'Numerical proposals and reconstructed-cell checks only; no Regular geometry authority.',
+    source_paths=[root/'runtime-core/src/visual_metrics.rs',root/'runtime-core/src/geometry_provider.rs',
+                  directory/'periodic_boundary.rs',directory/'periodic_boundary_cases.rs',
+                  directory/'interval.rs',directory/'uniform_box.rs',directory/'affine_return.rs']
+    if branch: source_paths.append(branch_path)
+    record={'scope':'Numerical proposals, local branch proofs and reconstructed-cell checks only; no Regular geometry authority.',
             'baseline':baseline,'mutations':rows,'num_complex_rlib':selected.name,
             'num_complex_sha256':hashlib.sha256(selected.read_bytes()).hexdigest(),
             'source_sha256':{str(p.relative_to(root)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest()
-                 for p in [root/'runtime-core/src/visual_metrics.rs',root/'runtime-core/src/geometry_provider.rs',
-                           directory/'periodic_boundary.rs',directory/'periodic_boundary_cases.rs',
-                           directory/'interval.rs',directory/'uniform_box.rs',directory/'affine_return.rs']}}
+                 for p in source_paths}}
     args.output.write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
     print(json.dumps({'all_baseline_tests_passed':True,'mutations_caught':len(rows),'rlib':selected.name}))

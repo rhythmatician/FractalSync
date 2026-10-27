@@ -1,0 +1,564 @@
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -1,5 +1,7 @@
+ //! Numerical proposals only. This module cannot issue a Regular geometry jet.
+ use num_complex::Complex64 as C;
++#[path = "periodic_boundary/branch.rs"]
++mod branch;
+ #[path = "periodic_boundary_cases.rs"]
+ #[cfg(test)]
+ mod cases;
+@@ -110,6 +112,9 @@
+     pub(super) distance: f64,
+     pub(super) period: usize,
+     pub(super) stationarity: f64,
++    root: C,
++    boundary: C,
++    multiplier: C,
+ }
+ fn project(query: C, mut z: C, mut c: C, period: usize, mut theta: f64) -> Option<Proposal> {
+     let mut best: Option<Proposal> = None;
+@@ -140,6 +145,9 @@
+                 distance,
+                 period,
+                 stationarity,
++                root: z,
++                boundary: c,
++                multiplier: mu,
+             });
+         }
+         let delta = dot(r, d1) / denominator;
+@@ -279,6 +287,87 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn all_discovered_node_branches_have_local_multiplier_disk_proofs() {
++        let start = std::time::Instant::now();
++        let mut maximum = 0f64;
++        for &(name, q, _, error) in cases::CERTIFIED_NODES {
++            let p = propose(C::new(q[0], q[1])).unwrap();
++            let (proof, r) = branch::certify_auto(p.root, p.boundary, p.multiplier, p.period, 1e-4)
++                .unwrap_or_else(|| panic!("local disk {name} {q:?}"));
++            assert!(proof.inclusion()[1] < error, "{name} {q:?} {proof:?}");
++            assert!(
++                proof.inclusion()[0] < r[1]
++                    && proof.inclusion()[1] < r[2]
++                    && proof.contraction() < 1.
++            );
++            maximum = maximum.max(proof.inclusion()[1]);
++            let neighbor = p.multiplier + C::new(1e-4, 0.);
++            let (z, c) = solve(p.root, p.boundary, p.period, neighbor).unwrap();
++            let (next, _) = branch::certify_auto(z, c, neighbor, p.period, 1e-4).unwrap();
++            let shared = p.multiplier + (neighbor - p.multiplier) * 0.5;
++            assert!(
++                branch::glue(&proof, &next, shared).is_some(),
++                "branch join {name} {q:?}"
++            );
++            eprintln!(
++                "[F64_BRANCH_ROW145] {:?}",
++                [
++                    p.root.re,
++                    p.root.im,
++                    p.boundary.re,
++                    p.boundary.im,
++                    p.multiplier.re,
++                    p.multiplier.im,
++                    p.period as f64,
++                    r[0],
++                    r[1],
++                    r[2],
++                    proof.inverse()[0][0].re,
++                    proof.inverse()[0][0].im,
++                    proof.inverse()[0][1].re,
++                    proof.inverse()[0][1].im,
++                    proof.inverse()[1][0].re,
++                    proof.inverse()[1][0].im,
++                    proof.inverse()[1][1].re,
++                    proof.inverse()[1][1].im,
++                    proof.inclusion()[0],
++                    proof.inclusion()[1],
++                    proof.contraction()
++                ]
++            );
++        }
++        eprintln!("[F64_BRANCH_NODES145] count=162 multiplier_radius=1e-4 maximum_parameter_error={maximum} elapsed_s={}",start.elapsed().as_secs_f64());
++    }
++    #[test]
++    fn local_branch_proof_at_discovered_high_period_projections() {
++        for q in [
++            C::new(0.32049988639807619, 0.04733531447355364),
++            C::new(0.35659381055433242, 0.06404656757776669),
++        ] {
++            let p = propose(q).unwrap();
++            let mut found = None;
++            for z_error in [1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6] {
++                for c_error in [1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10] {
++                    if let Some(proof) = branch::certify(
++                        p.root,
++                        p.boundary,
++                        p.multiplier,
++                        p.period,
++                        [0., z_error, c_error],
++                    ) {
++                        found = Some((z_error, c_error, proof));
++                        break;
++                    }
++                }
++                if found.is_some() {
++                    break;
++                }
++            }
++            eprintln!("[F64_BRANCH145] query={q:?} proof={found:?}");
++            assert!(found.is_some(), "strict local branch proof");
++        }
++    }
+     #[test]
+     fn discover_components_without_fixture_periods_or_angles() {
+         for q in [
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
+@@ -0,0 +1,443 @@
++//! Local coupled-root proof only; no nearest-boundary or membership authority.
++use super::super::interval::Interval as I;
++use super::{cycle, finite, C};
++
++fn up_add(a: f64, b: f64) -> f64 {
++    (a + b).next_up()
++}
++fn up_mul(a: f64, b: f64) -> f64 {
++    (a * b).next_up()
++}
++fn norm(a: C) -> f64 {
++    I::point(a.re)
++        .square()
++        .add(I::point(a.im).square())
++        .hi
++        .sqrt()
++        .next_up()
++}
++fn round(center: C, re: I, im: I) -> f64 {
++    norm(C::new(
++        re.sub(I::point(center.re)).abs_upper(),
++        im.sub(I::point(center.im)).abs_upper(),
++    ))
++}
++fn add(a: C, b: C) -> (C, f64) {
++    let c = a + b;
++    (
++        c,
++        round(
++            c,
++            I::point(a.re).add(I::point(b.re)),
++            I::point(a.im).add(I::point(b.im)),
++        ),
++    )
++}
++fn mul(a: C, b: C) -> (C, f64) {
++    let c = a * b;
++    let p = I::point;
++    (
++        c,
++        round(
++            c,
++            p(a.re).mul(p(b.re)).sub(p(a.im).mul(p(b.im))),
++            p(a.re).mul(p(b.im)).add(p(a.im).mul(p(b.re))),
++        ),
++    )
++}
++#[derive(Clone, Copy)]
++struct Affine {
++    center: C,
++    coefficients: [C; 3],
++    remainder: f64,
++}
++impl Affine {
++    fn constant(center: C) -> Self {
++        Self {
++            center,
++            coefficients: [C::new(0., 0.); 3],
++            remainder: 0.,
++        }
++    }
++    fn variable(center: C, coefficients: [C; 3]) -> Self {
++        Self {
++            center,
++            coefficients,
++            remainder: 0.,
++        }
++    }
++    fn perturbation(self, r: [f64; 3]) -> f64 {
++        self.coefficients
++            .iter()
++            .zip(r)
++            .fold(self.remainder, |v, (c, r)| up_add(v, up_mul(norm(*c), r)))
++    }
++    fn norm(self, r: [f64; 3]) -> f64 {
++        up_add(norm(self.center), self.perturbation(r))
++    }
++    fn neg(self) -> Self {
++        Self {
++            center: -self.center,
++            coefficients: self.coefficients.map(|c| -c),
++            ..self
++        }
++    }
++    fn add(self, b: Self, r: [f64; 3]) -> Self {
++        let (center, error) = add(self.center, b.center);
++        let mut remainder = up_add(up_add(self.remainder, b.remainder), error);
++        let coefficients = std::array::from_fn(|i| {
++            let (c, e) = add(self.coefficients[i], b.coefficients[i]);
++            remainder = up_add(remainder, up_mul(e, r[i]));
++            c
++        });
++        Self {
++            center,
++            coefficients,
++            remainder,
++        }
++    }
++    fn sub(self, b: Self, r: [f64; 3]) -> Self {
++        self.add(b.neg(), r)
++    }
++    fn mul(self, b: Self, r: [f64; 3]) -> Self {
++        let (center, error) = mul(self.center, b.center);
++        let mut remainder = up_add(
++            up_add(
++                up_mul(norm(self.center), b.remainder),
++                up_mul(norm(b.center), self.remainder),
++            ),
++            up_add(up_mul(self.perturbation(r), b.perturbation(r)), error),
++        );
++        let coefficients = std::array::from_fn(|i| {
++            let (a, ea) = mul(self.center, b.coefficients[i]);
++            let (b, eb) = mul(b.center, self.coefficients[i]);
++            let (c, ec) = add(a, b);
++            remainder = up_add(remainder, up_mul(up_add(up_add(ea, eb), ec), r[i]));
++            c
++        });
++        Self {
++            center,
++            coefficients,
++            remainder,
++        }
++    }
++    fn scale(self, c: C, r: [f64; 3]) -> Self {
++        self.mul(Self::constant(c), r)
++    }
++}
++
++#[derive(Debug, Clone, Copy)]
++pub(super) struct Certificate {
++    inclusion: [f64; 2],
++    contraction: f64,
++    centers: [C; 2],
++    inverse: [[C; 2]; 2],
++    parameter: C,
++    radii: [f64; 3],
++    period: usize,
++}
++
++impl Certificate {
++    pub(super) fn inclusion(&self) -> [f64; 2] {
++        self.inclusion
++    }
++    pub(super) fn contraction(&self) -> f64 {
++        self.contraction
++    }
++    pub(super) fn inverse(&self) -> [[C; 2]; 2] {
++        self.inverse
++    }
++    fn contains(&self, parameter: C) -> bool {
++        let (delta, error) = add(parameter, -self.parameter);
++        finite(parameter)
++            && (parameter == self.parameter || up_add(norm(delta), error) <= self.radii[0])
++    }
++    /// Enclose each exact branch value at this exact represented multiplier.
++    fn at(&self, parameter: C) -> Option<[(C, f64); 2]> {
++        if !self.contains(parameter) {
++            return None;
++        }
++        let (delta, delta_error) = add(parameter, -self.parameter);
++        let values = std::array::from_fn(|i| {
++            let (offset, mul_error) = mul(self.inverse[i][1], delta);
++            let (value, add_error) = add(self.centers[i], offset);
++            let error = up_add(
++                self.inclusion[i],
++                up_add(
++                    up_add(mul_error, add_error),
++                    up_mul(norm(self.inverse[i][1]), delta_error),
++                ),
++            );
++            (value, error)
++        });
++        values
++            .iter()
++            .all(|(z, e)| finite(*z) && e.is_finite())
++            .then_some(values)
++    }
++}
++
++/// Prove that the old endpoint root lies strictly inside the next uniqueness
++/// domain. A numerical coincidence or overlapping error disks is insufficient.
++pub(super) fn glue(old: &Certificate, next: &Certificate, parameter: C) -> Option<usize> {
++    if old.period != next.period {
++        return None;
++    }
++    let [(mut z, mut ze), (c, ce)] = old.at(parameter)?;
++    next.at(parameter)?;
++    // Membership in the next *requested* polydisk, not its smaller image disk.
++    let (delta, de) = add(parameter, -next.parameter);
++    let predicted = std::array::from_fn::<_, 2, _>(|i| {
++        let (offset, me) = mul(next.inverse[i][1], delta);
++        let (value, ae) = add(next.centers[i], offset);
++        (
++            value,
++            up_add(up_add(me, ae), up_mul(norm(next.inverse[i][1]), de)),
++        )
++    });
++    let (gap, ge) = add(c, -predicted[1].0);
++    if up_add(up_add(norm(gap), ge), up_add(ce, predicted[1].1)) >= next.radii[2] {
++        return None;
++    }
++    for phase in 0..old.period {
++        let (gap, ge) = add(z, -predicted[0].0);
++        if up_add(up_add(norm(gap), ge), up_add(ze, predicted[0].1)) < next.radii[1] {
++            return Some(phase);
++        }
++        let (square, se) = mul(z, z);
++        let (nz, ae) = add(square, c);
++        ze = up_add(
++            up_add(up_mul(up_mul(2., norm(z)), ze), up_mul(ze, ze)),
++            up_add(ce, up_add(se, ae)),
++        );
++        z = nz;
++        if !finite(z) || !ze.is_finite() {
++            return None;
++        }
++    }
++    None
++}
++
++/// For every exact complex delta in |delta|<=mu_radius, prove a unique coupled
++/// root in (z,c)+inverse[:,1]*delta with strict error radii (z_error,c_error).
++/// The rounded inverse is an exact fixed dyadic preconditioner in this proof.
++pub(super) fn certify(z: C, c: C, mu: C, period: usize, r: [f64; 3]) -> Option<Certificate> {
++    measured(z, c, mu, period, r).filter(|proof| {
++        proof.inclusion[0] < r[1] && proof.inclusion[1] < r[2] && proof.contraction < 1.
++    })
++}
++fn measured(z: C, c: C, mu: C, period: usize, r: [f64; 3]) -> Option<Certificate> {
++    if ![z, c, mu].into_iter().all(finite)
++        || period == 0
++        || period > 512
++        || !r.into_iter().all(f64::is_finite)
++        || r[0] < 0.
++        || r[1] <= 0.
++        || r[2] <= 0.
++    {
++        return None;
++    }
++    let j = cycle(z, c, period)?;
++    let one = C::new(1., 0.);
++    let nil = C::new(0., 0.);
++    let two = C::new(2., 0.);
++    let det = (j.m - one) * j.d - j.a * j.b;
++    let inverse = [[j.d / det, -j.a / det], [-j.b / det, (j.m - one) / det]];
++    if !inverse.iter().flatten().copied().all(finite) {
++        return None;
++    }
++    let az = Affine::variable(z, [inverse[0][1], one, nil]);
++    let ac = Affine::variable(c, [inverse[1][1], nil, one]);
++    let amu = Affine::variable(mu, [one, nil, nil]);
++    let (mut v, mut m, mut a, mut b, mut d) = (
++        az,
++        Affine::constant(one),
++        Affine::constant(nil),
++        Affine::constant(nil),
++        Affine::constant(nil),
++    );
++    for _ in 0..period {
++        (v, m, a, b, d) = (
++            v.mul(v, r).add(ac, r),
++            v.mul(m, r).scale(two, r),
++            v.mul(a, r).scale(two, r).add(Affine::constant(one), r),
++            m.mul(m, r).add(v.mul(b, r), r).scale(two, r),
++            a.mul(m, r).add(v.mul(d, r), r).scale(two, r),
++        );
++    }
++    let residual = [v.sub(az, r), m.sub(amu, r)];
++    let errors = [
++        Affine::variable(nil, [nil, one, nil]),
++        Affine::variable(nil, [nil, nil, one]),
++    ];
++    let inclusion = std::array::from_fn(|row| {
++        errors[row]
++            .sub(
++                residual[0]
++                    .scale(inverse[row][0], r)
++                    .add(residual[1].scale(inverse[row][1], r), r),
++                r,
++            )
++            .norm(r)
++    });
++    let jacobian = [[m.sub(Affine::constant(one), r), a], [b, d]];
++    let mut contraction = 0f64;
++    for row in 0..2 {
++        let mut bound = 0.;
++        for column in 0..2 {
++            let product = jacobian[0][column]
++                .scale(inverse[row][0], r)
++                .add(jacobian[1][column].scale(inverse[row][1], r), r);
++            let identity = Affine::constant(if row == column { one } else { nil });
++            let weighted =
++                (up_mul(identity.sub(product, r).norm(r), r[column + 1]) / r[row + 1]).next_up();
++            bound = up_add(bound, weighted);
++        }
++        if !bound.is_finite() {
++            return None;
++        }
++        contraction = contraction.max(bound);
++    }
++    inclusion
++        .into_iter()
++        .all(f64::is_finite)
++        .then_some(Certificate {
++            inclusion,
++            contraction,
++            centers: [z, c],
++            inverse,
++            parameter: mu,
++            radii: r,
++            period,
++        })
++}
++
++pub(super) fn certify_auto(
++    z: C,
++    c: C,
++    mu: C,
++    period: usize,
++    mu_radius: f64,
++) -> Option<(Certificate, [f64; 3])> {
++    let mut r = [mu_radius, 1e-14, 1e-16];
++    for _ in 0..12 {
++        let proof = measured(z, c, mu, period, r)?;
++        if proof.inclusion[0] < r[1] && proof.inclusion[1] < r[2] && proof.contraction < 1. {
++            return Some((proof, r));
++        }
++        for i in 0..2 {
++            r[i + 1] = r[i + 1].max(up_mul(2., proof.inclusion[i]));
++        }
++    }
++    None
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn singleton_multiplier_domains_evaluate_and_join_at_the_exact_center() {
++        let mu = C::new(-0.5, 0.5);
++        let z = mu * 0.5;
++        let c = mu * 0.5 - mu * mu * 0.25;
++        let proof = certify(z, c, mu, 1, [0., 1e-8, 1e-8]).unwrap();
++        assert!(proof.at(mu).is_some());
++        assert_eq!(glue(&proof, &proof, mu), Some(0));
++        assert!(proof.at(C::new(mu.re.next_up(), mu.im)).is_none());
++    }
++    #[test]
++    fn endpoint_enclosures_cover_exact_cardioid_and_glue_cycle_phases() {
++        let mu = C::new(-0.5, 0.5);
++        let z = mu * 0.5;
++        let c = mu * 0.5 - mu * mu * 0.25;
++        let proof = certify(z, c, mu, 1, [1e-3, 1e-6, 1e-6]).unwrap();
++        for delta in [C::new(2f64.powi(-12), 0.), C::new(0., -2f64.powi(-12))] {
++            let parameter = mu + delta;
++            let exact = [
++                parameter * 0.5,
++                parameter * 0.5 - parameter * parameter * 0.25,
++            ];
++            let values = proof.at(parameter).unwrap();
++            for i in 0..2 {
++                assert!(norm(exact[i] - values[i].0) <= values[i].1);
++            }
++        }
++        assert!(proof.at(mu + C::new(0.01, 0.)).is_none());
++        let mu = C::new(-0.5, 0.2);
++        let c = C::new(-1., 0.) + mu * 0.25;
++        let mut z = C::new(0., 0.);
++        for _ in 0..4096 {
++            z = z * z + c;
++        }
++        let a = certify(z, c, mu, 2, [1e-4, 1e-7, 1e-7]).unwrap();
++        let b = certify(z * z + c, c, mu, 2, [1e-4, 1e-7, 1e-7]).unwrap();
++        assert_eq!(glue(&a, &b, mu), Some(1));
++    }
++    #[test]
++    fn branch_identity_requires_containment_and_matching_components() {
++        let make = |mu: C| {
++            let z = mu * 0.5;
++            let c = mu * 0.5 - mu * mu * 0.25;
++            certify(z, c, mu, 1, [2e-4, 1e-7, 1e-7]).unwrap()
++        };
++        let a = make(C::new(-0.4, 0.6));
++        let b = make(C::new(-0.4, 0.6001));
++        assert_eq!(glue(&a, &b, C::new(-0.4, 0.60005)), Some(0));
++        assert_eq!(glue(&a, &b, C::new(0., 0.)), None);
++        assert_eq!(glue(&a, &b, C::new(f64::NAN, 0.)), None);
++        let make3 = |seed: C| {
++            let (z, c) = super::super::solve(C::new(0., 0.), seed, 3, C::new(0., 0.)).unwrap();
++            certify(z, c, C::new(0., 0.), 3, [1e-6, 1e-9, 1e-9]).unwrap()
++        };
++        let x = make3(C::new(-1.7548776662466927, 0.));
++        let y = make3(C::new(-0.1225611668766536, 0.7448617666197442));
++        assert_eq!(glue(&x, &y, C::new(0., 0.)), None);
++    }
++    #[test]
++    fn arithmetic_encloses_lost_center_bits_and_remainder_products() {
++        let small = 2f64.powi(-54);
++        let a = Affine::constant(C::new(1., 0.));
++        let b = Affine::constant(C::new(small, 0.));
++        let r = [0.; 3];
++        assert!(a.add(b, r).remainder >= small);
++        let mut b = Affine::constant(C::new(0., 0.));
++        b.remainder = 2.;
++        assert!(Affine::constant(C::new(3., 4.)).mul(b, r).norm(r) >= 10.);
++    }
++    #[test]
++    fn exact_cardioid_predictor_certifies_and_bad_remainders_refuse() {
++        let mu = C::new(-0.4, 0.6);
++        let z = mu * 0.5;
++        let c = mu * 0.5 - mu * mu * 0.25;
++        let proof = certify(z, c, mu, 1, [1e-4, 1e-8, 1e-8]).unwrap();
++        assert!(proof.inclusion[0] < 1e-8 && proof.inclusion[1] < 1e-8 && proof.contraction < 1.);
++        assert!(certify(z, c, mu, 1, [1e-4, 1e-8, 1e-10]).is_none());
++    }
++    #[test]
++    fn self_inclusion_without_contraction_refuses() {
++        let zero = C::new(0., 0.);
++        assert!(certify(zero, zero, zero, 1, [0., 1., 1.5]).is_none());
++    }
++    #[test]
++    fn singular_wrong_and_invalid_inputs_refuse() {
++        let zero = C::new(0., 0.);
++        assert!(certify(
++            C::new(-0.5, 0.),
++            C::new(-0.75, 0.),
++            C::new(1., 0.),
++            2,
++            [0., 1e-12, 1e-12]
++        )
++        .is_none());
++        assert!(certify(zero, zero, C::new(0.5, 0.), 1, [0., 1e-12, 1e-12]).is_none());
++        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
++            for slot in 0..3 {
++                let mut r = [0., 1e-8, 1e-8];
++                r[slot] = value;
++                assert!(certify(zero, zero, zero, 1, r).is_none());
++            }
++        }
++        assert!(certify(zero, zero, zero, 0, [0., 1e-8, 1e-8]).is_none());
++        assert!(certify(zero, zero, zero, 513, [0., 1e-8, 1e-8]).is_none());
++    }
++}
