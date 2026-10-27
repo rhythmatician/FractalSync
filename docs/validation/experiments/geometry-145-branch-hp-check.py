@@ -29,6 +29,7 @@ assert len(rows)==162 and all(len(row)==21 for row in rows)
 cover_rows=[]
 targets=[]
 scalars=[]
+queries=[]
 for line in record['baseline'].splitlines():
     if line.startswith('[F64_COVER_ROW145]'):
         _,group,values=line.split(' ',2)
@@ -45,9 +46,20 @@ for line in record['baseline'].splitlines():
         row=json.loads(values)
         assert len(row)==10
         scalars.append(row)
-assert not cover_rows or (len(targets)==162 and {int(row[25]) for row in cover_rows}=={0,1})
+    elif line.startswith('[CERTIFIED_QUERY145]'):
+        _,name,values=line.split(' ',2)
+        row=json.loads(values)
+        assert len(row)==14
+        assert name in ('name=native','name=python')
+        queries.append((row,0. if name=='name=native' else 1.))
+assert len(queries) in (0,2)
+assert not queries or ({group for _,group in queries}=={0.,1.} and len({(row[0],row[1]) for row,_ in queries})==2)
+for row,group in queries:
+    scalars.append(row[:10])
+    targets.append([row[0],row[1],row[4],row[4],row[13],group])
+assert not cover_rows or (len(targets)==162+len(queries) and {int(row[25]) for row in cover_rows}=={0,1})
 if scalars:
-    assert len(scalars)==162 and len(targets)==162
+    assert len(scalars)==162+len(queries) and len(targets)==162+len(queries)
     lower_by_query={(row[0],row[1]):row[3] for row in targets}
     assert all(row[4]==lower_by_query[(row[0],row[1])] for row in scalars)
 rows.extend(row[:21] for row in cover_rows)
@@ -97,7 +109,7 @@ fn independent_f64_exterior_witnesses_and_complete_windows() {
         assert!(BigFloat::from_f64(row[4],512).cmp(&value.sub(&error,512,R::Up)).is_some_and(|v|v>=0));
         assert!(BigFloat::from_f64(row[5],512).cmp(&value.add(&error,512,R::Down)).is_some_and(|v|v<=0));
     }
-    eprintln!("[HP_SCALAR145] witnesses=162 precision=512 complete_windows=true");
+    eprintln!("[HP_SCALAR145] witnesses={} precision=512 complete_windows=true",SCALAR_ROWS.len());
 }
 '''
 deps=args.target_dir.resolve()/'release/deps'
@@ -133,6 +145,7 @@ fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
     for group in 0..2 {
         if edges[group].is_empty() {continue;}
         let targets:Vec<_>=crate::COVER_TARGETS.iter().filter(|row|row[5] as usize==group).collect();
+        let target_count=targets.len();
         let first=targets[0];
         let curve=cover::closed(std::mem::take(&mut edges[group]),&C::new(first[0],first[1])).unwrap();
         for row in targets {
@@ -142,7 +155,7 @@ fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
             assert!(lower.cmp(&B::from_f64(row[3],P)).is_some_and(|v|v>=0),"f64 geometric bound group {group}");
             assert_eq!(clearance.winding(),row[4] as i32);
         }
-        eprintln!("[HP_COVER145] group={group} edges={} targets=81 independently_closed=true",curve.edge_count());
+        eprintln!("[HP_COVER145] group={group} edges={} targets={target_count} independently_closed=true",curve.edge_count());
     }
 }
 '''

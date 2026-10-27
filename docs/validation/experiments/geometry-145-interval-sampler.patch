@@ -1,0 +1,536 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1074,6 +1074,7 @@
+ }
+
+ struct FittedJet {
++    range: RangeJet,
+     size_bound:f64,
+     nodes_certified:bool,
+     detail: FieldJet,
+@@ -1501,27 +1502,223 @@
+ fn component_sample(c:Complex64)->Option<(f64,BoundaryInterval)> {
+  component_sample_using(c,Some(&*COMPONENT_VALUE_CACHE))
+ }
+-fn component_distance(c:Complex64)->Option<f64> {
+- component_sample(c).map(|sample|sample.0)
+-}
+-fn component_enclosure(c:Complex64)->Option<BoundaryInterval> {
+- if c.im==0. && (c.re==0.25 || c.re== -0.75) {return Some(BoundaryInterval::point(0.));}
+- component_sample(c).map(|sample|sample.1)
+-}
+ fn unknown_field_range(bound:f64)->RangeJet {
+  let unknown=BoundaryInterval{lo:f64::NEG_INFINITY,hi:f64::INFINITY};
+  RangeJet{d:BoundaryInterval{lo:-bound,hi:bound},g:[unknown;2],h:[[unknown;2];2]}
+ }
+-fn field_enclosure(c:Complex64,h:f64,stencil:&[(f64,f64,f64)])->Option<RangeJet> {
+- let nodes:Option<Vec<_>>=distance_stencil(c,h).zip(stencil).enumerate().map(|(index,(p,&(_,_,value)))| {
+-  if index<9 || index%9==0 {return Some(BoundaryInterval::point(value));}
+-  if component_kind(p).is_some() || (p.im==0. && (p.re==0.25 || p.re== -0.75)) {component_enclosure(p)}
+-  else {Some(BoundaryInterval::point(value))}
+- }).collect();
+- range_jet::quintic([c.re,c.im],h,&nodes?)
+-}
+-
+-static FIELD_NODE_CACHE: Lazy<RwLock<LruCache<(u32,u64,u64),f64>>> = Lazy::new(|| RwLock::new(LruCache::new(4096)));
++#[derive(Clone, Copy)]
++struct NodalSample {
++    query: Complex64,
++    value: f64,
++    enclosure: Option<BoundaryInterval>,
++}
++impl NodalSample {
++    fn enclosed(query: Complex64, value: f64, enclosure: BoundaryInterval) -> Option<Self> {
++        (query.re.is_finite()
++            && query.im.is_finite()
++            && value.is_finite()
++            && enclosure.finite()
++            && enclosure.lo <= value
++            && value <= enclosure.hi)
++            .then_some(Self {
++                query,
++                value,
++                enclosure: Some(enclosure),
++            })
++    }
++    fn unproved(query: Complex64, value: f64) -> Option<Self> {
++        (query.re.is_finite() && query.im.is_finite() && value.is_finite()).then_some(Self {
++            query,
++            value,
++            enclosure: None,
++        })
++    }
++}
++fn field_enclosure(c: Complex64, h: f64, stencil: &[NodalSample]) -> Option<RangeJet> {
++    if stencil.len() != 81
++        || !distance_stencil(c, h)
++            .zip(stencil)
++            .all(|(query, sample)| query == sample.query)
++    {
++        return None;
++    }
++    let nodes: Option<Vec<_>> = stencil.iter().map(|sample| sample.enclosure).collect();
++    range_jet::quintic([c.re, c.im], h, &nodes?)
++}
++
++// Enclose the canonical represented Shore polyline oracle, not ideal-M distance.
++// Membership stability and coarse/fine contour disagreement remain separate
++// requirements. The nominal value and sign retain signed_shore_distance's
++// existing semantics; only projection arithmetic is enclosed here.
++fn shore_nodal_sample(query: Complex64, h: f64, segments: &[Segment]) -> Option<NodalSample> {
++    if !query.re.is_finite()
++        || !query.im.is_finite()
++        || !h.is_finite()
++        || h <= 0.
++        || !segments.iter().all(|s| {
++            [s.p1.0, s.p1.1, s.p2.0, s.p2.1, s.normal.0, s.normal.1]
++                .iter()
++                .all(|v| v.is_finite())
++        })
++    {
++        return None;
++    }
++    let value = signed_shore_distance(query, h, segments)?;
++    let p = BoundaryInterval::point;
++    let mut lower = f64::INFINITY;
++    let mut upper = f64::INFINITY;
++    for segment in segments {
++        let x = p(segment.p2.0).sub(p(segment.p1.0));
++        let y = p(segment.p2.1).sub(p(segment.p1.1));
++        let dx = p(query.re).sub(p(segment.p1.0));
++        let dy = p(query.im).sub(p(segment.p1.1));
++        let length = x.square().add(y.square());
++        let vx = segment.p2.0 - segment.p1.0;
++        let vy = segment.p2.1 - segment.p1.1;
++        let represented_length = vx * vx + vy * vy;
++        let (rx, ry) = if represented_length <= f64::MIN_POSITIVE {
++            (dx, dy)
++        } else {
++            if !length.finite() || length.lo <= 0. {
++                return None;
++            }
++            let t = dx.mul(x).add(dy.mul(y)).div_positive(length);
++            if !t.finite() {
++                return None;
++            }
++            let t = BoundaryInterval {
++                lo: t.lo.clamp(0., 1.),
++                hi: t.hi.clamp(0., 1.),
++            };
++            (dx.sub(t.mul(x)), dy.sub(t.mul(y)))
++        };
++        let square = rx.square().add(ry.square());
++        if !square.finite() || square.hi < 0. {
++            return None;
++        }
++        lower = lower.min(square.lo.max(0.).sqrt().next_down().max(0.));
++        upper = upper.min(square.hi.sqrt().next_up());
++    }
++    let interval = if value.is_sign_negative() {
++        BoundaryInterval {
++            lo: -upper,
++            hi: -lower,
++        }
++    } else {
++        BoundaryInterval {
++            lo: lower,
++            hi: upper,
++        }
++    };
++    NodalSample::enclosed(
++        query,
++        value,
++        BoundaryInterval {
++            lo: interval.lo.min(value),
++            hi: interval.hi.max(value),
++        },
++    )
++}
++
++#[cfg(test)]
++mod nodal_range_checks {
++    use super::*;
++    #[test]
++    fn represented_shore_intervals_enclose_interiors_endpoints_and_minima() {
++        let line = Segment {
++            p1: (0., 0.),
++            p2: (1., 0.),
++            normal: (0., 1.),
++        };
++        for (q, expected) in [
++            (Complex64::new(0.5, 0.25), 0.25),
++            (Complex64::new(0.5, -0.25), -0.25),
++            (Complex64::new(2., 1.), 2f64.sqrt()),
++        ] {
++            let sample = shore_nodal_sample(q, 0.01, &[line.clone()]).unwrap();
++            let interval = sample.enclosure.unwrap();
++            assert_eq!(
++                sample.value.to_bits(),
++                signed_shore_distance(q, 0.01, &[line.clone()])
++                    .unwrap()
++                    .to_bits()
++            );
++            assert!(interval.lo <= expected && interval.hi >= expected);
++            assert!(interval.hi > interval.lo);
++            assert!(interval.hi - interval.lo < 1e-12);
++        }
++        let far = Segment {
++            p1: (100., 0.),
++            p2: (101., 0.),
++            normal: (0., 1.),
++        };
++        let near = shore_nodal_sample(Complex64::new(0.5, 0.25), 0.01, &[far, line.clone()])
++            .unwrap()
++            .enclosure
++            .unwrap();
++        assert!(near.lo > 0.249999999999 && near.hi < 0.250000000001);
++        let point = Segment {
++            p1: (0., 0.),
++            p2: (0., 0.),
++            normal: (0., 1.),
++        };
++        let point = shore_nodal_sample(Complex64::new(3., 4.), 0.01, &[point])
++            .unwrap()
++            .enclosure
++            .unwrap();
++        assert!(point.lo <= 5. && point.hi >= 5. && point.hi - point.lo < 1e-12);
++        assert!(shore_nodal_sample(Complex64::new(0.5, 0.25), 0., &[line.clone()]).is_none());
++        assert!(shore_nodal_sample(Complex64::new(0.5, 0.25), 0.01, &[]).is_none());
++        let invalid = Segment {
++            normal: (f64::NAN, 1.),
++            ..line
++        };
++        assert!(shore_nodal_sample(Complex64::new(0.5, 0.25), 0.01, &[invalid]).is_none());
++    }
++    #[test]
++    fn intervals_enclose_admissible_assignments_and_reject_moved_nodes() {
++        let h = 1. / 1024.;
++        let c = Complex64::new(2. + 0.25 * h, 1. + 0.375 * h);
++        let nodes: Vec<_> = distance_stencil(c, h)
++            .map(|q| {
++                NodalSample::enclosed(
++                    q,
++                    0.5,
++                    BoundaryInterval {
++                        lo: 0.5 - 1e-7,
++                        hi: 0.5 + 1e-7,
++                    },
++                )
++                .unwrap()
++            })
++            .collect();
++        let range = field_enclosure(c, h, &nodes).unwrap();
++        let stencil: Vec<_> = nodes
++            .iter()
++            .map(|s| (s.query.re - c.re, s.query.im - c.im, s.value))
++            .collect();
++        for index in 0..81 {
++            for value in [0.5 - 1e-7, 0.5 + 1e-7] {
++                let mut assigned = stencil.clone();
++                assigned[index].2 = value;
++                let (sampled, _) = quintic_field(c, h, &assigned);
++                let contains = |i: BoundaryInterval, v: f64| i.lo <= v && v <= i.hi;
++                assert!(contains(range.d, sampled.d));
++                for i in 0..2 {
++                    assert!(contains(range.g[i], sampled.g[i]));
++                    for j in 0..2 {
++                        assert!(contains(range.h[i][j], sampled.h[i][j]));
++                    }
++                }
++            }
++        }
++        let mut moved = nodes;
++        moved.swap(40, 41);
++        assert!(field_enclosure(c, h, &moved).is_none());
++    }
++}
++
++static FIELD_NODE_CACHE: Lazy<RwLock<LruCache<(u32,u64,u64),NodalSample>>> = Lazy::new(|| RwLock::new(LruCache::new(4096)));
+ fn point_membership_stable(c:Complex64,tile:&ShoreTile)->bool {
+  let nearest=tile.segments.iter().map(|s|point_to_segment_distance(c.re,c.im,s).0).min_by(f64::total_cmp);
+  let Some(distance)=nearest else {return false;};
+@@ -1535,8 +1732,8 @@
+    (projection.0-x).abs().max((projection.1-y).abs())>DYADIC_STABILITY_BAND_CELLS as f64*tile.h)
+  })
+ }
+-fn field_node(c:Complex64,k:u32,_source:&ShoreTile)->Option<f64> {
+- if let Some(value)=bounded_component_distance(c) {return Some(value);}
++fn field_node(c:Complex64,k:u32)->Option<NodalSample> {
++ if let Some(sample)=bounded_component_sample(c) {return Some(sample);}
+  let key=(k,c.re.to_bits(),c.im.to_bits());
+  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {if let Some(v)=cache.get(&key){return Some(v);}}
+
+@@ -1545,7 +1742,7 @@
+  for q in k..=(k+8).min(32) {
+   let Ok((tile,_))=contained_tile(c,q) else {continue;};
+   if !point_membership_stable(c,&tile) {continue;}
+-  let value=signed_shore_distance(c,tile.h,&tile.segments)?;
++  let value=shore_nodal_sample(c,tile.h,&tile.segments)?;
+   if true {
+    if let Ok(mut cache)=FIELD_NODE_CACHE.write() {cache.insert(key,value);}
+    return Some(value);
+@@ -1580,8 +1777,10 @@
+
+ fn component_level(c:Complex64,epsilon:f64,k:u32,h:f64)->Option<FittedJet> {
+  let d0=bounded_component_distance(c)?;
+- let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p|bounded_component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
+- let stencil=stencil?;
++ let samples:Option<Vec<_>>=distance_stencil(c,h).map(bounded_component_sample).collect();
++ let samples=samples?;
++ let range=field_enclosure(c,h,&samples)?;
++ let stencil:Vec<_>=distance_stencil(c,h).zip(&samples).map(|(p,s)|(p.re-c.re,p.im-c.im,s.value)).collect();
+  let center:Vec<_>=(1..8).flat_map(|y|(1..8).map(move|x|(y,x))).map(|(y,x)|stencil[y*9+x]).collect();
+  let (_,rms)=fit_quadratic_jet(&center)?;
+  let (field,detail)=quintic_field(c,h,&stencil);
+@@ -1590,7 +1789,7 @@
+  jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms.max(1e-13);
+  jet.requested_scale=GEOMETRY_SCALE_ALPHA*(field.d*field.d+epsilon*epsilon).sqrt();
+  jet.tile_id=format!("component:{k}");jet.is_bridge=false;
+- Some(FittedJet{size_bound:f64::INFINITY,nodes_certified:true,detail,jet,fit_rms:rms,stencil})
++ Some(FittedJet{range,size_bound:f64::INFINITY,nodes_certified:true,detail,jet,fit_rms:rms,stencil})
+ }
+
+
+@@ -1624,7 +1823,12 @@
+ }
+
+ fn bounded_component_distance(c:Complex64)->Option<f64> {
+- component_distance(c).map(|d| {let upper=distance_upper([c.re,c.im]);d.clamp(-upper,upper)})
++ bounded_component_sample(c).map(|sample|sample.value)
++}
++fn bounded_component_sample(c: Complex64) -> Option<NodalSample> {
++    let (value, enclosure) = component_sample(c)?;
++    let upper = distance_upper([c.re, c.im]);
++    NodalSample::enclosed(c, value.clamp(-upper, upper), enclosure)
+ }
+ fn scalar_field_bound(c:Complex64,h:f64)->f64 {
+  let tx=c.re/h-(c.re/h).floor();let ty=c.im/h-(c.im/h).floor();
+@@ -1667,7 +1871,7 @@
+     h: f64,
+     tile: &ShoreTile,
+ ) -> Option<FittedJet> {
+-    compute_jet_at_level_using(c, epsilon, k, h, tile, |sample| field_node(sample, k, tile))
++    compute_jet_at_level_using(c, epsilon, k, h, tile, |sample| field_node(sample, k))
+ }
+
+ // Keep scalar sampling explicit: runtime nodes use their canonical Mandelbrot
+@@ -1678,20 +1882,36 @@
+     k: u32,
+     h: f64,
+     tile: &ShoreTile,
+-    mut sample_node: impl FnMut(Complex64) -> Option<f64>,
++    mut sample_node: impl FnMut(Complex64) -> Option<NodalSample>,
+ ) -> Option<FittedJet> {
+     if tile.segments.is_empty() {
+         return None;
+     }
+     // The same signed-distance evaluator owns fitting and convergence.
+     let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
+-    let mut nodes_certified=true;
+-    for (index,sample) in distance_stencil(c, h).enumerate() {
+-        let value=if index<9 || index%9==0 {signed_shore_distance(sample,h,&tile.segments)?} else if let Some(value)=sample_node(sample) {value} else {nodes_certified=false;signed_shore_distance(sample,h,&tile.segments)?};
+-        let upper=distance_upper([sample.re,sample.im]);
+-        let value=value.clamp(-upper,upper);
+-        stencil.push((sample.re-c.re,sample.im-c.im,value));
+-    }
++    let mut samples = Vec::with_capacity(81);
++    for sample in distance_stencil(c, h) {
++        let supplied = sample_node(sample)?;
++        if supplied.query != sample {
++            return None;
++        }
++        let upper = distance_upper([sample.re, sample.im]);
++        let value = supplied.value.clamp(-upper, upper);
++        let supplied = match supplied.enclosure {
++            Some(enclosure) => NodalSample::enclosed(sample, value, enclosure)?,
++            None => NodalSample::unproved(sample, value)?,
++        };
++        stencil.push((sample.re - c.re, sample.im - c.im, value));
++        samples.push(supplied);
++    }
++    let enclosure = field_enclosure(c, h, &samples);
++    let nodes_certified = enclosure.is_some();
++    let size_bound = if nodes_certified {
++        f64::INFINITY
++    } else {
++        scalar_field_bound(c, h)
++    };
++    let range = enclosure.unwrap_or_else(|| unknown_field_range(size_bound));
+     let center_stencil: Vec<_> = (1..8)
+         .flat_map(|y| (1..8).map(move |x| (y, x)))
+         .map(|(y, x)| stencil[y * 9 + x])
+@@ -1726,7 +1946,8 @@
+         is_bridge: false,
+     };
+     Some(FittedJet {
+-        size_bound:if nodes_certified {f64::INFINITY} else {scalar_field_bound(c,h)},
++        range,
++        size_bound,
+         nodes_certified,
+         detail,
+         jet,
+@@ -2135,14 +2356,13 @@
+         };
+         if !certified {previous=None;}
+         if previous.as_ref().is_some_and(|p|p.component && !component) {previous=None;}
+-        let FittedJet{size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
++        let FittedJet{range,size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
+         if let Some(field) = &mut hierarchy {
+             field.advance_bounded(&jet, epsilon, nodes_certified, detail,size_bound);
+         } else {
+             hierarchy = Some(FieldHierarchy::new_bounded(&jet, epsilon, nodes_certified, detail,size_bound));
+         }
+         if let Some(field)=&mut hierarchy {
+-            let range=if nodes_certified {field_enclosure(c,h,&stencil).unwrap_or_else(||RangeJet::exact(f64::NAN,[f64::NAN;2],[[f64::NAN;2];2]))} else {unknown_field_range(size_bound)};
+             field.models.last_mut().unwrap().range=range;
+         }
+         if ties.is_some() {
+@@ -2943,6 +3163,139 @@
+         assert!(compute_jet_at_level(Complex64::new(0.0, 0.0), 0.01, 8, h, &tile).is_none());
+     }
+
++    fn sampler_test_tile(h: f64) -> ShoreTile {
++        ShoreTile {
++            k: 0,
++            h,
++            origin_re: 0.,
++            origin_im: 0.,
++            segments: vec![Segment {
++                p1: (0., 0.),
++                p2: (1., 0.),
++                normal: (0., 1.),
++            }],
++            unstable_nodes: Vec::new(),
++        }
++    }
++
++    #[test]
++    fn interval_bearing_sampler_encloses_value_gradient_and_hessian_assignments() {
++        let h = 1. / 1024.;
++        let c = Complex64::new(2. + 0.25 * h, 1. + 0.375 * h);
++        let tile = sampler_test_tile(h);
++        let changed = distance_stencil(c, h).nth(40).unwrap();
++        let delta = 1e-7;
++        let model = compute_jet_at_level_using(c, 0.01, 0, h, &tile, |p| {
++            let radius = if p == changed { delta } else { 0. };
++            NodalSample::enclosed(
++                p,
++                0.5,
++                BoundaryInterval {
++                    lo: 0.5 - radius,
++                    hi: 0.5 + radius,
++                },
++            )
++        })
++        .unwrap();
++        assert!(model.nodes_certified);
++        assert!(model.range.d.hi > model.range.d.lo);
++        assert!(model.range.g.iter().all(|i| i.hi > i.lo));
++        assert!(model.range.h.iter().flatten().all(|i| i.hi > i.lo));
++        for shift in [-delta, 0., delta] {
++            let assigned = compute_jet_at_level_using(c, 0.01, 0, h, &tile, |p| {
++                let value = 0.5 + if p == changed { shift } else { 0. };
++                NodalSample::enclosed(p, value, BoundaryInterval::point(value))
++            })
++            .unwrap();
++            let contains = |i: BoundaryInterval, v: f64| i.lo <= v && v <= i.hi;
++            assert!(contains(model.range.d, assigned.jet.d));
++            for i in 0..2 {
++                assert!(contains(model.range.g[i], assigned.jet.grad_d[i]));
++                for j in 0..2 {
++                    assert!(contains(model.range.h[i][j], assigned.jet.hessian_d[i][j]));
++                }
++            }
++        }
++        // Equal numerical fields do not erase their independent nodal errors.
++        let mut raw = model.jet.clone();
++        raw.estimated_error = 0.;
++        let mut hierarchy = FieldHierarchy::new_bounded(&raw, 0.01, true, model.detail, f64::INFINITY);
++        hierarchy.models[0].range = model.range;
++        let output = hierarchy.output(&raw, 0.01);
++        let expected = model.range.error(raw.d, raw.grad_d, raw.hessian_d, 2. * h);
++        assert!(expected > 0.);
++        assert!(output.estimated_error >= expected);
++    }
++
++    #[test]
++    fn interval_bearing_sampler_does_not_certify_unproved_values() {
++        let h = 1. / 1024.;
++        let c = Complex64::new(2., 1.);
++        let tile = sampler_test_tile(h);
++        let model = compute_jet_at_level_using(c, 0.01, 0, h, &tile, |p| NodalSample::unproved(p, 0.5))
++            .unwrap();
++        assert!(!model.nodes_certified);
++        assert!(model
++            .range
++            .g
++            .iter()
++            .chain(model.range.h.iter().flatten())
++            .all(|i| i.lo == f64::NEG_INFINITY && i.hi == f64::INFINITY));
++        assert!(model.size_bound.is_finite());
++    }
++
++    #[test]
++    fn interval_bearing_sampler_requires_one_owner_for_every_node() {
++        let h = 1. / 1024.;
++        let c = Complex64::new(2., 1.);
++        let tile = sampler_test_tile(h);
++        let mut calls = 0;
++        assert!(compute_jet_at_level_using(c, 0.01, 0, h, &tile, |p| {
++            calls += 1;
++            NodalSample::enclosed(p, 0.5, BoundaryInterval::point(0.5))
++        })
++        .is_some());
++        assert_eq!(calls, 81);
++        let first = distance_stencil(c, h).next().unwrap();
++        assert!(compute_jet_at_level_using(c, 0.01, 0, h, &tile, |p| {
++            if p == first {
++                None
++            } else {
++                NodalSample::enclosed(p, 0.5, BoundaryInterval::point(0.5))
++            }
++        })
++        .is_none());
++        assert!(compute_jet_at_level_using(c, 0.01, 0, h, &tile, |_| {
++            NodalSample::enclosed(c, 0.5, BoundaryInterval::point(0.5))
++        })
++        .is_none());
++    }
++
++    #[test]
++    fn interval_bearing_sampler_rejects_invalid_certificates() {
++        for (value, lo, hi) in [
++            (0., 1., 2.),
++            (0., 1., -1.),
++            (f64::NAN, -1., 1.),
++            (0., f64::NEG_INFINITY, 1.),
++            (0., -1., f64::INFINITY),
++            (0., f64::NAN, 1.),
++        ] {
++            assert!(
++                NodalSample::enclosed(Complex64::new(2., 1.), value, BoundaryInterval { lo, hi })
++                    .is_none()
++            );
++        }
++        assert!(NodalSample::unproved(Complex64::new(2., 1.), f64::NAN).is_none());
++        assert!(NodalSample::unproved(Complex64::new(2., 1.), f64::INFINITY).is_none());
++        assert!(NodalSample::enclosed(
++            Complex64::new(f64::NAN, 1.),
++            0.,
++            BoundaryInterval::point(0.)
++        )
++        .is_none());
++    }
++
+     #[test]
+     fn signed_stencil_preserves_distance_to_segment_endpoint() {
+         let h = 0.001;
+@@ -2959,7 +3312,7 @@
+             unstable_nodes: Vec::new(),
+         };
+         let jet = compute_jet_at_level_using(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile,
+-            |sample| signed_shore_distance(sample, h, &tile.segments))
++            |sample| {let value=signed_shore_distance(sample,h,&tile.segments)?;NodalSample::enclosed(sample,value,BoundaryInterval::point(value))})
+             .unwrap()
+             .jet;
+         assert!(

@@ -1,6 +1,45 @@
 //! Precision-backed exterior witnesses. This is not a runtime provider hook.
 use super::*;
 
+fn field_quality_passes(
+    field: &crate::geometry_provider::FieldJet,
+    error: f64,
+    budget: f64,
+) -> bool {
+    field.d.is_finite()
+        && field
+            .g
+            .iter()
+            .chain(field.h.iter().flatten())
+            .all(|v| v.is_finite())
+        && error.is_finite()
+        && error >= 0.
+        && budget.is_finite()
+        && budget > 0.
+        && error <= budget
+}
+
+#[test]
+fn field_quality_gate_rejects_invalid_arithmetic() {
+    let field = crate::geometry_provider::FieldJet::constant(0.);
+    assert!(field_quality_passes(&field, 0., 1.));
+    for error in [-1., f64::NAN, f64::INFINITY] {
+        assert!(!field_quality_passes(&field, error, 1.));
+    }
+    for budget in [0., -1., f64::NAN, f64::INFINITY] {
+        assert!(!field_quality_passes(&field, 0., budget));
+    }
+    for index in 0..3 {
+        let mut invalid = field;
+        match index {
+            0 => invalid.d = f64::NAN,
+            1 => invalid.g[1] = f64::INFINITY,
+            _ => invalid.h[0][1] = f64::NAN,
+        }
+        assert!(!field_quality_passes(&invalid, 0., 1.));
+    }
+}
+
 struct OutsideWitness {
     point: C,
     proof: crate::point_proof::EscapeProof,
@@ -31,6 +70,18 @@ struct CertifiedScalar {
     upper: f64,
 }
 impl CertifiedScalar {
+    fn nodal_sample(&self) -> Option<crate::geometry_provider::NodalSample> {
+        // Preserve the canonical value, including when a future tighter true-
+        // distance bracket excludes it. The hull only widens the error range.
+        crate::geometry_provider::NodalSample::enclosed(
+            self.query,
+            self.value,
+            crate::geometry_provider::BoundaryInterval {
+                lo: (-self.upper).min(self.value),
+                hi: (-self.lower).max(self.value),
+            },
+        )
+    }
     fn direction_cone(
         &self,
         curve: &branch::cover::ClosedCover,
@@ -112,6 +163,9 @@ fn certified_scalar_requires_both_endpoint_gates_and_keeps_its_value() {
     let sample = CertifiedScalar::certify(&curve, &witness, query, p.distance, error).unwrap();
     assert_eq!(sample.value.to_bits(), (-p.distance).to_bits());
     assert_eq!(sample.query, query);
+    let node = sample.nodal_sample().unwrap();
+    assert_eq!(node.query, query);
+    assert_eq!(node.value.to_bits(), sample.value.to_bits());
     assert!(
         CertifiedScalar::certify(&curve, &witness, query, p.distance - error * 2., error).is_none()
     );
@@ -131,7 +185,9 @@ fn original_nodes_have_complete_scalar_distance_windows_and_direction_cones() {
     let mut longest = 0;
     let mut cone_unresolved = Vec::new();
     let mut maximum_refinement = 0;
+    let mut field_refusals = Vec::new();
     for group in cases::CERTIFIED_NODES.chunks_exact(81) {
+        let mut nodes = Vec::with_capacity(81);
         let targets: Vec<_> = group
             .iter()
             .map(|&(_, q, _, error)| {
@@ -161,6 +217,12 @@ fn original_nodes_have_complete_scalar_distance_windows_and_direction_cones() {
                 let sample = CertifiedScalar::certify(&curve, &witness, query, value, error)
                     .expect("original scalar error gates");
                 assert_eq!(sample.value.to_bits(), (-value).to_bits());
+                let node = sample
+                    .nodal_sample()
+                    .expect("query-bound canonical node interval");
+                assert_eq!(node.value.to_bits(), sample.value.to_bits());
+                assert_eq!(node.query, sample.query);
+                nodes.push(node);
                 let proposal = propose(query).unwrap();
                 let axis = proposal.boundary - query;
                 let base_h = if name == "native" {
@@ -215,6 +277,114 @@ fn original_nodes_have_complete_scalar_distance_windows_and_direction_cones() {
                 refusals.push((name, q));
             }
         }
+        if nodes.len() == 81 {
+            let name = group[0].0;
+            let (query, h) = if name == "native" {
+                (
+                    C::new(0.32049988639807619, 0.04733531447355364),
+                    2f64.powi(-20),
+                )
+            } else {
+                (
+                    C::new(0.35659381055433242, 0.06404656757776669),
+                    2f64.powi(-27),
+                )
+            };
+            let range = crate::geometry_provider::field_enclosure(query, h, &nodes)
+                .expect("retained node queries match canonical stencil");
+            let stencil: Vec<_> = nodes
+                .iter()
+                .map(|s| (s.query.re - query.re, s.query.im - query.im, s.value))
+                .collect();
+            let (field, _) = crate::geometry_provider::quintic_field(query, h, &stencil);
+            let mut moved = nodes.clone();
+            moved.swap(40, 41);
+            assert!(
+                crate::geometry_provider::field_enclosure(query, h, &moved).is_none(),
+                "node certificates cannot move between coordinates"
+            );
+            for (index, node) in nodes.iter().enumerate() {
+                let interval = node.enclosure.unwrap();
+                for value in [interval.lo, interval.hi] {
+                    let mut assigned = stencil.clone();
+                    assigned[index].2 = value;
+                    let (sampled, _) = crate::geometry_provider::quintic_field(query, h, &assigned);
+                    let contains = |i: crate::geometry_provider::BoundaryInterval, v: f64| {
+                        i.lo <= v && v <= i.hi
+                    };
+                    assert!(contains(range.d, sampled.d));
+                    for i in 0..2 {
+                        assert!(contains(range.g[i], sampled.g[i]));
+                        for j in 0..2 {
+                            assert!(contains(range.h[i][j], sampled.h[i][j]));
+                        }
+                    }
+                }
+            }
+            let error = range.error(field.d, field.g, field.h, 2. * h);
+            let epsilon = 1e-4; // Both original crossing configurations.
+            let requested = crate::geometry_provider::GEOMETRY_SCALE_ALPHA
+                * (field.d * field.d + epsilon * epsilon).sqrt();
+            let budget = crate::geometry_provider::DYADIC_FIT_ERROR_FACTOR * requested;
+            let proposal = propose(query).unwrap();
+            let scalar_error = group[0].3;
+            let witness = OutsideWitness::find(query, scalar_error * 0.25)
+                .or_else(|| OutsideWitness::find(query, scalar_error))
+                .expect("actual query exterior witness");
+            let query_sample =
+                CertifiedScalar::certify(&curve, &witness, query, proposal.distance, scalar_error)
+                    .expect("actual query original scalar window");
+            let mut cone = None;
+            for refinement in 0..=4 {
+                cone = query_sample.direction_cone(
+                    &curve,
+                    h * 2f64.powi(-refinement),
+                    proposal.boundary - query,
+                );
+                if cone.is_some() {
+                    break;
+                }
+            }
+            let cone = cone.expect("actual query complete direction agreement");
+            eprintln!(
+                "[CERTIFIED_QUERY145] name={name} {:?}",
+                [
+                    query.re,
+                    query.im,
+                    query_sample.value,
+                    scalar_error,
+                    query_sample.lower,
+                    query_sample.upper,
+                    witness.point.re,
+                    witness.point.im,
+                    witness.proof.update as f64,
+                    witness.proof.precision as f64,
+                    cone.radius(),
+                    cone.axis_cosine_lower(),
+                    cone.work() as f64,
+                    curve.clearance(query).unwrap().winding() as f64
+                ]
+            );
+            eprintln!(
+                "[CERTIFIED_FIELD145] name={name} {:?}",
+                [
+                    query.re,
+                    query.im,
+                    h,
+                    field.d,
+                    field.g[0],
+                    field.g[1],
+                    field.h[0][0],
+                    field.h[0][1],
+                    field.h[1][1],
+                    error,
+                    budget
+                ]
+            );
+            if !field_quality_passes(&field, error, budget) {
+                field_refusals.push((name, error, budget));
+            }
+        }
     }
     eprintln!(
         "[MP_WITNESS145] accepted={} refused={refusals:?} longest={longest} elapsed_s={}",
@@ -224,4 +394,8 @@ fn original_nodes_have_complete_scalar_distance_windows_and_direction_cones() {
     assert!(refusals.is_empty());
     eprintln!("[SCALAR_CONE_SUMMARY145] accepted={} maximum_refinement={maximum_refinement} unresolved={cone_unresolved:?}",162-cone_unresolved.len());
     assert!(cone_unresolved.is_empty());
+    assert!(
+        field_refusals.is_empty(),
+        "certified nodal uncertainty exceeds original quality gate: {field_refusals:?}"
+    );
 }

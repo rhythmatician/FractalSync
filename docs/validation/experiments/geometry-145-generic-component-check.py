@@ -29,20 +29,28 @@ parser.add_argument('--emit-cover',action='store_true')
 parser.add_argument('--precision-target-dir',type=Path)
 parser.add_argument('--test-filter')
 args=parser.parse_args(namespace=Options())
+source_bytes: dict[Path,bytes]={}
+def source_text(path:Path)->str:
+    raw=path.read_bytes()
+    source_bytes[path]=raw
+    return raw.decode('utf-8').replace('\r\n','\n')
 precision_dir=args.precision_target_dir.resolve()/'release/deps' if args.precision_target_dir else None
 precision_library=next(precision_dir.glob('libastro_float-*.rlib')) if precision_dir else None
 experiment_dir=Path(__file__).resolve().parent
 witness_path=experiment_dir/'geometry-145-witness-tests.rs'
-witness=witness_path.read_text(encoding='utf-8') if precision_dir else ''
+witness=source_text(witness_path) if precision_dir else ''
 root=args.source_root.resolve()
 directory=root/'runtime-core/src/geometry_provider'
-provider=(root/'runtime-core/src/geometry_provider.rs').read_text(encoding='utf-8')
-visual=(root/'runtime-core/src/visual_metrics.rs').read_text(encoding='utf-8')
-proposal=(directory/'periodic_boundary.rs').read_text(encoding='utf-8')
+provider=source_text(root/'runtime-core/src/geometry_provider.rs')
+visual=source_text(root/'runtime-core/src/visual_metrics.rs')
+proposal=source_text(directory/'periodic_boundary.rs')
 branch_path=directory/'periodic_boundary/branch.rs'
-branch=branch_path.read_text(encoding='utf-8') if branch_path.exists() else ''
+branch=source_text(branch_path) if branch_path.exists() else ''
 cover_path=directory/'periodic_boundary/branch/cover.rs'
-cover=cover_path.read_text(encoding='utf-8') if cover_path.exists() else ''
+cover=source_text(cover_path) if cover_path.exists() else ''
+dependency_paths=[directory/name for name in ['periodic_boundary_cases.rs','interval.rs','uniform_box.rs','affine_return.rs','range_jet.rs']]
+precision_paths=[experiment_dir/'geometry-145-point-proof/src'/name for name in ['point_proof.rs','complex_ball.rs','directed_norm.rs']] if precision_dir else []
+for path in dependency_paths+precision_paths: source_text(path)
 
 def item(text:str,marker:str)->str:
     start=text.index(marker)
@@ -63,14 +71,28 @@ field_impl=field_impl.replace(item(field_impl,'fn from_geometry('),'')
 basis=provider[provider.index('const QUINTIC_BASIS:'):provider.index('fn quintic_basis(')]
 angle=next(line for line in provider.splitlines() if line.startswith('pub const DYADIC_CUT_NORMAL_DEGREES:'))
 tie=next(line for line in provider.splitlines() if line.startswith('pub const DYADIC_CUT_TIE_FACTOR:'))
+alpha=next(line for line in provider.splitlines() if line.startswith('pub const GEOMETRY_SCALE_ALPHA:'))
+fit_factor=next(line for line in provider.splitlines() if line.startswith('pub const DYADIC_FIT_ERROR_FACTOR:'))
 kernel='\n'.join(['#[derive(Clone,Copy)]',item(provider,'struct FieldJet'),field_impl,
                   item(provider,'fn distance_stencil('),basis,item(provider,'fn quintic_basis('),
-                  item(provider,'fn quintic_field('),angle,tie])
+                  item(provider,'fn quintic_field('),angle,tie,alpha,fit_factor,
+                  'use self::interval::Interval as BoundaryInterval; use self::range_jet::RangeJet;',
+                  '#[derive(Clone,Copy)]',item(provider,'struct NodalSample'),item(provider,'impl NodalSample'),
+                  item(provider,'fn field_enclosure('),'#[derive(Clone)]',item(provider,'struct Segment'),
+                  item(provider,'fn point_to_segment_distance('),item(provider,'fn signed_shore_distance('),
+                  item(provider,'fn shore_nodal_sample('),item(provider,'mod nodal_range_checks')])
 deps=args.target_dir.resolve()/'release/deps'
 libraries=sorted(deps.glob('libnum_complex-*.rlib'),key=lambda p:p.stat().st_mtime,reverse=True)
 assert libraries, 'build the source checkout first'
 prefix='geometry_provider::periodic_boundary::tests::'
 mutations=[
+    ('shore-endpoint-clamp','kernel',
+     'lo: t.lo.clamp(0., 1.),\n                hi: t.hi.clamp(0., 1.),',
+     'lo: t.lo,\n                hi: t.hi,',
+     'geometry_provider::nodal_range_checks::represented_shore_intervals_enclose_interiors_endpoints_and_minima'),
+    ('shore-canonical-sign','kernel','let interval = if value.is_sign_negative() {',
+     'let interval = if false {',
+     'geometry_provider::nodal_range_checks::represented_shore_intervals_enclose_interiors_endpoints_and_minima'),
     ('fresh-root-disk', 'proposal',
      'super::uniform_box::proposal_cycle_trap([z.re, z.im], [c.re, c.im], period, radius)',
      'true', prefix+'a_small_multiplier_alone_cannot_supply_a_root_disk'),
@@ -131,6 +153,18 @@ if 'struct BoundaryDirectionCone' in cover:
         ('cone-work-exhaustion','cover','if *work > 65536 {','if false {',cone_test),
     ])
 if witness:
+    field_test='geometry_provider::nodal_range_checks::intervals_enclose_admissible_assignments_and_reject_moved_nodes'
+    mutations.extend([
+        ('node-interval-propagation','kernel','stencil.iter().map(|sample| sample.enclosure).collect()',
+         'stencil.iter().map(|sample|Some(BoundaryInterval::point(sample.value))).collect()',field_test),
+        ('node-coordinate-binding','kernel','all(|(query, sample)| query == sample.query)',
+         'all(|_|true)',field_test),
+        ('node-canonical-value','witness','self.value,\n            crate::geometry_provider::BoundaryInterval',
+         '-(self.lower+self.upper)*0.5,\n            crate::geometry_provider::BoundaryInterval',
+         'geometry_provider::periodic_boundary::witness_tests::certified_scalar_requires_both_endpoint_gates_and_keeps_its_value'),
+        ('field-budget-finite','witness','budget.is_finite()', 'true',
+         'geometry_provider::periodic_boundary::witness_tests::field_quality_gate_rejects_invalid_arithmetic'),
+    ])
     witness_prefix='geometry_provider::periodic_boundary::witness_tests::'
     mutations.extend([
         ('scalar-lower-gate','witness','lower < (value - error).next_up()','false',
@@ -150,7 +184,8 @@ if args.test_filter: mutations=[]
 
 with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
     tmp=Path(name)
-    (tmp/'periodic_boundary_cases.rs').write_bytes((directory/'periodic_boundary_cases.rs').read_bytes())
+    for path in dependency_paths+precision_paths:
+        (tmp/path.name).write_bytes(source_bytes[path])
     (tmp/'periodic_boundary').mkdir()
     if cover:
         (tmp/'periodic_boundary/branch').mkdir()
@@ -164,12 +199,12 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
         if branch_text:
             (tmp/'periodic_boundary/branch.rs').write_text(branch_text,encoding='utf-8')
         harness='mod visual_metrics {\n'+orbit+'\n}\nmod geometry_provider {\nuse num_complex::Complex64;\n'
-        for module,filename in [('interval','interval.rs'),('uniform_box','uniform_box.rs')]:
-            harness+=f'#[path="{(directory/filename).as_posix()}"] mod {module};\n'
+        for module,filename in [('interval','interval.rs'),('uniform_box','uniform_box.rs'),('range_jet','range_jet.rs')]:
+            harness+=f'#[path="{(tmp/filename).as_posix()}"] mod {module};\n'
         harness+=kernel_text+'\n'+f'#[path="{(tmp/"proposal.rs").as_posix()}"] mod periodic_boundary;\n'+'}\n'
         if precision_dir:
             for module in ['complex_ball','point_proof']:
-                harness+=f'#[path="{(experiment_dir/"geometry-145-point-proof/src"/(module+".rs")).as_posix()}"] mod {module};\n'
+                harness+=f'#[path="{(tmp/(module+".rs")).as_posix()}"] mod {module};\n'
         (tmp/'main.rs').write_text(harness,encoding='utf-8')
     selected: Path | None=None
     def build(label:str)->Path:
@@ -222,7 +257,7 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
     assert selected is not None
     source_paths=[root/'runtime-core/src/visual_metrics.rs',root/'runtime-core/src/geometry_provider.rs',
                   directory/'periodic_boundary.rs',directory/'periodic_boundary_cases.rs',
-                  directory/'interval.rs',directory/'uniform_box.rs',directory/'affine_return.rs']
+                  directory/'interval.rs',directory/'uniform_box.rs',directory/'affine_return.rs',directory/'range_jet.rs']
     if branch: source_paths.append(branch_path)
     if cover: source_paths.append(cover_path)
     record={'scope':'Numerical proposals, local branch proofs and reconstructed-cell checks only; no Regular geometry authority.',
@@ -230,14 +265,19 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
             'executed_tests':executed_tests,
             'baseline':baseline,'mutations':rows,'num_complex_rlib':selected.name,
             'num_complex_sha256':hashlib.sha256(selected.read_bytes()).hexdigest(),
-            'source_sha256':{str(p.relative_to(root)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest()
+            'source_sha256':{str(p.relative_to(root)).replace('\\','/'):hashlib.sha256(source_bytes[p]).hexdigest()
                  for p in source_paths}}
     if precision_dir and precision_library:
         proof_paths=[witness_path]+[experiment_dir/'geometry-145-point-proof/src'/name
                                    for name in ['point_proof.rs','complex_ball.rs','directed_norm.rs']]
-        record['precision_sources']={str(p.relative_to(experiment_dir)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest() for p in proof_paths}
+        record['precision_sources']={str(p.relative_to(experiment_dir)).replace('\\','/'):hashlib.sha256(source_bytes[p]).hexdigest() for p in proof_paths}
         record['astro_float_rlib']=precision_library.name
         record['astro_float_sha256']=hashlib.sha256(precision_library.read_bytes()).hexdigest()
+    drift=[str(p) for p,raw in source_bytes.items() if p.read_bytes()!=raw]
+    record['immutable_source_snapshot']=True
+    record['source_drift']=drift
+    if drift: record['stage']='source-drift'
     args.output.write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
+    if drift: raise RuntimeError(f'Source changed during validation; snapshot log: {args.output}')
     print(json.dumps({'all_baseline_tests_passed':True,'executed_tests':executed_tests,
                       'test_filter':args.test_filter,'mutations_caught':len(rows),'rlib':selected.name}))
