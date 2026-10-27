@@ -26,29 +26,50 @@ record=json.loads(args.input.read_text(encoding='utf-8'))
 rows=[json.loads(line.split('] ',1)[1]) for line in record['baseline'].splitlines()
       if line.startswith('[F64_BRANCH_ROW145]')]
 assert len(rows)==162 and all(len(row)==21 for row in rows)
+cover_rows=[]
+targets=[]
+for line in record['baseline'].splitlines():
+    if line.startswith('[F64_COVER_ROW145]'):
+        _,group,values=line.split(' ',2)
+        row=json.loads(values)
+        assert len(row)==25
+        cover_rows.append(row+[float(group)])
+    elif line.startswith('[F64_COVER_TARGET145]'):
+        _,group,values=line.split(' ',2)
+        target=json.loads(values)
+        assert len(target)==5
+        targets.append(target+[float(group)])
+assert not cover_rows or (len(targets)==162 and {int(row[25]) for row in cover_rows}=={0,1})
+rows.extend(row[:21] for row in cover_rows)
 directory=root/'docs/validation/experiments/geometry-145-point-proof/src'
 source=(directory/'component_probe.rs').read_text(encoding='utf-8')
 for name in ['complex_ball','point_proof','proof_support','quintic_field','validated_branch']:
     source=source.replace(f'mod {name};',f'#[path="{(directory/(name+".rs")).as_posix()}"] mod {name};')
 literal=',\n'.join('['+','.join(repr(float(v)) for v in row)+']' for row in rows)
 source+='''
-fn f64_rows()->[[f64;21];162] {[ROWS]}
-fn fixed_preconditioner(z:&C,c:&C,mu:&C,period:usize)->[[C;2];2] {
-    let row=f64_rows().into_iter().find(|row|
-        z.f64()==[row[0],row[1]] && c.f64()==[row[2],row[3]] &&
-        mu.f64()==[row[4],row[5]] && period==row[6] as usize).unwrap();
-    [[C::new(row[10],row[11]),C::new(row[12],row[13])],
-     [C::new(row[14],row[15]),C::new(row[16],row[17])]]
+static F64_ROWS:[[f64;21];COUNT]=[ROWS];
+fn f64_rows()->&'static [[f64;21]] {&F64_ROWS}
+fn fixed_preconditioner(z:&C,c:&C,mu:&C,period:usize)->Option<[[C;2];2]> {
+    let (z,c,mu)=(z.f64(),c.f64(),mu.f64());
+    let row=f64_rows().iter().find(|row|
+        z==[row[0],row[1]] && c==[row[2],row[3]] &&
+        mu==[row[4],row[5]] && period==row[6] as usize)?;
+    Some([[C::new(row[10],row[11]),C::new(row[12],row[13])],
+     [C::new(row[14],row[15]),C::new(row[16],row[17])]])
 }
 #[test]
 fn independent_f64_branch_domains() {
-    for (index,row) in f64_rows().into_iter().enumerate() {
+    for (index,row) in f64_rows().iter().take(162).enumerate() {
         let proof=validated_branch::certify(&C::new(row[0],row[1]),&C::new(row[2],row[3]),
             &C::new(row[4],row[5]),row[6] as usize,row[7],row[8],row[9]);
         assert!(proof.is_ok(),"independent root domain {index}: {proof:?}");
     }
 }
-'''.replace('ROWS',literal)
+'''.replace('COUNT',str(len(rows))).replace('ROWS]',literal+']')
+def rust_rows(values:list[list[float]])->str:
+    return ',\n'.join('['+','.join(repr(float(v)) for v in row)+']' for row in values)
+source+=f'\nstatic COVER_ROWS:[[f64;26];{len(cover_rows)}]=[{rust_rows(cover_rows)}];\n'
+source+=f'\nstatic COVER_TARGETS:[[f64;6];{len(targets)}]=[{rust_rows(targets)}];\n'
 deps=args.target_dir.resolve()/'release/deps'
 library=next(deps.glob('libastro_float-*.rlib'))
 with tempfile.TemporaryDirectory(prefix='geometry145-branch-hp-') as name:
@@ -58,11 +79,15 @@ with tempfile.TemporaryDirectory(prefix='geometry145-branch-hp-') as name:
     branch=(directory/'validated_branch.rs').read_text(encoding='utf-8')
     start=branch.index('        let inverse = [')
     end=branch.index('        if !inverse.iter()',start)
-    branch=branch[:start]+'        let inverse = crate::fixed_preconditioner(z,c,mu,period);\n'+branch[end:]
+    original_inverse=branch[start:end].replace('let inverse =','let natural_inverse =',1)
+    branch=branch[:start]+original_inverse+'        let inverse = crate::fixed_preconditioner(z,c,mu,period).unwrap_or(natural_inverse);\n'+branch[end:]
     branch+='''
 #[test]
 fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
-    for (index,row) in crate::f64_rows().into_iter().enumerate() {
+    let mut edges:[Vec<cover::Edge>;2]=std::array::from_fn(|_|Vec::new());
+    for (index,row) in crate::f64_rows().iter().enumerate() {
+        assert!(crate::fixed_preconditioner(&C::new(row[0],row[1]),&C::new(row[2],row[3]),
+            &C::new(row[4],row[5]),row[6] as usize).is_some());
         let proof=certify(&C::new(row[0],row[1]),&C::new(row[2],row[3]),
             &C::new(row[4],row[5]),row[6] as usize,row[7],row[8],row[9]).unwrap();
         for axis in 0..2 {
@@ -70,6 +95,24 @@ fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
                 .is_some_and(|order|order<=0),"f64 error bound {index} axis {axis}");
         }
         assert!(proof.contraction<=row[20],"f64 contraction bound {index}");
+        if index>=162 {
+            let item=crate::COVER_ROWS[index-162];
+            edges[item[25] as usize].push(cover::edge(&proof,&C::new(item[21],item[22]),&C::new(item[23],item[24])).unwrap());
+        }
+    }
+    for group in 0..2 {
+        if edges[group].is_empty() {continue;}
+        let targets:Vec<_>=crate::COVER_TARGETS.iter().filter(|row|row[5] as usize==group).collect();
+        let first=targets[0];
+        let curve=cover::closed(std::mem::take(&mut edges[group]),&C::new(first[0],first[1])).unwrap();
+        for row in targets {
+            let clearance=curve.clearance_at(&C::new(row[0],row[1])).unwrap();
+            let lower=clearance.mandelbrot_interior_distance_lower();
+            assert!(lower.cmp(&B::from_f64(row[2],P)).is_some_and(|v|v>=0),"target group {group}");
+            assert!(lower.cmp(&B::from_f64(row[3],P)).is_some_and(|v|v>=0),"f64 geometric bound group {group}");
+            assert_eq!(clearance.winding(),row[4] as i32);
+        }
+        eprintln!("[HP_COVER145] group={group} edges={} targets=81 independently_closed=true",curve.edge_count());
     }
 }
 '''
@@ -83,6 +126,7 @@ fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
     assert build.returncode==0,build.stderr
     run=subprocess.run([str(exe),'f64_','--nocapture'],capture_output=True,text=True)
     output={'returncode':run.returncode,'stdout':run.stdout,'stderr':run.stderr,'rows':len(rows),
+            'cover_edges':len(cover_rows),'cover_targets':len(targets),
             'input_sha256':hashlib.sha256(args.input.read_bytes()).hexdigest(),
             'astro_float_sha256':hashlib.sha256(library.read_bytes()).hexdigest(),
             'source_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()

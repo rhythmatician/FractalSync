@@ -1,0 +1,51 @@
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -9,6 +9,21 @@
+ #[cfg(test)]
+ pub(super) fn proposal_cycle_trap(z:[f64;2],c:[f64;2],period:usize,radius:f64)->bool {
+     affine_return::AffineBall{z,d:[0.;2],remainder:0.}.traps(c,0.,period,radius)
++}
++
++// Exact-parameter exterior witness only, independent of finite-N membership.
++// Reuse the existing outward orbit ball; failure supplies no classification.
++#[cfg(test)]
++pub(super) fn proposal_exterior_witness(c:[f64;2],budget:usize)->Option<usize> {
++    if !c.iter().all(|x|x.is_finite())||norm_upper(c)>2.||budget>32768 {return None;}
++    let mut orbit=Ball{z:[0.;2],radius:0.};
++    for n in 0..=budget {
++        let lower=Interval::point(orbit.z[0]).square().add(Interval::point(orbit.z[1]).square())
++            .lo.max(0.).sqrt().next_down();
++        if (lower-orbit.radius).next_down()>2. {return Some(n);}
++        if n<budget {orbit=orbit.step(c,0.)?;}
++    }
++    None
+ }
+
+ /// `Some` proves that every point has the same membership. `None` is only a
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -287,6 +287,24 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn outward_exterior_witnesses_for_all_original_nodes() {
++        let start=std::time::Instant::now();let mut refused=Vec::new();let mut longest=0;
++        for &(name,q,_,error) in cases::CERTIFIED_NODES {
++            let point=C::new(q[0],q[1]);let p=propose(point).unwrap();
++            let direction=(p.boundary-point)/p.distance;
++            let mut found=None;
++            for fraction in [0.25,0.5,0.75] {
++                let witness=point+direction*(p.distance+error*fraction);
++                if let Some(n)=super::super::uniform_box::proposal_exterior_witness([witness.re,witness.im],32768) {
++                    longest=longest.max(n);found=Some(n);break;
++                }
++            }
++            if found.is_none() {refused.push((name,q));}
++        }
++        eprintln!("[F64_EXTERIOR145] accepted={} refused={refused:?} longest={longest} elapsed_s={}",162-refused.len(),start.elapsed().as_secs_f64());
++        assert!(refused.is_empty());
++    }
+     #[test]
+     fn shared_closed_curves_meet_all_original_node_lower_windows() {
+         for (index, group) in cases::CERTIFIED_NODES.chunks_exact(81).enumerate() {

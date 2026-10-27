@@ -10,16 +10,19 @@ import hashlib
 import json
 import subprocess
 import tempfile
+import os
 
 class Options(argparse.Namespace):
     source_root: Path
     target_dir: Path
     output: Path
+    emit_cover: bool
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--source-root',type=Path,required=True)
 parser.add_argument('--target-dir',type=Path,required=True)
 parser.add_argument('--output',type=Path,required=True)
+parser.add_argument('--emit-cover',action='store_true')
 args=parser.parse_args(namespace=Options())
 root=args.source_root.resolve()
 directory=root/'runtime-core/src/geometry_provider'
@@ -28,6 +31,8 @@ visual=(root/'runtime-core/src/visual_metrics.rs').read_text(encoding='utf-8')
 proposal=(directory/'periodic_boundary.rs').read_text(encoding='utf-8')
 branch_path=directory/'periodic_boundary/branch.rs'
 branch=branch_path.read_text(encoding='utf-8') if branch_path.exists() else ''
+cover_path=directory/'periodic_boundary/branch/cover.rs'
+cover=cover_path.read_text(encoding='utf-8') if cover_path.exists() else ''
 
 def item(text:str,marker:str)->str:
     start=text.index(marker)
@@ -92,12 +97,30 @@ if branch:
         ('branch-singleton-domain','branch','parameter == self.parameter ||','',
          branch_prefix+'singleton_multiplier_domains_evaluate_and_join_at_the_exact_center'),
     ])
+if cover:
+    cover_prefix='geometry_provider::periodic_boundary::branch::cover::tests::'
+    mutations.extend([
+        ('cover-attraction','cover','if norm(start) >= 1. || norm(end) >= 1. {','if false {',
+         cover_prefix+'unclosed_paths_and_non_attracting_segments_refuse'),
+        ('cover-closure','cover','if a.end != b.start {','if false {',
+         cover_prefix+'unclosed_paths_and_non_attracting_segments_refuse'),
+        ('cover-winding','cover','if winding == 0 {','if false {',
+         cover_prefix+'cardioid_closed_curve_bounds_and_reuses_queries'),
+        ('cover-capsule-radius','cover','box_lower.max(line_lower) - cap.radius','box_lower.max(line_lower)',
+         cover_prefix+'capsule_radius_and_orientation_bounds_are_not_optional'),
+        ('cover-final-target','cover','if clearance.lower < minimum {','if false {',
+         cover_prefix+'exhausted_or_invalid_requests_never_return_a_prefix_cover'),
+    ])
 
 with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
     tmp=Path(name)
     (tmp/'periodic_boundary_cases.rs').write_bytes((directory/'periodic_boundary_cases.rs').read_bytes())
     (tmp/'periodic_boundary').mkdir()
-    def write_sources(proposal_text:str,kernel_text:str,branch_text:str=branch)->None:
+    if cover:
+        (tmp/'periodic_boundary/branch').mkdir()
+    def write_sources(proposal_text:str,kernel_text:str,branch_text:str=branch,cover_text:str=cover)->None:
+        if cover_text:
+            (tmp/'periodic_boundary/branch/cover.rs').write_text(cover_text,encoding='utf-8')
         (tmp/'proposal.rs').write_text(proposal_text,encoding='utf-8')
         if branch_text:
             (tmp/'periodic_boundary/branch.rs').write_text(branch_text,encoding='utf-8')
@@ -121,17 +144,22 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
         raise RuntimeError('\n'.join(failures))
     write_sources(proposal,kernel)
     exe=build('baseline')
-    result=subprocess.run([str(exe),'--nocapture'],capture_output=True,text=True)
-    assert result.returncode==0,result.stdout+result.stderr
+    env=os.environ.copy()
+    if args.emit_cover: env['GEOMETRY145_COVER_REFERENCE']='1'
+    result=subprocess.run([str(exe),'--nocapture'],capture_output=True,text=True,env=env)
     baseline=result.stdout+result.stderr
+    if result.returncode!=0:
+        args.output.write_text(json.dumps({'stage':'baseline','returncode':result.returncode,
+            'baseline':baseline},indent=2)+'\n',encoding='utf-8')
+        raise RuntimeError(f'Baseline failed; terminal log: {args.output}')
     rows=[]
     for label,target,old,new,test in mutations:
-        source={'proposal':proposal,'kernel':kernel,'branch':branch}[target]
+        source={'proposal':proposal,'kernel':kernel,'branch':branch,'cover':cover}[target]
         expected=3 if label=='branch-contraction' else 2 if label=='branch-inclusion' else 1
         assert source.count(old)==expected,(label,source.count(old))
         altered=source.replace(old,new,2 if target=='branch' else -1)
         write_sources(altered if target=='proposal' else proposal,altered if target=='kernel' else kernel,
-                      altered if target=='branch' else branch)
+                      altered if target=='branch' else branch,altered if target=='cover' else cover)
         exe=build(label)
         result=subprocess.run([str(exe),'--exact',test,'--nocapture'],capture_output=True,text=True)
         caught=result.returncode!=0 and 'test result: FAILED' in result.stdout
@@ -142,6 +170,7 @@ with tempfile.TemporaryDirectory(prefix='geometry145-generic-') as name:
                   directory/'periodic_boundary.rs',directory/'periodic_boundary_cases.rs',
                   directory/'interval.rs',directory/'uniform_box.rs',directory/'affine_return.rs']
     if branch: source_paths.append(branch_path)
+    if cover: source_paths.append(cover_path)
     record={'scope':'Numerical proposals, local branch proofs and reconstructed-cell checks only; no Regular geometry authority.',
             'baseline':baseline,'mutations':rows,'num_complex_rlib':selected.name,
             'num_complex_sha256':hashlib.sha256(selected.read_bytes()).hexdigest(),
