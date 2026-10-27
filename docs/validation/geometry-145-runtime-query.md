@@ -100,6 +100,11 @@ and live-training validation. Before production adoption, remove diagnostic
 logging/replay controls, reconcile cache ownership, update versions/goldens and
 bindings, measure browser artifact size, and run the applicable project gates.
 
+The subsequent [Shore fallback diagnostic](geometry-145-shore-cost.md) isolates
+cache eviction cost and completes the stalled query with larger diagnostic
+caches. It exposes an additional `Unresolved` result: retained coarse geometry
+disagrees with finer contours. That numerical refusal also needs repair.
+
 [Machine evidence](geometry-145-runtime-query.json) and
 [incremental candidate patch](experiments/geometry-145-runtime-query.patch).
 The patch applies after the validated runtime-tile experiment series in an

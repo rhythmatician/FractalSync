@@ -1,0 +1,170 @@
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -423,6 +423,13 @@
+     (core_ix, core_iy, tile_re0, tile_im0)
+ }
+
++// Diagnostic experiment: compact, completely stable empty results are retained
++// separately so they cannot evict contour-bearing tiles from the existing LRU.
++static EMPTY_SHORE_TILE_CACHE: Lazy<RwLock<ShoreTileLru>> =
++    Lazy::new(|| RwLock::new(ShoreTileLru::new(16384)));
++
++#[cfg(test)] mod empty_cache_controls;
++
+ fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<ShoreTile> {
+     let budget = dyadic_n0(k);
+     let key = TileKey {
+@@ -436,6 +443,9 @@
+         if let Some(tile) = cache.get(&key) {
+             return Some(tile);
+         }
++    }
++    if let Ok(mut cache) = EMPTY_SHORE_TILE_CACHE.write() {
++        if let Some(tile) = cache.get(&key) {return Some(tile);}
+     }
+     let h = dyadic_h(k);
+     let core_stride = DYADIC_CORE_CELLS as f64 * h;
+@@ -454,7 +464,9 @@
+         });
+     }
+     let tile = generate_shore_tile(k, h, tile_re0, tile_im0)?;
+-    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
++    if tile.segments.is_empty() && tile.unstable_nodes.is_empty() {
++        if let Ok(mut cache) = EMPTY_SHORE_TILE_CACHE.write() {cache.insert(key,tile.clone());}
++    } else if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+         cache.insert(key, tile.clone());
+     }
+     Some(tile)
+@@ -2198,6 +2210,7 @@
+     }
+ }
+ fn contained_tile(c: Complex64, k: u32) -> Result<(ShoreTile, bool), TileQueryError> {
++    let tile_start=std::time::Instant::now();
+     let h = dyadic_h(k);
+     let (ix, iy, _, _) = dyadic_tile_origin(c, h);
+     let stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
+@@ -2223,7 +2236,10 @@
+         segments: Vec::new(),
+         unstable_nodes: Vec::new(),
+     };
+-    search.visit(c, k, base, [-radius, radius, -radius, radius], &mut tile)?;
++    let searched=search.visit(c, k, base, [-radius, radius, -radius, radius], &mut tile);
++    eprintln!("[SHORE_PROFILE145] tile k={k} c={c:?} seconds={} leaves={} visits={} segments={} unstable={} ok={}",
++        tile_start.elapsed().as_secs_f64(),search.leaves,search.visits,tile.segments.len(),tile.unstable_nodes.len(),searched.is_ok());
++    searched?;
+     if contour_footprint_contains(c, &tile, width) {
+         let stable = stencil_membership_stable(c, &tile);
+         return Ok((tile, stable));
+@@ -2535,6 +2551,10 @@
+         } else {
+             jet.estimated_error = f64::INFINITY;
+         }
++        eprintln!("[SHORE_QUALITY145] k={k} raw={} closed={} certified={} output={}",
++            serde_json::to_string(&jet).unwrap(),hierarchy.as_ref().unwrap().closed,
++            hierarchy.as_ref().unwrap().certified,
++            serde_json::to_string(&hierarchy.as_ref().unwrap().output(&jet,epsilon)).unwrap());
+         last = jet.clone();
+         if last.validity != GeometryValidity::Singular {
+             last.validity = GeometryValidity::Unresolved;
+@@ -3977,3 +3997,12 @@
+   assert_eq!(field.models[1].range.d.hi,100.);
+  }
+ }
++
++#[cfg(test)] mod shore_timeout_profile {
++ use super::*;
++ #[test] fn python_bisection_point() {
++  let result=query_scale_aware(Complex64::new(0.33125,0.05),1e-4).unwrap();
++  eprintln!("[SHORE_PROFILE145] result={}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++}
+diff --git a/runtime-core/src/geometry_provider/uniform_box.rs b/runtime-core/src/geometry_provider/uniform_box.rs
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -13,7 +13,23 @@
+ /// `Some` proves that every point has the same membership. `None` is only a
+ /// failed shortcut, never a membership refusal. Outward-rounded intervals may
+ /// overestimate the orbit enclosure, which costs work but cannot hide a Shore.
++type MembershipCache = super::LruCache<(u64,u64,u64),Option<bool>>;
++static MEMBERSHIP_CACHE: once_cell::sync::Lazy<std::sync::RwLock<MembershipCache>> =
++    once_cell::sync::Lazy::new(|| std::sync::RwLock::new(MembershipCache::new(16384)));
++
+ pub(super) fn membership(re0: f64, im0: f64, width: f64) -> Option<bool> {
++    membership_using(re0,im0,width,&MEMBERSHIP_CACHE)
++}
++fn membership_using(re0:f64,im0:f64,width:f64,cache:&std::sync::RwLock<MembershipCache>)->Option<bool> {
++    let key=(re0.to_bits(),im0.to_bits(),width.to_bits());
++    if let Ok(mut retained)=cache.write() {
++        if let Some(result)=retained.get(&key) {return result;}
++    }
++    let result=membership_uncached(re0,im0,width);
++    if let Ok(mut retained)=cache.write() {retained.insert(key,result);}
++    result
++}
++fn membership_uncached(re0: f64, im0: f64, width: f64) -> Option<bool> {
+     if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width < 0.0 {
+         return None;
+     }
+@@ -402,3 +418,19 @@
+   }
+  }
+ }
++
++#[cfg(test)] mod cache_tests {
++ use super::*;
++ #[test] fn exact_results_survive_order_and_eviction() {
++  let cache=std::sync::RwLock::new(MembershipCache::new(2));
++  let fixtures=[(-0.1,-0.1,0.2),(-1.05,-0.05,0.1),(0.8,0.5,0.1),(0.24,-0.01,0.02),
++   (0.33125,0.05,1e-7),(f64::NAN,0.,1.),(-0.,0.,0.),(0.,0.,0.)];
++  let expected:Vec<_>=fixtures.iter().map(|&(x,y,w)|membership_uncached(x,y,w)).collect();
++  for index in (0..fixtures.len()).chain((0..fixtures.len()).rev()) {
++   let (x,y,w)=fixtures[index];
++   assert_eq!(membership_using(x,y,w,&cache),expected[index]);
++   assert_eq!(membership_using(x,y,w,&cache),expected[index]);
++   assert!(cache.read().unwrap().map.len()<=2);
++  }
++ }
++}
+diff --git a/runtime-core/src/geometry_provider/empty_cache_controls.rs b/runtime-core/src/geometry_provider/empty_cache_controls.rs
+new file mode 100644
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/empty_cache_controls.rs
+@@ -0,0 +1,36 @@
++use super::*;
++
++#[test]
++fn cached_empty_tiles_equal_fresh_membership_and_contour_construction() {
++    let k = 21;
++    let h = dyadic_h(k);
++    let stride = DYADIC_CORE_CELLS as f64 * h;
++    let c = Complex64::new(0.33125, 0.05);
++    let ix = (c.re / stride).floor() as i64;
++    let iy = (c.im / stride).floor() as i64;
++    let mut checked = 0;
++    for dx in [-256, -128, -64, 0, 64, 128, 256] {
++        for dy in [-256, -128, -64, 0, 64, 128, 256] {
++            let x = ix + dx;
++            let y = iy + dy;
++            let re = x as f64 * stride - DYADIC_HALO_CELLS as f64 * h;
++            let im = y as f64 * stride - DYADIC_HALO_CELLS as f64 * h;
++            if uniform_box::membership(re, im, DYADIC_TILE_CELLS as f64 * h).is_some() {
++                continue;
++            }
++            let expected = generate_shore_tile(k, h, re, im).unwrap();
++            if !expected.segments.is_empty() || !expected.unstable_nodes.is_empty() {
++                continue;
++            }
++            let first = get_or_generate_shore_tile(k, x, y).unwrap();
++            let repeated = get_or_generate_shore_tile(k, x, y).unwrap();
++            assert_eq!(format!("{expected:?}"), format!("{first:?}"));
++            assert_eq!(format!("{expected:?}"), format!("{repeated:?}"));
++            let key = TileKey {version: GEOMETRY_PROVIDER_VERSION.into(), k,
++                tile_x: x, tile_y: y, budget: dyadic_n0(k)};
++            assert!(EMPTY_SHORE_TILE_CACHE.write().unwrap().get(&key).is_some());
++            checked += 1;
++        }
++    }
++    assert!(checked > 0);
++}
