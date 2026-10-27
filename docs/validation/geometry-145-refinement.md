@@ -105,6 +105,102 @@ no drift. This is a query-cost failure and provides no passing correctness
 verdict. The archive includes the exact replay source and the earlier successful
 membership regression as separate snapshots.
 
+Targeted tracing found an unproved mask node at
+`(0.3205142021179199, 0.047362565994262695)`. The existing directed proof
+limits do not establish its membership. Building the level-20 shared cover
+took 20.13 s; the subsequent membership check brought the total to 21.57 s.
+This distinguishes cover construction cost from the failed membership proof.
+
+Two interval-source experiments preserve uncertain sign instead of assigning
+membership. A contour edge outside all enlarged uncertain-cell boxes survives
+the permitted local contour changes, so its distance provides an unsigned
+upper bound. The scalar enclosure retains both signs. With no surviving edge,
+the sampler still refuses. This bounds the represented finite contour family;
+it does not prove exact Mandelbrot membership or override query classification.
+
+Both experiments pass all 12 original derivative probes at the unchanged
+tolerance. The early interval variant also passes four source controls and
+11 hierarchy controls. It advances the recorded native query past its missing
+scalar stencil but still returns `Unresolved` after 215.33 s, with estimated
+scalar error `9.77e-8`. Its regularity failure remains open. These experiments
+are not an accepted crossing repair.
+
+The deferred interval fallback subsequently timed out at 900.03 s and is not a
+practical query strategy. The acceptance trace for the early variant confirms
+that its coherent field is closed and certified at level 23, while the query
+direction remains unresolved. Level 24 then lacks an unretained raw witness.
+Increasing arithmetic precision through 2,048 bits did not resolve the three
+recorded mask nodes within the unchanged 32,768-iteration proof limit.
+
+An RK4 subdivision experiment retries unresolved predicted stages using at
+most four timestep bisections. Unresolved starting states, detected singularities
+and provider/domain failures still reject; failed subdivisions return no
+partial movement. Four stage controls, the original 12 derivative probes and
+all 25 selected Python physics tests pass on this snapshot. Its original native
+crossing still fails after 299.24 s. This is not an accepted crossing repair.
+
+The `relevance-certified` snapshot adds an outward-rounded geometric proof for
+changed cells that cannot reach any nearest or competing feature. It retains
+the four-cell stability band, half-cell competing-feature band and angle/error
+thresholds. The new regression fails before the proof and passes afterward;
+closer cells, tie-band overlap and rounding-boundary controls still refuse
+exclusion. The original tied-projection test and all 12 derivative probes pass.
+The original native crossing still fails after 284.58 s, now reporting a
+suspected cut locus at `(0.32051319273424200, 0.04736395396592710)`. The earlier
+isolated query remains Unresolved. Further geometry is being checked to
+distinguish finite-resolution competition from a persistent nonsmooth feature.
+
+The `linear-range` experiment fixes repeated accounting of the same uncertain
+nodal value in the affine-reference interval evaluator. It first collects each
+node's linear coefficient, then encloses that node once. The new regression
+fails on the previous evaluator and passes with the correction, including
+adversarial extrema for the value, gradient and Hessian. The nominal field and
+public error thresholds are unchanged. All 12 original derivative probes pass.
+
+At `(0.32051424405315243, 0.04736324864591995)`, a same-source comparison reduces
+the analytic enclosure error from `0.42215383086462627` to
+`3.39540053030035e-7`. The query becomes Regular with total error
+`1.6042069473509945e-6`, below its unchanged `2.5000008e-6` limit. The original
+native crossing passes that point but fails later at
+`(0.32051451369978534, 0.04736306453144112)`, where the analytic enclosure still
+dominates. Its full run fails after 569.47 s. The provider suite reports 171
+passes and three failures: two unresolved rollout points and one test expecting
+an unresolved result where the candidate now returns Regular. That last result
+still needs independent verification before revising its expectation.
+
+The `bounded-weights` experiment addresses the next interval overestimate.
+The quintic blend weight has a known value range and bounded first and second
+derivatives, but direct interval polynomial evaluation can exceed those ranges.
+The new regression fails before intersecting with these analytic bounds and
+passes afterward. All ten range controls, five zero-tail controls, five
+selector controls, seven integrator stage controls and 12 original derivative
+probes pass. Its staged Python wheel still fails the original ridge-barrier
+test before movement: `(0.6, 0.15)` returns Unresolved. The nominal field,
+crossing tests and acceptance thresholds remain unchanged. The original native
+crossing fails after 642.21 s at the same later stage; analytic enclosure error
+falls from `0.017355738516676638` to `0.00034293200949250525`, still above the
+unchanged limit. All three staged-wheel training-start controls pass.
+
+The `world-footprint` experiment fixes a separate refusal at `(0.6, 0.15)`.
+The fixed tile-count search shrank in world units as the source mesh refined,
+eventually ending before the nearest Shore. The corrected search covers the
+valid disk from every query while retaining the existing visit and leaf caps.
+World widths use floating-point units rather than overflowing a browser-sized
+cell count. The recorded ridge-start regression changes from Unresolved to
+Regular, with error `0.0019229919458484956` against its unchanged approximately
+`0.00414` limit. The width control and all four source-cover controls pass.
+The full ridge-barrier test still needs a staged-wheel rerun. The recorded
+rollout point `(0.3075204398270623, 0.02876420131721053)` remains Unresolved;
+this search correction does not resolve that field-comparison failure.
+
+The `centered-enclosure` experiment addresses lost cancellation in the blend
+enclosure. Retained weights form a partition of unity, including derivatives.
+Subtracting a fixed Taylor jet from every level and restoring it once preserves
+that identity during interval evaluation. A new common-field control reports a
+spurious error of `162.8069792730034` before the correction and passes afterward.
+Five zero-tail, five selector, 11 coherent-field and the proved-gate control pass.
+The nominal field is unchanged. Its original native crossing rerun is pending.
+
 Before adoption, finish both original crossings, repeat the applicable checks
 on one final source snapshot, validate live training, settle query/memory cost,
 and finish browser artifact and project checks. Single-point Regular results
