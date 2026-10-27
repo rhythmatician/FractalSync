@@ -55,6 +55,57 @@
         ".json": "01ebfe1eb5843f24bfa5a0125c2dd89e7b6cdb59cebaa742bcf9961b766516e1",
         ".log": "82a7f984c85d6101d77e65c658c9c57ddb523a57287a398f2688b819cb6e8bf5"
       }
+    },
+    {
+      "name": "native",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 498.90249209990725,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 13474,
+          "elapsed_s": 31.1731488
+        },
+        {
+          "name": "phase",
+          "calls": 5364,
+          "elapsed_s": 11.2851861
+        },
+        {
+          "name": "certify",
+          "calls": 5364,
+          "elapsed_s": 375.1561671
+        },
+        {
+          "name": "edge",
+          "calls": 2837,
+          "elapsed_s": 0.056872
+        },
+        {
+          "name": "join",
+          "calls": 2836,
+          "elapsed_s": 0.1007913
+        },
+        {
+          "name": "geometry",
+          "calls": 2837,
+          "elapsed_s": 1.1088902
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 1.6601668
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "outputs_sha256": {
+        ".json": "7e726e4d37af4b598c2190aeb00a201be7c859edb9c47313b19a0dcd17520af2",
+        ".log": "394113b3850e6a25c6de8c87b323d9f00bfbc142e0a46096c8fbf052f2a59665"
+      }
     }
   ],
   "source_sha256": {

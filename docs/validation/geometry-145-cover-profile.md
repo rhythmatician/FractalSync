@@ -16,6 +16,8 @@ The terminal Python fixture run reproduced all 81 certified samples and every fi
 
 Certification dominates cover construction. However, the complete cold run took 133.833 seconds, so these measurements do not attribute most of the whole run. Independent node-witness search and other work outside cover construction need separate profiling. Reducing certification retries is a candidate optimization, not a measured improvement yet.
 
-The native fixture is running separately; its result is not included in this checkpoint. No production behavior, threshold, or crossing test changed. These observations do not establish readiness to merge.
+The native fixture also completed and reproduced every certified sample, field component, uncertainty bound, and derivative output. Its cover took 421.064 seconds of a 498.902-second cold run. Certification used 375.156 seconds across 5,364 candidate patches, root solving 31.173 seconds across 13,474 calls, and phase selection 11.285 seconds. Edge construction, joins, target geometry, and final validation together used 2.927 seconds. These measurements support investigating certification retries before further geometry pruning.
+
+No production behavior, threshold, or crossing test changed. These observations do not establish readiness to merge.
 
 Source and executable hashes, exact-output comparisons, phase counts, and terminal status are in [the profile evidence](geometry-145-cover-profile.json).
