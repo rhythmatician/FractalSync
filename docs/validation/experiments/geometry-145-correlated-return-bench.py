@@ -93,8 +93,11 @@ with tempfile.TemporaryDirectory(prefix='geometry145-correlated-') as name:
         assert caught, label
     (directory / 'child.rs').write_text(child)
     runs = {}
-    for enabled in [False, True]:
-        code = outer if enabled else re.sub(call, 'if false', outer)
+    for enabled in [False, True, 'Original512']:
+        code = outer if enabled is True else re.sub(call, 'if false', outer)
+        if enabled == 'Original512':
+            code, count = re.subn(r'for n in 1usize\.\.=4096', 'for n in 1usize..=512', code)
+            assert count == 1
         (directory / 'uniform.rs').write_text(code)
         exe = compile_rust(directory, False, f'benchmark-{enabled}')
         result = subprocess.run([str(exe)], capture_output=True, text=True, check=True)
@@ -102,9 +105,12 @@ with tempfile.TemporaryDirectory(prefix='geometry145-correlated-') as name:
     before, after = runs['False']['results'], runs['True']['results']
     assert len(before) == len(after) == 1296
     assert all(a == b for a, b in zip(before, after) if a != -1)
+    original = runs['Original512']['results']
+    assert all(a == b for a, b in zip(original, after) if a != -1)
     record = {'production_adoption': False, 'tests': tests, 'mutations': mutations, 'runs': runs,
               'existing_certificates_unchanged': True,
               'new_certificates': sum(a == -1 and b != -1 for a, b in zip(before, after)),
+              'ablation_limit': 'False retains the new 4096-prefix schedule; Original512 additionally restores the original prefix cap.',
               'source_sha256': {filename: hashlib.sha256((source / filename).read_bytes()).hexdigest()
                                 for filename in ['uniform_box.rs', 'affine_return.rs', 'interval.rs']
                                 if (source / filename).exists()}}
@@ -112,4 +118,5 @@ with tempfile.TemporaryDirectory(prefix='geometry145-correlated-') as name:
     print(json.dumps({'boxes': len(before), 'new_certificates': record['new_certificates'],
                       'old_certificates_unchanged': True,
                       'before_s': runs['False']['elapsed_s'], 'after_s': runs['True']['elapsed_s'],
+                      'original512_s': runs['Original512']['elapsed_s'], 'original512_certificates': sum(x != -1 for x in original),
                       'mutations_caught': len(mutations)}))

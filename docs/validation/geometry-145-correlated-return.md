@@ -16,7 +16,7 @@ Interior proof attempts use bounded dyadic prefixes from 128 through 4096 update
 
 ## Cost and remaining failures
 
-In the 1296-box ablation, accepted interior boxes increase from 324 to 917, with all 324 existing certificates preserved. Uncertain boxes decrease from 972 to 379. The stronger proof takes 0.664 seconds versus 0.400 seconds for this box-only run. More certificates may avoid expensive tile generation, but these timings do not establish a net query improvement.
+In the 1296-box ablation, accepted interior boxes increase from 324 to 917, with all 324 existing certificates preserved. Uncertain boxes decrease from 972 to 379. Both sides of this ablation retain the 4096-prefix schedule; disabling correlation takes 0.373 seconds versus 0.633 seconds with correlation. A separate control restoring the original 512-prefix cap certifies zero boxes and takes 0.070 seconds. Thus the complete change buys more certificates with substantially more proof work. Avoided tile construction must justify that tradeoff; these timings do not establish a net query improvement.
 
 The 64 production cases total 29.076 seconds cold versus the earlier record's 27.496 seconds under different concurrent loads. No general speedup is claimed.
 
