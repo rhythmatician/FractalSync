@@ -6,6 +6,8 @@ use super::{
 use astro_float::RoundingMode as R;
 #[path = "distance_bracket.rs"]
 pub(crate) mod bracket;
+#[path = "cover_profile.rs"]
+mod profile;
 
 #[derive(Clone)]
 struct Capsule {
@@ -410,20 +412,26 @@ impl Builder {
         )
         .next_up();
         let candidate = (|| -> Option<(Edge, C, C, usize)> {
-            let (mut zm, mut cm) = super::super::solve(z.clone(), c.clone(), self.period, &mu)?;
+            let (mut zm, mut cm) = profile::timed(0, || {
+                super::super::solve(z.clone(), c.clone(), self.period, &mu)
+            })?;
             // Pick the critical-nearest phase as a conditioning hint; the proof and
             // validated joins, rather than the heuristic, establish cycle identity.
-            let mut v = zm.clone();
-            let mut best = zm.clone();
-            for _ in 0..self.period {
-                if v.norm() < best.norm() {
-                    best = v.clone();
+            let best = profile::timed(1, || {
+                let mut v = zm.clone();
+                let mut best = zm.clone();
+                for _ in 0..self.period {
+                    if v.norm() < best.norm() {
+                        best = v.clone();
+                    }
+                    v = v.mul(&v).add(&cm);
                 }
-                v = v.mul(&v).add(&cm);
-            }
-            (zm, cm) = super::super::solve(best, cm, self.period, &mu)?;
-            let (patch, attempts) = super::certify_auto(&zm, &cm, &mu, self.period, h).ok()?;
-            let item = edge(&patch, start, end).ok()?;
+                best
+            });
+            (zm, cm) = profile::timed(0, || super::super::solve(best, cm, self.period, &mu))?;
+            let (patch, attempts) =
+                profile::timed(2, || super::certify_auto(&zm, &cm, &mu, self.period, h)).ok()?;
+            let item = profile::timed(3, || edge(&patch, start, end)).ok()?;
             let bound = capsule_distance_lower(&item.capsule, &self.query)?;
             if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
                 || !bound.cmp(&self.minimum_clearance).is_some_and(|v| v >= 0)
@@ -431,7 +439,7 @@ impl Builder {
                 return None;
             }
             if let Some(previous) = self.edges.last() {
-                join(&previous.patch, &patch, start).ok()?;
+                profile::timed(4, || join(&previous.patch, &patch, start)).ok()?;
                 let connector = connector_capsule(previous, &item)?;
                 if !capsule_distance_lower(&connector, &self.query)?
                     .cmp(&self.minimum_clearance)
@@ -444,23 +452,26 @@ impl Builder {
                 Some(previous) => Some(connector_capsule(previous, &item)?),
                 None => None,
             };
-            for (query, minimum) in &self.extra_targets {
-                for capsule in std::iter::once(&item.capsule).chain(connector.as_ref()) {
-                    if capsule_clears_axis(capsule, query, minimum) {
-                        continue;
-                    }
-                    let bound = capsule_distance_lower(capsule, query)?;
-                    if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
-                        || !bound.cmp(minimum).is_some_and(|v| v >= 0)
-                    {
-                        if depth == 24 {
-                            eprintln!("[COVER_TARGET_REFUSAL145] query={:?} bound={bound} minimum={minimum} mu_start={:?} mu_end={:?}",query.f64(),item.start.f64(),item.end.f64());
+            profile::timed(5, || -> Option<()> {
+                for (query, minimum) in &self.extra_targets {
+                    for capsule in std::iter::once(&item.capsule).chain(connector.as_ref()) {
+                        if capsule_clears_axis(capsule, query, minimum) {
+                            continue;
                         }
-                        return None;
+                        let bound = capsule_distance_lower(capsule, query)?;
+                        if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
+                            || !bound.cmp(minimum).is_some_and(|v| v >= 0)
+                        {
+                            if depth == 24 {
+                                eprintln!("[COVER_TARGET_REFUSAL145] query={:?} bound={bound} minimum={minimum} mu_start={:?} mu_end={:?}",query.f64(),item.start.f64(),item.end.f64());
+                            }
+                            return None;
+                        }
                     }
                 }
-            }
-            let (ze, ce) = super::super::solve(zm, cm, self.period, end)?;
+                Some(())
+            })?;
+            let (ze, ce) = profile::timed(0, || super::super::solve(zm, cm, self.period, end))?;
             Some((item, ze, ce, attempts))
         })();
         if let Some((item, ze, ce, proof_attempts)) = candidate {
@@ -542,6 +553,7 @@ pub(crate) fn build_requested_at(
     request: CoverRequest,
     extra_targets: &[(C, B)],
 ) -> Result<ClosedCover, BuildFailure> {
+    let _profile = profile::Scope::begin();
     let CoverRequest {
         radius,
         root_radius,
@@ -628,14 +640,16 @@ pub(crate) fn build_requested_at(
     }
     let attempted = builder.attempted;
     let depth = builder.maximum_depth;
-    let cover = finish_cover(
-        builder.edges,
-        query,
-        &B::from_f64(minimum_clearance, P),
-        attempted,
-        depth,
-    )?;
-    finish_targets(cover, extra_targets, attempted, depth)
+    let cover = profile::timed(6, || {
+        finish_cover(
+            builder.edges,
+            query,
+            &B::from_f64(minimum_clearance, P),
+            attempted,
+            depth,
+        )
+    })?;
+    profile::timed(6, || finish_targets(cover, extra_targets, attempted, depth))
 }
 fn finish_targets(
     cover: ClosedCover,
