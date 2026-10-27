@@ -62,9 +62,10 @@ field_impl=item(provider,'impl FieldJet')
 field_impl=field_impl.replace(item(field_impl,'fn from_geometry('),'')
 basis=provider[provider.index('const QUINTIC_BASIS:'):provider.index('fn quintic_basis(')]
 angle=next(line for line in provider.splitlines() if line.startswith('pub const DYADIC_CUT_NORMAL_DEGREES:'))
+tie=next(line for line in provider.splitlines() if line.startswith('pub const DYADIC_CUT_TIE_FACTOR:'))
 kernel='\n'.join(['#[derive(Clone,Copy)]',item(provider,'struct FieldJet'),field_impl,
                   item(provider,'fn distance_stencil('),basis,item(provider,'fn quintic_basis('),
-                  item(provider,'fn quintic_field('),angle])
+                  item(provider,'fn quintic_field('),angle,tie])
 deps=args.target_dir.resolve()/'release/deps'
 libraries=sorted(deps.glob('libnum_complex-*.rlib'),key=lambda p:p.stat().st_mtime,reverse=True)
 assert libraries, 'build the source checkout first'
@@ -120,6 +121,14 @@ if cover:
          cover_prefix+'capsule_radius_and_orientation_bounds_are_not_optional'),
         ('cover-final-target','cover','if clearance.lower < minimum {','if false {',
          cover_prefix+'exhausted_or_invalid_requests_never_return_a_prefix_cover'),
+    ])
+if 'struct BoundaryDirectionCone' in cover:
+    cone_test='geometry_provider::periodic_boundary::branch::cover::tests::capsule_cones_clip_only_by_certified_distance_and_require_half_angles'
+    mutations.extend([
+        ('cone-capsule-radius','cover','let remainder = (cap.radius * axis_norm).next_up();','let remainder = 0.;',cone_test),
+        ('cone-angle-gate','cover','if lower > threshold {','if true {',cone_test),
+        ('cone-prune-equality','cover','if distance_lower(cap, q).ok()? > radius {','if distance_lower(cap, q).ok()? >= radius {',cone_test),
+        ('cone-work-exhaustion','cover','if *work > 65536 {','if false {',cone_test),
     ])
 if witness:
     witness_prefix='geometry_provider::periodic_boundary::witness_tests::'

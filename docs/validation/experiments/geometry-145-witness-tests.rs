@@ -31,6 +31,22 @@ struct CertifiedScalar {
     upper: f64,
 }
 impl CertifiedScalar {
+    fn direction_cone(
+        &self,
+        curve: &branch::cover::ClosedCover,
+        h: f64,
+        axis: C,
+    ) -> Option<branch::cover::BoundaryDirectionCone> {
+        if !h.is_finite() || h <= 0. {
+            return None;
+        }
+        let tie = (crate::geometry_provider::DYADIC_CUT_TIE_FACTOR * h).next_up();
+        let radius = (self.upper + tie).next_up();
+        let cosine = crate::geometry_provider::DYADIC_CUT_NORMAL_DEGREES
+            .to_radians()
+            .cos();
+        curve.boundary_direction_cone(self.query, radius, axis, cosine)
+    }
     fn certify(
         curve: &branch::cover::ClosedCover,
         witness: &OutsideWitness,
@@ -109,10 +125,12 @@ fn certified_scalar_requires_both_endpoint_gates_and_keeps_its_value() {
 }
 
 #[test]
-fn original_nodes_have_complete_scalar_distance_windows() {
+fn original_nodes_have_complete_scalar_distance_windows_and_direction_cones() {
     let start = std::time::Instant::now();
     let mut refusals = Vec::new();
     let mut longest = 0;
+    let mut cone_unresolved = Vec::new();
+    let mut maximum_refinement = 0;
     for group in cases::CERTIFIED_NODES.chunks_exact(81) {
         let targets: Vec<_> = group
             .iter()
@@ -136,11 +154,48 @@ fn original_nodes_have_complete_scalar_distance_windows() {
         for &(name, q, _, error) in group {
             let query = C::new(q[0], q[1]);
             let value = propose(query).unwrap().distance;
-            if let Some(witness) = OutsideWitness::find(query, error) {
+            if let Some(witness) = OutsideWitness::find(query, error * 0.25)
+                .or_else(|| OutsideWitness::find(query, error))
+            {
                 longest = longest.max(witness.proof.update);
                 let sample = CertifiedScalar::certify(&curve, &witness, query, value, error)
                     .expect("original scalar error gates");
                 assert_eq!(sample.value.to_bits(), (-value).to_bits());
+                let proposal = propose(query).unwrap();
+                let axis = proposal.boundary - query;
+                let base_h = if name == "native" {
+                    2f64.powi(-20)
+                } else {
+                    2f64.powi(-27)
+                };
+                let mut proved_cone = false;
+                for refinement in 0..=4 {
+                    let h = base_h * 2f64.powi(-refinement);
+                    if let Some(cone) = sample.direction_cone(&curve, h, axis) {
+                        assert_eq!(cone.query(), query);
+                        assert!(cone.radius() >= sample.upper);
+                        maximum_refinement = maximum_refinement.max(refinement);
+                        proved_cone = true;
+                        eprintln!(
+                            "[SCALAR_CONE145] name={name} {:?}",
+                            [
+                                q[0],
+                                q[1],
+                                h,
+                                cone.radius(),
+                                cone.axis_cosine_lower(),
+                                cone.pieces() as f64,
+                                cone.axis().re,
+                                cone.axis().im,
+                                cone.work() as f64
+                            ]
+                        );
+                        break;
+                    }
+                }
+                if !proved_cone {
+                    cone_unresolved.push((name, q));
+                }
                 eprintln!(
                     "[MP_SCALAR145] name={name} {:?}",
                     [
@@ -167,4 +222,6 @@ fn original_nodes_have_complete_scalar_distance_windows() {
         start.elapsed().as_secs_f64()
     );
     assert!(refusals.is_empty());
+    eprintln!("[SCALAR_CONE_SUMMARY145] accepted={} maximum_refinement={maximum_refinement} unresolved={cone_unresolved:?}",162-cone_unresolved.len());
+    assert!(cone_unresolved.is_empty());
 }
