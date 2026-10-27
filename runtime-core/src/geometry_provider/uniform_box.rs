@@ -334,13 +334,12 @@ fn affine_membership(re: Interval, im: Interval) -> Option<bool> {
     let mut remainder = 0.;
     let mut centers = vec![z];
     let mut all_bounded = true;
-    let mut radius = 0.;
     for n in 1usize..=4096 {
         let next = affine_return::AffineBall { z, d, remainder }.step(c, cr)?;
         z = next.z;
         d = next.d;
         remainder = next.remainder;
-        radius = next.radius(cr);
+        let radius = next.radius(cr);
         let p = Interval::point;
         let low = p(z[0])
             .square()
