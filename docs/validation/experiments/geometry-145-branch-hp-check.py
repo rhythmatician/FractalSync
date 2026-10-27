@@ -28,6 +28,7 @@ rows=[json.loads(line.split('] ',1)[1]) for line in record['baseline'].splitline
 assert len(rows)==162 and all(len(row)==21 for row in rows)
 cover_rows=[]
 targets=[]
+scalars=[]
 for line in record['baseline'].splitlines():
     if line.startswith('[F64_COVER_ROW145]'):
         _,group,values=line.split(' ',2)
@@ -39,7 +40,16 @@ for line in record['baseline'].splitlines():
         target=json.loads(values)
         assert len(target)==5
         targets.append(target+[float(group)])
+    elif line.startswith('[MP_SCALAR145]'):
+        _,_,values=line.split(' ',2)
+        row=json.loads(values)
+        assert len(row)==10
+        scalars.append(row)
 assert not cover_rows or (len(targets)==162 and {int(row[25]) for row in cover_rows}=={0,1})
+if scalars:
+    assert len(scalars)==162 and len(targets)==162
+    lower_by_query={(row[0],row[1]):row[3] for row in targets}
+    assert all(row[4]==lower_by_query[(row[0],row[1])] for row in scalars)
 rows.extend(row[:21] for row in cover_rows)
 directory=root/'docs/validation/experiments/geometry-145-point-proof/src'
 source=(directory/'component_probe.rs').read_text(encoding='utf-8')
@@ -70,6 +80,26 @@ def rust_rows(values:list[list[float]])->str:
     return ',\n'.join('['+','.join(repr(float(v)) for v in row)+']' for row in values)
 source+=f'\nstatic COVER_ROWS:[[f64;26];{len(cover_rows)}]=[{rust_rows(cover_rows)}];\n'
 source+=f'\nstatic COVER_TARGETS:[[f64;6];{len(targets)}]=[{rust_rows(targets)}];\n'
+source+=f'\nstatic SCALAR_ROWS:[[f64;10];{len(scalars)}]=[{rust_rows(scalars)}];\n'
+if scalars:
+    source+='''
+#[test]
+fn independent_f64_exterior_witnesses_and_complete_windows() {
+    use complex_ball::Complex;
+    for (index,row) in SCALAR_ROWS.iter().enumerate() {
+        let proof=point_proof::escape([row[6],row[7]],512,32768).unwrap();
+        assert!(proof.update<32768,"exterior budget {index}");
+        let query=Complex{re:BigFloat::from_f64(row[0],512),im:BigFloat::from_f64(row[1],512)};
+        let point=Complex{re:BigFloat::from_f64(row[6],512),im:BigFloat::from_f64(row[7],512)};
+        let upper=query.distance_upper(&point,512).unwrap();
+        assert!(upper.cmp(&BigFloat::from_f64(row[5],512)).is_some_and(|v|v<=0),"endpoint upper {index}");
+        let value=BigFloat::from_f64(-row[2],512);let error=BigFloat::from_f64(row[3],512);
+        assert!(BigFloat::from_f64(row[4],512).cmp(&value.sub(&error,512,R::Up)).is_some_and(|v|v>=0));
+        assert!(BigFloat::from_f64(row[5],512).cmp(&value.add(&error,512,R::Down)).is_some_and(|v|v<=0));
+    }
+    eprintln!("[HP_SCALAR145] witnesses=162 precision=512 complete_windows=true");
+}
+'''
 deps=args.target_dir.resolve()/'release/deps'
 library=next(deps.glob('libastro_float-*.rlib'))
 with tempfile.TemporaryDirectory(prefix='geometry145-branch-hp-') as name:
@@ -127,6 +157,7 @@ fn f64_error_bounds_enclose_independent_multiprecision_bounds() {
     run=subprocess.run([str(exe),'f64_','--nocapture'],capture_output=True,text=True)
     output={'returncode':run.returncode,'stdout':run.stdout,'stderr':run.stderr,'rows':len(rows),
             'cover_edges':len(cover_rows),'cover_targets':len(targets),
+            'scalar_witnesses':len(scalars),
             'input_sha256':hashlib.sha256(args.input.read_bytes()).hexdigest(),
             'astro_float_sha256':hashlib.sha256(library.read_bytes()).hexdigest(),
             'source_sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
