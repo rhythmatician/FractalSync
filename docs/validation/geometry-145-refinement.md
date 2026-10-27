@@ -4,6 +4,11 @@ PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
 original native/Python crossing tests remain intact.
 
+The next step is an architecture/acceptance-contract review, not another
+point-specific proof extension. [Proposed ADR 0005](../adr/0005-bounded-operational-geometry.md)
+separates reference evidence from a versioned operational field with bounded
+evaluation cost. It has not superseded ADR 0004 or changed the current tests.
+
 The source-aware hierarchy replaces a disagreeing Shore model using smooth
 lookahead weights. The value, gradient, Hessian and enclosing range use the same
 expression. Scalar nodal certification is separate from query direction, and
@@ -167,6 +172,8 @@ dominates. Its full run fails after 569.47 s. The provider suite reports 171
 passes and three failures: two unresolved rollout points and one test expecting
 an unresolved result where the candidate now returns Regular. That last result
 still needs independent verification before revising its expectation.
+Its full 27-test Python run times out at 3600 s after reporting a ridge-start
+failure. This predates the world-footprint repair and is not a passing suite.
 
 The `bounded-weights` experiment addresses the next interval overestimate.
 The quintic blend weight has a known value range and bounded first and second
@@ -189,7 +196,9 @@ World widths use floating-point units rather than overflowing a browser-sized
 cell count. The recorded ridge-start regression changes from Unresolved to
 Regular, with error `0.0019229919458484956` against its unchanged approximately
 `0.00414` limit. The width control and all four source-cover controls pass.
-The full ridge-barrier test still needs a staged-wheel rerun. The recorded
+The unchanged staged-wheel ridge-barrier test passes its full 200-step rollout
+in 1107.82 s, with no source drift. This repairs its immediate starting-point
+refusal but leaves substantial performance work. The recorded
 rollout point `(0.3075204398270623, 0.02876420131721053)` remains Unresolved;
 this search correction does not resolve that field-comparison failure.
 
@@ -198,8 +207,58 @@ enclosure. Retained weights form a partition of unity, including derivatives.
 Subtracting a fixed Taylor jet from every level and restoring it once preserves
 that identity during interval evaluation. A new common-field control reports a
 spurious error of `162.8069792730034` before the correction and passes afterward.
-Five zero-tail, five selector, 11 coherent-field and the proved-gate control pass.
-The nominal field is unchanged. Its original native crossing rerun is pending.
+Five zero-tail, five selector, 11 coherent-field, ten range, seven integrator
+stage, the cut-locus and both proved/uncertain gate controls pass. All 12
+original derivative probes and three staged-wheel training-start controls pass.
+The nominal field is unchanged. Its original native crossing fails after
+531.95 s at the same later query, with analytic enclosure error
+`0.00038503165859504236`. The common-field correction therefore does not repair
+this trajectory. All 25 selected Python physics tests pass in 1583.78 s on this
+snapshot, with the original crossing and continuity tests excluded from that
+selection. This is not a full-suite pass.
+Its WASM bridge check succeeds with zero errors and 19 warnings; this is
+compilation only, not browser execution or artifact-size acceptance.
+
+A single busy-host query-cost diagnostic uses this candidate's staged wheel at
+`epsilon=1e-4`. It queries `(0.6 + i*1e-6, 0.15)` in index order
+`[0, 0, 1, 2, 3, 4, 0]`. The cold query takes 7.17 s, neighboring queries take
+0.089–0.419 s, and exact cached repeats take 21–33 microseconds. All return
+Regular, with source hashes unchanged. These measurements expose remaining
+cost work; they are not browser or runtime cost acceptance.
+
+The focused `enclosure-trace` replay confirms the later native refusal after
+240.54 s. At the first retained level, scalar range is approximately
+`[-7.57e-7, 7.56e-7]`; the resulting disagreement-weight Hessian interval reaches
+roughly `1.28e16`, despite a nominal Hessian on the order of `1e7`. The next
+level's scalar bounds are substantially tighter. This motivates the
+`scalar-precision` experiment: try at most two additional source levels after
+finding a wide finite fallback, retain the narrowest certified interval, and
+include exact epsilon in the nodal cache key. This refines the oracle data;
+the public thresholds, cut tests and outer refinement budget remain unchanged.
+The replay still refuses after 253.43 s, but reduces analytic enclosure error
+to `2.7973162196900137e-6`, just above the unchanged approximately `2.50e-6`
+limit. It also retains the other recorded rollout refusal. A separate
+`finer-source` experiment keeps the canonical source mesh four levels finer
+than its coefficient mesh after the epsilon floor is reached. It encounters
+missing source samples on the other recorded rollout replay and times out at
+900 s on this native point. Neither experiment establishes crossing acceptance.
+
+The `strict-scalar` variant reduces the internal coefficient uncertainty target
+from one eighth to one thirty-second of the existing scalar budget, retaining
+the same two extra source attempts. It passes the native-point replay in
+194.22 s, with total error `3.5539708944324027e-7` below the unchanged
+approximately `2.50e-6` limit. All 12 original derivative probes and three
+training-start controls pass. Its original native crossing still fails after
+639.26 s, now at `(0.32051477807538159, 0.04736288660490145)`. Remaining Python
+runs were interrupted for contract review; they are not passing validations.
+
+The `capped-source` counterfactual passes the earlier `(0.30752, 0.02876)` point
+but exposes a discrepancy at `(0.35715, 0.06381)`, and takes 893.83 s to pass the
+native-point replay. At fixed spatial level 20, the `budget-trace` diagnostic
+finds no contour-distance change when raising the starting iteration budget
+from its default through 16384. This does not prove higher-level spatial or
+reference correctness. The separate `confidence-refinement` prototype fails a
+new derivative-join control and is not an accepted alternative.
 
 Before adoption, finish both original crossings, repeat the applicable checks
 on one final source snapshot, validate live training, settle query/memory cost,
@@ -211,8 +270,9 @@ do not establish trajectory validity or merge readiness.
 [Machine records](geometry-145-refinement.json) contain source pins, binary
 hashes, limits and verdicts. The
 [source archive](experiments/geometry-145-refinement/sources.zip) preserves the
-exact Rust source bytes for each named snapshot. Readable patches in the same
-directory compare each snapshot with the source recorded by
+exact Rust source bytes for each named snapshot. Three representative readable
+patches remain; redundant generated patches were removed without discarding
+their archived sources. These patches compare with the source recorded by
 [`20b1af8`](geometry-145-runtime-query.md).
 
 Restore a snapshot with the hash-checking helper, for example:
