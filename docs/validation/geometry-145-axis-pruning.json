@@ -1,0 +1,236 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "f46bde9",
+  "production_adoption": false,
+  "scope": "Conservative axis separation shortcut; no field definition or acceptance threshold change.",
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "d23a5c9efce82a3d15b3812618323e917e5af0c80f83a9710d0d07e7662a67a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "54885dd76f5003b4464ba0ed57691777c5f06f716c28da076423405715ca5ce8",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quintic_field.rs": "0615d5ca65d441f9b5c859f70e7bbef36a113a17a4f9766578fbeecc0e8f5de9",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "b23f54b819cde7fbba8e65941e52d599827eb3326a2e9d1e15bae418fe56ca93",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6",
+    "docs/validation/experiments/geometry-145-cover-mutations.py": "3b14519bd58ff704e67fd4135f16b7cd3e5507d510c96b7e0f3f1706b803b81a"
+  },
+  "frozen_binary_sha256": {
+    "geometry145_stencil_20261026d.exe": "c83ffb037108c49f39742d03a7af035083692bba07260b6780fb61dd2f7738e7",
+    "geometry145_stencil_20261026e.exe": "f71c6d96ee59950e25f65b58be8f4f3159243be439d95be19cc76952d9f1d135"
+  },
+  "runs": [
+    {
+      "name": "native",
+      "variant": "final",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 478.8065204999875,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "90411a0ae3452f834508557381dc549d8c4d6e0a4b7d1afd4c3d00f47e74feba",
+      "stderr_sha256": "b804dccee82780bad79728cbb40f5d7e3e1f939b432cd311a3ed27b086176d87",
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=421.0988649 result=Ok(ClosedCover { edges: 2746, winding: 1, curve_distance_lower: 7.614225016868299e-6 })",
+        "[NODE_GRID_REFINED_STATUS145] name=native nodes=81 within_requested_width=81 elapsed_s=427.3506585",
+        "[CERTIFIED_NODE_FIELD145] name=native jet=Jet { components: [7.642528691673288e-6, 0.6524171381689301, -0.757860258907957, -14959.345871925581, -12878.021654703249, -11086.250040662095], nodal_error: [1.5000000000000044e-7, 0.18839168866142428, 0.1824881290029433, 302324.9079629264, 229194.97855685535, 292297.4536829876] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=native gradient_error=0.00000000011428791246714809 distance_scaled_hessian_error=0.00000000004955638451413875 step=0.00000000095367431640625",
+        "[NODE_FIELD_COST145] name=native queries=1000 elapsed_s=0.7498736 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=478.7826442"
+      ]
+    },
+    {
+      "name": "native",
+      "variant": "pruned",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 438.87291790009476,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "d5cf2d128ce0a9f0ebf8b1d1567d0ee9635d10cf1eab2fd968ff23bed28d4243",
+      "stderr_sha256": "b804dccee82780bad79728cbb40f5d7e3e1f939b432cd311a3ed27b086176d87",
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=381.3788903 result=Ok(ClosedCover { edges: 2746, winding: 1, curve_distance_lower: 7.614225016868299e-6 })",
+        "[NODE_GRID_REFINED_STATUS145] name=native nodes=81 within_requested_width=81 elapsed_s=382.6455885",
+        "[CERTIFIED_NODE_FIELD145] name=native jet=Jet { components: [7.642528691673288e-6, 0.6524171381689301, -0.757860258907957, -14959.345871925581, -12878.021654703249, -11086.250040662095], nodal_error: [1.5000000000000044e-7, 0.18839168866142428, 0.1824881290029433, 302324.9079629264, 229194.97855685535, 292297.4536829876] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=native gradient_error=0.00000000011428791246714809 distance_scaled_hessian_error=0.00000000004955638451413875 step=0.00000000095367431640625",
+        "[NODE_FIELD_COST145] name=native queries=1000 elapsed_s=0.7097287 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=438.5886107"
+      ]
+    },
+    {
+      "name": "python",
+      "variant": "final",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 100.14222309994511,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "a91b0c346f8a25b4daf391996e5dfd2666deb62a44e4edba6a01b6a146e80936",
+      "stderr_sha256": "841e7a8a12039a67fa6cb0300c1431d7cb554d8256423e1b2b98bb327adfaae6",
+      "results": [
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=28.0623963 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267611764929584e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=28.617075",
+        "[CERTIFIED_NODE_FIELD145] name=python jet=Jet { components: [1.7286813524266808e-7, 0.44851293132532233, 0.8937763483699265, -1333774.8510945442, 669312.0157704448, -335872.6666483152], nodal_error: [1.5000000000000045e-9, 0.19835219730814546, 0.22119586852365358, 53248036.90250805, 29249791.03810021, 47528748.527503625] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=python gradient_error=0.000000000027946644998166903 distance_scaled_hessian_error=0.00000000001890419019128 step=0.000000000007450580596923828",
+        "[NODE_FIELD_COST145] name=python queries=1000 elapsed_s=0.8714579 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=99.9330734"
+      ]
+    },
+    {
+      "name": "python",
+      "variant": "pruned",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 107.51017919997685,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "56b35cde39266c1f1542476cdfab250f6b7a4686bf07d76b76187c0b3390a6fa",
+      "stderr_sha256": "841e7a8a12039a67fa6cb0300c1431d7cb554d8256423e1b2b98bb327adfaae6",
+      "results": [
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=27.5082228 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267611764929584e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=27.6496045",
+        "[CERTIFIED_NODE_FIELD145] name=python jet=Jet { components: [1.7286813524266808e-7, 0.44851293132532233, 0.8937763483699265, -1333774.8510945442, 669312.0157704448, -335872.6666483152], nodal_error: [1.5000000000000045e-9, 0.19835219730814546, 0.22119586852365358, 53248036.90250805, 29249791.03810021, 47528748.527503625] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=python gradient_error=0.000000000027946644998166903 distance_scaled_hessian_error=0.00000000001890419019128 step=0.000000000007450580596923828",
+        "[NODE_FIELD_COST145] name=python queries=1000 elapsed_s=0.8584842 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=107.2281374"
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "native",
+      "all81_candidate_checks_identical": true,
+      "all_six_field_components_and_error_bounds_identical": true,
+      "derivative_rows_identical": true,
+      "unpruned_postconstruction_validation_s": 6.251793599999985,
+      "pruned_postconstruction_validation_s": 1.2666981999999507
+    },
+    {
+      "name": "python",
+      "all81_candidate_checks_identical": true,
+      "all_six_field_components_and_error_bounds_identical": true,
+      "derivative_rows_identical": true,
+      "unpruned_postconstruction_validation_s": 0.5546787000000002,
+      "pruned_postconstruction_validation_s": 0.14138170000000017
+    }
+  ],
+  "cover_mutations": [
+    {
+      "mutation": "axis-winding",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "axis-radius",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "axis-minimum",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "axis-strict",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "multi-query-refinement",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "multi-query-final-target",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "closed-parameter-path",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "cycle-joins",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "query-separation",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "connector-separation",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "nonzero-winding",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "reused-connector-separation",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "reused-nonzero-winding",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "orientation",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "region-budget",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "requested-refinement",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "requested-finite-clearance",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "point-bridge-construction",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "point-bridge-left",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "point-bridge-right",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "final-clearance",
+      "exit_code": 101,
+      "caught": true
+    }
+  ],
+  "test_output": "cargo test: 78 passed (2 suites, 0.74s)\n",
+  "timing_limit": "Different concurrent loads; postconstruction validation includes final bracket checks and diagnostic output. No controlled cold speedup claim."
+}

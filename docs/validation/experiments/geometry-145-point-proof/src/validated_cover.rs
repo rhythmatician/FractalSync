@@ -202,6 +202,30 @@ fn capsule_distance_lower(capsule: &Capsule, q: &C) -> Option<B> {
     };
     nonnegative(max(box_lower, line_lower)?.sub(&capsule.radius, P, R::Down))
 }
+fn capsule_clears_axis(capsule: &Capsule, q: &C, minimum: &B) -> bool {
+    if !q.finite()
+        || !finite(&capsule.radius)
+        || !finite(minimum)
+        || !capsule.radius.cmp(&B::new(P)).is_some_and(|v| v >= 0)
+        || !minimum.cmp(&B::new(P)).is_some_and(|v| v >= 0)
+    {
+        return false;
+    }
+    let threshold = capsule.radius.add(minimum, P, R::Up);
+    if !finite(&threshold) {
+        return false;
+    }
+    // Either coordinate gap is a lower bound on distance to the segment.
+    // Strictly clearing radius+minimum also proves positive separation at zero.
+    [
+        (&q.re, &capsule.a.re, &capsule.b.re),
+        (&q.im, &capsule.a.im, &capsule.b.im),
+    ]
+    .into_iter()
+    .any(|(q, a, b)| {
+        axis_distance(q, a, b).is_some_and(|gap| gap.cmp(&threshold).is_some_and(|v| v > 0))
+    })
+}
 fn crossing(a: &C, b: &C, q: &C) -> Result<i32, Refusal> {
     let upward = a.im.cmp(&q.im).is_some_and(|v| v <= 0) && b.im.cmp(&q.im).is_some_and(|v| v > 0);
     let downward =
@@ -298,7 +322,10 @@ fn curve_clearance(edges: &[Edge], q: &C) -> Result<CurveClearance, Refusal> {
         // from the actual joined curve to the centerline reference polygon.
         let connector = connector_capsule(a, b).ok_or(Refusal::NumericalFailure)?;
         for capsule in [&a.capsule, &connector] {
-            let bound = capsule_distance_lower(capsule, q).ok_or(Refusal::NumericalFailure)?;
+            let bound = match &lower {
+                Some(current) if capsule_clears_axis(capsule, q, current) => current.clone(),
+                _ => capsule_distance_lower(capsule, q).ok_or(Refusal::NumericalFailure)?,
+            };
             if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0) {
                 return Err(Refusal::QueryNotSeparated);
             }
@@ -419,6 +446,9 @@ impl Builder {
             };
             for (query, minimum) in &self.extra_targets {
                 for capsule in std::iter::once(&item.capsule).chain(connector.as_ref()) {
+                    if capsule_clears_axis(capsule, query, minimum) {
+                        continue;
+                    }
                     let bound = capsule_distance_lower(capsule, query)?;
                     if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)
                         || !bound.cmp(minimum).is_some_and(|v| v >= 0)
@@ -666,6 +696,43 @@ fn finish_cover(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn axis_pruning_retains_radius_target_and_strict_separation() {
+        let capsule = Capsule {
+            a: C::new(0., 0.),
+            b: C::new(0., 0.),
+            radius: B::from_f64(0.25, P),
+        };
+        let minimum = B::from_f64(0.5, P);
+        assert!(!capsule_clears_axis(&capsule, &C::new(0.75, 0.), &minimum));
+        assert!(!capsule_clears_axis(
+            &capsule,
+            &C::new(0.75f64.next_down(), 0.),
+            &minimum
+        ));
+        assert!(capsule_clears_axis(
+            &capsule,
+            &C::new(0.75f64.next_up(), 0.),
+            &minimum
+        ));
+        assert!(!capsule_clears_axis(
+            &capsule,
+            &C::new(0.25, 0.),
+            &B::new(P)
+        ));
+        assert!(!capsule_clears_axis(&capsule, &C::new(0.1, 0.), &B::new(P)));
+        assert!(capsule_clears_axis(&capsule, &C::new(0., 1.), &minimum));
+        assert!(!capsule_clears_axis(
+            &capsule,
+            &C::new(f64::NAN, 0.),
+            &minimum
+        ));
+        assert!(!capsule_clears_axis(
+            &capsule,
+            &C::new(1., 0.),
+            &B::from_f64(-1., P)
+        ));
+    }
     fn period_three_patch(seed: C) -> Certificate {
         let zero = C::new(0., 0.);
         let (z, c) = super::super::super::solve(zero.clone(), seed, 3, &zero).unwrap();

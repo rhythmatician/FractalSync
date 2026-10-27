@@ -7,6 +7,10 @@ root = Path("docs/validation/experiments/geometry-145-point-proof")
 path = root / "src/validated_cover.rs"
 original = path.read_bytes()
 cases = [
+    ("axis-winding", "Some(current) if capsule_clears_axis(capsule, q, current) => current.clone(),", "Some(current) if capsule_clears_axis(capsule, q, current) => continue,", "reused_cover_accepts_queries_outside_original_transport_disk"),
+    ("axis-radius", "let threshold = capsule.radius.add(minimum, P, R::Up);", "let threshold = minimum.clone();", "axis_pruning_retains_radius_target_and_strict_separation"),
+    ("axis-minimum", "let threshold = capsule.radius.add(minimum, P, R::Up);", "let threshold = capsule.radius.clone();", "axis_pruning_retains_radius_target_and_strict_separation"),
+    ("axis-strict", "gap.cmp(&threshold).is_some_and(|v| v > 0)", "gap.cmp(&threshold).is_some_and(|v| v >= 0)", "axis_pruning_retains_radius_target_and_strict_separation"),
     ("multi-query-refinement", "for (query, minimum) in &self.extra_targets", "for (query, minimum) in self.extra_targets.iter().take(0)", "multiple_queries_require_independent_refinement_and_final_targets"),
     ("multi-query-final-target", ".cmp(minimum)\n            .is_some_and(|v| v >= 0)", ".cmp(minimum)\n            .is_some_and(|_| true)", "multiple_queries_require_independent_refinement_and_final_targets"),
     ("closed-parameter-path", "if !equal(&a.end, &b.start)", "if false", "open_or_non_enclosing_paths_refuse"),
