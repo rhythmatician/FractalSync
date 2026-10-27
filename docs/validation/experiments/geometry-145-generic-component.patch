@@ -1,0 +1,666 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -34,6 +34,8 @@
+ mod certified_cardioid;
+ mod feature_cover;
+ mod range_jet;
++#[cfg(test)]
++mod periodic_boundary;
+ use self::range_jet::RangeJet;
+
+ /// Version of the geometry provider contract. Bump when jet shape, semantics,
+--- a/runtime-core/src/visual_metrics.rs
++++ b/runtime-core/src/visual_metrics.rs
+@@ -211,6 +211,14 @@
+ }
+
+ impl MembershipOrbit {
++    #[cfg(test)]
++    pub(crate) fn geometry_seed(&mut self, budget: usize) -> Option<(num_complex::Complex64, Option<usize>)> {
++        if self.safely_interior || !self.inside_at(budget)
++            || !self.z.re.is_finite() || !self.z.im.is_finite()
++        { return None; }
++        Some((self.z, self.periodic.then_some(self.cycle_length)))
++    }
++
+     pub(crate) fn new(c: num_complex::Complex64) -> Self {
+         Self {
+             c,
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -3,6 +3,13 @@
+ use super::interval::Interval;
+ #[path = "affine_return.rs"]
+ mod affine_return;
++
++// A local root proposal only: this disk has no enclosed critical-orbit prefix
++// and must never be used as a whole-box membership shortcut by itself.
++#[cfg(test)]
++pub(super) fn proposal_cycle_trap(z:[f64;2],c:[f64;2],period:usize,radius:f64)->bool {
++    affine_return::AffineBall{z,d:[0.;2],remainder:0.}.traps(c,0.,period,radius)
++}
+
+ /// `Some` proves that every point has the same membership. `None` is only a
+ /// failed shortcut, never a membership refusal. Outward-rounded intervals may
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -0,0 +1,450 @@
++//! Numerical proposals only. This module cannot issue a Regular geometry jet.
++use num_complex::Complex64 as C;
++#[path = "periodic_boundary_cases.rs"]
++#[cfg(test)]
++mod cases;
++
++fn finite(z: C) -> bool {
++    z.re.is_finite() && z.im.is_finite()
++}
++fn dot(a: C, b: C) -> f64 {
++    a.re * b.re + a.im * b.im
++}
++struct Cycle {
++    z: C,
++    m: C,
++    a: C,
++    b: C,
++    d: C,
++}
++fn cycle(z: C, c: C, period: usize) -> Option<Cycle> {
++    let mut j = Cycle {
++        z,
++        m: C::new(1., 0.),
++        a: C::new(0., 0.),
++        b: C::new(0., 0.),
++        d: C::new(0., 0.),
++    };
++    for _ in 0..period {
++        j = Cycle {
++            z: j.z * j.z + c,
++            m: 2. * j.z * j.m,
++            a: 2. * j.z * j.a + 1.,
++            b: 2. * (j.m * j.m + j.z * j.b),
++            d: 2. * (j.a * j.m + j.z * j.d),
++        };
++        if ![j.z, j.m, j.a, j.b, j.d].into_iter().all(finite) {
++            return None;
++        }
++    }
++    Some(j)
++}
++
++// Return the best numerical iterate, including stagnation at machine precision.
++// A small step is deliberately not called a proof of root convergence.
++fn solve(mut z: C, mut c: C, period: usize, mu: C) -> Option<(C, C)> {
++    for _ in 0..40 {
++        let j = cycle(z, c, period)?;
++        let f = j.z - z;
++        let g = j.m - mu;
++        let det = (j.m - 1.) * j.d - j.a * j.b;
++        if !finite(det) || det.norm_sqr() == 0. {
++            return None;
++        }
++        let dz = (j.d * f - j.a * g) / det;
++        let dc = ((j.m - 1.) * g - j.b * f) / det;
++        if !finite(dz) || !finite(dc) {
++            return None;
++        }
++        let old = f.norm_sqr() + g.norm_sqr();
++        if dz.norm() <= 8. * f64::EPSILON * z.norm().max(1.)
++            && dc.norm() <= 8. * f64::EPSILON * c.norm().max(1.)
++        {
++            return Some((z, c));
++        }
++        let mut next = None;
++        for k in 0..24 {
++            let alpha = 2f64.powi(-k);
++            let nz = z - dz * alpha;
++            let nc = c - dc * alpha;
++            if let Some(n) = cycle(nz, nc, period) {
++                if (n.z - nz).norm_sqr() + (n.m - mu).norm_sqr() < old {
++                    next = Some((nz, nc));
++                    break;
++                }
++            }
++        }
++        let Some(pair) = next else {
++            return Some((z, c));
++        };
++        (z, c) = pair;
++    }
++    Some((z, c))
++}
++
++fn derivatives(z: C, c: C, period: usize, mu: C) -> Option<(C, C)> {
++    let j = cycle(z, c, period)?;
++    let det = (j.m - 1.) * j.d - j.a * j.b;
++    let mu1 = C::new(-mu.im, mu.re);
++    let z1 = -j.a * mu1 / det;
++    let c1 = (j.m - 1.) * mu1 / det;
++    let (mut v, mut v1, mut v2) = (z, z1, C::new(0., 0.));
++    let (mut m, mut m1, mut m2) = (C::new(1., 0.), C::new(0., 0.), C::new(0., 0.));
++    for _ in 0..period {
++        let nv2 = 2. * (v1 * v1 + v * v2);
++        let nm2 = 2. * (v2 * m + 2. * v1 * m1 + v * m2);
++        let nv1 = 2. * v * v1 + c1;
++        let nm1 = 2. * (v1 * m + v * m1);
++        let nv = v * v + c;
++        let nm = 2. * v * m;
++        (v, v1, v2, m, m1, m2) = (nv, nv1, nv2, nm, nm1, nm2);
++    }
++    let rhs_f = -v2;
++    let rhs_g = -mu - m2;
++    let c2 = ((j.m - 1.) * rhs_g - j.b * rhs_f) / det;
++    (finite(c1) && finite(c2)).then_some((c1, c2))
++}
++
++#[derive(Debug)]
++pub(super) struct Proposal {
++    pub(super) distance: f64,
++    pub(super) period: usize,
++    pub(super) stationarity: f64,
++}
++fn project(query: C, mut z: C, mut c: C, period: usize, mut theta: f64) -> Option<Proposal> {
++    let mut best: Option<Proposal> = None;
++    for _ in 0..12 {
++        let mu = C::from_polar(1., theta);
++        (z, c) = solve(z, c, period, mu)?;
++        let (d1, d2) = derivatives(z, c, period, mu)?;
++        let r = c - query;
++        let speed = d1.norm();
++        let denominator = d1.norm_sqr() + dot(r, d2);
++        if !speed.is_finite() || speed <= 0. || !denominator.is_finite() || denominator <= 0. {
++            return None;
++        }
++        let stationarity = dot(r, d1).abs() / speed;
++        if !stationarity.is_finite() {
++            return None;
++        }
++        let distance = r.norm();
++        let alignment = (r.re * d1.im - r.im * d1.re) / (distance * speed);
++        if !distance.is_finite() || distance <= 0. || !alignment.is_finite() || alignment <= 0. {
++            return None;
++        }
++        if best
++            .as_ref()
++            .is_none_or(|old| stationarity < old.stationarity)
++        {
++            best = Some(Proposal {
++                distance,
++                period,
++                stationarity,
++            });
++        }
++        let delta = dot(r, d1) / denominator;
++        if !delta.is_finite() || delta.abs() > 0.1 {
++            return None;
++        }
++        if delta.abs() < 1e-13 {
++            break;
++        }
++        theta -= delta;
++    }
++    best
++}
++
++fn root_disk(z: C, c: C, period: usize) -> Option<C> {
++    if cycle(z, c, period)?.m.norm() >= 1. {
++        return None;
++    }
++    [1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9, 1e-8]
++        .into_iter()
++        .find_map(|radius| {
++            super::uniform_box::proposal_cycle_trap([z.re, z.im], [c.re, c.im], period, radius)
++                .then_some(z)
++        })
++}
++fn attracting_root(mut z: C, c: C, period: usize) -> Option<C> {
++    for _ in 0..40 {
++        let j = cycle(z, c, period)?;
++        let residual = j.z - z;
++        if residual.norm() <= 64. * f64::EPSILON * z.norm().max(1.) {
++            return root_disk(z, c, period);
++        }
++        let step = residual / (j.m - 1.);
++        if !finite(step) {
++            return None;
++        }
++        let mut next = None;
++        for k in 0..24 {
++            let candidate = z - step * 2f64.powi(-k);
++            if let Some(n) = cycle(candidate, c, period) {
++                if (n.z - candidate).norm_sqr() < residual.norm_sqr() {
++                    next = Some(candidate);
++                    break;
++                }
++            }
++        }
++        let Some(next) = next else {
++            return root_disk(z, c, period);
++        };
++        z = next;
++    }
++    root_disk(z, c, period)
++}
++
++pub(super) fn propose(query: C) -> Option<Proposal> {
++    let mut orbit = crate::visual_metrics::MembershipOrbit::new(query);
++    let (seed, hint) = orbit.geometry_seed(32768)?;
++    let machine_period = if let Some(period) = hint {
++        period
++    } else {
++        let mut z = seed;
++        let mut best = (f64::INFINITY, 0);
++        for p in 1..=512 {
++            z = z * z + query;
++            let error = (z - seed).norm_sqr();
++            if error < best.0 {
++                best = (error, p);
++            }
++        }
++        best.1
++    };
++    if machine_period == 0 || machine_period > 32768 {
++        return None;
++    }
++    // Improve conditioning by choosing the phase nearest the critical point.
++    let mut z = seed;
++    let mut phase = seed;
++    for _ in 0..machine_period {
++        if z.norm_sqr() < phase.norm_sqr() {
++            phase = z;
++        }
++        z = z * z + query;
++    }
++    // A repeated machine cycle may be a multiple of the mathematical period.
++    // Divisor roots and numerical attraction only propose a reduced period;
++    // none of these floating checks issues a component certificate.
++    let (period, phase) = (1..=machine_period)
++        .filter(|p| *p <= 512 && machine_period % p == 0)
++        .find_map(|p| attracting_root(phase, query, p).map(|z| (p, z)))?;
++    let mu = cycle(phase, query, period)?.m;
++    let angle = mu.arg();
++    let mut best: Option<Proposal> = None;
++    for offset in [
++        0.,
++        -0.1,
++        0.1,
++        -0.2,
++        0.2,
++        -0.4,
++        0.4,
++        -0.8,
++        0.8,
++        -1.6,
++        1.6,
++        std::f64::consts::PI,
++    ] {
++        let theta = angle + offset;
++        let target = C::from_polar(1., theta);
++        let mut z = phase;
++        let mut c = query;
++        let mut valid = true;
++        for step in 1..=64 {
++            let t = f64::from(step) / 64.;
++            if let Some(pair) = solve(z, c, period, mu * (1. - t) + target * t) {
++                (z, c) = pair;
++            } else {
++                valid = false;
++                break;
++            }
++        }
++        if !valid {
++            continue;
++        }
++        if let Some(proposal) = project(query, z, c, period, theta) {
++            // This only ranks proposals. It does not certify global nearestness.
++            if best
++                .as_ref()
++                .is_none_or(|old| proposal.distance < old.distance)
++            {
++                best = Some(proposal);
++            }
++        }
++    }
++    best
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn discover_components_without_fixture_periods_or_angles() {
++        for q in [
++            [0.32049988639807619, 0.04733531447355364],
++            [0.35659381055433242, 0.06404656757776669],
++        ] {
++            let start = std::time::Instant::now();
++            let mut orbit = crate::visual_metrics::MembershipOrbit::new(C::new(q[0], q[1]));
++            eprintln!(
++                "[SHARED_SEED145] q={q:?} seed={:?}",
++                orbit.geometry_seed(32768)
++            );
++            let proposal = propose(C::new(q[0], q[1]));
++            eprintln!(
++                "[GENERIC_PROPOSAL145] q={q:?} result={proposal:?} elapsed_s={}",
++                start.elapsed().as_secs_f64()
++            );
++            let proposal = proposal.expect("numerical proposal");
++            assert_eq!(proposal.period, if q[0] < 0.35 { 85 } else { 154 });
++        }
++    }
++    #[test]
++    fn all_archived_nodes_keep_the_original_certified_error_windows() {
++        let start = std::time::Instant::now();
++        let mut observations = Vec::new();
++        for &(name, q, bounds, error) in cases::CERTIFIED_NODES {
++            let proposal = propose(C::new(q[0], q[1])).unwrap_or_else(|| {
++                let mut orbit = crate::visual_metrics::MembershipOrbit::new(C::new(q[0], q[1]));
++                panic!(
++                    "generic node proposal {name} {q:?} seed={:?}",
++                    orbit.geometry_seed(32768)
++                );
++            });
++            assert_eq!(
++                proposal.period,
++                if name == "native" { 85 } else { 154 },
++                "{name} {q:?}: {proposal:?}"
++            );
++            assert!(
++                (proposal.distance - error).next_up() <= bounds[0],
++                "lower {name} {q:?}: {proposal:?} reference={bounds:?}"
++            );
++            assert!(
++                (proposal.distance + error).next_down() >= bounds[1],
++                "upper {name} {q:?}: {proposal:?} reference={bounds:?}"
++            );
++            assert!(proposal.stationarity.is_finite());
++            observations.push(proposal.distance.to_bits());
++        }
++        eprintln!(
++            "[GENERIC_NODES145] nodes={} elapsed_s={} original_error_windows=true",
++            observations.len(),
++            start.elapsed().as_secs_f64()
++        );
++        for (index, &(_, q, _, _)) in cases::CERTIFIED_NODES.iter().enumerate().rev() {
++            assert_eq!(
++                propose(C::new(q[0], q[1])).unwrap().distance.to_bits(),
++                observations[index]
++            );
++        }
++    }
++    #[test]
++    fn invalid_exterior_and_existing_analytic_components_do_not_supply_proposals() {
++        for q in [
++            [f64::NAN, 0.],
++            [f64::INFINITY, 0.],
++            [2., 0.],
++            [0., 0.],
++            [-1., 0.],
++        ] {
++            assert!(propose(C::new(q[0], q[1])).is_none());
++        }
++    }
++    #[test]
++    fn a_small_multiplier_alone_cannot_supply_a_root_disk() {
++        assert!(root_disk(C::new(0.1, 0.), C::new(0.2, 0.), 1).is_none());
++    }
++    #[test]
++    fn reading_geometry_seeds_preserves_membership_at_every_budget() {
++        for q in [
++            [0.32049988639807619, 0.04733531447355364],
++            [0.35659381055433242, 0.06404656757776669],
++            [0.25003736342837773, 0.],
++            [2., 0.],
++            [0., 0.],
++            [-1., 0.],
++            [f64::NAN, 0.],
++        ] {
++            let point = C::new(q[0], q[1]);
++            let mut orbit = crate::visual_metrics::MembershipOrbit::new(point);
++            let _ = orbit.geometry_seed(32768);
++            for budget in [0, 1, 511, 512, 513, 2048, 32768] {
++                assert_eq!(
++                    orbit.inside_at(budget),
++                    crate::visual_metrics::mandelbrot_membership(point, budget),
++                    "{q:?} N={budget}"
++                );
++            }
++        }
++    }
++    #[test]
++    fn generic_scalar_nodes_keep_quintic_derivatives_and_cell_joins_coherent() {
++        use std::collections::BTreeMap;
++        for (q, h) in [
++            (
++                C::new(0.32049988639807619, 0.04733531447355364),
++                2f64.powi(-20),
++            ),
++            (
++                C::new(0.35659381055433242, 0.06404656757776669),
++                2f64.powi(-27),
++            ),
++        ] {
++            let mut nodes = BTreeMap::new();
++            let mut field = |point: C| {
++                let stencil: Vec<_> = super::super::distance_stencil(point, h)
++                    .map(|node| {
++                        let value = *nodes
++                            .entry((node.re.to_bits(), node.im.to_bits()))
++                            .or_insert_with(|| {
++                                -propose(node).expect("canonical scalar proposal").distance
++                            });
++                        (node.re - point.re, node.im - point.im, value)
++                    })
++                    .collect();
++                super::super::quintic_field(point, h, &stencil).0
++            };
++            let center = field(q);
++            let mut gradient_error = 0f64;
++            let mut hessian_error = 0f64;
++            for axis in 0..2 {
++                let offset = if axis == 0 {
++                    C::new(h * 1e-3, 0.)
++                } else {
++                    C::new(0., h * 1e-3)
++                };
++                let plus = field(q + offset);
++                let minus = field(q - offset);
++                let denominator = if axis == 0 {
++                    (q + offset).re - (q - offset).re
++                } else {
++                    (q + offset).im - (q - offset).im
++                };
++                let error = ((plus.d - minus.d) / denominator - center.g[axis]).abs();
++                assert!(error.is_finite());
++                gradient_error = gradient_error.max(error);
++                for row in 0..2 {
++                    let error = ((plus.g[row] - minus.g[row]) / denominator - center.h[row][axis])
++                        .abs()
++                        * center.d.abs();
++                    assert!(error.is_finite());
++                    hessian_error = hessian_error.max(error);
++                }
++            }
++            assert!(gradient_error <= 1e-5 && hessian_error <= 1e-5);
++            let knot = (q.re / h).floor() * h;
++            let left = field(C::new(knot.next_down(), q.im));
++            let right = field(C::new(knot.next_up(), q.im));
++            assert!((left.d - right.d).abs() <= 64. * f64::EPSILON);
++            for row in 0..2 {
++                assert!((left.g[row] - right.g[row]).abs() <= 1e-5);
++                for col in 0..2 {
++                    assert!((left.h[row][col] - right.h[row][col]).abs() * center.d.abs() <= 1e-5);
++                }
++            }
++            eprintln!("[GENERIC_FIELD145] q={q:?} gradient_error={gradient_error} distance_scaled_hessian_error={hessian_error} coherent_join=true nodes={}",nodes.len());
++        }
++    }
++}
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary_cases.rs
+@@ -0,0 +1,166 @@
++// Recorded scalar enclosures, expanded outward by one f64 ulp.
++// Source hashes and rounding policy are archived in the generic-component report.
++pub(super) const CERTIFIED_NODES: &[(&str,[f64;2],[f64;2],f64)] = &[
++    ("native",[0.32049560546875,0.04733085632324219],[7.68397117140443e-06,7.733662697809728e-06],5e-08),
++    ("native",[0.3204965591430664,0.04733085632324219],[8.414315848246052e-06,8.463952661459119e-06],5e-08),
++    ("native",[0.3204975128173828,0.04733085632324219],[9.134201208476393e-06,9.173858923846439e-06],5e-08),
++    ("native",[0.3204984664916992,0.04733085632324219],[9.831535229834567e-06,9.878478095919497e-06],5e-08),
++    ("native",[0.3204994201660156,0.04733085632324219],[1.0536164411211628e-05,1.0570933054499326e-05],5e-08),
++    ("native",[0.32050037384033203,0.04733085632324219],[1.1216976096426956e-05,1.1250890139556444e-05],5e-08),
++    ("native",[0.32050132751464844,0.04733085632324219],[1.1885895983767449e-05,1.1917167593538734e-05],5e-08),
++    ("native",[0.32050228118896484,0.04733085632324219],[1.2524833967624697e-05,1.2568566086724863e-05],5e-08),
++    ("native",[0.32050323486328125,0.04733085632324219],[1.3163771951481947e-05,1.3207713113828283e-05],5e-08),
++    ("native",[0.32049560546875,0.047331809997558594],[7.071586170695451e-06,7.1175086351192395e-06],5e-08),
++    ("native",[0.3204965591430664,0.047331809997558594],[7.7866584247521e-06,7.828348255668097e-06],5e-08),
++    ("native",[0.3204975128173828,0.047331809997558594],[8.48426118655879e-06,8.531844836927353e-06],5e-08),
++    ("native",[0.3204984664916992,0.047331809997558594],[9.18889036793585e-06,9.22223978481296e-06],5e-08),
++    ("native",[0.3204994201660156,0.047331809997558594],[9.868325973974924e-06,9.902195841429117e-06],5e-08),
++    ("native",[0.32050037384033203,0.047331809997558594],[1.0538965800407012e-05,1.0568566467967807e-05],5e-08),
++    ("native",[0.32050132751464844,0.047331809997558594],[1.1177903784264262e-05,1.1221751592844481e-05],5e-08),
++    ("native",[0.32050228118896484,0.047331809997558594],[1.181684176812151e-05,1.1861049191163996e-05],5e-08),
++    ("native",[0.32050323486328125,0.047331809997558594],[1.2453976504511049e-05,1.2485712361130372e-05],5e-08),
++    ("native",[0.32049560546875,0.047332763671875],[6.439115641027807e-06,6.484162557840315e-06],5e-08),
++    ("native",[0.3204965591430664,0.047332763671875],[7.136987143283013e-06,7.185285640971478e-06],5e-08),
++    ("native",[0.3204975128173828,0.047332763671875],[7.841616324660075e-06,7.8735485304632e-06],5e-08),
++    ("native",[0.3204984664916992,0.047332763671875],[8.51967585152289e-06,8.553503074106859e-06],5e-08),
++    ("native",[0.3204994201660156,0.047332763671875],[9.192035617046575e-06,9.219994020079894e-06],5e-08),
++    ("native",[0.32050037384033203,0.047332763671875],[9.830973600903825e-06,9.875451531638273e-06],5e-08),
++    ("native",[0.32050132751464844,0.047332763671875],[1.0469911584761074e-05,1.051490698676523e-05],5e-08),
++    ("native",[0.32050228118896484,0.047332763671875],[1.110968810964871e-05,1.1142056212818836e-05],5e-08),
++    ("native",[0.32050323486328125,0.047332763671875],[1.1718579588339882e-05,1.1752970037942989e-05],5e-08),
++    ("native",[0.32049560546875,0.047333717346191406],[5.789713100007236e-06,5.838380362943777e-06],5e-08),
++    ("native",[0.3204965591430664,0.047333717346191406],[6.494342281384298e-06,6.52486054116279e-06],5e-08),
++    ("native",[0.3204975128173828,0.047333717346191406],[7.171025729070859e-06,7.204812697259144e-06],5e-08),
++    ("native",[0.3204984664916992,0.047333717346191406],[7.845105433686138e-06,7.871464989432158e-06],5e-08),
++    ("native",[0.3204994201660156,0.047333717346191406],[8.484043417543388e-06,8.529909489734193e-06],5e-08),
++    ("native",[0.32050037384033203,0.047333717346191406],[9.122981401400637e-06,9.169516278001151e-06],5e-08),
++    ("native",[0.32050132751464844,0.047333717346191406],[9.765417649583402e-06,9.799328934854117e-06],5e-08),
++    ("native",[0.32050228118896484,0.047333717346191406],[1.0375987417362764e-05,1.0411658405871838e-05],5e-08),
++    ("native",[0.32050323486328125,0.047333717346191406],[1.0985412733134332e-05,1.101055622585516e-05],5e-08),
++    ("native",[0.32049560546875,0.04733467102050781],[5.147068238108521e-06,5.176178369103875e-06],5e-08),
++    ("native",[0.3204965591430664,0.04733467102050781],[5.8223756066188255e-06,5.856126362495041e-06],5e-08),
++    ("native",[0.3204975128173828,0.04733467102050781],[6.497480767225014e-06,6.5230063035762185e-06],5e-08),
++    ("native",[0.3204984664916992,0.04733467102050781],[7.137113234182952e-06,7.181326934262867e-06],5e-08),
++    ("native",[0.3204994201660156,0.04733467102050781],[7.7760512180402e-06,7.821953025584456e-06],5e-08),
++    ("native",[0.32050037384033203,0.04733467102050781],[8.418437418126256e-06,8.4539543642568e-06],5e-08),
++    ("native",[0.32050132751464844,0.04733467102050781],[9.033395246385645e-06,9.072537440839222e-06],5e-08),
++    ("native",[0.32050228118896484,0.04733467102050781],[9.642728469277081e-06,9.671686549869275e-06],5e-08),
++    ("native",[0.32050323486328125,0.04733467102050781],[1.0227654834569873e-05,1.0258081512317398e-05],5e-08),
++    ("native",[0.32049560546875,0.04733562469482422],[4.473725484166792e-06,4.507447698146251e-06],5e-08),
++    ("native",[0.3204965591430664,0.04733562469482422],[5.148811745949996e-06,5.174672955871289e-06],5e-08),
++    ("native",[0.3204975128173828,0.04733562469482422],[5.790183050822515e-06,5.8327420377367865e-06],5e-08),
++    ("native",[0.3204984664916992,0.04733562469482422],[6.429121034679765e-06,6.474342401391397e-06],5e-08),
++    ("native",[0.3204994201660156,0.04733562469482422],[7.071457186669109e-06,7.107952927529669e-06],5e-08),
++    ("native",[0.32050037384033203,0.04733562469482422],[7.690803075408525e-06,7.729420001763232e-06],5e-08),
++    ("native",[0.32050132751464844,0.04733562469482422],[8.30004420541983e-06,8.33218471527589e-06],5e-08),
++    ("native",[0.32050228118896484,0.04733562469482422],[8.891872351430669e-06,8.921435417013317e-06],5e-08),
++    ("native",[0.32050323486328125,0.04733562469482422],[9.466658059753969e-06,9.494689951635366e-06],5e-08),
++    ("native",[0.32049560546875,0.047336578369140625],[3.801064564632882e-06,3.8265974404225e-06],5e-08),
++    ("native",[0.3204965591430664,0.047336578369140625],[4.443252867462079e-06,4.484068522024426e-06],5e-08),
++    ("native",[0.3204975128173828,0.047336578369140625],[5.082190851319328e-06,5.127304236492206e-06],5e-08),
++    ("native",[0.3204984664916992,0.047336578369140625],[5.724476955211962e-06,5.763212997461598e-06],5e-08),
++    ("native",[0.3204994201660156,0.047336578369140625],[6.348210904431408e-06,6.3842240802333465e-06],5e-08),
++    ("native",[0.32050037384033203,0.047336578369140625],[6.9573599415625814e-06,6.989647063436803e-06],5e-08),
++    ("native",[0.32050132751464844,0.047336578369140625],[7.556089868291464e-06,7.581382885978763e-06],5e-08),
++    ("native",[0.32050228118896484,0.047336578369140625],[8.130875576614762e-06,8.1575640636801e-06],5e-08),
++    ("native",[0.32050323486328125,0.047336578369140625],[8.701208005842622e-06,8.724550598586213e-06],5e-08),
++    ("native",[0.32049560546875,0.04733753204345703],[3.0963226841016423e-06,3.1353976131199557e-06],5e-08),
++    ("native",[0.3204965591430664,0.04733753204345703],[3.735260667958892e-06,3.7814503492362624e-06],5e-08),
++    ("native",[0.3204975128173828,0.04733753204345703],[4.380304660570694e-06,4.420475004787104e-06],5e-08),
++    ("native",[0.3204984664916992,0.04733753204345703],[5.005618733454288e-06,5.038017985604569e-06],5e-08),
++    ("native",[0.3204994201660156,0.04733753204345703],[5.614675677705331e-06,5.647088706624216e-06],5e-08),
++    ("native",[0.32050037384033203,0.04733753204345703],[6.220307385152259e-06,6.243953809726667e-06],5e-08),
++    ("native",[0.32050132751464844,0.04733753204345703],[6.795093093475558e-06,6.8249940978359884e-06],5e-08),
++    ("native",[0.32050228118896484,0.04733753204345703],[7.373046407721641e-06,7.393197913134809e-06],5e-08),
++    ("native",[0.32050323486328125,0.04733753204345703],[7.916245511096362e-06,7.951354273802615e-06],5e-08),
++    ("native",[0.32049560546875,0.04733848571777344],[2.388330484598455e-06,2.4362464471284086e-06],5e-08),
++    ("native",[0.3204965591430664,0.04733848571777344],[3.0332750639583484e-06,3.0724128758501774e-06],5e-08),
++    ("native",[0.3204975128173828,0.04733848571777344],[3.66302656247717e-06,3.693631295488308e-06],5e-08),
++    ("native",[0.3204984664916992,0.04733848571777344],[4.271991413848081e-06,4.305166130077782e-06],5e-08),
++    ("native",[0.3204994201660156,0.04733848571777344],[4.883484324675079e-06,4.9041049131554955e-06],5e-08),
++    ("native",[0.32050037384033203,0.04733848571777344],[5.459310610336353e-06,5.4910247038933275e-06],5e-08),
++    ("native",[0.32050132751464844,0.04733848571777344],[6.0370001858582715e-06,6.0651546282756086e-06],5e-08),
++    ("native",[0.32050228118896484,0.04733848571777344],[6.5897964922921065e-06,6.615917135366777e-06],5e-08),
++    ("native",[0.32050323486328125,0.04733848571777344],[7.129261015613775e-06,7.164483468730134e-06],5e-08),
++    ("python",[0.3565937802195549,0.06404653191566467],[1.2714330579594864e-07,1.2749349841156372e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404653191566467],[1.306064680606952e-07,1.3088877695856208e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404653191566467],[1.338519849242602e-07,1.3422125861010217e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404653191566467],[1.370960137182589e-07,1.3753519602475384e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404653191566467],[1.4033798101197912e-07,1.4074517599818725e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404653191566467],[1.4357868367332746e-07,1.438942931232946e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404653191566467],[1.466283335980503e-07,1.469795667190697e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404653191566467],[1.4953071738105683e-07,1.4994701043917038e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404653191566467],[1.524316744761859e-07,1.5288808897687348e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404653936624527],[1.336804073209373e-07,1.3407095127374063e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404653936624527],[1.3725454554906678e-07,1.3753663534996555e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404653936624527],[1.40558942650715e-07,1.4091357514591835e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404653936624527],[1.438032805546808e-07,1.4419784281350907e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404653936624527],[1.4704634954721166e-07,1.4751858311546757e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404653936624527],[1.5028809951085165e-07,1.5061433649793287e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404653936624527],[1.5348967844446498e-07,1.537426930049878e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404653936624527],[1.5639308992152758e-07,1.567813533523221e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404653936624527],[1.5929464025661582e-07,1.5972737934902515e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404654681682587],[1.4021685231770862e-07,1.4063699573582644e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404654681682587],[1.437921516871579e-07,1.441534296004294e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404654681682587],[1.472651042213455e-07,1.475471957984108e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404654681682587],[1.505105473911027e-07,1.5088079839776646e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404654681682587],[1.537545761851014e-07,1.5419406076369527e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404654681682587],[1.569964680460842e-07,1.5739880675730262e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404654681682587],[1.6023709355026633e-07,1.6053973087431088e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404654681682587],[1.6325500299635913e-07,1.636063232729005e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404654681682587],[1.6615701279708658e-07,1.6656782077175082e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404655426740646],[1.4675329731447992e-07,1.4718235436960422e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404655426740646],[1.5032905430222967e-07,1.5072256084066136e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404655426740646],[1.5390339144027604e-07,1.541941050184465e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404655426740646],[1.572175788113653e-07,1.575730917354815e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404655426740646],[1.604618430215233e-07,1.608568951155815e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404655426740646],[1.6370483658131674e-07,1.641680647473449e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404655426740646],[1.6694656022469003e-07,1.6726849635662608e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404655426740646],[1.701163478427738e-07,1.7039080127084352e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404655426740646],[1.7301938533755734e-07,1.7342240058210102e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404656171798706],[1.5328889304007522e-07,1.537432043483193e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404656171798706],[1.5686549929900097e-07,1.5728718005687799e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404656171798706],[1.6044099757836716e-07,1.6081337601774639e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404656171798706],[1.6392374038199578e-07,1.6420593641690765e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404656171798706],[1.6716910985794522e-07,1.6754043064206183e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404656171798706],[1.704131386519439e-07,1.708531478092851e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404656171798706],[1.7365495508018924e-07,1.7404288996122224e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404656171798706],[1.768955034272052e-07,1.7718446981922431e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404656171798706],[1.7988167239466796e-07,1.8023922023006196e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404656916856766],[1.5982417294756263e-07,1.6024213570901248e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404656916856766],[1.634019442957723e-07,1.6382920878612407e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404656916856766],[1.6697770128352202e-07,1.673758412364239e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404656916856766],[1.705522373314853e-07,1.708496987720095e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404656916856766],[1.7387621497201557e-07,1.7423270166666517e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404656916856766],[1.7712040548836582e-07,1.7751612617645048e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404656916856766],[1.8036332361542179e-07,1.8081948488394255e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404656916856766],[1.836049701016289e-07,1.839237148940106e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404656916856766],[1.867430172410826e-07,1.8704102805354454e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404657661914825],[1.6635942068634611e-07,1.667173318771541e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404657661914825],[1.6993733878979547e-07,1.703927406182274e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404657661914825],[1.7351414628029334e-07,1.7393924503459023e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404657661914825],[1.7708984346957642e-07,1.774733333748955e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404657661914825],[1.8058237654264608e-07,1.8086490990085677e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404657661914825],[1.8382767232478774e-07,1.842001302567949e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404657661914825],[1.8707169215065433e-07,1.8751239791063753e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404657661914825],[1.9031344211429432e-07,1.9068863410802912e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404657661914825],[1.9355391330414406e-07,1.938318317855858e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404658406972885],[1.7289353155197728e-07,1.731803231999752e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404658406972885],[1.7647261869728288e-07,1.7688913641776327e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404658406972885],[1.800505046320283e-07,1.8047849006878266e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404658406972885],[1.836263482648144e-07,1.840303388714667e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404658406972885],[1.8720108322269456e-07,1.875060762504662e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404658406972885],[1.9053485113266587e-07,1.9089238050106765e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404658406972885],[1.9377896795520834e-07,1.9417548998644076e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404658406972885],[1.9702181064952684e-07,1.9746950965730757e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404658406972885],[2.0026337997856776e-07,2.005797283868251e-07],5e-10),
++    ("python",[0.3565937802195549,0.06404659152030945],[1.7928378606132447e-07,1.796327670406094e-07],5e-10),
++    ("python",[0.3565937876701355,0.06404659152030945],[1.830076628682342e-07,1.833507204643913e-07],5e-10),
++    ("python",[0.3565937951207161,0.06404659152030945],[1.8658578453951571e-07,1.8702667587489912e-07],5e-10),
++    ("python",[0.3565938025712967,0.06404659152030945],[1.901627932615857e-07,1.905926977312464e-07],5e-10),
++    ("python",[0.3565938100218773,0.06404659152030945],[1.9373855024933544e-07,1.9412956233838766e-07],5e-10),
++    ("python",[0.3565938174724579,0.06404659152030945],[1.9724101270329638e-07,1.9752405733137706e-07],5e-10),
++    ("python",[0.3565938249230385,0.06404659152030945],[2.0048623479163026e-07,2.008598804784705e-07],5e-10),
++    ("python",[0.3565938323736191,0.06404659152030945],[2.0373017918475938e-07,2.041717711545004e-07],5e-10),
++    ("python",[0.3565938398241997,0.06404659152030945],[2.0697192914839937e-07,2.0733666902463266e-07],5e-10),
++];
