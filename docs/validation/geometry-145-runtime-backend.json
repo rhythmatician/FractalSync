@@ -1,0 +1,53 @@
+{
+  "stage": "runtime-owned certificate backend; not query integration",
+  "baseline": "d8018983fe884f9b73ebc332eec51270e852c734",
+  "source_hashes": {
+    "Cargo.lock": "97a95a6d0d6a68306319aff00f27b44e2301070108e8e5b3e9ba3bafa0c9cf5b",
+    "runtime-core/Cargo.toml": "2bab1d9e8c389486282b2b47e0635e0ef0acadc93f4a3f1b6440396e697599e6",
+    "runtime-core/src/geometry_provider.rs": "ee2f4be6baf535e0a39344b6342316ee92dc4146a45b1cb7eb438f92c8a23c1b",
+    "runtime-core/src/geometry_provider/uniform_box.rs": "6baef913e930bf6174bbaab3ffa674d34dc1c9ee06eaf7980f1f5523d06850f8",
+    "runtime-core/src/visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+    "runtime-core/src/geometry_provider/periodic_boundary.rs": "a5149a76638f2e56aaf42e4667b848ceab4138387283182051fbde8279bf0734",
+    "runtime-core/src/geometry_provider/periodic_boundary/branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+    "runtime-core/src/geometry_provider/periodic_boundary/certified.rs": "3f1c32888fff54afbe4f0528a34483f015343bfad2f9afebeee70df9427363f0",
+    "runtime-core/src/geometry_provider/periodic_boundary/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "runtime-core/src/geometry_provider/periodic_boundary/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "runtime-core/src/geometry_provider/periodic_boundary/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9"
+  },
+  "source_drift": [],
+  "patch_sha256": "195367447989440183b455d61d5076a549db557368fa5eadbb199b026fded638",
+  "native_provider": {
+    "passed": 122,
+    "filtered": 224,
+    "suites": 23,
+    "elapsed_s": 209.87,
+    "exit_code": 0
+  },
+  "focused": {
+    "passed": 2,
+    "exit_code": 0,
+    "output": "\nrunning 2 tests\ntest geometry_provider::periodic_boundary::certified::tests::invalid_cover_requests_refuse_before_search ... ok\ntest geometry_provider::periodic_boundary::certified::tests::runtime_owned_cover_certifies_actual_query_centers ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 180 filtered out; finished in 18.66s\n\n[RUNTIME_COVER145] query=Complex { re: 0.3204998863980762, im: 0.04733531447355364 } spatial_refinement=2 elapsed_s=10.4632794\n[RUNTIME_COVER145] query=Complex { re: 0.3565938105543324, im: 0.0640465675777667 } spatial_refinement=0 elapsed_s=8.1912949\n"
+  },
+  "wasm_bridge": {
+    "exit_code": 0,
+    "errors": 0,
+    "warnings": 79,
+    "command": "cargo check --manifest-path tmp/geometry145-runtime-integration/wasm-orbit/Cargo.toml --target-dir target/geometry145-runtime-integration --target wasm32-unknown-unknown --jobs 1"
+  },
+  "reviews": {
+    "standards": "no finding",
+    "spec": "no finding",
+    "health": "no material regression; cost and build size remain integration limits"
+  },
+  "production_changed": false,
+  "remaining": [
+    "bounded derived tiles and reuse",
+    "runtime hierarchy hookup",
+    "original crossing and inward acceptance",
+    "derivative and energy checks",
+    "live training",
+    "query cost and browser artifact size",
+    "adopted versions, golden vectors and bindings"
+  ]
+}
