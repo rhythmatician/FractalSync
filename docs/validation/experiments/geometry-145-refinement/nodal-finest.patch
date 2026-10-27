@@ -1,0 +1,1251 @@
+diff --git a/runtime-core/src/controller.rs b/runtime-core/src/controller.rs
+index 8ab4112..a99cc43 100644
+--- a/runtime-core/src/controller.rs
++++ b/runtime-core/src/controller.rs
+@@ -57,7 +57,7 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
+ ///       of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q. The adapter fails closed on
+ ///       manifold error (no silent flat-physics fallback). This is a
+ ///       transitional seam, not destination Controls v2 (issue #107).
+-pub const CONTROLLER_VERSION: &str = "orbit-controller/10";
++pub const CONTROLLER_VERSION: &str = "orbit-controller/11";
+ 
+ /// Gravity: restoring acceleration toward the valley floor at the origin,
+ /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are
+diff --git a/runtime-core/src/controls.rs b/runtime-core/src/controls.rs
+index 82686c2..cab2928 100644
+--- a/runtime-core/src/controls.rs
++++ b/runtime-core/src/controls.rs
+@@ -750,7 +750,7 @@ impl ControlsV2 {
+ ///   Q_drag  = -beta(brake,grip) G v             // PSD, non-energy-injecting
+ ///   Q_total = Q_drive + Q_potential + Q_wall + Q_drag // summed as covectors
+ ///   a       = G^{-1} Q_total - Γ(v,v)           // single G^{-1} mapping
+-///   v'      = v + a dt                          // semi-implicit Euler
++///   (c', v') = RK4(c, v, Q_drive, beta, dt)     // continuous dynamics
+ ///   c'      = c + v' dt
+ ///   v''     = v' + Δv_impulse(c)                // bounded impulse layered on persistent momentum
+ pub fn integrate_motion_controls(
+diff --git a/runtime-core/src/debug.rs b/runtime-core/src/debug.rs
+index 906f580..93418c2 100644
+--- a/runtime-core/src/debug.rs
++++ b/runtime-core/src/debug.rs
+@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
+ 
+ /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
+ /// in the same commit as binding + UI updates.
+-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/5";
++pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/6";
+ 
+ /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
+ /// Derived from the timebase authority — not restated (ADR 0001).
+diff --git a/runtime-core/src/geometry_provider/empty_cache_controls.rs b/runtime-core/src/geometry_provider/empty_cache_controls.rs
+new file mode 100644
+index 0000000..1bec0ec
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/empty_cache_controls.rs
+@@ -0,0 +1,36 @@
++use super::*;
++
++#[test]
++fn cached_empty_tiles_equal_fresh_membership_and_contour_construction() {
++    let k = 21;
++    let h = dyadic_h(k);
++    let stride = DYADIC_CORE_CELLS as f64 * h;
++    let c = Complex64::new(0.33125, 0.05);
++    let ix = (c.re / stride).floor() as i64;
++    let iy = (c.im / stride).floor() as i64;
++    let mut checked = 0;
++    for dx in [-256, -128, -64, 0, 64, 128, 256] {
++        for dy in [-256, -128, -64, 0, 64, 128, 256] {
++            let x = ix + dx;
++            let y = iy + dy;
++            let re = x as f64 * stride - DYADIC_HALO_CELLS as f64 * h;
++            let im = y as f64 * stride - DYADIC_HALO_CELLS as f64 * h;
++            if uniform_box::membership(re, im, DYADIC_TILE_CELLS as f64 * h).is_some() {
++                continue;
++            }
++            let expected = generate_shore_tile(k, h, re, im).unwrap();
++            if !expected.segments.is_empty() || !expected.unstable_nodes.is_empty() {
++                continue;
++            }
++            let first = get_or_generate_shore_tile(k, x, y).unwrap();
++            let repeated = get_or_generate_shore_tile(k, x, y).unwrap();
++            assert_eq!(format!("{expected:?}"), format!("{first:?}"));
++            assert_eq!(format!("{expected:?}"), format!("{repeated:?}"));
++            let key = TileKey {version: GEOMETRY_PROVIDER_VERSION.into(), k,
++                tile_x: x, tile_y: y, budget: dyadic_n0(k)};
++            assert!(EMPTY_SHORE_TILE_CACHE.write().unwrap().get(&key).is_some());
++            checked += 1;
++        }
++    }
++    assert!(checked > 0);
++}
+diff --git a/runtime-core/src/geometry_provider/empty_tiles.rs b/runtime-core/src/geometry_provider/empty_tiles.rs
+new file mode 100644
+index 0000000..48aab1c
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/empty_tiles.rs
+@@ -0,0 +1,67 @@
++//! Exact storage of generated empty tiles, including every uncertainty flag.
++use super::{ShoreTile,DYADIC_TILE_NODES};
++
++const NODE_COUNT:usize=DYADIC_TILE_NODES*DYADIC_TILE_NODES;
++const WORD_COUNT:usize=NODE_COUNT.div_ceil(64);
++
++#[derive(Clone)]
++pub(super) struct CompressedEmptyTile {
++    k:u32,
++    h:f64,
++    origin:[f64;2],
++    unstable:[u64;WORD_COUNT],
++}
++impl CompressedEmptyTile {
++    pub(super) fn from_tile(tile:&ShoreTile)->Option<Self> {
++        if !tile.segments.is_empty()||!tile.h.is_finite()||tile.h<=0.
++            ||![tile.origin_re,tile.origin_im].iter().all(|v|v.is_finite()){return None;}
++        let mut result=Self{k:tile.k,h:tile.h,origin:[tile.origin_re,tile.origin_im],unstable:[0;WORD_COUNT]};
++        let mut previous=None;
++        for &(x,y) in &tile.unstable_nodes {
++            let ix=(x-tile.origin_re)/tile.h;let iy=(y-tile.origin_im)/tile.h;
++            if ![ix,iy].iter().all(|v|v.is_finite()&&*v>=0.&&*v<DYADIC_TILE_NODES as f64&&v.fract()==0.){return None;}
++            let index=iy as usize*DYADIC_TILE_NODES+ix as usize;
++            if previous.is_some_and(|p|index<=p)||result.point(index)!=(x,y){return None;}
++            result.unstable[index/64]|=1u64<<(index%64);
++            previous=Some(index);
++        }
++        Some(result)
++    }
++    fn point(&self,index:usize)->(f64,f64) {
++        (self.origin[0]+(index%DYADIC_TILE_NODES) as f64*self.h,
++         self.origin[1]+(index/DYADIC_TILE_NODES) as f64*self.h)
++    }
++    pub(super) fn expand(&self)->ShoreTile {
++        ShoreTile{k:self.k,h:self.h,origin_re:self.origin[0],origin_im:self.origin[1],segments:Vec::new(),
++            unstable_nodes:(0..NODE_COUNT).filter(|i|self.unstable[i/64]&(1u64<<(i%64))!=0)
++                .map(|i|self.point(i)).collect()}
++    }
++}
++
++#[cfg(test)] mod tests {
++    use super::*;
++    #[test] fn exact_roundtrip_keeps_full_and_sparse_uncertainty_masks() {
++        for k in [0,17,24,32] {
++            let h=super::super::dyadic_h(k);
++            let mut tile=ShoreTile{k,h,origin_re:170.*h,origin_im:-231.*h,segments:Vec::new(),unstable_nodes:Vec::new()};
++            let points:Vec<_>=(0..NODE_COUNT).map(|i|(tile.origin_re+(i%DYADIC_TILE_NODES) as f64*h,
++                tile.origin_im+(i/DYADIC_TILE_NODES) as f64*h)).collect();
++            for mask in [Vec::new(),points.iter().step_by(17).copied().collect(),points.clone()] {
++                tile.unstable_nodes=mask;
++                let compressed=CompressedEmptyTile::from_tile(&tile).unwrap();
++                assert_eq!(format!("{tile:?}"),format!("{:?}",compressed.expand()));
++            }
++        }
++        assert!(std::mem::size_of::<CompressedEmptyTile>()<=448);
++    }
++    #[test] fn unsupported_order_or_coordinates_use_the_original_storage() {
++        let mut tile=ShoreTile{k:0,h:0.125,origin_re:0.,origin_im:0.,segments:Vec::new(),unstable_nodes:vec![(0.0625,0.)]};
++        assert!(CompressedEmptyTile::from_tile(&tile).is_none());
++        tile.unstable_nodes=vec![(0.125,0.),(0.,0.)];
++        assert!(CompressedEmptyTile::from_tile(&tile).is_none());
++        tile.unstable_nodes=vec![(0.,0.),(0.,0.)];
++        assert!(CompressedEmptyTile::from_tile(&tile).is_none());
++        tile.unstable_nodes=vec![(f64::NAN,0.)];
++        assert!(CompressedEmptyTile::from_tile(&tile).is_none());
++    }
++}
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/branch/arc_cache.rs b/runtime-core/src/geometry_provider/periodic_boundary/branch/arc_cache.rs
+new file mode 100644
+index 0000000..8620a29
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch/arc_cache.rs
+@@ -0,0 +1,84 @@
++//! Pure certificate memo. Quantized values are solver seeds, never proof bounds.
++use super::{certify_auto,Certificate,C};
++use super::super::super::LruCache;
++use once_cell::sync::Lazy;
++use std::sync::RwLock;
++#[cfg(test)]
++use std::sync::atomic::{AtomicUsize,Ordering};
++
++type Key=[u64;8];
++type Cache=RwLock<LruCache<Key,Option<Certificate>>>;
++static CACHE:Lazy<Cache>=Lazy::new(||RwLock::new(LruCache::new(8192)));
++#[cfg(test)]
++static HITS:AtomicUsize=AtomicUsize::new(0);
++#[cfg(test)]
++static MISSES:AtomicUsize=AtomicUsize::new(0);
++
++fn seed(value:f64)->f64 {
++    // Retain 40 significand fraction bits. Re-solving and strict outward
++    // certification follow this operation even when the cache is disabled.
++    f64::from_bits((value.to_bits()+(1<<11))&!((1<<12)-1))
++}
++fn key(z:C,c:C,mu:C,period:usize,radius:f64)->Option<Key> {
++    if ![z,c,mu].into_iter().all(super::finite)||period==0||period>512||!radius.is_finite()||radius<0. {
++        return None;
++    }
++    let z=C::new(seed(z.re),seed(z.im));let c=C::new(seed(c.re),seed(c.im));
++    if ![z,c].into_iter().all(super::finite){return None;}
++    Some([period as u64,z.re.to_bits(),z.im.to_bits(),c.re.to_bits(),c.im.to_bits(),mu.re.to_bits(),mu.im.to_bits(),radius.to_bits()])
++}
++fn uncached(key:Key)->Option<Certificate> {
++    let c64=|i|C::new(f64::from_bits(key[i]),f64::from_bits(key[i+1]));
++    let period=usize::try_from(key[0]).ok()?;let mu=c64(5);
++    let (z,c)=super::super::solve(c64(1),c64(3),period,mu)?;
++    certify_auto(z,c,mu,period,f64::from_bits(key[7])).map(|(proof,_)|proof)
++}
++fn using(cache:&Cache,key:Key)->Option<Certificate> {
++    if let Ok(mut retained)=cache.write(){if let Some(result)=retained.get(&key){
++        #[cfg(test)]
++        HITS.fetch_add(1,Ordering::Relaxed);return result;
++    }}
++    #[cfg(test)]
++        MISSES.fetch_add(1,Ordering::Relaxed);
++    let result=uncached(key);
++    if let Ok(mut retained)=cache.write(){retained.insert(key,result);}
++    result
++}
++pub(super) fn certify(z:C,c:C,mu:C,period:usize,radius:f64)->Option<Certificate> {
++    using(&CACHE,key(z,c,mu,period,radius)?)
++}
++#[cfg(test)] pub(super) fn stats()->(usize,usize) {
++    (HITS.load(Ordering::Relaxed),MISSES.load(Ordering::Relaxed))
++}
++
++#[cfg(test)] mod tests {
++    use super::*;
++    #[test] fn cache_order_and_eviction_preserve_every_certificate_field() {
++        let cache=RwLock::new(LruCache::new(2));
++        let keys=[-0.234,-0.334,-0.434].map(|x|{
++            let mu=C::new(x,0.456);let z=mu*0.5;let c=z-mu*mu*0.25;
++            key(z,c,mu,1,0.0001).unwrap()
++        });
++        let expected=keys.map(|key|format!("{:?}",uncached(key).unwrap()));
++        for i in [0,1,2,0,2,1,0]{
++            assert_eq!(format!("{:?}",using(&cache,keys[i]).unwrap()),expected[i]);
++            assert!(cache.read().unwrap().map.len()<=2);
++        }
++    }
++    #[test] fn solver_seed_quantization_never_replaces_strict_certification() {
++        let mu=C::new(-0.234,0.456);let z=mu*0.5;let c=z-mu*mu*0.25;
++        let first=key(z,c,mu,1,0.0001).unwrap();
++        let adjacent=key(C::new(z.re.next_up(),z.im),C::new(c.re,c.im.next_down()),mu,1,0.0001).unwrap();
++        assert_eq!(first,adjacent);
++        let proof=uncached(first).unwrap();
++        for offset in [C::new(0.,0.),C::new(1e-5,0.),C::new(0.,-1e-5)] {
++            let m=mu+offset;let expected=[m*0.5,m*0.5-m*m*0.25];
++            let enclosure=proof.at(m).unwrap();
++            for i in 0..2{assert!((expected[i]-enclosure[i].0).norm()<=enclosure[i].1);}
++        }
++        assert!(certify(z,c,mu,0,0.0001).is_none());
++        assert!(certify(z,c,mu,1,f64::NAN).is_none());
++        assert!(certify(z,c,mu,1,-1.).is_none());
++        assert!(certify(C::new(f64::NAN,0.),c,mu,1,0.0001).is_none());
++    }
++}
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs b/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
+index 349555d..1ede36f 100644
+--- a/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
+@@ -469,7 +469,7 @@ impl Builder<'_> {
+                 v = v * v + cm;
+             }
+             (zm, cm) = super::super::solve(best, cm, self.period, mu)?;
+-            let (patch, _) = certify_auto(zm, cm, mu, self.period, radius)?;
++            let patch = super::arc_cache::certify(zm, cm, mu, self.period, radius)?;
+             let item = edge(patch, start, end).ok()?;
+             if let Some(previous) = self.edges.last() {
+                 join(&previous.patch, &patch, start).ok()?;
+@@ -495,18 +495,7 @@ impl Builder<'_> {
+             return Ok((z, c));
+         }
+         if depth >= 24 {
+-            eprintln!(
+-                "[F64_COVER_REFUSAL145] mu={mu:?} local_root={:?} targets={:?}",
+-                super::super::solve(z, c, self.period, mu).map(|(z, c)| (
+-                    z,
+-                    c,
+-                    self.targets
+-                        .iter()
+-                        .map(|(q, m)| ((c - *q).norm(), *m))
+-                        .collect::<Vec<_>>()
+-                )),
+-                self.targets
+-            );
++            
+             return Err(self.fail(Refusal::Work, depth));
+         }
+         let (z, c) = self.extend(start, mu, z, c, depth + 1)?;
+@@ -611,6 +600,22 @@ fn build_seeded(
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn neighboring_queries_share_pure_arc_certificates() {
++        let q=C::new(0.32049988639807619,0.04733531447355364);
++        let r=Request{radius:0.999999,root_radius:0.999,root_width:0.002,initial_edges:512,max_regions:65536};
++        let mut rows=Vec::new();
++        for point in [q,q+C::new(3e-7,1e-7),q] {
++            let before=super::super::arc_cache::stats();let start=std::time::Instant::now();
++            let distance=super::super::super::propose(point).unwrap().distance;
++            let curve=build(point,r,&[(point,(distance-5e-8).max(0.))]).unwrap();
++            let after=super::super::arc_cache::stats();
++            rows.push(curve.reference_rows());
++            eprintln!("[ARC_CACHE145] point={point:?} seconds={} edges={} hits={} misses={}",
++                start.elapsed().as_secs_f64(),curve.edge_count(),after.0-before.0,after.1-before.1);
++        }
++        assert_eq!(rows[0],rows[2]);
++    }
+     fn request() -> Request {
+         Request {
+             radius: 0.5,
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/branch.rs b/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
+index 864ca42..b8adb6f 100644
+--- a/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
+@@ -314,6 +314,8 @@ fn measured(z: C, c: C, mu: C, period: usize, r: [f64; 3]) -> Option<Certificate
+         })
+ }
+ 
++#[path = "branch/arc_cache.rs"]
++mod arc_cache;
+ pub(super) fn certify_auto(
+     z: C,
+     c: C,
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+index b653442..bf578e7 100644
+--- a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+@@ -60,7 +60,6 @@ impl DistanceCover {
+         if !finite(query) || !error.is_finite() || error <= 0. {
+             return None;
+         }
+-        let geometry_start = std::time::Instant::now();
+         let proposal = propose(query)?;
+         let lower = self.curve.clearance(query).ok()?.lower();
+         if lower < (proposal.distance - error).next_up() {
+@@ -68,15 +67,11 @@ impl DistanceCover {
+         }
+         // Floating membership only ranks candidates. A fresh directed proof at
+         // the exact represented endpoint is the sole exterior authority.
+-        let geometry_s = geometry_start.elapsed().as_secs_f64();
+-        let witness_start = std::time::Instant::now();
+-        let mut mp_s = 0.;
+-        let mut fast_hit = false;
+         let witness = [error * 0.25, error].into_iter().find_map(|window| {
+             super::witness_window(query, window, &proposal, |point| {
+                 if let Some(proof) = super::fast_escape::escape([point.re, point.im], 32768) {
+-                    fast_hit = true;
+-                    if std::env::var_os("GEOMETRY145_REPLAY_FAST").is_some() {
++                    #[cfg(test)]
++                    {
+                         assert!(point_proof::escape([point.re, point.im], 512, proof.update + 1).is_some());
+                     }
+                     return Some(Arc::new(ExteriorWitness { point, _proof: proof }));
+@@ -84,9 +79,7 @@ impl DistanceCover {
+                 None
+             }, |point| {
+                 for precision in [128, 256] {
+-                    let mp_start = std::time::Instant::now();
+                     let proof = point_proof::escape([point.re, point.im], precision, 32768);
+-                    mp_s += mp_start.elapsed().as_secs_f64();
+                     if let Some(proof) = proof {
+                         return Some(Arc::new(ExteriorWitness { point, _proof: proof }));
+                     }
+@@ -94,7 +87,7 @@ impl DistanceCover {
+                 None
+             })
+         });
+-        eprintln!("[PROFILE_NODE145] geometry_s={geometry_s} witness_s={} mp_s={mp_s} fast_hit={fast_hit}", witness_start.elapsed().as_secs_f64());
++        
+         Self::finish(query, error, proposal, lower, witness?)
+     }
+ 
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+index c42e328..d5b7c9d 100644
+--- a/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+@@ -49,7 +49,6 @@ fn key(query: C, k: u32, error: f64) -> Option<Key> {
+ 
+ impl Tile {
+     fn new(key: Key) -> Option<Self> {
+-        let profile_start = std::time::Instant::now();
+         let (k, ix, iy, error) = key;
+         let h = dyadic_h(k);
+         let error = f64::from_bits(error);
+@@ -70,8 +69,6 @@ impl Tile {
+             .copied()
+             .filter(|&q| super::propose(q).is_some())
+             .collect();
+-        let proposal_s = profile_start.elapsed().as_secs_f64();
+-        let cover_start = std::time::Instant::now();
+         let midpoint = origin + C::new(4. * h, 4. * h);
+         let center = *usable.iter().min_by(|a, b| {
+             (**a - midpoint)
+@@ -84,7 +81,7 @@ impl Tile {
+             center,
+             &usable.iter().map(|&q| (q, error)).collect::<Vec<_>>(),
+         )?;
+-        eprintln!("[PROFILE_CONSTRUCTOR145] k={k} proposal_s={proposal_s} cover_s={}", cover_start.elapsed().as_secs_f64());
++        
+         Some(Self {
+             cover,
+             targets,
+@@ -96,7 +93,6 @@ impl Tile {
+         if targets.iter().any(|q| !self.targets.contains(q)) {
+             return None;
+         }
+-        let nodes_start = std::time::Instant::now();
+         let mut nodes = Vec::with_capacity(81);
+         for &point in targets {
+             let key = (point.re.to_bits(), point.im.to_bits());
+@@ -124,8 +120,6 @@ impl Tile {
+             };
+             nodes.push(sample);
+         }
+-        let nodes_s = nodes_start.elapsed().as_secs_f64();
+-        let center_start = std::time::Instant::now();
+         // Non-grid query points do not grow the retained node cache.
+         let donor = targets
+             .iter()
+@@ -141,7 +135,7 @@ impl Tile {
+             .and_then(|node| self.cover.sample_reusing(query, error, node))
+             .or_else(|| self.cover.sample(query, error))?;
+         let direction_agrees = self.cover.direction_agrees(&center, h);
+-        eprintln!("[PROFILE_FIELD145] nodes_s={nodes_s} center_s={}", center_start.elapsed().as_secs_f64());
++        
+         Some(CertifiedField {
+             nodes,
+             reference: center.sample().value,
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary.rs b/runtime-core/src/geometry_provider/periodic_boundary.rs
+index abbf16c..2a5aff8 100644
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -15,6 +15,26 @@ mod cases;
+ fn finite(z: C) -> bool {
+     z.re.is_finite() && z.im.is_finite()
+ }
++
++#[cfg(test)]
++mod crossing_node_probe {
++    use super::*;
++    #[test]
++    fn inspect_next_native_refusal_node() {
++        let query=C::new(0.32057285308837891,0.04727935791015625);
++        let proposal=propose(query);
++        eprintln!("[CROSSING_NODE145] proposal={proposal:?}");
++        eprintln!("[CROSSING_NODE145] membership={:?}",point_proof::membership([query.re,query.im],128,32768));
++        if let Some(proposal)=proposal {
++            let error=proposal.distance/128.;
++            let cover=certified::DistanceCover::build(query,&[(query,error)]);
++            eprintln!("[CROSSING_NODE145] cover={}",cover.is_some());
++            if let Some(cover)=cover {
++                eprintln!("[CROSSING_NODE145] sample={:?}",cover.sample(query,error).map(|node|node.sample().value));
++            }
++        }
++    }
++}
+ fn dot(a: C, b: C) -> f64 {
+     a.re * b.re + a.im * b.im
+ }
+diff --git a/runtime-core/src/geometry_provider/range_jet.rs b/runtime-core/src/geometry_provider/range_jet.rs
+index d6e9297..198b2c2 100644
+--- a/runtime-core/src/geometry_provider/range_jet.rs
++++ b/runtime-core/src/geometry_provider/range_jet.rs
+@@ -124,6 +124,21 @@ impl RangeJet {
+         self.square().add(Self::constant(epsilon*epsilon)).sqrt_positive()?
+             .reciprocal_positive().map(|v|v.scale(factor).add(Self::constant(-1.)).smoothstep())
+     }
++    pub(super) fn disagreement(self,fine:Self,epsilon:f64,alpha:f64,factor:f64)->Option<Self> {
++        if !self.well_formed()||!fine.well_formed()||!self.d.finite()||!fine.d.finite()
++            ||!epsilon.is_finite()||epsilon<=0. {return None;}
++        let scale=16./(alpha*factor).powi(2);
++        if !scale.is_finite()||scale<=0. {return None;}
++        let rho2=self.d.square().add(I::point(epsilon).square());
++        if !rho2.finite()||rho2.lo<=0. {return None;}
++        let scalar=fine.d.sub(self.d).square().div_positive(rho2).mul(I::point(scale));
++        if !scalar.finite(){return None;}
++        if scalar.lo>=2. {return Some(Self::constant(1.));}
++        if scalar.hi<=1. {return Some(Self::constant(0.));}
++        let delta=fine.add(self.scale(-1.));
++        Some(delta.square().mul(self.square().add(Self::constant(epsilon*epsilon)).reciprocal_positive()?)
++            .scale(scale).add(Self::constant(-1.)).smoothstep())
++    }
+     pub(super) fn finite(self)->bool {
+         self.d.finite() && self.g.iter().chain(self.h.iter().flatten()).all(|v|v.finite())
+     }
+@@ -143,6 +158,18 @@ impl RangeJet {
+ #[cfg(test)] mod tests {
+     use super::*;
+     fn encloses(range:I,value:f64)->bool {range.lo<=value && range.hi>=value}
++    #[test] fn disagreement_bounds_cover_numeric_weight_derivatives() {
++        let epsilon=1e-4;
++        for delta in [0.,0.0003,0.001] {
++            let c=super::super::FieldJet{d:0.04,g:[0.2,-0.1],h:[[0.3,0.4],[0.4,-0.2]]};
++            let f=super::super::FieldJet{d:c.d+delta,g:[0.21,-0.12],h:[[0.32,0.39],[0.39,-0.19]]};
++            let expected=super::super::FieldHierarchy::disagreement(c,f,epsilon);
++            let range=RangeJet::exact(c.d,c.g,c.h).disagreement(RangeJet::exact(f.d,f.g,f.h),epsilon,0.1,0.25).unwrap();
++            assert!(encloses(range.d,expected.d));
++            for i in 0..2 {assert!(encloses(range.g[i],expected.g[i]));
++                for j in 0..2 {assert!(encloses(range.h[i][j],expected.h[i][j]));}}
++        }
++    }
+     #[test] fn multiplication_encloses_sampled_value_gradient_and_hessian() {
+         let x=RangeJet{d:I{lo:1.,hi:2.},g:[I{lo:-2.,hi:3.};2],h:[[I{lo:-4.,hi:5.};2];2]};
+         let y=RangeJet{d:I{lo:3.,hi:4.},g:[I{lo:-1.,hi:2.};2],h:[[I{lo:-3.,hi:4.};2];2]};
+diff --git a/runtime-core/src/geometry_provider/uniform_box.rs b/runtime-core/src/geometry_provider/uniform_box.rs
+index 30e6f8e..f8272a4 100644
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -13,7 +13,23 @@ pub(super) fn proposal_cycle_trap(z:[f64;2],c:[f64;2],period:usize,radius:f64)->
+ /// `Some` proves that every point has the same membership. `None` is only a
+ /// failed shortcut, never a membership refusal. Outward-rounded intervals may
+ /// overestimate the orbit enclosure, which costs work but cannot hide a Shore.
++type MembershipCache = super::LruCache<(u64,u64,u64),Option<bool>>;
++static MEMBERSHIP_CACHE: once_cell::sync::Lazy<std::sync::RwLock<MembershipCache>> =
++    once_cell::sync::Lazy::new(|| std::sync::RwLock::new(MembershipCache::new(16384)));
++
+ pub(super) fn membership(re0: f64, im0: f64, width: f64) -> Option<bool> {
++    membership_using(re0,im0,width,&MEMBERSHIP_CACHE)
++}
++fn membership_using(re0:f64,im0:f64,width:f64,cache:&std::sync::RwLock<MembershipCache>)->Option<bool> {
++    let key=(re0.to_bits(),im0.to_bits(),width.to_bits());
++    if let Ok(mut retained)=cache.write() {
++        if let Some(result)=retained.get(&key) {return result;}
++    }
++    let result=membership_uncached(re0,im0,width);
++    if let Ok(mut retained)=cache.write() {retained.insert(key,result);}
++    result
++}
++fn membership_uncached(re0: f64, im0: f64, width: f64) -> Option<bool> {
+     if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width < 0.0 {
+         return None;
+     }
+@@ -402,3 +418,19 @@ mod correlated_return_tests {
+   }
+  }
+ }
++
++#[cfg(test)] mod cache_tests {
++ use super::*;
++ #[test] fn exact_results_survive_order_and_eviction() {
++  let cache=std::sync::RwLock::new(MembershipCache::new(2));
++  let fixtures=[(-0.1,-0.1,0.2),(-1.05,-0.05,0.1),(0.8,0.5,0.1),(0.24,-0.01,0.02),
++   (0.33125,0.05,1e-7),(f64::NAN,0.,1.),(-0.,0.,0.),(0.,0.,0.)];
++  let expected:Vec<_>=fixtures.iter().map(|&(x,y,w)|membership_uncached(x,y,w)).collect();
++  for index in (0..fixtures.len()).chain((0..fixtures.len()).rev()) {
++   let (x,y,w)=fixtures[index];
++   assert_eq!(membership_using(x,y,w,&cache),expected[index]);
++   assert_eq!(membership_using(x,y,w,&cache),expected[index]);
++   assert!(cache.read().unwrap().map.len()<=2);
++  }
++ }
++}
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+index 6935fb6..447946d 100644
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -35,12 +35,13 @@ mod certified_cardioid;
+ mod feature_cover;
+ mod range_jet;
+ mod periodic_boundary;
++mod empty_tiles;
+ use self::range_jet::RangeJet;
+ 
+ /// Version of the geometry provider contract. Bump when jet shape, semantics,
+ /// or validity classification changes in the same commit as manifold/debug
+ /// updates and regenerated goldens/mirrors.
+-pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/6";
++pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/7";
+ 
+ /// Scale-relative resolution law factor: local cell size <= alpha * max(rho, epsilon).
+ /// The exact refinement/error criterion is derived and validated (ADR 0004 does
+@@ -423,6 +424,13 @@ fn dyadic_tile_origin(c: Complex64, h: f64) -> (i64, i64, f64, f64) {
+     (core_ix, core_iy, tile_re0, tile_im0)
+ }
+ 
++// Preserve all uncertainty flags while retaining segment-free tiles compactly.
++type EmptyShoreTileLru = LruCache<TileKey,empty_tiles::CompressedEmptyTile>;
++static EMPTY_SHORE_TILE_CACHE: Lazy<RwLock<EmptyShoreTileLru>> =
++    Lazy::new(|| RwLock::new(EmptyShoreTileLru::new(16384)));
++
++#[cfg(test)] mod empty_cache_controls;
++
+ fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<ShoreTile> {
+     let budget = dyadic_n0(k);
+     let key = TileKey {
+@@ -437,6 +445,9 @@ fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<Shor
+             return Some(tile);
+         }
+     }
++    if let Ok(mut cache) = EMPTY_SHORE_TILE_CACHE.write() {
++        if let Some(tile) = cache.get(&key) {return Some(tile.expand());}
++    }
+     let h = dyadic_h(k);
+     let core_stride = DYADIC_CORE_CELLS as f64 * h;
+     let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+@@ -454,7 +465,9 @@ fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<Shor
+         });
+     }
+     let tile = generate_shore_tile(k, h, tile_re0, tile_im0)?;
+-    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
++    if let Some(compact)=empty_tiles::CompressedEmptyTile::from_tile(&tile) {
++        if let Ok(mut cache) = EMPTY_SHORE_TILE_CACHE.write() {cache.insert(key,compact);}
++    } else if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+         cache.insert(key, tile.clone());
+     }
+     Some(tile)
+@@ -1173,6 +1186,7 @@ impl FieldJet {
+ }
+ 
+ struct FieldModel {
++    source:LevelSource,
+     range:RangeJet,
+     size_bound:f64,
+     field: FieldJet,
+@@ -1224,10 +1238,47 @@ impl FieldHierarchy {
+             .add(FieldJet::constant(-1.))
+             .smoothstep()
+     }
++    fn selected_weight(&self,index:usize,epsilon:f64)->Option<(FieldJet,RangeJet,bool)> {
++        let coarse=self.models.get(index)?;
++        let size=Self::next_weight(coarse.field,coarse.h,epsilon,coarse.detail);
++        let range_size=coarse.range.size_weight(coarse.h,epsilon,GEOMETRY_SCALE_ALPHA/128.)?;
++        let one=|v:FieldJet|v.d==1.&&v.g==[0.;2]&&v.h==[[0.;2];2];
++        let bounded=one(size)&&range_size.is_constant(1.)
++            &&size_saturated_by_bound(coarse.h,epsilon,coarse.size_bound);
++        if one(size)&&range_size.is_constant(1.) {
++            return Some((size,range_size,bounded||coarse.certified));
++        }
++        if coarse.source!=LevelSource::Shore {
++            let certificate=if field_zero(size)&&range_size.is_constant(0.) {coarse.certified}
++            else if let (Some(first),Some(second))=(self.models.get(index+1),self.models.get(index+2)) {
++                let a=Self::disagreement(coarse.field,first.field,epsilon);
++                let b=Self::disagreement(coarse.field,second.field,epsilon);
++                coarse.certified&&((first.certified&&one(a))||(second.certified&&one(b))
++                    ||(first.certified&&second.certified))
++            } else {false};
++            return Some((size,range_size,certificate));
++        }
++        let first=self.models.get(index+1)?;let second=self.models.get(index+2)?;
++        let error1=Self::disagreement(coarse.field,first.field,epsilon);
++        let range1=coarse.range.disagreement(first.range,epsilon,GEOMETRY_SCALE_ALPHA,DYADIC_FIT_ERROR_FACTOR)?;
++        if one(error1)&&range1.is_constant(1.)&&coarse.certified&&first.certified {
++            return Some((FieldJet::constant(1.),RangeJet::constant(1.),true));
++        }
++        let error2=Self::disagreement(coarse.field,second.field,epsilon);
++        let range2=coarse.range.disagreement(second.range,epsilon,GEOMETRY_SCALE_ALPHA,DYADIC_FIT_ERROR_FACTOR)?;
++        if one(error2)&&range2.is_constant(1.)&&coarse.certified&&second.certified {
++            return Some((FieldJet::constant(1.),RangeJet::constant(1.),true));
++        }
++        let either=|a:RangeJet,b:RangeJet|RangeJet::constant(1.).add(
++            RangeJet::constant(1.).add(a.scale(-1.)).mul(RangeJet::constant(1.).add(b.scale(-1.))).scale(-1.));
++        Some((Self::either(size,Self::either(error1,error2)),
++            either(range_size,either(range1,range2)),coarse.certified&&first.certified&&second.certified))
++    }
+     fn new(jet: &GeometryJet, _epsilon: f64, certified: bool, detail: FieldJet) -> Self {
+         let field = FieldJet::from_geometry(jet);
+         Self {
+             models: vec![FieldModel {
++                source:LevelSource::Component,
+                 size_bound:f64::INFINITY,
+                 range:RangeJet::exact(field.d,field.g,field.h),
+                 field,
+@@ -1253,7 +1304,11 @@ impl FieldHierarchy {
+         self.advance_enclosed(jet,epsilon,certified,detail,size_bound,range);
+     }
+     fn advance_enclosed(&mut self,jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet,size_bound:f64,range:RangeJet) {
++        self.advance_enclosed_source(jet,epsilon,certified,detail,size_bound,range,LevelSource::Component);
++    }
++    fn advance_enclosed_source(&mut self,jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet,size_bound:f64,range:RangeJet,source:LevelSource) {
+         self.models.push(FieldModel {
++            source,
+             size_bound,
+             range,
+             field: FieldJet::from_geometry(jet),
+@@ -1279,10 +1334,17 @@ impl FieldHierarchy {
+             let coarse = &self.models[i];
+             let first = &self.models[i + 1];
+             let second = &self.models[i + 2];
+-            let size = Self::next_weight(coarse.field, coarse.h, epsilon, coarse.detail);
+-            let error1 = Self::disagreement(coarse.field, first.field, epsilon);
+-            let error2 = Self::disagreement(coarse.field, second.field, epsilon);
+-            let weight = size;
++            let (weight,weight_certificate)=self.selected_weight(i,epsilon)
++                .map(|(weight,_,certificate)|(weight,certificate)).unwrap_or_else(|| {
++                    // The nominal field still exists when its interval proof
++                    // fails. Continue it, retaining the failed certificate.
++                    let size=Self::next_weight(coarse.field,coarse.h,epsilon,coarse.detail);
++                    let weight=if coarse.source==LevelSource::Shore {
++                        Self::either(size,Self::either(Self::disagreement(coarse.field,first.field,epsilon),
++                            Self::disagreement(coarse.field,second.field,epsilon)))
++                    } else {size};
++                    (weight,false)
++                });
+             let next = if weight.d == 1. && weight.g == [0.; 2] && weight.h == [[0.; 2]; 2] {
+                 product
+             } else if field_zero(weight) {
+@@ -1290,16 +1352,7 @@ impl FieldHierarchy {
+             } else {
+                 product.mul(weight)
+             };
+-            let one = |v: FieldJet| v.d == 1. && v.g == [0.; 2] && v.h == [[0.; 2]; 2];
+-            // A flat coefficient alone cannot certify the inputs selecting it.
+-            // A certified operand that independently forces OR to one can
+-            // dominate other unknown operands; a zero plateau cannot.
+-            let bounded_one=one(size) && size_saturated_by_bound(coarse.h,epsilon,coarse.size_bound);
+-            weights_certified &= bounded_one || (coarse.certified
+-                && (one(size)
+-                    || (first.certified && one(error1))
+-                    || (second.certified && one(error2))
+-                    || (first.certified && second.certified)));
++            weights_certified &=weight_certificate;
+             let retained = product.add(next.scale(-1.));
+             if !field_zero(retained) {
+                 prefix = prefix.add(retained.mul(coarse.field));
+@@ -1327,22 +1380,10 @@ impl FieldHierarchy {
+         let mut range_sum=RangeJet::constant(0.);
+         let mut effective_h:f64=0.;
+         for (i,coarse) in self.models.iter().enumerate() {
+-            let size=Self::next_weight(coarse.field,coarse.h,epsilon,coarse.detail);
+-            let range_weight=coarse.range.size_weight(coarse.h,epsilon,GEOMETRY_SCALE_ALPHA/128.)?;
++            let (size,range_weight,weight_certificate)=self.selected_weight(i,epsilon)?;
++            if !weight_certificate {return None;}
+             let zero=field_zero(size)&&range_weight.is_constant(0.);
+             let one=|v:FieldJet|v.d==1.&&v.g==[0.;2]&&v.h==[[0.;2];2];
+-            if zero {
+-                if !coarse.certified {return None;}
+-            } else {
+-                let bounded_one=one(size)&&size_saturated_by_bound(coarse.h,epsilon,coarse.size_bound);
+-                let operands=if let (Some(first),Some(second))=(self.models.get(i+1),self.models.get(i+2)) {
+-                    let error1=Self::disagreement(coarse.field,first.field,epsilon);
+-                    let error2=Self::disagreement(coarse.field,second.field,epsilon);
+-                    coarse.certified&&(one(size)||(first.certified&&one(error1))
+-                        ||(second.certified&&one(error2))||(first.certified&&second.certified))
+-                } else {coarse.certified&&one(size)};
+-                if !(bounded_one||operands) {return None;}
+-            }
+             let next=if one(size) {product} else if field_zero(size) {
+                 FieldJet::constant(0.)
+             } else {product.mul(size)};
+@@ -1370,7 +1411,7 @@ impl FieldHierarchy {
+         let mut sum=self.models.first()?.range;
+         for i in 0..self.models.len().saturating_sub(2) {
+             let coarse=&self.models[i];let first=&self.models[i+1];
+-            let weight=coarse.range.size_weight(coarse.h,epsilon,GEOMETRY_SCALE_ALPHA/128.)?;
++            let (_,weight,_)=self.selected_weight(i,epsilon)?;
+             let (next,retained)=if weight.is_constant(1.) {
+                 (product,RangeJet::constant(0.))
+             } else if weight.is_constant(0.) {
+@@ -1793,19 +1834,19 @@ fn field_node(c:Complex64,k:u32)->Option<NodalSample> {
+  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {if let Some(v)=cache.get(&key){return Some(v);}}
+ 
+  // A retained node is defined only by its own coordinates and start level.
+- // Query-centered source reuse is excluded until equivalence is proved.
++ // Query-centered reuse is permitted only by canonical_sample_from_tile.
++ let mut retained=None;
+  for q in k..=(k+8).min(32) {
+   let Ok((tile,_))=contained_tile(c,q) else {continue;};
+   if !point_membership_stable(c,&tile) {continue;}
+-  let value=shore_nodal_sample(c,tile.h,&tile.segments)?;
+-  if true {
+-   if let Ok(mut cache)=FIELD_NODE_CACHE.write() {cache.insert(key,value);}
+-   return Some(value);
+-  }
++  if let Some(value)=shore_nodal_sample(c,tile.h,&tile.segments) {retained=Some(value);}
+ 
+  }
+- eprintln!("[NODE145] unresolved k={k} c=({:.17},{:.17})",c.re,c.im);
+- None
++ 
++ if let Some(value)=retained {
++  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {cache.insert(key,value);}
++ }
++ retained
+ }
+ 
+ 
+@@ -1938,6 +1979,28 @@ fn compute_jet_at_level(
+     compute_jet_at_level_using(c, epsilon, k, h, tile, |sample| field_node(sample, k))
+ }
+ 
++fn source_root(c:Complex64,h:f64)->(i64,i64) {
++    let (ix,iy,_,_)=dyadic_tile_origin(c,h);
++    let stride=(DYADIC_TILE_CELLS/DYADIC_CORE_CELLS) as i64;
++    let center=(DYADIC_HALO_CELLS/DYADIC_CORE_CELLS) as i64;
++    ((ix+center).div_euclid(stride)*stride,(iy+center).div_euclid(stride)*stride)
++}
++// The expanded search contains every canonical same-root point search. A
++// first contour-bearing leaf can overestimate nearest distance by at most its
++// diagonal. Two stencil displacements and the original search padding give
++// (56+20)*sqrt(2)+4 cells; construction reserves two additional cells and one
++// region visit. Membership shortcuts, leaf grids and work limits are unchanged.
++fn canonical_sample_from_tile(point:Complex64,owner:Complex64,k:u32,tile:&ShoreTile)->Option<NodalSample> {
++    if source_root(point,tile.h)!=source_root(owner,tile.h) {return None;}
++    let cells=(2*FIELD_SEARCH_RADIUS+1) as usize*DYADIC_TILE_CELLS;
++    if !contour_footprint_contains(point,tile,cells)||!point_membership_stable(point,tile){return None;}
++    shore_nodal_sample(point,dyadic_h(k),&tile.segments)
++}
++fn compute_jet_at_level_reusing(c:Complex64,epsilon:f64,k:u32,h:f64,tile:&ShoreTile,_reusable:bool)->Option<FittedJet> {
++    // The former reuse proof applies to the first source level only.
++    compute_jet_at_level(c,epsilon,k,h,tile)
++}
++
+ // Keep scalar sampling explicit: runtime nodes use their canonical Mandelbrot
+ // definition; synthetic contour checks supply their own fixed distance field.
+ fn compute_jet_at_level_using(
+@@ -2106,6 +2169,7 @@ const FIELD_REGION_VISIT_LIMIT: usize = 131072;
+ const FIELD_LEAF_TILE_LIMIT: usize = 16384;
+ const FIELD_SEARCH_RADIUS: i64 = 4096;
+ struct RegionSearch {
++    padding:f64,
+     visits: usize,
+     leaves: usize,
+     nearest: f64,
+@@ -2142,13 +2206,10 @@ impl RegionSearch {
+         while let Some(region) = heap.pop() {
+             self.visits += 1;
+             if self.visits > FIELD_REGION_VISIT_LIMIT {
+-                eprintln!(
+-                    "REGION_LIMIT k={k} leaves={} visits={}",
+-                    self.leaves, self.visits
+-                );
++                
+                 return Err(TileQueryError::FootprintUnresolved);
+             }
+-            if region.lower > self.nearest + (10. * 2_f64.sqrt() + 4.) * h {
++            if region.lower > self.nearest + self.padding * h {
+                 break;
+             }
+             let [x0, x1, y0, y1] = region.bounds;
+@@ -2162,10 +2223,7 @@ impl RegionSearch {
+             if x0 == x1 && y0 == y1 {
+                 self.leaves += 1;
+                 if self.leaves > FIELD_LEAF_TILE_LIMIT {
+-                    eprintln!(
+-                        "LEAF_LIMIT k={k} leaves={} visits={}",
+-                        self.leaves, self.visits
+-                    );
++                    
+                     return Err(TileQueryError::FootprintUnresolved);
+                 }
+                 let tile =
+@@ -2198,6 +2256,19 @@ impl RegionSearch {
+     }
+ }
+ fn contained_tile(c: Complex64, k: u32) -> Result<(ShoreTile, bool), TileQueryError> {
++    contained_tile_with_padding(c,k,10.*2f64.sqrt()+4.).map(|(tile,stable,_)|(tile,stable))
++}
++fn contained_stencil_tile(c:Complex64,k:u32)->Result<(ShoreTile,bool,bool),TileQueryError> {
++    let (original,stable)=contained_tile(c,k)?;
++    if stable {
++        let padding=(DYADIC_TILE_CELLS as f64+20.)*2f64.sqrt()+6.;
++        if let Ok((expanded,true,true))=contained_tile_with_padding(c,k,padding) {
++            return Ok((expanded,true,true));
++        }
++    }
++    Ok((original,stable,false))
++}
++fn contained_tile_with_padding(c:Complex64,k:u32,padding:f64)->Result<(ShoreTile,bool,bool),TileQueryError> {
+     let h = dyadic_h(k);
+     let (ix, iy, _, _) = dyadic_tile_origin(c, h);
+     let stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
+@@ -2211,6 +2282,7 @@ fn contained_tile(c: Complex64, k: u32) -> Result<(ShoreTile, bool), TileQueryEr
+     let radius = FIELD_SEARCH_RADIUS;
+     let width = (2 * radius + 1) as usize * DYADIC_TILE_CELLS;
+     let mut search = RegionSearch {
++        padding,
+         visits: 0,
+         leaves: 0,
+         nearest: f64::INFINITY,
+@@ -2223,10 +2295,12 @@ fn contained_tile(c: Complex64, k: u32) -> Result<(ShoreTile, bool), TileQueryEr
+         segments: Vec::new(),
+         unstable_nodes: Vec::new(),
+     };
+-    search.visit(c, k, base, [-radius, radius, -radius, radius], &mut tile)?;
++    let searched=search.visit(c, k, base, [-radius, radius, -radius, radius], &mut tile);
++    
++    searched?;
+     if contour_footprint_contains(c, &tile, width) {
+         let stable = stencil_membership_stable(c, &tile);
+-        return Ok((tile, stable));
++        return Ok((tile, stable,search.visits<FIELD_REGION_VISIT_LIMIT));
+     }
+     Err(TileQueryError::FootprintUnresolved)
+ }
+@@ -2249,6 +2323,7 @@ struct LevelEvaluation {
+ }
+ struct PreviousLevel {
+     source:LevelSource,
++    direction_agrees:bool,
+     jet: GeometryJet,
+     fit_rms: f64,
+     ties: Option<Vec<NearestFeature>>,
+@@ -2331,7 +2406,7 @@ fn persistent_competition(a: &[NearestFeature], b: &[NearestFeature], coarse_h:
+ }
+ 
+ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+-    eprintln!("[QUERY145] {:.17} {:.17}",c.re,c.im);
++    
+     #[cfg(test)]
+     QUERY_EVALUATIONS.with(|count| count.set(count.get() + 1));
+     if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
+@@ -2385,7 +2460,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
+-        eprintln!("[HOOK_LEVEL145] k={k} h={h}");
++        
+ 
+         // No raw convergence sample is made here. Every admissible coefficient
+         // assignment forces this model's size gate to one, so its field value
+@@ -2411,12 +2486,12 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+             let ties=has_competing_directions(&features).then_some(features);
+             LevelEvaluation{fitted:model,scalar_certified:true,segments:Vec::new(),ties,
+                 source:LevelSource::Component,direction_agrees:true}
+-        } else if let Some((model, direction)) = covered_query_probe(c,epsilon,k) {
+-            eprintln!("[HOOK_COVERED145] k={k} direction={direction}");
++        } else if let Some((model, direction)) = covered_query_level(c,epsilon,k) {
++            
+             LevelEvaluation{fitted:model,scalar_certified:true,segments:Vec::new(),ties:None,
+                 source:LevelSource::Covered,direction_agrees:direction}
+         } else {
+-        let (tile, certified) = match contained_tile(c, k) {
++        let (tile, _stencil_stable, reusable) = match contained_stencil_tile(c, k) {
+             Ok(tile) => tile,
+             Err(TileQueryError::FootprintUnresolved) => return Ok(last),
+             Err(TileQueryError::MembershipUnresolved) => {
+@@ -2426,14 +2501,29 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+                 return Ok(last);
+             }
+         };
+-        if !certified {
+-            previous = None;
+-        }
+-
+-            let Some(model)=compute_jet_at_level(c,epsilon,k,h,&tile) else {return Ok(last);};
+-            let ties=competing_normals(c,&tile.segments,h);
+-            LevelEvaluation{fitted:model,scalar_certified:certified,segments:tile.segments,ties,
+-                source:LevelSource::Shore,direction_agrees:true}
++            let Some(model)=compute_jet_at_level_reusing(c,epsilon,k,h,&tile,reusable) else {
++                // Coarse size-only skips may leave no prior fitted jet. The
++                // contained contour still supplies a best-effort scalar when
++                // nodal/derivative certification refuses. Keep dynamics closed.
++                if !last.d.is_finite() {
++                    if let Some(d)=signed_shore_distance(c,h,&tile.segments).filter(|d|d.is_finite()) {
++                        last=failure_jet(d,h,GeometryValidity::Unresolved,SingularityKind::None);
++                        last.requested_scale=GEOMETRY_SCALE_ALPHA*(d*d+epsilon*epsilon).sqrt();
++                        last.tile_id=format!("scale-aware:scalar-only:{k}");
++                        last.is_bridge=false;
++                    }
++                }
++                return Ok(last);
++            };
++            let direction=point_membership_stable(c,&tile);
++            let ties=if direction {competing_normals(c,&tile.segments,h)} else {None};
++            // The coordinate-owned nodes each passed their own membership
++            // stability check, even if this query's broader contour is unstable.
++            // Those scalar coefficients remain usable by the coherent field.
++            // Query direction is a separate acceptance condition at both levels.
++            let scalar_certified=model.nodes_certified;
++            LevelEvaluation{fitted:model,scalar_certified,segments:tile.segments,ties,
++                source:LevelSource::Shore,direction_agrees:direction}
+         };
+         let LevelEvaluation{fitted,scalar_certified:certified,segments:segs,ties,source,
+             direction_agrees:direction}=evaluated;
+@@ -2441,12 +2531,12 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+         if previous.as_ref().is_some_and(|p|p.source==LevelSource::Component && source!=LevelSource::Component) {previous=None;}
+         let FittedJet{range,size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
+         if let Some(field) = &mut hierarchy {
+-            field.advance_enclosed(&jet, epsilon, nodes_certified, detail,size_bound,range);
++            field.advance_enclosed_source(&jet, epsilon, nodes_certified, detail,size_bound,range,source);
+         } else {
+             hierarchy = Some(FieldHierarchy::new_bounded(&jet, epsilon, nodes_certified, detail,size_bound));
+         }
+         if let Some(field)=&mut hierarchy {
+-            if field.models.len()==1 {field.models[0].range=range;}
++            if field.models.len()==1 {field.models[0].range=range;field.models[0].source=source;}
+         }
+         if ties.is_some() || !direction {
+             pending = None;
+@@ -2516,6 +2606,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+                 }
+                 if ties.is_none()
+                     && direction
++                    && previous.direction_agrees
+                     && prev.resolved_scale <= jet.requested_scale
+                     && jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale
+                 {
+@@ -2535,6 +2626,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+         } else {
+             jet.estimated_error = f64::INFINITY;
+         }
++        
+         last = jet.clone();
+         if last.validity != GeometryValidity::Singular {
+             last.validity = GeometryValidity::Unresolved;
+@@ -2544,6 +2636,7 @@ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String>
+         // Refine monotonically one level at a time until the ruler and error agree.
+         previous = certified.then_some(PreviousLevel {
+             source,
++            direction_agrees:direction,
+             jet,
+             fit_rms: rms,
+             ties,
+@@ -3419,7 +3512,7 @@ mod tests {
+ 
+     #[test]
+     fn provider_version_is_pinned() {
+-        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/6");
++        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/7");
+     }
+ 
+     #[test]
+@@ -3887,20 +3980,19 @@ mod coherent_field_tests {
+  }
+ }
+ 
+-// Diagnostic adapter only. Unavailable proposals never become certificates.
+-fn covered_query_probe(c:Complex64, epsilon:f64,k:u32)->Option<(FittedJet,bool)> {
++// Covered nodal source. Unavailable proposals never become certificates.
++fn covered_query_level(c:Complex64, epsilon:f64,k:u32)->Option<(FittedJet,bool)> {
+  let h=dyadic_h(k);
+  if distance_stencil(c,h).any(|p|periodic_boundary::propose(p).is_none()) {
+-  eprintln!("[HOOK_UNAVAILABLE145] k={k}");return None;
++  return None;
+  }
+- let start=std::time::Instant::now();
+  let distance=periodic_boundary::propose(c)?.distance;
+  // This is a quantized request budget, never an outward proof bound.
+  let cap=f64::from_bits((distance/128.).to_bits() & (0x7ff_u64<<52));
+  let error=(epsilon/2000.).min(cap);
+  if !(error.is_finite()&&error>0.) {return None;}
+  let result=covered_level(c,epsilon,k,error);
+- eprintln!("[HOOK_ATTEMPT145] k={k} available={} elapsed_s={}",result.is_some(),start.elapsed().as_secs_f64());
++ 
+  result
+ }
+ #[cfg(test)] mod actual_query_hook_probe {
+@@ -3977,3 +4069,86 @@ fn covered_query_probe(c:Complex64, epsilon:f64,k:u32)->Option<(FittedJet,bool)>
+   assert_eq!(field.models[1].range.d.hi,100.);
+  }
+ }
++
++
++#[cfg(test)] mod unresolved_scalar_tests {
++ use super::*;
++ #[test] fn missing_first_derivative_stencil_keeps_contained_scalar() {
++  let jet=query_scale_aware(Complex64::new(0.3226806640625,0.05),1e-4).unwrap();
++  assert!(jet.d.is_finite());
++  assert_eq!(jet.validity,GeometryValidity::Unresolved);
++  assert!(!jet.is_bridge);
++  assert!(jet.grad_d.iter().chain(jet.hessian_d.iter().flatten()).all(|v|v.is_nan()));
++  assert_eq!(jet.estimated_error,f64::INFINITY);
++  let json=serde_json::to_value(&jet).unwrap();
++  assert!(json["D"].is_number());
++  assert!(json["grad_D"][0].is_null());
++ }
++}
++
++#[cfg(test)] mod shore_refinement_tests {
++ use super::*;
++ #[test] fn next_original_python_crossing_refusal() {
++  let result=query_scale_aware(Complex64::new(0.37490511279048488,0.05358919829424173),1e-4).unwrap();
++  eprintln!("[NEXT_PYTHON_REFUSAL145] {}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++ fn jet(d:f64,h:f64)->GeometryJet {
++  let mut result=failure_jet(d,h,GeometryValidity::Regular,SingularityKind::None);
++  result.grad_d=[0.;2];result.hessian_d=[[0.;2];2];result.estimated_error=0.;result
++ }
++ #[test] fn shoreline_lookahead_replaces_a_disagreeing_coarse_model() {
++  let zero=FieldJet::constant(0.);let epsilon=1e-4;
++  let coarse=jet(0.04,1e-7);
++  let mut field=FieldHierarchy::new(&coarse,epsilon,true,zero);
++  field.models[0].source=LevelSource::Shore;
++  for d in [0.04,0.035] {
++   let next=jet(d,1e-8);
++   field.advance_enclosed_source(&next,epsilon,true,zero,f64::INFINITY,
++    RangeJet::exact(next.d,next.grad_d,next.hessian_d),LevelSource::Shore);
++  }
++  assert!(!field.closed);
++  for _ in 0..3 {
++   let next=jet(0.035,1e-9);
++   field.advance_enclosed_source(&next,epsilon,true,zero,f64::INFINITY,
++    RangeJet::exact(next.d,next.grad_d,next.hessian_d),LevelSource::Shore);
++  }
++  assert!(field.closed&&field.certified);
++  assert!((field.sum.d-0.035).abs()<1e-15);
++ }
++ #[test] fn under_barrier_original_python_refusal() {
++  let result=query_scale_aware(Complex64::new(0.36340742428278627,0.05860532738425128),1e-4).unwrap();
++  eprintln!("[SHORE_REFINEMENT145] {}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++}
++
++#[cfg(test)] mod stencil_reuse_tests {
++ use super::*;
++ #[test] fn expanded_source_equals_canonical_nodal_values_and_intervals() {
++  for (c,k) in [(Complex64::new(0.4,0.05),13),
++                (Complex64::new(0.36340742428278627,0.05860532738425128),17)] {
++   let Ok((tile,true,true))=contained_stencil_tile(c,k) else {panic!("expanded stable stencil");};
++   let mut checked=0;
++   for point in distance_stencil(c,dyadic_h(k)) {
++    if bounded_component_sample(point).is_some(){continue;}
++    let Some(borrowed)=canonical_sample_from_tile(point,c,k,&tile) else {continue;};
++    let expected=field_node(point,k).expect("same-root canonical point search");
++    assert_eq!(borrowed.value.to_bits(),expected.value.to_bits());
++    let a=borrowed.enclosure.unwrap();let b=expected.enclosure.unwrap();
++    assert_eq!([a.lo.to_bits(),a.hi.to_bits()],[b.lo.to_bits(),b.hi.to_bits()]);checked+=1;
++   }
++   assert!(checked>0);
++   eprintln!("[STENCIL_REUSE145] q={c:?} k={k} checked={checked}");
++  }
++ }
++}
++
++#[cfg(test)] mod shore_certificate_tests {
++ use super::*;
++ #[test] fn native_original_crossing_refusal_uses_nodal_scalar_certificates() {
++  let result=query_scale_aware(Complex64::new(0.32056465907526527,0.04729005326438480),1e-4).unwrap();
++  eprintln!("[SHORE_CERTIFICATES145] {}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++}
+diff --git a/runtime-core/src/manifold.rs b/runtime-core/src/manifold.rs
+index ffd33c9..db5d11b 100644
+--- a/runtime-core/src/manifold.rs
++++ b/runtime-core/src/manifold.rs
+@@ -567,57 +567,17 @@ pub fn drag_force(
+     Ok((-beta * gv_x, -beta * gv_y))
+ }
+ 
+-/// Integrator selection (issue #106).
++/// Fourth-order Runge-Kutta step for the canonical manifold equations.
+ ///
+-/// Candidate timesteppers considered:
++/// The coherent geometry field can contain narrow, smooth refinement
++/// transitions. Semi-implicit Euler produced large energy excursions there
++/// even with mutually consistent distance, gradient and Hessian. RK4 evaluates
++/// the same Rust-owned acceleration at its four stage states. Every stage
++/// must have regular geometry; failures reject the whole step.
+ ///
+-/// - **Semi-implicit (symplectic) Euler**: `v_{n+1} = v_n + a(q_n,v_n)·dt`,
+-///   `r_{n+1} = r_n + v_{n+1}·dt`. First-order, explicit, area-preserving in
+-///   flat phase space, inexpensive, stable for position-dependent forces when
+-///   `dt` is the canonical hop `HOP_LENGTH/SAMPLE_RATE` (≈21 ms). Energy is
+-///   not exactly conserved but drift is bounded and O(dt).
+-/// - **Explicit RK4**: higher accuracy but overtly conservative; dominant
+-///   near-Shore error comes from finite-differenced `∇sigma`/`H_sigma`
+-///   propagating into the otherwise analytic `Γ`, not from the timestepper
+-///   itself (see `docs/adr/` and PR #112 notes).
+-/// - **Variational / geometric**: ideal for long conservative rollouts but
+-///   heavier and requires re-deriving the discrete Lagrangian for the
+-///   sampled sigma field.
+-///
+-/// **Chosen**: semi-implicit Euler as the inexpensive baseline. It keeps
+-/// parity cheap, preserves the canonical timebase, and bounds total-energy
+-/// drift away from and near the Shore (see `TestEnergyDrift` in
+-/// `backend/tests/test_manifold_physics.py`). The dominant error is the
+-/// sampled-field gradient quality, not the integrator order; a future deeper/
+-/// analytic Map provider can improve `∇sigma`/`H_sigma` without changing the
+-/// timestepper contract. The kernel fails closed on metric singularities
+-/// (no silent flat-physics fallback).
+-///
+-/// A differentiable training rollout may use a parity-pinned STE surrogate
+-/// where autograd requires it, but Rust remains semantic authority (ADR 0001).
+-///
+-/// Semi-implicit Euler integration step for manifold dynamics.
+-///
+-/// Integrates: r_ddot + Gamma(r_dot, r_dot) = -G^{-1}∇U + G^{-1}Q
+-///
+-/// Generalized forces are summed as COVECTORS and converted to coordinate
+-/// acceleration exactly once via G^{-1}:
+-///
+-///   Q_potential = -grad U_sigma
+-///   Q_wall      = -grad U_wall (p=8 secant bowl; the outer-domain barrier
+-///                 participates in the dynamics, not just the energy ledger)
+-///   Q_drag      = -beta G v
+-///   Q_total     = Q_potential + Q_wall + Q_control + Q_drag
+-///   a_force     = G^{-1} Q_total
+-///   a_total     = -Gamma(v,v) + a_force
+-///
+-/// `q_control` is a generalized force covector (units of force, NOT an
+-/// already-integrated impulse). Continuous force is integrated exactly once:
+-///
+-///   v_new = v + a_total * dt
+-///   r_new = r + v_new * dt
+-///
+-/// Returns (new_c, new_v, energy_info)
++/// The control covector and drag coefficient are held over the requested
++/// timestep. Forces remain covectors and each stage applies G^{-1} once.
++/// Returns the new state and the complete conservative energy ledger.
+ pub fn integrate_step(
+     c: Complex64,
+     v: (f64, f64),
+@@ -634,30 +594,41 @@ pub fn integrate_step(
+         ));
+     }
+ 
+-    // Geodesic (curvature) acceleration: -Gamma(v, v).
+-    let a_geodesic = geodesic_acceleration(v, c, config)?;
+-
+-    // Sum generalized force covectors: potential + wall + control + drag.
+-    let q_potential = potential_force(c, config)?;
+-    let q_wall = wall_force(c, config)?;
+-    let q_drag = drag_force(v, c, beta, config)?;
+-    let q_total = (
+-        q_potential.0 + q_wall.0 + q_control.0 + q_drag.0,
+-        q_potential.1 + q_wall.1 + q_control.1 + q_drag.1,
+-    );
+-
+-    // Single G^{-1} conversion of the summed covector into acceleration.
+-    let a_force = apply_generalized_force(q_total, c, config)?;
+-
+-    // Total acceleration.
+-    let a_total = (
+-        -a_geodesic.0 + a_force.0,
+-        -a_geodesic.1 + a_force.1,
+-    );
+-
+-    // Semi-implicit update: continuous force integrated exactly once.
+-    let v_new = (v.0 + a_total.0 * dt, v.1 + a_total.1 * dt);
+-    let c_new = Complex64::new(c.re + v_new.0 * dt, c.im + v_new.1 * dt);
++    let derivative = |state: [f64; 4]| -> Result<[f64; 4], String> {
++        let position = Complex64::new(state[0], state[1]);
++        let radius_squared = position.norm_sqr();
++        if !radius_squared.is_finite() || radius_squared >= 4. {
++            return Err(format!(
++                "Hard invariant violated: intermediate |c|^2 = {}; rejecting invalid stage",
++                radius_squared
++            ));
++        }
++        let velocity = (state[2], state[3]);
++        let geodesic = geodesic_acceleration(velocity, position, config)?;
++        let potential = potential_force(position, config)?;
++        let wall = wall_force(position, config)?;
++        let drag = drag_force(velocity, position, beta, config)?;
++        let force = (
++            potential.0 + wall.0 + q_control.0 + drag.0,
++            potential.1 + wall.1 + q_control.1 + drag.1,
++        );
++        let acceleration = apply_generalized_force(force, position, config)?;
++        Ok([velocity.0, velocity.1,
++            -geodesic.0 + acceleration.0, -geodesic.1 + acceleration.1])
++    };
++    let state = [c.re, c.im, v.0, v.1];
++    let shifted = |stage: [f64; 4], step: f64| -> [f64; 4] {
++        std::array::from_fn(|i| state[i] + step * stage[i])
++    };
++    let a = derivative(state)?;
++    let b = derivative(shifted(a, dt * 0.5))?;
++    let c_stage = derivative(shifted(b, dt * 0.5))?;
++    let d = derivative(shifted(c_stage, dt))?;
++    let next: [f64; 4] = std::array::from_fn(|i| {
++        state[i] + dt * (a[i] + 2. * b[i] + 2. * c_stage[i] + d[i]) / 6.
++    });
++    let c_new = Complex64::new(next[0], next[1]);
++    let v_new = (next[2], next[3]);
+ 
+     // Hard invariant: authoritative state must remain inside |c| < 2.
+     // If the proposed result is non-finite or has |c_new| >= 2, return an
