@@ -1,5 +1,8 @@
 //! Conservative empty-contour shortcut. An uncertain box uses ordinary tiles.
 
+#[path = "affine_return.rs"]
+mod affine_return;
+
 #[derive(Clone, Copy)]
 struct Interval {
     lo: f64,
@@ -332,40 +335,13 @@ fn affine_membership(re: Interval, im: Interval) -> Option<bool> {
     let mut centers = vec![z];
     let mut all_bounded = true;
     let mut radius = 0.;
-    for n in 1..=512 {
-        let magnitude = norm_upper(z);
-        let sensitivity = norm_upper(d);
-        let total = upper_add(upper_mul(sensitivity, cr), remainder);
-        let a = upper_add(magnitude, total);
-        let cb = upper_add(norm_upper(c), cr);
-        // Bounds both the machine critical-orbit update and center update.
-        let round = machine_round_error(a, cb);
-        let next = [z[0] * z[0] - z[1] * z[1] + c[0], 2. * z[0] * z[1] + c[1]];
-        let next_d = [
-            2. * (z[0] * d[0] - z[1] * d[1]) + 1.,
-            2. * (z[0] * d[1] + z[1] * d[0]),
-        ];
+    for n in 1usize..=4096 {
+        let next = affine_return::AffineBall { z, d, remainder }.step(c, cr)?;
+        z = next.z;
+        d = next.d;
+        remainder = next.remainder;
+        radius = next.radius(cr);
         let p = Interval::point;
-        let dr = p(2.)
-            .mul(p(z[0]).mul(p(d[0])).sub(p(z[1]).mul(p(d[1]))))
-            .add(p(1.));
-        let di = p(2.).mul(p(z[0]).mul(p(d[1])).add(p(z[1]).mul(p(d[0]))));
-        let de = dr.sub(p(next_d[0]));
-        let ie = di.sub(p(next_d[1]));
-        let coefficient_error = de.square().add(ie.square()).hi.sqrt().next_up();
-        remainder = upper_add(
-            upper_add(
-                upper_mul(upper_mul(2., magnitude), remainder),
-                upper_mul(total, total),
-            ),
-            upper_add(round, upper_mul(coefficient_error, cr)),
-        );
-        z = next;
-        d = next_d;
-        radius = upper_add(upper_mul(norm_upper(d), cr), remainder);
-        if !radius.is_finite() || radius > 4. || !z.iter().all(|x| x.is_finite()) {
-            return None;
-        }
         let low = p(z[0])
             .square()
             .add(p(z[1]).square())
@@ -379,11 +355,27 @@ fn affine_membership(re: Interval, im: Interval) -> Option<bool> {
         }
         all_bounded &= Ball { z, radius }.bounded();
         centers.push(z);
+        if all_bounded && n >= 128 && n.is_power_of_two() {
+            let prefix = affine_return::AffineBall { z, d, remainder };
+            if periodic_affine_trap(prefix, &centers, c, cr) {
+                return Some(true);
+            }
+        }
+        if n >= 512 {
+            // Exterior semantics remain limited to the minimum ordinary budget.
+            // Additional prefix work may prove interior only, with every earlier
+            // enclosure bounded and the same strict periodic-return certificate.
+            if !all_bounded {
+                return None;
+            }
+            if n.is_power_of_two() {
+                if let Some(result) = periodic_trap(z, radius, &centers, c, cr) {
+                    return Some(result);
+                }
+            }
+        }
     }
-    if !all_bounded {
-        return None;
-    }
-    periodic_trap(z, radius, &centers, c, cr)
+    None
 }
 
 #[cfg(test)]
@@ -567,6 +559,65 @@ mod affine_tests {
                 );
                 for budget in [512, 32768] {
                     assert!(crate::visual_metrics::mandelbrot_membership(point, budget));
+                }
+            }
+        }
+    }
+}
+
+fn periodic_affine_trap(
+    prefix: affine_return::AffineBall,
+    centers: &[[f64; 2]],
+    c: [f64; 2],
+    cr: f64,
+) -> bool {
+    let Some(last) = centers.len().checked_sub(1) else {
+        return false;
+    };
+    let mut period = 0;
+    let mut separation = f64::INFINITY;
+    for p in 1..=last {
+        let distance = distance_upper(prefix.z, centers[last - p]);
+        if distance < separation {
+            period = p;
+            separation = distance;
+        }
+    }
+    for factor in [2., 8., 32., 128.] {
+        let radius = upper_mul(factor, upper_add(prefix.remainder, separation));
+        if prefix.traps(c, cr, period, radius) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod correlated_return_tests {
+    use super::*;
+    #[test]
+    fn high_period_box_proofs_agree_with_shared_critical_orbits() {
+        for (center, k) in [
+            ([0.32049988639807619, 0.04733531447355364], 24),
+            ([0.35659381055433242, 0.06404656757776669], 28),
+        ] {
+            let width = 56. * 0.125 * 2f64.powi(-k);
+            let re = center[0] - width / 2.;
+            let im = center[1] - width / 2.;
+            assert_eq!(affine_box(re, im, width), Some(true));
+            assert_eq!(membership(re, im, width), Some(true));
+            for y in 0..=56 {
+                for x in 0..=56 {
+                    let c = num_complex::Complex64::new(
+                        re + width * x as f64 / 56.,
+                        im + width * y as f64 / 56.,
+                    );
+                    for budget in [512, 2048, 32768] {
+                        assert!(
+                            crate::visual_metrics::mandelbrot_membership(c, budget),
+                            "{c:?}, N={budget}"
+                        );
+                    }
                 }
             }
         }
