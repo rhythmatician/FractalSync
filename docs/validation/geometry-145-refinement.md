@@ -4,10 +4,14 @@ PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
 original native/Python crossing tests remain intact.
 
-The next step is an architecture/acceptance-contract review, not another
-point-specific proof extension. [Proposed ADR 0005](../adr/0005-bounded-operational-geometry.md)
-separates reference evidence from a versioned operational field with bounded
-evaluation cost. It has not superseded ADR 0004 or changed the current tests.
+The owner authorized the bounded experimental implementation of
+[ADR 0005](../adr/0005-bounded-operational-geometry.md). The
+[operational prototype report](geometry-145-operational-prototype.md) records
+the new feature-gated Rust field, unchanged crossing/energy replays and cold
+prepared-query measurements. Its raster reference is uncertified, so these
+results do not clear the current scalar-fidelity acceptance gate. ADR 0004
+still governs shipping behavior. The older adaptive experiments below remain
+failure evidence rather than the selected runtime implementation.
 
 The source-aware hierarchy replaces a disagreeing Shore model using smooth
 lookahead weights. The value, gradient, Hessian and enclosing range use the same

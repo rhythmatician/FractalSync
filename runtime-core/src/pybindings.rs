@@ -9,6 +9,15 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyComplex, PyDict};
 
+#[cfg(feature = "experimental-operational-field")]
+#[pyfunction]
+fn experimental_prepare_operational_field() -> PyResult<String> {
+    let field = crate::operational_field::prepare_raster_baseline().map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let identity = format!("operational:{:016x}",field.identity());
+    crate::operational_field::activate(Some(std::sync::Arc::new(field)));
+    Ok(identity)
+}
+
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
@@ -1121,6 +1130,10 @@ fn geometry_provider_query(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<S
 
 #[pyfunction]
 fn geometry_provider_version() -> String {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(profile) = crate::operational_field::active_profile() {
+        return profile.to_string();
+    }
     crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string()
 }
 
@@ -2485,6 +2498,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_apply_generalized_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_drag_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_function(wrap_pyfunction!(experimental_prepare_operational_field, m)?)?;
     m.add_function(wrap_pyfunction!(controls_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
     m.add_function(wrap_pyfunction!(debug_snapshot_from_state, m)?)?;

@@ -32,6 +32,8 @@ pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
+#[cfg(feature = "experimental-operational-field")]
+pub mod operational_field;
 pub mod scale_relative_map;
 pub mod manifold;
 pub mod proxies;

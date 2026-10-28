@@ -1,0 +1,349 @@
+{
+  "date": "2026-10-28",
+  "device": "Intel Core i9-14900; Windows x64",
+  "scouting_observations": {
+    "quintic_64_mib_cache_stress_max_us": 352.8,
+    "quintic_64_mib_cache_stress_p99_us": 2.1,
+    "cubic_hessian_discrepancy_failed": 0.00044140368074973186,
+    "note": "Earlier scouting output retained as context; final frozen runs and hashes follow. No hard scheduling deadline claim."
+  },
+  "platform": "Windows-11-10.0.26100-SP0",
+  "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+  "executable_sha256": "6978bcde609e7c3d7dbf09291509c7d188c730eb5920a16e6cadfb4a8db35932",
+  "source_sha256": {
+    "runtime-core/src/operational_field.rs": "7db53da6ba8944f445009ef44cd6c711dd2c981eb7d0500f27b53df26c8e2498",
+    "runtime-core/src/geometry_provider.rs": "e9d9b7e909156b7af4ab25955a20993e15ccd1ddc460723a81f92cf29e3ccb4c",
+    "runtime-core/src/pybindings.rs": "0c0a93bc0b2e396e48497475e81e8839e0707e259477cee77ba29bc3248f65b4",
+    "runtime-core/src/manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+    "runtime-core/examples/operational_field_report.rs": "6f8afd2260abb6c2d6f03143b8e546ebd138680ff45953314d83e961e196eee8",
+    "runtime-core/data/mandelbrot_distance_1024.bin": "3105450d55222fbd5cde90a5e7757930a8536f451e5f56deeefa1950f8de4345",
+    "runtime-core/data/mandelbrot_distance_1024.json": "2eac192de829e1d70e8c73a2061bf1d59cc747bd49466927a0e874a30532ab15",
+    "backend/tests/test_manifold_physics.py": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536"
+  },
+  "runs": [
+    {
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 2.0,
+        "max_us": 166.0,
+        "p50_us": 1.0,
+        "p99_us": 4.5,
+        "samples": 1000
+      },
+      "coefficient_bytes": 12904200,
+      "coverage": {
+        "epsilon_min": 0.0001,
+        "lower_halo_nodes": 2,
+        "origin": [
+          -0.1,
+          -0.2
+        ],
+        "shape": [
+          1605,
+          1005
+        ],
+        "spacing": 0.0005,
+        "upper_halo_nodes": 3
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "distinct_queries": {
+        "first_us": 0.5,
+        "max_us": 129.4,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.39999999999999997,
+        "samples": 20000
+      },
+      "energy_rollouts": [
+        {
+          "absolute_drift": 0.00025044495877102335,
+          "dt": 0.002,
+          "maximum_excursion": 0.00025044495877102335,
+          "name": "high_curvature",
+          "passed": true,
+          "steps": 150,
+          "unchanged_limit": 0.05
+        },
+        {
+          "absolute_drift": 0.0034067502535677363,
+          "dt": 0.002,
+          "maximum_excursion": 0.0034067502535677363,
+          "name": "near_shore",
+          "passed": true,
+          "steps": 100,
+          "unchanged_limit": 0.05
+        }
+      ],
+      "first_prepared_query_us": 1.4,
+      "identity": "c709f01272dcb1c9",
+      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
+      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
+      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "preparation_seconds": 0.0981822,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "shipping_euler_step_on_operational_profile": {
+        "first_us": 41.0,
+        "max_us": 41.0,
+        "p50_us": 3.9,
+        "p99_us": 14.0,
+        "samples": 1000
+      },
+      "step_failures": 0,
+      "unavailable_queries": {
+        "first_us": 0.09999999999999999,
+        "max_us": 26.2,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      },
+      "fresh_process_seconds": 3.284190399805084
+    },
+    {
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 1.5999999999999999,
+        "max_us": 5.4,
+        "p50_us": 0.8999999999999999,
+        "p99_us": 2.0,
+        "samples": 1000
+      },
+      "coefficient_bytes": 12904200,
+      "coverage": {
+        "epsilon_min": 0.0001,
+        "lower_halo_nodes": 2,
+        "origin": [
+          -0.1,
+          -0.2
+        ],
+        "shape": [
+          1605,
+          1005
+        ],
+        "spacing": 0.0005,
+        "upper_halo_nodes": 3
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "distinct_queries": {
+        "first_us": 0.3,
+        "max_us": 17.4,
+        "p50_us": 0.09999999999999999,
+        "p99_us": 0.3,
+        "samples": 20000
+      },
+      "energy_rollouts": [
+        {
+          "absolute_drift": 0.00025044495877102335,
+          "dt": 0.002,
+          "maximum_excursion": 0.00025044495877102335,
+          "name": "high_curvature",
+          "passed": true,
+          "steps": 150,
+          "unchanged_limit": 0.05
+        },
+        {
+          "absolute_drift": 0.0034067502535677363,
+          "dt": 0.002,
+          "maximum_excursion": 0.0034067502535677363,
+          "name": "near_shore",
+          "passed": true,
+          "steps": 100,
+          "unchanged_limit": 0.05
+        }
+      ],
+      "first_prepared_query_us": 0.8999999999999999,
+      "identity": "c709f01272dcb1c9",
+      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
+      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
+      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "preparation_seconds": 0.0775375,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "shipping_euler_step_on_operational_profile": {
+        "first_us": 28.099999999999998,
+        "max_us": 29.099999999999998,
+        "p50_us": 3.7,
+        "p99_us": 10.200000000000001,
+        "samples": 1000
+      },
+      "step_failures": 0,
+      "unavailable_queries": {
+        "first_us": 0.09999999999999999,
+        "max_us": 0.3,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      },
+      "fresh_process_seconds": 3.027836399851367
+    },
+    {
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 1.9,
+        "max_us": 25.599999999999998,
+        "p50_us": 1.4,
+        "p99_us": 3.8,
+        "samples": 1000
+      },
+      "coefficient_bytes": 12904200,
+      "coverage": {
+        "epsilon_min": 0.0001,
+        "lower_halo_nodes": 2,
+        "origin": [
+          -0.1,
+          -0.2
+        ],
+        "shape": [
+          1605,
+          1005
+        ],
+        "spacing": 0.0005,
+        "upper_halo_nodes": 3
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "distinct_queries": {
+        "first_us": 0.5,
+        "max_us": 57.2,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.39999999999999997,
+        "samples": 20000
+      },
+      "energy_rollouts": [
+        {
+          "absolute_drift": 0.00025044495877102335,
+          "dt": 0.002,
+          "maximum_excursion": 0.00025044495877102335,
+          "name": "high_curvature",
+          "passed": true,
+          "steps": 150,
+          "unchanged_limit": 0.05
+        },
+        {
+          "absolute_drift": 0.0034067502535677363,
+          "dt": 0.002,
+          "maximum_excursion": 0.0034067502535677363,
+          "name": "near_shore",
+          "passed": true,
+          "steps": 100,
+          "unchanged_limit": 0.05
+        }
+      ],
+      "first_prepared_query_us": 1.4,
+      "identity": "c709f01272dcb1c9",
+      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
+      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
+      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "preparation_seconds": 0.1054897,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "shipping_euler_step_on_operational_profile": {
+        "first_us": 19.2,
+        "max_us": 62.9,
+        "p50_us": 4.300000000000001,
+        "p99_us": 8.3,
+        "samples": 1000
+      },
+      "step_failures": 0,
+      "unavailable_queries": {
+        "first_us": 0.0,
+        "max_us": 11.8,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      },
+      "fresh_process_seconds": 3.8537860999349505
+    }
+  ],
+  "rust_tests": {
+    "selected": 5,
+    "passed": 5
+  },
+  "default_native_check": "passed",
+  "wasm_bridge_check": "passed; wasm32-unknown-unknown; runtime_core/experimental-operational-field",
+  "direct_runtime_wasm_check": "failed: existing getrandom dependency requires js feature; bridge supplies it",
+  "python": {
+    "profile": "experimental-operational-field/1",
+    "field_identity": "operational:c709f01272dcb1c9",
+    "wheel_sha256": "0d1703e90f4a2ebd979fed83ec4d395155d6d06883dcd85951cf2ff9d7993b4a",
+    "extension_sha256": "ac124af9e88345032ac64f5f6a1f48271df43d2906be5d9a7931b03bfbfb6380",
+    "test_source_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "test_source_unchanged": true,
+    "rust_source_sha256": {
+      "runtime-core/src/operational_field.rs": "7db53da6ba8944f445009ef44cd6c711dd2c981eb7d0500f27b53df26c8e2498",
+      "runtime-core/src/geometry_provider.rs": "e9d9b7e909156b7af4ab25955a20993e15ccd1ddc460723a81f92cf29e3ccb4c",
+      "runtime-core/src/pybindings.rs": "0c0a93bc0b2e396e48497475e81e8839e0707e259477cee77ba29bc3248f65b4",
+      "runtime-core/src/manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166"
+    },
+    "preparation_seconds": 0.13116530003026128,
+    "pytest_seconds": 4.7278523000422865,
+    "pytest_args": [],
+    "pytest_exit_code": 1,
+    "tests": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_high_curvature_deep_scale_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0014754000585526228
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_near_shore_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0009280999656766653
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_potential_force_points_downhill_from_ridge",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0001300000585615635
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_h_signal_irrelevant_to_manifold_path",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0003543999046087265
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_ridge_is_barrier_without_h_gate",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.002838500076904893
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.20140130002982914
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_signed_distance_authority_sign_and_continuity",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0005302999634295702
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.00030589988455176353
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_scale_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00013060006313025951
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_metric_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0001192998606711626
+      }
+    ]
+  }
+}

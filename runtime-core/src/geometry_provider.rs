@@ -1645,6 +1645,10 @@ pub fn query_bridge_geometry_with_alpha(
 /// Direct dyadic Shore-contour provider (is_bridge=false), independent of the
 /// 1024² raster. RasterBridgeProvider remains explicit for tests/migration.
 pub fn query_geometry(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(result) = crate::operational_field::active_query(c, epsilon) {
+        return result;
+    }
     if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
         return query_scale_aware(c, epsilon);
     }

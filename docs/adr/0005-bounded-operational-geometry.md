@@ -1,7 +1,9 @@
 # 0005 — Separate reference geometry from bounded operational geometry
 
-Status: Proposed (2026-10-27). ADR 0004 and the current acceptance contract remain
-in force until this proposal is accepted. Related: #120, #145, PR #148.
+Status: Accepted for a bounded experimental prototype (2026-10-28, authorized by
+repository owner). Shipping adoption, reference-cut motion policy and device
+latency targets remain pending. ADR 0004 and the current shipping acceptance
+contract remain in force. Related: #120, #145, PR #148.
 
 FractalSync needs a coherent differential field that Physics can evaluate within
 a live frame budget. We propose separating that operational field from the
