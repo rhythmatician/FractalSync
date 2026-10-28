@@ -18,6 +18,15 @@ fn experimental_prepare_operational_field() -> PyResult<String> {
     Ok(identity)
 }
 
+#[cfg(feature = "experimental-operational-field")]
+#[pyfunction]
+fn experimental_load_operational_asset(bytes:&[u8]) -> PyResult<String> {
+    let field=crate::operational_field::PreparedField::from_asset_bytes(&bytes).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let identity=format!("operational:{:016x}",field.identity());
+    crate::operational_field::activate(Some(std::sync::Arc::new(field)));
+    Ok(identity)
+}
+
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
@@ -2500,6 +2509,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
     #[cfg(feature = "experimental-operational-field")]
     m.add_function(wrap_pyfunction!(experimental_prepare_operational_field, m)?)?;
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_function(wrap_pyfunction!(experimental_load_operational_asset, m)?)?;
     m.add_function(wrap_pyfunction!(controls_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
     m.add_function(wrap_pyfunction!(debug_snapshot_from_state, m)?)?;

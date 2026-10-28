@@ -6,9 +6,9 @@ latency targets remain pending. ADR 0004 and the current shipping acceptance
 contract remain in force. Related: #120, #145, PR #148.
 
 FractalSync needs a coherent differential field that Physics can evaluate within
-a live frame budget. We propose separating that operational field from the
-Mandelbrot reference evidence used to construct and assess it. This changes the
-meaning of the geometry consumed by Physics and must be versioned explicitly.
+a live frame budget. The authorized experiment separates that operational field
+from the Mandelbrot reference evidence used to construct and assess it. This
+authorizes a bounded prototype, not shipping adoption of the changed geometry.
 
 ## Why change the contract
 
@@ -85,26 +85,45 @@ changing the shipping profile.
 
 ## Bounded evaluation and immutable field identity
 
-The first implementation should use prepared coefficients for a finite test
-domain, with a fixed amount of Rust evaluation work. Preparation may perform
-expensive reference calculations outside the Physics step. This proposal does
-not require a general streaming or background-proof framework.
+The experiment loads the complete prepared asset before replay and freezes its
+coordinate/scale envelope, preparation parameters and deterministic initial-state
+perturbations. No coefficient replacement or coverage extension is allowed during
+a rollout. A miss ends that attempt as `GeometryUnavailable`; it is not simulated
+progress. A larger asset needs a new manifest and a fresh replay from the start.
+Preparation may perform expensive reference calculations outside Physics. No
+streaming, immutable-extension or recovery infrastructure is required here.
+
+The rollout carries two immutable manifest identities:
+
+- `field_id` identifies coefficients, coordinate mapping, patch structure,
+  reconstruction rules and evaluator semantics.
+- `physics_profile_id` identifies regularization and metric parameters, potential
+  and force rules, reference-refusal policy and evidence snapshot, and numerical
+  integration/work-accounting rules. Fixed timestep and drag parameters are part
+  of this experiment's profile; explicit Controls remain logged inputs.
 
 Cold prepared queries, cache eviction and exact repeats must evaluate the same
 field. Cache state, query order, wall-clock deadlines and newly arrived evidence
-must not choose a different local scalar function during a rollout. Pin the
-field identity across all integrator stages and energy measurements. Extending
-coverage must preserve the existing field and its derivatives on the overlap;
-changing the field requires an explicit version/reset or separately designed
-time-dependent mechanics.
+must not choose a different local scalar function or Physics profile during a
+rollout. Pin both identities across every stage and energy measurement. Within
+one build, cache eviction and query reordering preserve jets and validity.
+Native/browser comparisons use declared numerical parity tolerances, not an
+implicit bitwise-equality requirement.
+
+Every step is a transaction. Evaluate intermediate states into temporary storage,
+check every complete differential sample, check the final weighted endpoint
+separately from the fourth RK stage, and check endpoint metric/energy before
+committing. Any refusal preserves position, velocity, mechanical time, integrated
+work and all other mechanical state. Audio time is separate. Scalar availability
+alone is insufficient when any derivative or differentiated blend support is
+missing.
 
 An unprepared query returns `GeometryUnavailable` in bounded work. It does not
 fall back to a different metric, fetch data, fit a new field or launch a proof.
-A refused step commits no partial movement. Holding the last frame is a
-candidate product response, not a successful Physics step or a guarantee of
-live continuity. The domain contract requires a deliberate response to coverage
-loss before shipping. A sampled training corpus does not prove the Player will
-avoid unsupported geometry.
+A refused step commits no partial movement. The prototype reports the explicit
+rollout outcome and does not design frame-hold or recovery behavior. Product
+response to coverage loss remains unresolved. A sampled training corpus does
+not prove the Player will avoid unsupported geometry.
 
 Proposed benchmark targets, to be ratified on named native and browser devices:
 
@@ -121,6 +140,25 @@ separate gates. These proposed targets do not claim hard OS scheduling bounds
 and do not count asset loading or preparation as a cheap cold query.
 
 ## A bounded next step
+
+Acceptance is executable before constructing the corridor asset. An analytic
+`F(x,y)=x` control checks regularization through the crest, metric, connection and
+integration using the same downstream Rust code. Differential self-consistency,
+including joins, is mandatory; reference differential fidelity is a separate
+certified, measured or unknown claim. Energy tests do not establish reference
+fidelity.
+
+Keep existing crossing tests intact and report two verdicts. An operational
+crossing concerns `F=0`. A reference Shore crossing needs ordered states on the
+continuous reconstructed trajectory with conclusive opposite-realm evidence.
+Only certified point/region-scoped distance bounds may convert signs outside
+their error bands into reference realm conclusions. Measured discrepancies
+cannot do this. Missing evidence yields `reference_crossing: unverified`.
+
+Current-policy replay must honor authoritative reference-singularity refusals
+even where the operational field is smooth. The experiment does not authorize
+motion through a known reference cut. Unknown reference singularity information
+must remain explicit in the report.
 
 Build one experimental Rust operational representation over the original
 crossing corridors, their Shore-search queries and a halo for all RK stages,

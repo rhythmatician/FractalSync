@@ -93,6 +93,8 @@ pub fn signed_distance(c: Complex64) -> Result<f64, String> {
 /// D, grad D, H_D, resolved/requested scale, and validity in one coherent
 /// local representation (ADR 0004).
 pub fn geometry_jet(c: Complex64, config: &ManifoldConfig) -> Result<crate::geometry_provider::GeometryJet, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     crate::geometry_provider::query_geometry(c, config.epsilon)
 }
 
@@ -146,6 +148,8 @@ pub fn unsigned_distance(c: Complex64) -> Result<f64, String> {
 /// ruler and finite Shore summit. Changing it changes the Physics contract and
 /// requires the corresponding controller/version and parity updates.
 pub fn mandelbrot_scale(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let rho = regularized_distance(c, config.epsilon)?;
     Ok((config.d_ref / rho).log2())
 }
@@ -163,6 +167,8 @@ fn geometry_refusal(c: Complex64, jet: &crate::geometry_provider::GeometryJet) -
 /// rho = sqrt(D^2 + eps^2), grad rho = (D/rho) grad D,
 /// grad sigma = -(1/(rho ln 2)) grad rho.
 pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let jet = crate::geometry_provider::query_geometry(c, config.epsilon)?;
     // Operational validity: destination Physics (is_bridge==false) must not
     // silently consume Singular/Unresolved/ProviderFailure/OutsideDomain.
@@ -208,6 +214,8 @@ pub fn scale_gradient(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64
 ///   H_rho = (D/rho) H_D + (eps^2/rho^3) grad_D grad_D^T
 ///   H_sigma = -(1/ln2)( H_rho/rho - grad_rho grad_rho^T / rho^2 )
 pub fn scale_hessian(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let jet = crate::geometry_provider::query_geometry(c, config.epsilon)?;
     // Operational validity: destination must not silently consume Singular/Unresolved.
     // Bridge reports but proceeds best-effort.
@@ -296,6 +304,8 @@ pub fn sigma_dot(
 /// H = diag(rho^-2, rho^-2, lambda^2).
 /// Returns 2x2 symmetric positive-definite matrix as [[g11, g12], [g12, g22]]
 pub fn induced_metric(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let (gx, gy) = scale_gradient(c, config)?;
     let sigma = mandelbrot_scale(c, config)?;
     let rho = config.d_ref * 2.0_f64.powf(-sigma);
@@ -328,6 +338,8 @@ pub fn kinetic_energy(
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let g = induced_metric(c, config)?;
     let gv0 = g[0][0] * v.0 + g[0][1] * v.1;
     let gv1 = g[1][0] * v.0 + g[1][1] * v.1;
@@ -336,6 +348,8 @@ pub fn kinetic_energy(
 
 /// Native potential U = kappa * sigma(c)
 pub fn potential_energy(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let sigma = mandelbrot_scale(c, config)?;
     Ok(config.kappa * sigma)
 }
@@ -358,6 +372,8 @@ pub fn potential_energy(c: Complex64, config: &ManifoldConfig) -> Result<f64, St
 /// Per-evaluation cost: one cos, some multiplies/divisions. No square root
 /// or arbitrary exponentiation; kept exact for a clean energy ledger.
 pub fn wall_potential(c: Complex64, config: &ManifoldConfig) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let x = c.re;
     let y = c.im;
     let r2 = x * x + y * y;
@@ -385,6 +401,8 @@ pub fn total_energy(
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     Ok(kinetic_energy(v, c, config)? + potential_energy(c, config)? + wall_potential(c, config)?)
 }
 
@@ -403,6 +421,8 @@ pub fn total_energy(
 /// where `a^2 = lambda^2 / ln(2)^2` and
 /// `W = 1 + a^2 |grad(rho)|^2`.
 pub fn christoffel_symbols(c: Complex64, config: &ManifoldConfig) -> Result<[[[f64; 2]; 2]; 2], String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let (gx, gy) = scale_gradient(c, config)?;
     let hess = scale_hessian(c, config)?;
     let sigma = mandelbrot_scale(c, config)?;
@@ -476,6 +496,8 @@ pub fn geodesic_acceleration(
 /// The sign makes high-scale Shore geometry a potential ridge: the force points
 /// downhill, away from the Shore.
 pub fn potential_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let (grad_x, grad_y) = scale_gradient(c, config)?;
     Ok((-config.kappa * grad_x, -config.kappa * grad_y))
 }
@@ -499,6 +521,8 @@ pub fn potential_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f6
 /// acceleration. It is summed with other covectors and converted to
 /// acceleration by [`apply_generalized_force`] (the single G^{-1} path).
 pub fn wall_force(c: Complex64, config: &ManifoldConfig) -> Result<(f64, f64), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let x = c.re;
     let y = c.im;
     let r2 = x * x + y * y;
@@ -539,6 +563,8 @@ pub fn apply_generalized_force(
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<(f64, f64), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
     let g = induced_metric(c, config)?;
     let g_inv = inverse_2x2(g)?;
 
@@ -559,6 +585,10 @@ pub fn drag_force(
     beta: f64,
     config: &ManifoldConfig,
 ) -> Result<(f64, f64), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_drag(beta)?;
     let g = induced_metric(c, config)?;
 
     let gv_x = g[0][0] * v.0 + g[0][1] * v.1;
@@ -626,6 +656,10 @@ pub fn integrate_step(
     dt: f64,
     config: &ManifoldConfig,
 ) -> Result<(Complex64, (f64, f64), EnergyInfo), String> {
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_config(config)?;
+    #[cfg(feature = "experimental-operational-field")]
+    crate::operational_field::acceptance::check_euler_step(beta, dt)?;
     let c_abs_sq = c.re * c.re + c.im * c.im;
     if !c_abs_sq.is_finite() || c_abs_sq >= 4.0 {
         return Err(format!(

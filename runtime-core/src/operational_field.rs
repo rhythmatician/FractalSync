@@ -2,6 +2,8 @@
 //! Coefficients are samples, not interpolation coefficients. Fidelity must be
 //! measured separately; smoothness never certifies Mandelbrot membership.
 
+pub mod acceptance;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FieldJet {
     pub value: f64,
@@ -18,6 +20,7 @@ pub struct PreparedField {
     spacing: f64,
     shape: [usize; 2],
     coefficients: Box<[f64]>,
+    available: Option<Box<[bool]>>,
     identity: u64,
 }
 
@@ -64,6 +67,7 @@ impl PreparedField {
             spacing,
             shape,
             coefficients: coefficients.into_boxed_slice(),
+            available: None,
             identity,
         })
     }
@@ -71,11 +75,103 @@ impl PreparedField {
     pub fn identity(&self) -> u64 {
         self.identity
     }
+    /// A complete immutable asset can explicitly mark missing coefficients.
+    /// No scalar-only fallback is permitted when any differential support is absent.
+    pub fn new_sparse(
+        origin: [f64; 2],
+        spacing: f64,
+        shape: [usize; 2],
+        coefficients: Vec<Option<f64>>,
+    ) -> Result<Self, &'static str> {
+        let available: Vec<bool> = coefficients.iter().map(Option::is_some).collect();
+        let mut field = Self::new(
+            origin,
+            spacing,
+            shape,
+            coefficients.into_iter().map(|v| v.unwrap_or(0.0)).collect(),
+        )?;
+        if available.iter().any(|v| !v) {
+            for value in &available {
+                field.identity = (field.identity ^ *value as u64).wrapping_mul(0x100000001b3);
+            }
+            field.available = Some(available.into_boxed_slice());
+        }
+        Ok(field)
+    }
     pub fn coefficient_bytes(&self) -> usize {
         self.coefficients.len() * 8
     }
     pub fn spacing(&self) -> f64 {
         self.spacing
+    }
+    /// Offline wire representation. Construction/loading never happens in query.
+    pub fn asset_bytes(&self) -> Vec<u8> {
+        let mut bytes = b"FSOP0001".to_vec();
+        for word in [
+            self.origin[0].to_bits(),
+            self.origin[1].to_bits(),
+            self.spacing.to_bits(),
+            self.shape[0] as u64,
+            self.shape[1] as u64,
+            u64::from(self.available.is_some()),
+        ] {
+            bytes.extend(word.to_le_bytes());
+        }
+        for value in self.coefficients.iter() {
+            bytes.extend(value.to_le_bytes());
+        }
+        if let Some(mask) = &self.available {
+            bytes.extend(mask.iter().map(|b| u8::from(*b)));
+        }
+        bytes
+    }
+
+    pub fn from_asset_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.len() < 56 || &bytes[..8] != b"FSOP0001" {
+            return Err("invalid operational asset header");
+        }
+        let words: Vec<_> = bytes[8..56]
+            .chunks_exact(8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        let shape = [
+            usize::try_from(words[3]).map_err(|_| "invalid asset shape")?,
+            usize::try_from(words[4]).map_err(|_| "invalid asset shape")?,
+        ];
+        let n = shape[0].checked_mul(shape[1]).ok_or("invalid asset size")?;
+        if words[5] > 1 {
+            return Err("invalid asset mask flag");
+        }
+        let size = n
+            .checked_mul(8 + words[5] as usize)
+            .and_then(|n| n.checked_add(56))
+            .ok_or("invalid asset size")?;
+        if size != bytes.len() {
+            return Err("truncated or trailing operational asset data");
+        }
+        let values: Vec<f64> = bytes[56..56 + n * 8]
+            .chunks_exact(8)
+            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        let origin = [f64::from_bits(words[0]), f64::from_bits(words[1])];
+        let spacing = f64::from_bits(words[2]);
+        if words[5] == 0 {
+            Self::new(origin, spacing, shape, values)
+        } else {
+            if bytes[56 + n * 8..].iter().any(|b| *b > 1) {
+                return Err("invalid coefficient availability mask");
+            }
+            Self::new_sparse(
+                origin,
+                spacing,
+                shape,
+                values
+                    .into_iter()
+                    .zip(&bytes[56 + n * 8..])
+                    .map(|(v, b)| (*b == 1).then_some(v))
+                    .collect(),
+            )
+        }
     }
 
     /// Exactly 36 coefficient reads on success. Both axes require a full halo.
@@ -99,7 +195,11 @@ impl PreparedField {
         };
         for y in 0..6 {
             for x in 0..6 {
-                let c = self.coefficients[(iy + y - 2) * self.shape[0] + ix + x - 2];
+                let index = (iy + y - 2) * self.shape[0] + ix + x - 2;
+                if self.available.as_ref().is_some_and(|a| !a[index]) {
+                    return Err(GeometryUnavailable);
+                }
+                let c = self.coefficients[index];
                 jet.value += c * wx[0][x] * wy[0][y];
                 jet.gradient[0] += c * wx[1][x] * wy[0][y];
                 jet.gradient[1] += c * wx[0][x] * wy[1][y];
@@ -163,7 +263,15 @@ pub(crate) fn active_profile() -> Option<&'static str> {
 /// Explicit experimental thread-local activation. An owned immutable asset is
 /// pinned for the whole replay; ordinary builds have no override at all.
 pub fn activate(field: Option<std::sync::Arc<PreparedField>>) {
+    try_activate(field).expect("cannot replace a pinned rollout field");
+}
+
+pub fn try_activate(field: Option<std::sync::Arc<PreparedField>>) -> Result<(), String> {
+    if acceptance::is_pinned() {
+        return Err("FrozenIdentity: replacement during rollout evaluation".into());
+    }
     ACTIVE.with(|active| *active.borrow_mut() = field);
+    Ok(())
 }
 
 pub(crate) fn active_query(
@@ -175,6 +283,7 @@ pub(crate) fn active_query(
         let active = active.borrow();
         let field = active.as_ref()?;
         Some((|| {
+            acceptance::check_query(c, epsilon)?;
             if !epsilon.is_finite() || epsilon < 1e-4 {
                 return Err("GeometryUnavailable: prototype supports epsilon >= 1e-4".into());
             }
@@ -323,5 +432,34 @@ mod tests {
         assert!(result.unwrap_err().contains("GeometryUnavailable"));
         assert_eq!(c, num_complex::Complex64::new(0.05, 0.5));
         assert_eq!(v, (0.01, 0.0));
+    }
+
+    #[test]
+    fn frozen_mechanics_distinguishes_epsilon_lambda_and_integrator() {
+        use super::acceptance::{Integrator, PhysicsProfile};
+        let config = crate::manifold::ManifoldConfig::default();
+        let base = PhysicsProfile::new(config.clone(), 0.002, 0.0, Integrator::Euler).unwrap();
+        let mut changed = config.clone();
+        changed.epsilon *= 2.0;
+        assert_ne!(
+            base.id(),
+            PhysicsProfile::new(changed, 0.002, 0.0, Integrator::Euler)
+                .unwrap()
+                .id()
+        );
+        let mut changed = config.clone();
+        changed.lambda_sq *= 2.0;
+        assert_ne!(
+            base.id(),
+            PhysicsProfile::new(changed, 0.002, 0.0, Integrator::Euler)
+                .unwrap()
+                .id()
+        );
+        assert_ne!(
+            base.id(),
+            PhysicsProfile::new(config, 0.002, 0.0, Integrator::Rk4)
+                .unwrap()
+                .id()
+        );
     }
 }

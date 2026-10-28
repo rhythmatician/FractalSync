@@ -21,6 +21,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--asset", type=Path, required=True)
     parser.add_argument("--staging", type=Path, help=argparse.SUPPRESS)
     args, pytest_args = parser.parse_known_args()
     if args.staging is None:
@@ -30,6 +31,7 @@ def main() -> int:
             return subprocess.run([
                 sys.executable, str(Path(__file__).resolve()), str(args.wheel.resolve()),
                 "--report", str(args.report.resolve()), "--staging", staging, *pytest_args,
+                "--asset", str(args.asset.resolve()),
             ], check=False).returncode
     root = Path(__file__).resolve().parents[1]
     wheel = args.wheel.resolve()
@@ -52,15 +54,22 @@ def main() -> int:
             def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
                 if report.when == "call" or report.failed:
                     self.tests.append({"nodeid": report.nodeid, "outcome": report.outcome, "phase": report.when, "seconds": report.duration})
+                    if report.failed:
+                        failure=str(report.longrepr)
+                        for path,label in [(str(root),"${REPO}"),(staging,"${WHEEL}")]:
+                            failure=failure.replace(path,label).replace(path.replace("\\","\\\\"),label)
+                        self.tests[-1]["failure"]=failure[-3000:]
 
         outcomes = Outcomes()
 
         extension = next(Path(staging).rglob("*.pyd"))
         started = time.perf_counter()
-        identity = runtime_core.experimental_prepare_operational_field()
+        asset=args.asset.read_bytes()
+        identity = runtime_core.experimental_load_operational_asset(asset)
         preparation = time.perf_counter() - started
         started = time.perf_counter()
-        code = pytest.main(pytest_args or [str(test), "-q", "-k", "TestShoreCrossings or TestSignedSdfContinuity or energy_conserved_high_curvature_deep_scale_rollout or energy_conserved_near_shore_rollout"], plugins=[outcomes])
+        selected_args=pytest_args or [str(test.relative_to(root)), "-q", "-k", "TestEnergyDrift or TestShoreCrossings or TestSignedSdfContinuity"]
+        code = pytest.main(selected_args, plugins=[outcomes])
         record = {
             "profile": "experimental-operational-field/1",
             "field_identity": identity,
@@ -72,9 +81,10 @@ def main() -> int:
                 str(path.relative_to(root)).replace("\\", "/"): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in [root / "runtime-core/src/operational_field.rs", root / "runtime-core/src/geometry_provider.rs", root / "runtime-core/src/pybindings.rs", root / "runtime-core/src/manifold.rs"]
             },
-            "preparation_seconds": preparation,
+            "asset_loading_seconds": preparation,
+            "asset_sha256":hashlib.sha256(asset).hexdigest(),
             "pytest_seconds": time.perf_counter() - started,
-            "pytest_args": pytest_args,
+            "pytest_args": selected_args,
             "pytest_exit_code": int(code),
             "tests": outcomes.tests,
         }

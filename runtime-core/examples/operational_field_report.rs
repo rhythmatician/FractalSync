@@ -1,6 +1,12 @@
 //! Preparation and timing are deliberately outside the Physics evaluation path.
 use num_complex::Complex64;
-use runtime_core::{manifold, operational_field::prepare_raster_baseline};
+use runtime_core::{
+    manifold,
+    operational_field::{
+        acceptance::{frozen_experiment_report, FrozenRollout, Integrator, PhysicsProfile},
+        prepare_raster_baseline, PreparedField,
+    },
+};
 use serde_json::json;
 use std::{hint::black_box, sync::Arc, time::Instant};
 
@@ -11,9 +17,31 @@ fn stats(mut times: Vec<f64>) -> serde_json::Value {
 }
 
 fn main() -> Result<(), String> {
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() != 3 {
+        return Err(
+            "use --prepare asset.bin once, then --asset asset.bin for frozen replay".into(),
+        );
+    }
+    if args[1] == "--prepare" {
+        let start = Instant::now();
+        let field = prepare_raster_baseline()?;
+        let preparation = start.elapsed().as_secs_f64();
+        let bytes = field.asset_bytes();
+        std::fs::write(&args[2], &bytes).map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            json!({"field_id":format!("{:016x}",field.identity()),"preparation_compute_seconds":preparation,"preparation_serialization_write_seconds":start.elapsed().as_secs_f64()-preparation,"preparation_total_seconds":start.elapsed().as_secs_f64(),"asset_bytes":bytes.len(),"coefficient_bytes":field.coefficient_bytes(),"frozen_experiment":serde_json::from_str::<serde_json::Value>(runtime_core::operational_field::acceptance::EXPERIMENT_MANIFEST).unwrap()})
+        );
+        return Ok(());
+    }
+    if args[1] != "--asset" {
+        return Err("unknown operational experiment command".into());
+    }
     let start = Instant::now();
-    let field = Arc::new(prepare_raster_baseline()?);
-    let preparation = start.elapsed().as_secs_f64();
+    let bytes = std::fs::read(&args[2]).map_err(|e| e.to_string())?;
+    let field = Arc::new(PreparedField::from_asset_bytes(&bytes).map_err(str::to_string)?);
+    let loading = start.elapsed().as_secs_f64();
     let first = Instant::now();
     black_box(
         field
@@ -21,6 +49,8 @@ fn main() -> Result<(), String> {
             .map_err(|_| "missing prepared point")?,
     );
     let first_us = first.elapsed().as_secs_f64() * 1e6;
+    // This measured reference comparison is offline diagnostic work.
+    runtime_core::distance_field::load_builtin_distance_field("default")?;
     let mut times = Vec::new();
     let mut misses = Vec::new();
     let mut max_scalar_difference = 0.0f64;
@@ -53,8 +83,8 @@ fn main() -> Result<(), String> {
                     let plus = field.query(plus).unwrap();
                     let minus = field.query(minus).unwrap();
                     let fd = (plus.value - minus.value) / (2.0 * delta);
-                    max_gradient_absolute_error = max_gradient_absolute_error
-                        .max((fd - j.gradient[a]).abs());
+                    max_gradient_absolute_error =
+                        max_gradient_absolute_error.max((fd - j.gradient[a]).abs());
                     for b in 0..2 {
                         let fd = (plus.gradient[b] - minus.gradient[b]) / (2.0 * delta);
                         max_hessian_relative_error = max_hessian_relative_error
@@ -78,51 +108,35 @@ fn main() -> Result<(), String> {
         black_box(field.query(black_box(p))).unwrap();
         cold.push(now.elapsed().as_secs_f64() * 1e6);
     }
-    runtime_core::operational_field::activate(Some(field.clone()));
-    let config = manifold::ManifoldConfig::default();
-    let mut steps = Vec::new();
-    let mut failures = 0;
-    for i in 0..1000 {
-        let now = Instant::now();
-        let result = black_box(manifold::integrate_step(
-            Complex64::new(0.4 + i as f64 * 1e-6, 0.05),
-            (0.001, 0.0),
-            (0.0, 0.0),
-            0.0,
+    let frozen = FrozenRollout::new(
+        field.clone(),
+        PhysicsProfile::new(
+            manifold::ManifoldConfig::default(),
             0.001,
-            &config,
-        ));
-        steps.push(now.elapsed().as_secs_f64() * 1e6);
-        if result.is_err() {
-            failures += 1;
-        }
+            0.0,
+            Integrator::Euler,
+        )?,
+        vec![],
+    )?;
+    let mut transactional_times = Vec::new();
+    let mut transactional_counts = None;
+    for i in 0..1000 {
+        let mut state = frozen.initial_state([0.4 + i as f64 * 1e-6, 0.05], [0.001, 0.0])?;
+        let now = Instant::now();
+        let counts = frozen.attempt_step(&mut state, [0.0; 2])?;
+        transactional_times.push(now.elapsed().as_secs_f64() * 1e6);
+        transactional_counts = Some(counts);
     }
-    let mut energy_rollouts = Vec::new();
-    for (name, x, count) in [("high_curvature", 0.4, 150), ("near_shore", 0.3, 100)] {
-        let mut c = Complex64::new(x, 0.05);
-        let mut v = (0.0, 0.02);
-        let initial = manifold::total_energy(v, c, &config)?;
-        let mut excursion = 0.0f64;
-        for _ in 0..count {
-            let (next_c, next_v, _) =
-                manifold::integrate_step(c, v, (0.0, 0.0), 0.0, 0.002, &config)?;
-            c = next_c;
-            v = next_v;
-            excursion = excursion.max((manifold::total_energy(v, c, &config)? - initial).abs());
-        }
-        let drift = (manifold::total_energy(v, c, &config)? - initial).abs();
-        energy_rollouts.push(json!({"name":name,"steps":count,"dt":0.002,"absolute_drift":drift,"maximum_excursion":excursion,"unchanged_limit":0.05,"passed":drift<0.05 && excursion<0.05}));
-    }
-    runtime_core::operational_field::activate(None);
+    let experiment = frozen_experiment_report(field.clone())?;
     println!("{}",serde_json::to_string_pretty(&json!({
         "profile":"experimental-operational-field/1", "identity":format!("{:016x}",field.identity()),
         "reference":"existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
         "coverage":{"origin":[-0.1,-0.2],"shape":[1605,1005],"spacing":field.spacing(),"epsilon_min":1e-4,"lower_halo_nodes":2,"upper_halo_nodes":3},
-        "coefficient_bytes":field.coefficient_bytes(),"preparation_seconds":preparation,
+        "coefficient_bytes":field.coefficient_bytes(),"asset_loading_seconds":loading,
         "first_prepared_query_us":first_us,"distinct_queries":stats(times),"unavailable_queries":stats(misses),
         "cache_stress_queries":stats(cold),"cache_stress_eviction_bytes":eviction.len()*8,
-        "shipping_euler_step_on_operational_profile":stats(steps),"step_failures":failures,
-        "energy_rollouts":energy_rollouts,
+        "transactional_step_profile":frozen.profile().manifest(),"transactional_step":stats(transactional_times),"transactional_step_work":transactional_counts,
+        "frozen_experiment":experiment,
         "measured_raster_max_scalar_difference":max_scalar_difference,
         "neighbor_gradient_max_absolute_error":max_gradient_absolute_error,
         "neighbor_hessian_max_relative_error":max_hessian_relative_error,

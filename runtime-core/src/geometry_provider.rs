@@ -31,6 +31,12 @@ use std::sync::RwLock;
 
 mod uniform_box;
 
+/// Offline evidence only. None is unknown, never finite-budget interior.
+#[cfg(feature = "experimental-operational-field")]
+pub fn operational_reference_membership(c:Complex64)->Option<bool> {
+    uniform_box::membership(c.re,c.im,0.0)
+}
+
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.

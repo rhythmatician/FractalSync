@@ -2,6 +2,8 @@
 //! 
 //! WebAssembly bindings to runtime_core for browser use.
 
+#[cfg(feature = "experimental-operational-field")]
+mod operational_experiment;
 use wasm_bindgen::prelude::*;
 use js_sys::Array;
 use serde::Serialize;

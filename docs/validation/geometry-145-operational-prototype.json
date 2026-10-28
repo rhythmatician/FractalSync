@@ -1,349 +1,1621 @@
 {
   "date": "2026-10-28",
-  "device": "Intel Core i9-14900; Windows x64",
-  "scouting_observations": {
-    "quintic_64_mib_cache_stress_max_us": 352.8,
-    "quintic_64_mib_cache_stress_p99_us": 2.1,
-    "cubic_hessian_discrepancy_failed": 0.00044140368074973186,
-    "note": "Earlier scouting output retained as context; final frozen runs and hashes follow. No hard scheduling deadline claim."
+  "authorization": "ADR 0005 accepted for bounded prototype only; shipping adoption, cut-motion policy and device targets pending",
+  "field_id": "c709f01272dcb1c9",
+  "asset": {
+    "sha256": "bd92d6eca3a8c124179473bc8af05af38d98a114b48aaa0c7df9b350dc0ea2c5",
+    "bytes": 12904256,
+    "archive": "docs/validation/experiments/geometry-145-operational/field.zip",
+    "archive_sha256": "b2900d8ab914337b72b4e3a21a497ebaca68445618203b07173dc23d77390f1d",
+    "archive_bytes": 6136892,
+    "coefficient_bytes": 12904200,
+    "manifest": {
+      "field_id": "c709f01272dcb1c9",
+      "field_sha256": "bd92d6eca3a8c124179473bc8af05af38d98a114b48aaa0c7df9b350dc0ea2c5",
+      "evaluator": "FSOP0001; immutable tensor-product C4 quintic; field fingerprint basis 5",
+      "experiment_manifest": {
+        "coverage_policy": "load complete asset before replay; never extend or replace; miss is failure",
+        "crossing_horizon_seconds": 5,
+        "crossing_start": [
+          0.4,
+          0.05
+        ],
+        "crossing_timesteps": [
+          0.002,
+          0.001,
+          0.0005
+        ],
+        "launch_energy_factors": [
+          0.5,
+          25
+        ],
+        "parity_gradient_abs_tolerance": 0.0001,
+        "parity_hessian_relative_tolerance": 0.0001,
+        "parity_scalar_abs_tolerance": 0.000001,
+        "perturbations": [
+          {
+            "name": "original",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "x_plus",
+            "offset": [
+              0.00001,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "x_minus",
+            "offset": [
+              -0.00001,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "y_plus",
+            "offset": [
+              0,
+              0.00001
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "y_minus",
+            "offset": [
+              0,
+              -0.00001
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "speed_plus",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 1.01
+          },
+          {
+            "name": "speed_minus",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 0.99
+          }
+        ],
+        "preparation": {
+          "origin": [
+            -0.1,
+            -0.2
+          ],
+          "reference": "builtin-default-raster; measured only",
+          "shape": [
+            1605,
+            1005
+          ],
+          "spacing": 0.0005
+        },
+        "query_p99_target_us": 100,
+        "reference_policy": "current-authoritative-singularity-refusal; no smoothing permission",
+        "ridge_dt": 0.005,
+        "ridge_start": [
+          0.6,
+          0.15
+        ],
+        "ridge_steps": 200,
+        "schema": "operational-experiment/2",
+        "step_p99_target_us": 2000
+      },
+      "physics_profiles": [
+        {
+          "beta": 0.05,
+          "d_ref": 0.1,
+          "dt": 0.02,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 0.5,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "0790a66e7df83330",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.0005,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 0.1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "967ff9e8c8a2f0f9",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 0.1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "9ff5a7f24ecc279c",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "a5a82a028131131e",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.005,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "cbc921efb4e8635a",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 0.1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "e401f6cc3fd01ea3",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        }
+      ],
+      "reference": {
+        "scalar_fidelity": "unknown",
+        "differential_fidelity": "unknown",
+        "singularity_information": "unknown",
+        "authoritative_refusals": []
+      },
+      "replacement_and_extension_during_rollout": "forbidden; each run owns its fixed field/profile pair"
+    },
+    "preparation": {
+      "asset_bytes": 12904256,
+      "coefficient_bytes": 12904200,
+      "field_id": "c709f01272dcb1c9",
+      "frozen_experiment": {
+        "coverage_policy": "load complete asset before replay; never extend or replace; miss is failure",
+        "crossing_horizon_seconds": 5,
+        "crossing_start": [
+          0.4,
+          0.05
+        ],
+        "crossing_timesteps": [
+          0.002,
+          0.001,
+          0.0005
+        ],
+        "launch_energy_factors": [
+          0.5,
+          25
+        ],
+        "parity_gradient_abs_tolerance": 0.0001,
+        "parity_hessian_relative_tolerance": 0.0001,
+        "parity_scalar_abs_tolerance": 0.000001,
+        "perturbations": [
+          {
+            "name": "original",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "x_plus",
+            "offset": [
+              0.00001,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "x_minus",
+            "offset": [
+              -0.00001,
+              0
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "y_plus",
+            "offset": [
+              0,
+              0.00001
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "y_minus",
+            "offset": [
+              0,
+              -0.00001
+            ],
+            "speed_scale": 1
+          },
+          {
+            "name": "speed_plus",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 1.01
+          },
+          {
+            "name": "speed_minus",
+            "offset": [
+              0,
+              0
+            ],
+            "speed_scale": 0.99
+          }
+        ],
+        "preparation": {
+          "origin": [
+            -0.1,
+            -0.2
+          ],
+          "reference": "builtin-default-raster; measured only",
+          "shape": [
+            1605,
+            1005
+          ],
+          "spacing": 0.0005
+        },
+        "query_p99_target_us": 100,
+        "reference_policy": "current-authoritative-singularity-refusal; no smoothing permission",
+        "ridge_dt": 0.005,
+        "ridge_start": [
+          0.6,
+          0.15
+        ],
+        "ridge_steps": 200,
+        "schema": "operational-experiment/2",
+        "step_p99_target_us": 2000
+      },
+      "preparation_compute_seconds": 0.0873151,
+      "preparation_serialization_write_seconds": 0.010867499999999988,
+      "preparation_total_seconds": 0.0981829
+    },
+    "reproduction_byte_identity_verified": true
   },
-  "platform": "Windows-11-10.0.26100-SP0",
-  "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
-  "executable_sha256": "6978bcde609e7c3d7dbf09291509c7d188c730eb5920a16e6cadfb4a8db35932",
   "source_sha256": {
-    "runtime-core/src/operational_field.rs": "7db53da6ba8944f445009ef44cd6c711dd2c981eb7d0500f27b53df26c8e2498",
-    "runtime-core/src/geometry_provider.rs": "e9d9b7e909156b7af4ab25955a20993e15ccd1ddc460723a81f92cf29e3ccb4c",
-    "runtime-core/src/pybindings.rs": "0c0a93bc0b2e396e48497475e81e8839e0707e259477cee77ba29bc3248f65b4",
-    "runtime-core/src/manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
-    "runtime-core/examples/operational_field_report.rs": "6f8afd2260abb6c2d6f03143b8e546ebd138680ff45953314d83e961e196eee8",
+    "Cargo.lock": "6589fb4f888cf828005aba622ea7f68429d67e6e099d4082375843b67a1a3c88",
+    "runtime-core/Cargo.toml": "2f35d211f4b16e7644d9899e98aa06e1109cf023175c403964031af488384042",
+    "runtime-core/src/lib.rs": "e7fb00a92bca57abe8cb39e5f32abe7f5fdaa0b156b79721509ec876a1fd8e6e",
+    "runtime-core/src/operational_field.rs": "7ec147a0f71dee24912eace97520a8a6442457800ae372546783dce704525dcd",
+    "runtime-core/src/operational_field/acceptance.rs": "d0587cd80419dadc7a619f7043f8d7841f63a82887d631d4948983fea37c8058",
+    "runtime-core/src/geometry_provider.rs": "16bbae3b665b0544cfa87692e4b4f9ba0f80c3adb1736a0c98d8cfda3a7fa107",
+    "runtime-core/src/geometry_provider/uniform_box.rs": "4c5ce8b6f1001c99a13f757ce49e91a64843032b27afdf20e3c4532493f5d1a7",
+    "runtime-core/src/geometry_provider/affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+    "runtime-core/src/distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+    "runtime-core/src/controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+    "runtime-core/src/manifold.rs": "2ccd0d020484a5c4c12fca79e2ee38719015fec174eeeb5f4043d50dd4ecc00d",
+    "runtime-core/src/pybindings.rs": "46651c8b02853f9af8792f89bf7afa0df1ea8271b95e365c8a402bb517edec6b",
+    "runtime-core/examples/operational_field_report.rs": "7d02e7e3201addc9977c68dd44fe698c687205652345ad38c93deb4f32facddd",
+    "wasm-orbit/Cargo.toml": "f081374309416aa25e8331ac47c040941cd65e332fd9dd720a8d6105a3453ee3",
+    "wasm-orbit/src/lib.rs": "65b496e5bc691676430fae500a3d0d38af29b65ff50c1387b9e1391fb86f7ae8",
+    "wasm-orbit/src/operational_experiment.rs": "40b125fde1e5d208077ee8c151b0a358fb44225ed236afbc2d9b8dc6da09ae2d",
+    "backend/tests/test_manifold_physics.py": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "backend/src/cspace_proxies.py": "798219419de063274af799ad8e3d394049c91f8b3a50202379dcc1691d8d27ac",
+    "docs/validation/geometry-145-operational-experiment.json": "94b48bc133edc89bf128032c3a9a9fe7263aa240fd3a51044e73746ec1333d65",
     "runtime-core/data/mandelbrot_distance_1024.bin": "3105450d55222fbd5cde90a5e7757930a8536f451e5f56deeefa1950f8de4345",
     "runtime-core/data/mandelbrot_distance_1024.json": "2eac192de829e1d70e8c73a2061bf1d59cc747bd49466927a0e874a30532ab15",
-    "backend/tests/test_manifold_physics.py": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536"
+    "scripts/validate_operational_field.py": "d12d2de9bd10e1d8dd2736e7fdd2cfd6af9c9070531ce9ad4a9d08467b015458",
+    "scripts/validate_operational_field_browser.mjs": "aa64e8b36b99b3633f7e6344c2a5d0f6739221fcd2c11de009633d788eca13e5",
+    "scripts/validate_operational_native_crossing.py": "998bde9146473da8017fe6ef1c4922ce0be79f0c08c81efbd05da732ab15a3d8",
+    "scripts/collect_operational_acceptance.mjs": "7e54eb1f6c6751a92092dd7433f9eab93cf014d88dd84916e9941ef247f8fe9e",
+    "scripts/measure_operational_field.ps1": "f3a6fd29a505864129a508a83bc5508464f4d1aaef21162728409eb8ddc2d490"
   },
-  "runs": [
-    {
-      "cache_stress_eviction_bytes": 67108864,
-      "cache_stress_queries": {
-        "first_us": 2.0,
-        "max_us": 166.0,
-        "p50_us": 1.0,
-        "p99_us": 4.5,
-        "samples": 1000
-      },
-      "coefficient_bytes": 12904200,
-      "coverage": {
-        "epsilon_min": 0.0001,
-        "lower_halo_nodes": 2,
-        "origin": [
-          -0.1,
-          -0.2
-        ],
-        "shape": [
-          1605,
-          1005
-        ],
-        "spacing": 0.0005,
-        "upper_halo_nodes": 3
-      },
-      "derivative_checks_pass": true,
-      "derivative_tolerance_unchanged": 0.0001,
-      "distinct_queries": {
-        "first_us": 0.5,
-        "max_us": 129.4,
-        "p50_us": 0.19999999999999998,
-        "p99_us": 0.39999999999999997,
-        "samples": 20000
-      },
-      "energy_rollouts": [
-        {
-          "absolute_drift": 0.00025044495877102335,
-          "dt": 0.002,
-          "maximum_excursion": 0.00025044495877102335,
-          "name": "high_curvature",
-          "passed": true,
-          "steps": 150,
-          "unchanged_limit": 0.05
+  "native": {
+    "device": "Intel(R) Core(TM) i9-14900",
+    "os": "Microsoft Windows NT 10.0.26100.0",
+    "executable_sha256": "5a02d397247da00e1309c07a23bc5bf4368c21202268594a2ba9253215d2f751",
+    "memory_note": "OS peak working set sampled every 20 ms; includes asset/input copies, reference diagnostics, cache-stress scratch and serialization, not only coefficients",
+    "runs": [
+      {
+        "run": 0,
+        "asset_loading_seconds": 0.0202881,
+        "first_prepared_query_us": 8.399999999999999,
+        "distinct_queries": {
+          "first_us": 1.1,
+          "max_us": 324.79999999999995,
+          "p50_us": 0.09999999999999999,
+          "p99_us": 0.3,
+          "samples": 20000
         },
-        {
-          "absolute_drift": 0.0034067502535677363,
-          "dt": 0.002,
-          "maximum_excursion": 0.0034067502535677363,
-          "name": "near_shore",
-          "passed": true,
-          "steps": 100,
-          "unchanged_limit": 0.05
-        }
-      ],
-      "first_prepared_query_us": 1.4,
-      "identity": "c709f01272dcb1c9",
-      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
-      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
-      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
-      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
-      "preparation_seconds": 0.0981822,
-      "profile": "experimental-operational-field/1",
-      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
-      "shipping_euler_step_on_operational_profile": {
-        "first_us": 41.0,
-        "max_us": 41.0,
-        "p50_us": 3.9,
-        "p99_us": 14.0,
-        "samples": 1000
+        "unavailable_queries": {
+          "first_us": 0.09999999999999999,
+          "max_us": 0.7,
+          "p50_us": 0,
+          "p99_us": 0.09999999999999999,
+          "samples": 20000
+        },
+        "cache_stress_queries": {
+          "first_us": 1.9,
+          "max_us": 12.799999999999999,
+          "p50_us": 1.1,
+          "p99_us": 2.6,
+          "samples": 1000
+        },
+        "cache_stress_eviction_bytes": 67108864,
+        "transactional_step": {
+          "first_us": 16,
+          "max_us": 38.300000000000004,
+          "p50_us": 8.7,
+          "p99_us": 10.299999999999999,
+          "samples": 1000
+        },
+        "transactional_step_profile": {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "a5a82a028131131e",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        "transactional_step_work": {
+          "coefficient_reads_upper_bound": 864,
+          "geometry_evaluations": 24
+        },
+        "exit_code": 0,
+        "process_seconds": 4.2348723,
+        "sampled_os_peak_working_set_bytes": 116936704,
+        "stdout_file": "run-0.json"
       },
-      "step_failures": 0,
-      "unavailable_queries": {
-        "first_us": 0.09999999999999999,
-        "max_us": 26.2,
-        "p50_us": 0.0,
-        "p99_us": 0.09999999999999999,
-        "samples": 20000
+      {
+        "run": 1,
+        "asset_loading_seconds": 0.0199951,
+        "first_prepared_query_us": 7.5,
+        "distinct_queries": {
+          "first_us": 0.5,
+          "max_us": 127.2,
+          "p50_us": 0.09999999999999999,
+          "p99_us": 0.3,
+          "samples": 20000
+        },
+        "unavailable_queries": {
+          "first_us": 0.09999999999999999,
+          "max_us": 2,
+          "p50_us": 0,
+          "p99_us": 0.09999999999999999,
+          "samples": 20000
+        },
+        "cache_stress_queries": {
+          "first_us": 1.3,
+          "max_us": 34.3,
+          "p50_us": 1,
+          "p99_us": 3,
+          "samples": 1000
+        },
+        "cache_stress_eviction_bytes": 67108864,
+        "transactional_step": {
+          "first_us": 16.900000000000002,
+          "max_us": 21.1,
+          "p50_us": 11,
+          "p99_us": 14.8,
+          "samples": 1000
+        },
+        "transactional_step_profile": {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "a5a82a028131131e",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        "transactional_step_work": {
+          "coefficient_reads_upper_bound": 864,
+          "geometry_evaluations": 24
+        },
+        "exit_code": 0,
+        "process_seconds": 4.2085207,
+        "sampled_os_peak_working_set_bytes": 116563968,
+        "stdout_file": "run-1.json"
       },
-      "fresh_process_seconds": 3.284190399805084
+      {
+        "run": 2,
+        "asset_loading_seconds": 0.0188953,
+        "first_prepared_query_us": 6.2,
+        "distinct_queries": {
+          "first_us": 0.7999999999999999,
+          "max_us": 27.2,
+          "p50_us": 0.09999999999999999,
+          "p99_us": 0.3,
+          "samples": 20000
+        },
+        "unavailable_queries": {
+          "first_us": 0,
+          "max_us": 0.09999999999999999,
+          "p50_us": 0,
+          "p99_us": 0.09999999999999999,
+          "samples": 20000
+        },
+        "cache_stress_queries": {
+          "first_us": 1.1,
+          "max_us": 14.2,
+          "p50_us": 1,
+          "p99_us": 2.7,
+          "samples": 1000
+        },
+        "cache_stress_eviction_bytes": 67108864,
+        "transactional_step": {
+          "first_us": 10.4,
+          "max_us": 17.6,
+          "p50_us": 8,
+          "p99_us": 8.7,
+          "samples": 1000
+        },
+        "transactional_step_profile": {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "a5a82a028131131e",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        "transactional_step_work": {
+          "coefficient_reads_upper_bound": 864,
+          "geometry_evaluations": 24
+        },
+        "exit_code": 0,
+        "process_seconds": 4.1825346,
+        "sampled_os_peak_working_set_bytes": 116936704,
+        "stdout_file": "run-2.json"
+      }
+    ],
+    "derivative_controls": {
+      "max_gradient_absolute_error": 1.710788889441872e-7,
+      "max_hessian_normalized_error": 0.0000418017048452457,
+      "tolerance": 0.0001
     },
-    {
-      "cache_stress_eviction_bytes": 67108864,
-      "cache_stress_queries": {
-        "first_us": 1.5999999999999999,
-        "max_us": 5.4,
-        "p50_us": 0.8999999999999999,
-        "p99_us": 2.0,
-        "samples": 1000
+    "measured_raster_max_scalar_difference": 0.00007482089540695666
+  },
+  "experiment": {
+    "barrier": 0.9303275638224188,
+    "continuous_trajectory": "piecewise-linear reconstruction of successful committed states; no claim of exact continuous ODE solution",
+    "energy_runs": [
+      {
+        "absolute_drift": 0.00025044495877102335,
+        "field_id": "c709f01272dcb1c9",
+        "final": {
+          "energy": 0.761923077486821,
+          "field_id": "c709f01272dcb1c9",
+          "integrated_work": 0,
+          "mechanical_time": 0.3000000000000002,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "position": [
+            0.400934214321014,
+            0.055168097248799015
+          ],
+          "velocity": [
+            0.007476138503028972,
+            0.01367055959298633
+          ]
+        },
+        "initial": {
+          "energy": 0.762173522445592,
+          "field_id": "c709f01272dcb1c9",
+          "integrated_work": 0,
+          "mechanical_time": 0,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 0.00025044495877102335,
+        "name": "high_curvature",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        "unchanged_limit": 0.05
       },
-      "coefficient_bytes": 12904200,
-      "coverage": {
-        "epsilon_min": 0.0001,
-        "lower_halo_nodes": 2,
+      {
+        "absolute_drift": 0.0034067502535677363,
+        "field_id": "c709f01272dcb1c9",
+        "final": {
+          "energy": 3.858459152160112,
+          "field_id": "c709f01272dcb1c9",
+          "integrated_work": 0,
+          "mechanical_time": 0.20000000000000015,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "position": [
+            0.3001228328110483,
+            0.05464084745897643
+          ],
+          "velocity": [
+            0.0013667360126965182,
+            0.026718851461228387
+          ]
+        },
+        "initial": {
+          "energy": 3.8618659024136797,
+          "field_id": "c709f01272dcb1c9",
+          "integrated_work": 0,
+          "mechanical_time": 0,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "position": [
+            0.3,
+            0.05
+          ],
+          "velocity": [
+            0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 0.0034067502535677363,
+        "name": "near_shore",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Euler",
+          "kappa": 1,
+          "lambda_sq": 1,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "7124c0cd1fbf9ec4",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "work_rule": "left-endpoint control-plus-drag power"
+        },
+        "unchanged_limit": 0.05
+      }
+    ],
+    "experiment_manifest": {
+      "coverage_policy": "load complete asset before replay; never extend or replace; miss is failure",
+      "crossing_horizon_seconds": 5,
+      "crossing_start": [
+        0.4,
+        0.05
+      ],
+      "crossing_timesteps": [
+        0.002,
+        0.001,
+        0.0005
+      ],
+      "launch_energy_factors": [
+        0.5,
+        25
+      ],
+      "parity_gradient_abs_tolerance": 0.0001,
+      "parity_hessian_relative_tolerance": 0.0001,
+      "parity_scalar_abs_tolerance": 0.000001,
+      "perturbations": [
+        {
+          "name": "original",
+          "offset": [
+            0,
+            0
+          ],
+          "speed_scale": 1
+        },
+        {
+          "name": "x_plus",
+          "offset": [
+            0.00001,
+            0
+          ],
+          "speed_scale": 1
+        },
+        {
+          "name": "x_minus",
+          "offset": [
+            -0.00001,
+            0
+          ],
+          "speed_scale": 1
+        },
+        {
+          "name": "y_plus",
+          "offset": [
+            0,
+            0.00001
+          ],
+          "speed_scale": 1
+        },
+        {
+          "name": "y_minus",
+          "offset": [
+            0,
+            -0.00001
+          ],
+          "speed_scale": 1
+        },
+        {
+          "name": "speed_plus",
+          "offset": [
+            0,
+            0
+          ],
+          "speed_scale": 1.01
+        },
+        {
+          "name": "speed_minus",
+          "offset": [
+            0,
+            0
+          ],
+          "speed_scale": 0.99
+        }
+      ],
+      "preparation": {
         "origin": [
           -0.1,
           -0.2
         ],
+        "reference": "builtin-default-raster; measured only",
         "shape": [
           1605,
           1005
         ],
-        "spacing": 0.0005,
-        "upper_halo_nodes": 3
+        "spacing": 0.0005
       },
-      "derivative_checks_pass": true,
-      "derivative_tolerance_unchanged": 0.0001,
-      "distinct_queries": {
-        "first_us": 0.3,
-        "max_us": 17.4,
-        "p50_us": 0.09999999999999999,
-        "p99_us": 0.3,
-        "samples": 20000
-      },
-      "energy_rollouts": [
-        {
-          "absolute_drift": 0.00025044495877102335,
-          "dt": 0.002,
-          "maximum_excursion": 0.00025044495877102335,
-          "name": "high_curvature",
-          "passed": true,
-          "steps": 150,
-          "unchanged_limit": 0.05
-        },
-        {
-          "absolute_drift": 0.0034067502535677363,
-          "dt": 0.002,
-          "maximum_excursion": 0.0034067502535677363,
-          "name": "near_shore",
-          "passed": true,
-          "steps": 100,
-          "unchanged_limit": 0.05
-        }
+      "query_p99_target_us": 100,
+      "reference_policy": "current-authoritative-singularity-refusal; no smoothing permission",
+      "ridge_dt": 0.005,
+      "ridge_start": [
+        0.6,
+        0.15
       ],
-      "first_prepared_query_us": 0.8999999999999999,
-      "identity": "c709f01272dcb1c9",
-      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
-      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
-      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
-      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
-      "preparation_seconds": 0.0775375,
-      "profile": "experimental-operational-field/1",
-      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
-      "shipping_euler_step_on_operational_profile": {
-        "first_us": 28.099999999999998,
-        "max_us": 29.099999999999998,
-        "p50_us": 3.7,
-        "p99_us": 10.200000000000001,
-        "samples": 1000
-      },
-      "step_failures": 0,
-      "unavailable_queries": {
-        "first_us": 0.09999999999999999,
-        "max_us": 0.3,
-        "p50_us": 0.0,
-        "p99_us": 0.09999999999999999,
-        "samples": 20000
-      },
-      "fresh_process_seconds": 3.027836399851367
+      "ridge_steps": 200,
+      "schema": "operational-experiment/2",
+      "step_p99_target_us": 2000
     },
-    {
-      "cache_stress_eviction_bytes": 67108864,
-      "cache_stress_queries": {
-        "first_us": 1.9,
-        "max_us": 25.599999999999998,
-        "p50_us": 1.4,
-        "p99_us": 3.8,
-        "samples": 1000
+    "field_id": "c709f01272dcb1c9",
+    "join_differential_self_consistency": {
+      "gradient_absolute_error": 9.098919750982759e-8,
+      "hessian_normalized_error": 0.0000010105566214736686,
+      "passed": true,
+      "tolerance": 0.0001
+    },
+    "launch_speed": 0.21647965965938415,
+    "parity_samples": [
+      {
+        "availability": "available",
+        "jet": [
+          0.06317779742931535,
+          1.192916440777481,
+          -0.6893370067700827,
+          2.797051436365225,
+          6.199685028850674,
+          3.9290429817013237
+        ],
+        "point": [
+          0.4,
+          0.05
+        ]
       },
-      "coefficient_bytes": 12904200,
-      "coverage": {
-        "epsilon_min": 0.0001,
-        "lower_halo_nodes": 2,
-        "origin": [
+      {
+        "availability": "available",
+        "jet": [
+          -0.0004982454929712629,
+          1.0593469923050078,
+          -0.8808225242521278,
+          -295.2831658250133,
+          -196.01003663814873,
+          -287.1372500926048
+        ],
+        "point": [
+          0.3205,
+          0.0475
+        ]
+      },
+      {
+        "availability": "available",
+        "jet": [
+          -0.0004982465523184001,
+          1.0593472875879002,
+          -0.880822328241996,
+          -295.28262004003705,
+          -196.0102279863602,
+          -287.1367281955018
+        ],
+        "point": [
+          0.320499999,
+          0.0475
+        ]
+      },
+      {
+        "availability": "available",
+        "jet": [
+          -0.0004982444336243609,
+          1.0593466970215533,
+          -0.8808227202620793,
+          -295.2837116099926,
+          -196.0098452895608,
+          -287.1377719894066
+        ],
+        "point": [
+          0.32050000100000003,
+          0.0475
+        ]
+      },
+      {
+        "availability": "available",
+        "jet": [
+          -0.017751882528213577,
+          0.658852436269322,
+          -0.7450876628152233,
+          -8.566325737371537,
+          13.129475216069908,
+          1.3941071099810076
+        ],
+        "point": [
+          0.3,
+          0.05
+        ]
+      },
+      {
+        "availability": "available",
+        "jet": [
+          0.2166675027552991,
+          0.9999931582973998,
+          -0.33497217421729014,
+          -0.013162692353609062,
+          0.0011382831385364084,
+          6.277114152989641
+        ],
+        "point": [
+          0.6,
+          0.15
+        ]
+      },
+      {
+        "availability": "GeometryUnavailable",
+        "point": [
           -0.1,
-          -0.2
-        ],
-        "shape": [
-          1605,
-          1005
-        ],
-        "spacing": 0.0005,
-        "upper_halo_nodes": 3
+          0
+        ]
       },
-      "derivative_checks_pass": true,
-      "derivative_tolerance_unchanged": 0.0001,
+      {
+        "availability": "GeometryUnavailable",
+        "point": [
+          0.8,
+          0
+        ]
+      }
+    ],
+    "reference_differential_fidelity": "unknown",
+    "reference_scalar_fidelity": {
+      "certified_regions": 0,
+      "measured_raster_discrepancy_is_not_a_bound": true,
+      "status": "unknown"
+    },
+    "reference_singularity_policy": "authoritative evidence refuses before operational query; no reference-cut coverage certificate for this corridor",
+    "runs": [
+      {
+        "name": "original",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1561,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.1219999999998778,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "original",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3075,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0749999999997724,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "original",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6104,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0520000000001866,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "original",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_original",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1561,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.1219999999998778,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3075,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0749999999997724,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6104,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0520000000001866,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_x_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1561,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.1219999999998778,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3074,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0739999999997725,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6103,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0515000000001864,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "x_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_x_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1560,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.119999999999878,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3074,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0739999999997725,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6101,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.050500000000186,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_y_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1561,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.1219999999998778,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3076,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0759999999997722,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6106,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.053000000000187,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "y_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_y_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1546,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.091999999999881,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3044,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.0439999999997758,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6042,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.021000000000176,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_speed_plus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "e401f6cc3fd01ea3",
+        "dt": 0.002,
+        "committed_steps": 1577,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.1539999999998742,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 3106,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.105999999999769,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "967ff9e8c8a2f0f9",
+        "dt": 0.0005,
+        "committed_steps": 6166,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "passed",
+        "reference_crossing": "unverified",
+        "crossing_time": 3.083000000000197,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "speed_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "9ff5a7f24ecc279c",
+        "dt": 0.001,
+        "committed_steps": 5000,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      },
+      {
+        "name": "ridge_speed_minus",
+        "field_id": "c709f01272dcb1c9",
+        "physics_profile_id": "cbc921efb4e8635a",
+        "dt": 0.005,
+        "committed_steps": 200,
+        "mechanical_expectation": "passed",
+        "availability": "complete",
+        "operational_crossing": "not_observed",
+        "reference_crossing": "unverified",
+        "crossing_time": null,
+        "failure": null,
+        "field_and_profile_fixed": true
+      }
+    ]
+  },
+  "browser": {
+    "device": "Intel(R) Core(TM) i9-14900",
+    "browser": "153.0.8010.12",
+    "date": "2026-10-28",
+    "asset_sha256": "bd92d6eca3a8c124179473bc8af05af38d98a114b48aaa0c7df9b350dc0ea2c5",
+    "wasm_sha256": "a1a807aa3da3052bbb04310987249ae68860c22179e76a39533b34b87b9767fc",
+    "wasm_file_bytes": 4984870,
+    "results": {
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "cross_origin_isolated": true,
+      "wasm_initialization_ms": 22.884999990463257,
+      "asset_fetch_ms": 40.72500014305115,
+      "asset_decode_ms": 27.65499997138977,
+      "asset_bytes": 12904256,
+      "first_prepared_query_us": 180.00006675720215,
       "distinct_queries": {
-        "first_us": 0.5,
-        "max_us": 57.2,
-        "p50_us": 0.19999999999999998,
-        "p99_us": 0.39999999999999997,
-        "samples": 20000
+        "samples": 20000,
+        "first_us": 0,
+        "p50_us": 0,
+        "p99_us": 5.000114440917969,
+        "max_us": 224.99990463256836
       },
-      "energy_rollouts": [
-        {
-          "absolute_drift": 0.00025044495877102335,
-          "dt": 0.002,
-          "maximum_excursion": 0.00025044495877102335,
-          "name": "high_curvature",
-          "passed": true,
-          "steps": 150,
-          "unchanged_limit": 0.05
-        },
-        {
-          "absolute_drift": 0.0034067502535677363,
-          "dt": 0.002,
-          "maximum_excursion": 0.0034067502535677363,
-          "name": "near_shore",
-          "passed": true,
-          "steps": 100,
-          "unchanged_limit": 0.05
-        }
-      ],
-      "first_prepared_query_us": 1.4,
-      "identity": "c709f01272dcb1c9",
-      "measured_raster_max_scalar_difference": 7.482089540695666e-05,
-      "neighbor_gradient_max_absolute_error": 1.710788889441872e-07,
-      "neighbor_hessian_max_relative_error": 4.18017048452457e-05,
-      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
-      "preparation_seconds": 0.1054897,
-      "profile": "experimental-operational-field/1",
-      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
-      "shipping_euler_step_on_operational_profile": {
-        "first_us": 19.2,
-        "max_us": 62.9,
-        "p50_us": 4.300000000000001,
-        "p99_us": 8.3,
-        "samples": 1000
-      },
-      "step_failures": 0,
       "unavailable_queries": {
-        "first_us": 0.0,
-        "max_us": 11.8,
-        "p50_us": 0.0,
-        "p99_us": 0.09999999999999999,
-        "samples": 20000
+        "samples": 20000,
+        "first_us": 0,
+        "p50_us": 0,
+        "p99_us": 5.000114440917969,
+        "max_us": 329.9999237060547
       },
-      "fresh_process_seconds": 3.8537860999349505
+      "cache_stress_queries": {
+        "samples": 1000,
+        "first_us": 49.99995231628418,
+        "p50_us": 5.000114440917969,
+        "p99_us": 15.000104904174805,
+        "max_us": 1184.999942779541
+      },
+      "cache_stress_eviction_bytes": 67108864,
+      "transactional_step": {
+        "samples": 1000,
+        "first_us": 779.9999713897705,
+        "p50_us": 14.999866485595703,
+        "p99_us": 34.999847412109375,
+        "max_us": 779.9999713897705
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 864,
+        "geometry_evaluations": 24
+      },
+      "transactional_step_profile_id": "a5a82a028131131e",
+      "field_id": "c709f01272dcb1c9",
+      "identity_fixed": true,
+      "jet_invariance": true,
+      "wasm_linear_memory_bytes": 31195136,
+      "timing_note": "Browser bridge and return-value allocation/serialization included. Asset fetch/decoding and WASM initialization excluded from queries. Single-call timing is quantized by the browser timer."
+    },
+    "parity": {
+      "passed": true,
+      "differences": [],
+      "state_and_ledger_relative_tolerance": 0.000001,
+      "scalar_abs_tolerance": 0.000001,
+      "gradient_abs_tolerance": 0.0001,
+      "hessian_relative_tolerance": 0.0001
+    },
+    "provisional_targets": {
+      "query_p99_us": 100,
+      "step_p99_us": 2000,
+      "query_passed": true,
+      "step_passed": true,
+      "shipping_ratified": false
     }
-  ],
-  "rust_tests": {
-    "selected": 5,
-    "passed": 5
   },
-  "default_native_check": "passed",
-  "wasm_bridge_check": "passed; wasm32-unknown-unknown; runtime_core/experimental-operational-field",
-  "direct_runtime_wasm_check": "failed: existing getrandom dependency requires js feature; bridge supplies it",
-  "python": {
+  "retained_tests": {
     "profile": "experimental-operational-field/1",
     "field_identity": "operational:c709f01272dcb1c9",
-    "wheel_sha256": "0d1703e90f4a2ebd979fed83ec4d395155d6d06883dcd85951cf2ff9d7993b4a",
-    "extension_sha256": "ac124af9e88345032ac64f5f6a1f48271df43d2906be5d9a7931b03bfbfb6380",
+    "wheel_sha256": "0e07f94b34dc588881368d473ae8b51c2f2183250f56144e06c8f04c9b927aa0",
+    "extension_sha256": "a32d11f6b68fe1f56b03e03c95fb6ecf4e012ea4a97d71a380ec813ae8df5959",
     "test_source_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
     "test_source_unchanged": true,
     "rust_source_sha256": {
-      "runtime-core/src/operational_field.rs": "7db53da6ba8944f445009ef44cd6c711dd2c981eb7d0500f27b53df26c8e2498",
-      "runtime-core/src/geometry_provider.rs": "e9d9b7e909156b7af4ab25955a20993e15ccd1ddc460723a81f92cf29e3ccb4c",
-      "runtime-core/src/pybindings.rs": "0c0a93bc0b2e396e48497475e81e8839e0707e259477cee77ba29bc3248f65b4",
-      "runtime-core/src/manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166"
+      "runtime-core/src/operational_field.rs": "7ec147a0f71dee24912eace97520a8a6442457800ae372546783dce704525dcd",
+      "runtime-core/src/geometry_provider.rs": "16bbae3b665b0544cfa87692e4b4f9ba0f80c3adb1736a0c98d8cfda3a7fa107",
+      "runtime-core/src/pybindings.rs": "46651c8b02853f9af8792f89bf7afa0df1ea8271b95e365c8a402bb517edec6b",
+      "runtime-core/src/manifold.rs": "2ccd0d020484a5c4c12fca79e2ee38719015fec174eeeb5f4043d50dd4ecc00d"
     },
-    "preparation_seconds": 0.13116530003026128,
-    "pytest_seconds": 4.7278523000422865,
-    "pytest_args": [],
+    "asset_loading_seconds": 0.025473899906501174,
+    "asset_sha256": "bd92d6eca3a8c124179473bc8af05af38d98a114b48aaa0c7df9b350dc0ea2c5",
+    "pytest_seconds": 3.1262529001105577,
+    "pytest_args": [
+      "-q",
+      "backend\\tests\\test_manifold_physics.py",
+      "-q",
+      "-k",
+      "TestEnergyDrift or TestShoreCrossings or TestSignedSdfContinuity"
+    ],
     "pytest_exit_code": 1,
     "tests": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_no_forces",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.0003130999393761158,
+        "failure": "self = <test_manifold_physics.TestEnergyDrift object at 0x00000287E5B416D0>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_energy_drift_bounded_no_forces(self, rc):\n        \"\"\"Free geodesic motion (Q=0, beta=0) must conserve E to within\n        the semi-implicit integrator's O(dt) error.\"\"\"\n        config = ManifoldConfig()\n        dt = 0.01\n        c = (-0.5, 0.1)\n        v = (0.01, 0.01)\n        max_drift = 0.0\n        for _ in range(50):\n>           new_re, new_im, new_vx, new_vy, info = _rust_step(\n                rc, c, v, (0.0, 0.0), 0.0, dt, config\n            )\n\nbackend\\tests\\test_manifold_physics.py:323: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\nc = (-0.5, 0.1), v = (0.01, 0.01), q = (0.0, 0.0), beta = 0.0, dt = 0.01\nconfig = ManifoldConfig(d_ref=0.1, epsilon=0.0001, lambda_sq=1.0, kappa=1.0, mu=0.3183098861837907)\n\n    def _rust_step(rc, c, v, q, beta, dt, config):\n        \"\"\"Call the Rust scalar binding with a Python config mirror.\"\"\"\n        rc_config = rc.ManifoldConfig(\n            config.d_ref, config.epsilon, config.lambda_sq, config.kappa\n        )\n>       return rc.manifold_integrate_step(\n            c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config\n        )\nE       RuntimeError: GeometryUnavailable: outside prepared coverage\n\nbackend\\tests\\test_manifold_physics.py:68: RuntimeError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_near_shore",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0016069000121206045
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_low_curvature_rollout",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.00023090001195669174,
+        "failure": "self = <test_manifold_physics.TestEnergyDrift object at 0x00000287E572EEA0>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_energy_conserved_low_curvature_rollout(self, rc):\n        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)\n        dt = 0.002\n        c0 = (-0.5, 0.1)\n        v0 = (0.01, 0.0)\n>       drift, excursion, _ = self._rollout_energy_drift(\n            rc, c0, v0, dt, n_steps=150, config=config\n        )\n\nbackend\\tests\\test_manifold_physics.py:389: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\nbackend\\tests\\test_manifold_physics.py:368: in _rollout_energy_drift\n    e0 = _e(c0, v0)\n         ^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nci = (-0.5, 0.1), vi = (0.01, 0.0)\n\n    def _e(ci, vi):\n        return (\n>           rc.manifold_kinetic_energy(vi[0], vi[1], complex(*ci), rc_config)\n            + rc.manifold_potential_energy(complex(*ci), rc_config)\n            + rc.manifold_wall_potential(complex(*ci), rc_config)\n        )\nE       RuntimeError: GeometryUnavailable: outside prepared coverage\n\nbackend\\tests\\test_manifold_physics.py:363: RuntimeError"
+      },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_high_curvature_deep_scale_rollout",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0014754000585526228
+        "seconds": 0.0012077998835593462
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_near_shore_rollout",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0009280999656766653
+        "seconds": 0.0009622001089155674
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_potential_force_points_downhill_from_ridge",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0001300000585615635
+        "seconds": 0.00012400001287460327
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_h_signal_irrelevant_to_manifold_path",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0003543999046087265
+        "seconds": 0.00035530002787709236
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_ridge_is_barrier_without_h_gate",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.002838500076904893
+        "seconds": 0.0035957000218331814
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.20140130002982914
+        "seconds": 0.2322841000277549
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_signed_distance_authority_sign_and_continuity",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0005302999634295702
+        "seconds": 0.0006154999136924744
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
         "outcome": "failed",
         "phase": "call",
-        "seconds": 0.00030589988455176353
+        "seconds": 0.00024259998463094234,
+        "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x00000287E5B41D10>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.0017752164186247673)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_scale_continuous_inside_regular_patch",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.00013060006313025951
+        "seconds": 0.00012969993986189365
       },
       {
         "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_metric_continuous_inside_regular_patch",
         "outcome": "passed",
         "phase": "call",
-        "seconds": 0.0001192998606711626
+        "seconds": 0.00013759988360106945
       }
     ]
+  },
+  "original_native_crossing": {
+    "error": "undriven rollout failed at c=Complex { re: 0.1042700898980602, im: 0.30099067225167203 }, v=(-0.30360212013543375, 0.27188333310990276): GeometryUnavailable: outside prepared coverage",
+    "field_id": "c709f01272dcb1c9",
+    "passed": false,
+    "physics_profile": {
+      "beta": 0.05,
+      "d_ref": 0.1,
+      "dt": 0.02,
+      "epsilon": 0.0001,
+      "integrator": "Euler",
+      "kappa": 0.5,
+      "lambda_sq": 1,
+      "mu": 0.3183098861837907,
+      "physics_profile_id": "0790a66e7df83330",
+      "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+      "work_rule": "left-endpoint control-plus-drag power"
+    },
+    "reference_crossing": "unverified",
+    "work": {
+      "coefficient_reads_upper_bound": 213228,
+      "geometry_evaluations": 5923
+    },
+    "test": "manifold::tests::controls_drive_can_cross_shore_without_wall",
+    "test_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895",
+    "source_unchanged": true,
+    "asset_sha256": "bd92d6eca3a8c124179473bc8af05af38d98a114b48aaa0c7df9b350dc0ea2c5",
+    "exit_code": 1,
+    "setup": "verbatim original body in generated example; field/profile pinned around entire test; no assertion changes",
+    "stderr": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   ${REPO}\\wasm-orbit\\Cargo.toml\nworkspace: ${REPO}\\Cargo.toml\n   Compiling runtime_core v0.1.0 (${REPO}\\runtime-core)\n    Finished `release` profile [optimized] target(s) in 11.46s\n     Running `target\\release\\examples\\__operational_original_crossing.exe ${REPO}\\tmp\\geometry145-frozen-operational.bin`\n\nthread 'main' (101756) panicked at runtime-core\\examples\\__operational_original_crossing.rs:28:41:\nundriven rollout failed at c=Complex { re: 0.1042700898980602, im: 0.30099067225167203 }, v=(-0.30360212013543375, 0.27188333310990276): GeometryUnavailable: outside prepared coverage\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: process didn't exit successfully: `target\\release\\examples\\__operational_original_crossing.exe ${REPO}\\tmp\\geometry145-frozen-operational.bin` (exit code: 1)\n"
+  },
+  "contract_tests": {
+    "command": [
+      "rtk",
+      "cargo",
+      "test",
+      "--manifest-path",
+      "runtime-core/Cargo.toml",
+      "--release",
+      "--features",
+      "experimental-operational-field",
+      "operational_field",
+      "--",
+      "--test-threads=1"
+    ],
+    "exit_code": 0,
+    "passed": 14,
+    "summary": "cargo test: 14 passed, 263 filtered out (23 suites, 1.90s)\n"
+  },
+  "default_native_check": {
+    "exit_code": 0,
+    "summary": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   ${REPO}\\wasm-orbit\\Cargo.toml\nworkspace: ${REPO}\\Cargo.toml\ncargo check: 0 errors, 1 warnings (0 crates)\n"
+  },
+  "outcomes": {
+    "field_and_physics_profile_identity": "passed",
+    "analytic_chain_and_transaction_controls": "passed; 14 native executable controls",
+    "differential_self_consistency": "passed",
+    "reference_scalar_fidelity": "unknown; retained scalar-quality gate fails",
+    "reference_differential_fidelity": "unknown",
+    "reference_cut_policy_enforcement": "passed controls; corridor reference-singularity information unknown",
+    "frozen_corridor_mechanics": "passed",
+    "original_native_controlled_crossing": "failed: coverage",
+    "frozen_corridor_availability": "passed",
+    "retained_energy_crossing_continuity_tests": {
+      "passed": 10,
+      "failed": 3,
+      "coverage_refusals": 2,
+      "scalar_quality_failures": 1
+    },
+    "reference_shore_crossing": "unverified; no conclusive opposite-realm pair for the operational crossings",
+    "provisional_evaluation_cost": "passed",
+    "shipping_targets_ratified": false,
+    "retained_acceptance_passed": false,
+    "merge_ready": false,
+    "blockers": [
+      "coverage: original native undriven trajectory leaves the frozen halo before its driven branch",
+      "coverage: two retained energy starts lie outside the frozen corridor",
+      "reference scalar and differential fidelity are unknown",
+      "reference crossing and corridor reference-singularity evidence are incomplete"
+    ]
+  },
+  "evidence": {
+    "archive": "docs/validation/experiments/geometry-145-operational/evidence.zip",
+    "archive_sha256": "cf2c3282b0dc3c52823148325d8cefed0fd9743f8c6f57b134bd9dfb4456ea59",
+    "archive_bytes": 269293,
+    "uncompressed_report_sha256": "c282836ad71c1d29a55171447bfc194fffee8ee8bba08b37541f33e16f558776",
+    "note": "Exact full native/browser trajectories, reference certificates/unknowns and both endpoint ledgers are in report.json inside this archive"
   }
 }

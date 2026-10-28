@@ -9,7 +9,10 @@ The owner authorized the bounded experimental implementation of
 [operational prototype report](geometry-145-operational-prototype.md) records
 the new feature-gated Rust field, unchanged crossing/energy replays and cold
 prepared-query measurements. Its raster reference is uncertified, so these
-results do not clear the current scalar-fidelity acceptance gate. ADR 0004
+results do not clear the current scalar-fidelity acceptance gate. The frozen
+native controlled-crossing and retained energy replays also expose explicit
+coverage failures; reference crossings remain unverified. These are recorded
+outcomes, not requests for more point-specific proof extensions. ADR 0004
 still governs shipping behavior. The older adaptive experiments below remain
 failure evidence rather than the selected runtime implementation.
 
