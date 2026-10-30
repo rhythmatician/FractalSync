@@ -29,11 +29,13 @@ fn experimental_load_operational_asset(bytes:&[u8]) -> PyResult<String> {
 
 #[cfg(feature = "experimental-operational-field")]
 #[pyfunction]
-fn experimental_load_operational_asset_with_policy(bytes:&[u8],policy:&str) -> PyResult<String> {
+#[pyo3(signature=(bytes,policy,integrator="Euler"))]
+fn experimental_load_operational_asset_with_policy(bytes:&[u8],policy:&str,integrator:&str) -> PyResult<String> {
+    let method=crate::operational_field::acceptance::Integrator::parse_name(integrator).map_err(pyo3::exceptions::PyValueError::new_err)?;
     let field=crate::operational_field::PreparedField::from_asset_bytes(bytes).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     let cuts=crate::operational_field::acceptance::reference_policy_for_field(&field,policy).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     let id=format!("operational:{:016x}",field.identity());
-    crate::operational_field::activate_with_reference(Some(std::sync::Arc::new(field)),cuts).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    crate::operational_field::activate_with_reference_and_integrator(Some(std::sync::Arc::new(field)),cuts,method).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     Ok(id)
 }
 

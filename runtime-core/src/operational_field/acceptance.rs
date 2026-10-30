@@ -66,8 +66,27 @@ pub fn frozen_experiment_report_with_manifest(
     manifest: &str,
     cuts: &[ReferenceCut],
 ) -> Result<serde_json::Value, String> {
+    frozen_experiment_report_with_integrator(field, manifest, cuts, Integrator::Euler)
+}
+
+pub fn frozen_experiment_report_with_integrator(
+    field: Arc<PreparedField>,
+    manifest: &str,
+    cuts: &[ReferenceCut],
+    method: Integrator,
+) -> Result<serde_json::Value, String> {
     validate_reference_cuts(cuts)?;
     let resolved = resolve_experiment_manifest(manifest)?;
+    if let Some(declared) = resolved["coverage_declaration"].get("selected_integrator") {
+        if declared != &serde_json::to_value(method).map_err(|e| e.to_string())? {
+            return Err("declared and selected integrator differ".into());
+        }
+    }
+    if let Some(declared) = resolved["coverage_declaration"].get("field_id") {
+        if declared != &serde_json::Value::String(format!("{:016x}", field.identity())) {
+            return Err("declared and loaded field differ".into());
+        }
+    }
     let spec: Experiment = serde_json::from_value(resolved.clone()).map_err(|e| e.to_string())?;
     if field.origin != spec.preparation.origin
         || field.spacing != spec.preparation.spacing
@@ -83,7 +102,7 @@ pub fn frozen_experiment_report_with_manifest(
     ] {
         let frozen = FrozenRollout::new(
             field.clone(),
-            PhysicsProfile::new(ManifoldConfig::default(), 0.002, 0.0, Integrator::Euler)?,
+            PhysicsProfile::new(ManifoldConfig::default(), 0.002, 0.0, method)?,
             cuts.to_vec(),
         )?;
         let mut state = frozen.initial_state(start, [0.0, 0.02])?;
@@ -136,7 +155,7 @@ pub fn frozen_experiment_report_with_manifest(
     };
     let locate = FrozenRollout::new(
         field.clone(),
-        PhysicsProfile::new(config.clone(), 0.001, 0.0, Integrator::Euler)?,
+        PhysicsProfile::new(config.clone(), 0.001, 0.0, method)?,
         cuts.to_vec(),
     )?;
     let ((barrier, launch), _) = locate.evaluate(|config| {
@@ -170,7 +189,7 @@ pub fn frozen_experiment_report_with_manifest(
         for dt in &spec.crossing_timesteps {
             let rollout = FrozenRollout::new(
                 field.clone(),
-                PhysicsProfile::new(config.clone(), *dt, 0.0, Integrator::Euler)?,
+                PhysicsProfile::new(config.clone(), *dt, 0.0, method)?,
                 cuts.to_vec(),
             )?;
             runs.push(replay(
@@ -185,7 +204,7 @@ pub fn frozen_experiment_report_with_manifest(
         let low = launch * (spec.launch_energy_factors[0] / spec.launch_energy_factors[1]).sqrt();
         let rollout = FrozenRollout::new(
             field.clone(),
-            PhysicsProfile::new(config.clone(), 0.001, 0.0, Integrator::Euler)?,
+            PhysicsProfile::new(config.clone(), 0.001, 0.0, method)?,
             cuts.to_vec(),
         )?;
         runs.push(replay(
@@ -198,12 +217,7 @@ pub fn frozen_experiment_report_with_manifest(
         )?);
         let rollout = FrozenRollout::new(
             field.clone(),
-            PhysicsProfile::new(
-                ManifoldConfig::default(),
-                spec.ridge_dt,
-                0.0,
-                Integrator::Euler,
-            )?,
+            PhysicsProfile::new(ManifoldConfig::default(), spec.ridge_dt, 0.0, method)?,
             cuts.to_vec(),
         )?;
         runs.push(replay(
@@ -232,7 +246,7 @@ pub fn frozen_experiment_report_with_manifest(
         parity.push(match field.query(p) {Ok(j)=>serde_json::json!({"point":p,"availability":"available","jet":[j.value,j.gradient[0],j.gradient[1],j.hessian[0][0],j.hessian[0][1],j.hessian[1][1]]}),Err(_)=>serde_json::json!({"point":p,"availability":"GeometryUnavailable"})});
     }
     Ok(
-        serde_json::json!({"experiment_manifest":resolved,"field_id":format!("{:016x}",field.identity()),"barrier":barrier,"launch_speed":launch,"runs":runs,"parity_samples":parity,
+        serde_json::json!({"experiment_manifest":resolved,"selected_integrator":method,"field_id":format!("{:016x}",field.identity()),"barrier":barrier,"launch_speed":launch,"runs":runs,"parity_samples":parity,
         "reference_scalar_fidelity":{"status":"unknown","certified_regions":0,"measured_raster_discrepancy_is_not_a_bound":true},
         "energy_runs":energy_runs,
         "join_differential_self_consistency":{"gradient_absolute_error":join_gradient,"hessian_normalized_error":join_hessian,"tolerance":1e-4,"passed":join_gradient<1e-4 && join_hessian<1e-4},
@@ -316,6 +330,18 @@ fn replay(
 pub enum Integrator {
     Euler,
     Rk4,
+    Rk4FourSubsteps,
+}
+
+impl Integrator {
+    pub fn parse_name(name: &str) -> Result<Self, String> {
+        match name {
+            "Euler" => Ok(Self::Euler),
+            "Rk4" => Ok(Self::Rk4),
+            "Rk4FourSubsteps" => Ok(Self::Rk4FourSubsteps),
+            _ => Err("unknown experimental integrator".into()),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -394,10 +420,14 @@ impl PhysicsProfile {
     pub fn config(&self) -> &ManifoldConfig {
         &self.config
     }
+    pub fn integrator(&self) -> Integrator {
+        self.method
+    }
     pub fn manifest(&self) -> serde_json::Value {
         serde_json::json!({"physics_profile_id":format!("{:016x}",self.id),"semantics":"operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta", "integrator":self.method,"dt":self.dt,"beta":self.beta,
             "d_ref":self.config.d_ref,"epsilon":self.config.epsilon,"lambda_sq":self.config.lambda_sq,"kappa":self.config.kappa,"mu":self.config.mu,
-            "work_rule":match self.method {Integrator::Euler=>"left-endpoint control-plus-drag power",Integrator::Rk4=>"RK4 control-plus-drag power quadrature"}})
+            "substeps":match self.method {Integrator::Rk4FourSubsteps=>4,_=>1},
+            "work_rule":match self.method {Integrator::Euler=>"left-endpoint control-plus-drag power",Integrator::Rk4=>"RK4 control-plus-drag power quadrature",Integrator::Rk4FourSubsteps=>"four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"}})
     }
 }
 
@@ -556,14 +586,94 @@ pub fn check_drag(beta: f64) -> Result<(), String> {
     })
 }
 pub fn check_euler_step(beta: f64, dt: f64) -> Result<(), String> {
+    check_step(beta, dt, Integrator::Euler)
+}
+fn check_step(beta: f64, dt: f64, method: Integrator) -> Result<(), String> {
     check_drag(beta)?;
     CONTEXT.with(|context| {
-        if context.borrow().as_ref().is_some_and(|c| {
-            c.profile.dt.to_bits() != dt.to_bits() || c.profile.method != Integrator::Euler
-        }) {
+        if context
+            .borrow()
+            .as_ref()
+            .is_some_and(|c| c.profile.dt.to_bits() != dt.to_bits() || c.profile.method != method)
+        {
             return Err("FrozenIdentity: timestep or integrator changed".into());
         }
         Ok(())
+    })
+}
+
+/// Only explicit experimental RK4 profiles override the legacy Euler seam.
+/// Raw tuple callers receive one checked transaction; persistent time/work
+/// ledgers remain the responsibility of an owned FrozenRollout.
+pub(crate) fn experimental_step(
+    c: Complex64,
+    v: (f64, f64),
+    q: (f64, f64),
+    beta: f64,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Option<Result<(Complex64, (f64, f64), manifold::EnergyInfo), String>> {
+    let pinned = CONTEXT.with(|ctx| ctx.borrow().as_ref().map(|ctx| ctx.profile.method));
+    let method = pinned.unwrap_or_else(|| super::ACTIVE_INTEGRATOR.with(|m| m.get()));
+    if method == Integrator::Euler {
+        return None;
+    }
+    let attempt = |config: &ManifoldConfig| {
+        check_config(config)?;
+        check_step(beta, dt, method)?;
+        if ![c.re, c.im, v.0, v.1, q.0, q.1]
+            .iter()
+            .all(|x| x.is_finite())
+        {
+            return Err("invalid mechanical state or input".into());
+        }
+        if c.norm_sqr() >= 4.0 {
+            return Err("Hard invariant violated: initial |c| >= 2".into());
+        }
+        let old_energy = manifold::total_energy(v, c, config)?;
+        let old_kinetic = manifold::kinetic_energy(v, c, config)?;
+        let (end, velocity, work) = rk4_profile_advance(method, c, v, q, beta, dt, config)?;
+        let energy = checked_endpoint(end, velocity, config)?;
+        let kinetic = manifold::kinetic_energy(velocity, end, config)?;
+        if ![
+            old_energy,
+            old_kinetic,
+            energy,
+            kinetic,
+            work,
+            energy - kinetic,
+            energy - old_energy,
+            kinetic - old_kinetic,
+        ]
+        .iter()
+        .all(|x| x.is_finite())
+        {
+            return Err("nonfinite proposed mechanical ledger".into());
+        }
+        Ok((
+            end,
+            velocity,
+            manifold::EnergyInfo {
+                kinetic,
+                potential: energy - kinetic,
+                total: energy,
+                delta_total: energy - old_energy,
+                delta_kinetic: kinetic - old_kinetic,
+            },
+        ))
+    };
+    Some(if pinned.is_some() {
+        attempt(config)
+    } else {
+        (|| {
+            let field = super::ACTIVE
+                .with(|a| a.borrow().clone())
+                .ok_or("RK4 replay requires a prepared field")?;
+            let cuts = super::ACTIVE_REFERENCE.with(|a| a.borrow().clone());
+            let profile = PhysicsProfile::new(config.clone(), dt, beta, method)?;
+            let frame = FrozenRollout::new(field, profile, cuts)?;
+            frame.evaluate(attempt).map(|(result, _)| result)
+        })()
     })
 }
 
@@ -737,38 +847,11 @@ impl FrozenRollout {
                         .map_err(|e| format!("Euler attempt: {e}"))?;
                     (c, v, work)
                 }
-                Integrator::Rk4 => {
-                    let initial = [c.re, c.im, v.0, v.1];
-                    let k1 =
-                        rhs(initial, q, beta, config).map_err(|e| format!("RK stage 1: {e}"))?;
-                    let k2 = rhs(advance(initial, k1, dt / 2.0), q, beta, config)
-                        .map_err(|e| format!("RK stage 2: {e}"))?;
-                    let k3 = rhs(advance(initial, k2, dt / 2.0), q, beta, config)
-                        .map_err(|e| format!("RK stage 3: {e}"))?;
-                    let k4 = rhs(advance(initial, k3, dt), q, beta, config)
-                        .map_err(|e| format!("RK stage 4: {e}"))?;
-                    let mut end = initial;
-                    for i in 0..4 {
-                        end[i] += dt / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
-                    }
-                    (
-                        Complex64::new(end[0], end[1]),
-                        (end[2], end[3]),
-                        dt / 6.0 * (k1[4] + 2.0 * k2[4] + 2.0 * k3[4] + k4[4]),
-                    )
+                Integrator::Rk4 | Integrator::Rk4FourSubsteps => {
+                    rk4_profile_advance(self.profile.method, c, v, q, beta, dt, config)?
                 }
             };
-            // This point generally differs from the fourth RK stage position.
-            let endpoint = crate::geometry_provider::query_geometry(position, config.epsilon)
-                .map_err(|e| format!("Final endpoint: {e}"))?;
-            if endpoint.validity != crate::geometry_provider::GeometryValidity::Regular {
-                return Err("Final endpoint: geometry not regular".into());
-            }
-            if position.norm_sqr() >= 4.0 || !position.re.is_finite() || !position.im.is_finite() {
-                return Err("Hard invariant violated at endpoint".into());
-            }
-            let energy = manifold::total_energy(velocity, position, config)
-                .map_err(|e| format!("Final endpoint energy: {e}"))?;
+            let energy = checked_endpoint(position, velocity, config)?;
             Ok((
                 [position.re, position.im],
                 [velocity.0, velocity.1],
@@ -795,6 +878,80 @@ impl FrozenRollout {
     }
 }
 
+fn rk4_profile_advance(
+    method: Integrator,
+    mut c: Complex64,
+    mut v: (f64, f64),
+    q: (f64, f64),
+    beta: f64,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Result<(Complex64, (f64, f64), f64), String> {
+    let count = if method == Integrator::Rk4FourSubsteps {
+        4
+    } else {
+        1
+    };
+    let mut work = 0.0;
+    for step in 0..count {
+        let (next, velocity, increment) = rk4_advance(c, v, q, beta, dt / count as f64, config)?;
+        // Internal endpoints are temporary, but require the same complete
+        // differential and energy checks as the final outer endpoint.
+        if step + 1 < count {
+            checked_endpoint(next, velocity, config)
+                .map_err(|e| format!("RK substep {} endpoint: {e}", step + 1))?;
+        }
+        c = next;
+        v = velocity;
+        work += increment;
+    }
+    Ok((c, v, work))
+}
+
+fn rk4_advance(
+    c: Complex64,
+    v: (f64, f64),
+    q: (f64, f64),
+    beta: f64,
+    dt: f64,
+    config: &ManifoldConfig,
+) -> Result<(Complex64, (f64, f64), f64), String> {
+    let initial = [c.re, c.im, v.0, v.1];
+    let k1 = rhs(initial, q, beta, config).map_err(|e| format!("RK stage 1: {e}"))?;
+    let k2 = rhs(advance(initial, k1, dt / 2.0), q, beta, config)
+        .map_err(|e| format!("RK stage 2: {e}"))?;
+    let k3 = rhs(advance(initial, k2, dt / 2.0), q, beta, config)
+        .map_err(|e| format!("RK stage 3: {e}"))?;
+    let k4 =
+        rhs(advance(initial, k3, dt), q, beta, config).map_err(|e| format!("RK stage 4: {e}"))?;
+    let mut end = initial;
+    for i in 0..4 {
+        end[i] += dt / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
+    }
+    Ok((
+        Complex64::new(end[0], end[1]),
+        (end[2], end[3]),
+        dt / 6.0 * (k1[4] + 2.0 * k2[4] + 2.0 * k3[4] + k4[4]),
+    ))
+}
+fn checked_endpoint(
+    position: Complex64,
+    velocity: (f64, f64),
+    config: &ManifoldConfig,
+) -> Result<f64, String> {
+    // This point generally differs from the fourth RK stage position.
+    let endpoint = crate::geometry_provider::query_geometry(position, config.epsilon)
+        .map_err(|e| format!("Final endpoint: {e}"))?;
+    if endpoint.validity != crate::geometry_provider::GeometryValidity::Regular {
+        return Err("Final endpoint: geometry not regular".into());
+    }
+    if position.norm_sqr() >= 4.0 || !position.re.is_finite() || !position.im.is_finite() {
+        return Err("Hard invariant violated at endpoint".into());
+    }
+    let energy = manifold::total_energy(velocity, position, config)
+        .map_err(|e| format!("Final endpoint energy: {e}"))?;
+    Ok(energy)
+}
 fn advance(s: [f64; 4], k: [f64; 5], dt: f64) -> [f64; 4] {
     std::array::from_fn(|i| s[i] + dt * k[i])
 }
@@ -832,6 +989,108 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn four_substeps_improve_drag_accuracy_and_roll_back_internal_refusals() {
+        let method = Integrator::Rk4FourSubsteps;
+        let frame = FrozenRollout::new(constant(None), profile(method), vec![]).unwrap();
+        let mut state = frame.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
+        let initial = state;
+        frame.attempt_step(&mut state, [0.0; 2]).unwrap();
+        let exact_v = 0.1 * (-0.4_f64).exp();
+        assert!((state.velocity[0] - exact_v).abs() < 1e-7);
+        assert!((state.position[0] - (0.4 + (0.1 - exact_v) / 2.0)).abs() < 1e-7);
+        assert!((state.energy - initial.energy - state.integrated_work).abs() < 1e-7);
+        assert_eq!(state.mechanical_time, 0.2);
+        // A required stage in substep two, after substep one has completed.
+        let blocked = FrozenRollout::new(constant(Some(0.40702)), profile(method), vec![]).unwrap();
+        let mut state = blocked.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
+        let before = serde_json::to_string(&state).unwrap();
+        assert!(blocked
+            .attempt_step(&mut state, [0.0; 2])
+            .unwrap_err()
+            .contains("RK stage 2"));
+        assert_eq!(serde_json::to_string(&state).unwrap(), before);
+    }
+    #[test]
+    fn replay_declaration_rejects_a_different_integrator_or_field_before_evaluation() {
+        let manifest =
+            include_str!("../../../docs/validation/geometry-145-operational-rk4-experiment.json");
+        let field = constant(None);
+        assert!(frozen_experiment_report_with_integrator(
+            field.clone(),
+            manifest,
+            &[],
+            Integrator::Euler
+        )
+        .unwrap_err()
+        .contains("integrator"));
+        assert!(
+            frozen_experiment_report_with_integrator(field, manifest, &[], Integrator::Rk4)
+                .unwrap_err()
+                .contains("field")
+        );
+    }
+    #[test]
+    fn explicit_rk4_legacy_step_matches_owned_transaction_and_keeps_euler_default() {
+        let field = constant(None);
+        let owned = FrozenRollout::new(field.clone(), profile(Integrator::Rk4), vec![]).unwrap();
+        let config = owned.profile.config.clone();
+        let mut expected = owned.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
+        owned.attempt_step(&mut expected, [0.0; 2]).unwrap();
+        super::super::activate_with_reference_and_integrator(
+            Some(field.clone()),
+            vec![],
+            Integrator::Rk4,
+        )
+        .unwrap();
+        let (c, v, energy) = manifold::integrate_step(
+            Complex64::new(0.4, 0.0),
+            (0.1, 0.0),
+            (0.0, 0.0),
+            2.0,
+            0.2,
+            &config,
+        )
+        .unwrap();
+        assert_eq!([c.re, c.im], expected.position);
+        assert_eq!([v.0, v.1], expected.velocity);
+        assert_eq!(energy.total, expected.energy);
+        assert!(manifold::integrate_step(
+            Complex64::new(2.0, 0.0),
+            (0.0, 0.0),
+            (0.0, 0.0),
+            2.0,
+            0.2,
+            &config
+        )
+        .unwrap_err()
+        .contains("Hard invariant"));
+        let pinned = owned
+            .evaluate(|cfg| {
+                manifold::integrate_step(
+                    Complex64::new(0.4, 0.0),
+                    (0.1, 0.0),
+                    (0.0, 0.0),
+                    2.0,
+                    0.1,
+                    cfg,
+                )
+            })
+            .unwrap_err();
+        assert!(pinned.contains("FrozenIdentity"));
+        super::super::activate_with_reference(Some(field), vec![]).unwrap();
+        let (euler, _, _) = manifold::integrate_step(
+            Complex64::new(0.4, 0.0),
+            (0.1, 0.0),
+            (0.0, 0.0),
+            2.0,
+            0.2,
+            &config,
+        )
+        .unwrap();
+        assert!((euler.re - c.re).abs() > 0.001);
+        super::super::activate(None);
+    }
     #[test]
     fn coverage_manifest_preserves_declared_mechanics() {
         let coverage = include_str!(

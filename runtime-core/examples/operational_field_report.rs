@@ -4,7 +4,7 @@ use runtime_core::{
     manifold,
     operational_field::{
         acceptance::{
-            frozen_experiment_report_with_manifest, reference_policy_for_field, FrozenRollout,
+            frozen_experiment_report_with_integrator, reference_policy_for_field, FrozenRollout,
             Integrator, PhysicsProfile, EXPERIMENT_MANIFEST,
         },
         prepare_raster_baseline, PreparedField,
@@ -51,6 +51,7 @@ fn main() -> Result<(), String> {
     let policy_start = Instant::now();
     let mut manifest = EXPERIMENT_MANIFEST.to_string();
     let mut policy = None;
+    let mut method = Integrator::Euler;
     let mut seen = std::collections::HashSet::new();
     for pair in args[3..].chunks_exact(2) {
         if !seen.insert(&pair[0]) {
@@ -63,6 +64,7 @@ fn main() -> Result<(), String> {
             "--policy" => {
                 policy = Some(std::fs::read_to_string(&pair[1]).map_err(|e| e.to_string())?)
             }
+            "--integrator" => method = Integrator::parse_name(&pair[1])?,
             _ => return Err("unknown replay option".into()),
         }
     }
@@ -140,12 +142,7 @@ fn main() -> Result<(), String> {
     }
     let frozen = FrozenRollout::new(
         field.clone(),
-        PhysicsProfile::new(
-            manifold::ManifoldConfig::default(),
-            0.001,
-            0.0,
-            Integrator::Euler,
-        )?,
+        PhysicsProfile::new(manifold::ManifoldConfig::default(), 0.001, 0.0, method)?,
         cuts.clone(),
     )?;
     let mut transactional_times = Vec::new();
@@ -157,7 +154,8 @@ fn main() -> Result<(), String> {
         transactional_times.push(now.elapsed().as_secs_f64() * 1e6);
         transactional_counts = Some(counts);
     }
-    let experiment = frozen_experiment_report_with_manifest(field.clone(), &manifest, &cuts)?;
+    let experiment =
+        frozen_experiment_report_with_integrator(field.clone(), &manifest, &cuts, method)?;
     println!("{}",serde_json::to_string_pretty(&json!({
         "profile":"experimental-operational-field/1", "identity":format!("{:016x}",field.identity()),
         "reference":"existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",

@@ -23,6 +23,7 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--asset", type=Path, required=True)
     parser.add_argument("--reference-policy",type=Path)
+    parser.add_argument("--integrator",choices=["Euler","Rk4","Rk4FourSubsteps"],default="Euler")
     parser.add_argument("--staging", type=Path, help=argparse.SUPPRESS)
     args, pytest_args = parser.parse_known_args()
     if args.staging is None:
@@ -33,6 +34,7 @@ def main() -> int:
                 sys.executable, str(Path(__file__).resolve()), str(args.wheel.resolve()),
                 "--report", str(args.report.resolve()), "--staging", staging, *pytest_args,
                 "--asset", str(args.asset.resolve()), *(["--reference-policy",str(args.reference_policy.resolve())] if args.reference_policy else []),
+                "--integrator",args.integrator,
             ], check=False).returncode
     root = Path(__file__).resolve().parents[1]
     wheel = args.wheel.resolve()
@@ -66,13 +68,17 @@ def main() -> int:
         extension = next(Path(staging).rglob("*.pyd"))
         started = time.perf_counter()
         asset=args.asset.read_bytes()
-        identity = runtime_core.experimental_load_operational_asset_with_policy(asset,args.reference_policy.read_text(encoding="utf-8")) if args.reference_policy else runtime_core.experimental_load_operational_asset(asset)
+        if args.integrator!="Euler" and args.reference_policy is None:
+            raise ValueError("RK4 replay requires an explicit frozen reference policy")
+        identity = runtime_core.experimental_load_operational_asset_with_policy(asset,args.reference_policy.read_text(encoding="utf-8"),args.integrator) if args.reference_policy else runtime_core.experimental_load_operational_asset(asset)
         preparation = time.perf_counter() - started
         started = time.perf_counter()
         selected_args=pytest_args or [str(test.relative_to(root)), "-q", "-k", "TestEnergyDrift or TestShoreCrossings or TestSignedSdfContinuity"]
         code = pytest.main(selected_args, plugins=[outcomes])
         record = {
             "profile": "experimental-operational-field/1",
+            "integrator":args.integrator,
+            "legacy_step_contract":"explicit process-selected method; each legacy call pins its supplied config/dt/drag for the complete transaction; persistent mechanical ledgers are separately tested through owned FrozenRollout",
             "field_identity": identity,
             "wheel_sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
             "extension_sha256": hashlib.sha256(extension.read_bytes()).hexdigest(),

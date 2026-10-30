@@ -83,7 +83,8 @@ fn main() {
     let beta=controls::MotionControls{direction:[1.0,0.0],throttle:0.0,brake:0.0,grip:0.0,impulse:0.0}.friction_beta();
     let config=ManifoldConfig{d_ref:0.1,epsilon:1e-4,lambda_sq:1.0,kappa:0.5,mu:std::f64::consts::FRAC_1_PI};
     let cuts=std::env::args().nth(2).map(|path|runtime_core::operational_field::acceptance::reference_policy_for_field(&field,&std::fs::read_to_string(path).unwrap()).unwrap()).unwrap_or_default();
-    let frame=FrozenRollout::new(field,PhysicsProfile::new(config,0.02,beta,Integrator::Euler).unwrap(),cuts).unwrap();
+    let method=Integrator::parse_name(std::env::args().nth(3).as_deref().unwrap_or("Euler")).unwrap();
+    let frame=FrozenRollout::new(field,PhysicsProfile::new(config,0.02,beta,method).unwrap(),cuts).unwrap();
     let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||frame.evaluate(|_|{
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(controls_drive_can_cross_shore_without_wall)).map_err(panic_text)
     })));
@@ -103,6 +104,10 @@ fn main() {
         policy=(root / sys.argv[3]).resolve() if len(sys.argv)>3 else None
         if policy:
             args.append(str(policy))
+        if len(sys.argv)>4:
+            if not policy or sys.argv[4] not in ("Euler","Rk4","Rk4FourSubsteps"):
+                raise ValueError("invalid explicit native integrator selection")
+            args.append(sys.argv[4])
         run=subprocess.run(args,cwd=root,text=True,encoding="utf-8",capture_output=True,timeout=180,check=False)
         if not run.stdout.strip():
             raise RuntimeError("native diagnostic produced no verdict: " + run.stderr.replace(str(root), "${REPO}")[-4000:])

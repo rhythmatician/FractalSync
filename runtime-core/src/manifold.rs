@@ -657,6 +657,10 @@ pub fn integrate_step(
     config: &ManifoldConfig,
 ) -> Result<(Complex64, (f64, f64), EnergyInfo), String> {
     #[cfg(feature = "experimental-operational-field")]
+    if let Some(result)=crate::operational_field::acceptance::experimental_step(c,v,q_control,beta,dt,config) {
+        return result;
+    }
+    #[cfg(feature = "experimental-operational-field")]
     crate::operational_field::acceptance::check_config(config)?;
     #[cfg(feature = "experimental-operational-field")]
     crate::operational_field::acceptance::check_euler_step(beta, dt)?;

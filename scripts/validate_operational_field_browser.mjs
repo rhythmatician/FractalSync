@@ -6,7 +6,8 @@ import { resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
 
-const [assetArg, nativeArg, outputArg, policyArg, manifestArg] = process.argv.slice(2);
+const [assetArg, nativeArg, outputArg, policyArg, manifestArg, integratorArg='Euler'] = process.argv.slice(2);
+if (!['Euler','Rk4','Rk4FourSubsteps'].includes(integratorArg) || (integratorArg!=='Euler' && !policyArg)) throw new Error('Explicit RK4 replay requires a frozen policy');
 if (!outputArg) throw new Error('usage: node scripts/validate_operational_field_browser.mjs asset.bin native-report.json browser-report.json');
 const asset = await readFile(resolve(assetArg));
 const wasmDir = resolve('tmp/operational-field-wasm');
@@ -32,7 +33,7 @@ try {
   const page = await browser.newPage();
   page.setDefaultTimeout(120000);
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  const results = await page.evaluate(async ({hasPolicy,hasManifest}) => {
+  const results = await page.evaluate(async ({hasPolicy,hasManifest,integrator}) => {
     const mod = await import('/orbit_synth_wasm.js');
     let started = performance.now();
     const wasm = await mod.default();
@@ -45,7 +46,7 @@ try {
     const manifestText=hasManifest ? await (await fetch('/manifest.json')).text() : null;
     const policy_manifest_fetch_ms=performance.now()-started;
     started = performance.now();
-    const field = policyText ? mod.ExperimentalOperationalField.withPolicy(asset,policyText) : new mod.ExperimentalOperationalField(asset);
+    const field = policyText ? mod.ExperimentalOperationalField.withPolicyAndIntegrator(asset,policyText,integrator) : new mod.ExperimentalOperationalField(asset);
     const asset_decode_ms = performance.now() - started;
     const identity_before = field.identity();
     started = performance.now();
@@ -97,7 +98,7 @@ try {
       field_id:field.identity(), identity_fixed:identity_before===field.identity(), jet_invariance,
       wasm_linear_memory_bytes:wasm.memory.buffer.byteLength, experiment,known_refusal_probe,
       timing_note:'Browser bridge and return-value allocation/serialization included. Asset fetch/decoding and WASM initialization excluded from queries. Single-call timing is quantized by the browser timer.' };
-  },{hasPolicy:Boolean(policyArg),hasManifest:Boolean(manifestArg)});
+  },{hasPolicy:Boolean(policyArg),hasManifest:Boolean(manifestArg),integrator:integratorArg});
   const experiment = native.frozen_experiment;
   const spec = experiment.experiment_manifest;
   const differences = [];
@@ -119,7 +120,7 @@ try {
     for (const key of ['position','velocity']) for (let j=0;j<2;j++) if (Math.abs(a.final[key][j]-b.final[key][j])>1e-6*Math.max(1,Math.abs(a.final[key][j]))) differences.push(`state ${i}/${key}/${j}`);
     for (const key of ['energy','mechanical_time','integrated_work']) if (Math.abs(a.final[key]-b.final[key])>1e-6*Math.max(1,Math.abs(a.final[key]))) differences.push(`ledger ${i}/${key}`);
   }
-  const report = { device:cpus()[0].model, browser:browser.version(), date:process.env.OPERATIONAL_REPORT_DATE ?? '2026-10-30',
+  const report = { device:cpus()[0].model, browser:browser.version(), date:process.env.OPERATIONAL_REPORT_DATE ?? '2026-10-30',integrator:integratorArg,
     asset_sha256:createHash('sha256').update(asset).digest('hex'),
     wasm_sha256:createHash('sha256').update(files.get('/orbit_synth_wasm_bg.wasm')).digest('hex'),
     wasm_file_bytes:(await stat(resolve(wasmDir,'orbit_synth_wasm_bg.wasm'))).size,

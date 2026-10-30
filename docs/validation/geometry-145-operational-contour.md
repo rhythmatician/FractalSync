@@ -1,5 +1,10 @@
 # Geometry #145: frozen finite-contour source experiment
 
+Latest follow-up: [the explicit four-substep RK4 profile](geometry-145-operational-integrators.md)
+passes the unchanged crossing-refinement and drag tests on these same field
+bytes. Python is 26 passed, 1 failed under that profile. The Euler snapshot below
+and both scalar counterexamples remain preserved.
+
 October 30, 2026. This follows the [raster-source diagnosis](geometry-145-operational-source.md).
 The source changes; the dense C4 quintic evaluator, coefficient spacing, coverage,
 original test bodies and thresholds do not. This is a separate bounded prototype,

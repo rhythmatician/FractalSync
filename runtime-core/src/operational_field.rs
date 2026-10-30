@@ -253,6 +253,7 @@ fn basis(t: f64) -> [[f64; 6]; 3] {
 thread_local! {
     static ACTIVE: std::cell::RefCell<Option<std::sync::Arc<PreparedField>>> = const { std::cell::RefCell::new(None) };
     static ACTIVE_REFERENCE:std::cell::RefCell<Vec<acceptance::ReferenceCut>>=const{std::cell::RefCell::new(Vec::new())};
+    static ACTIVE_INTEGRATOR:std::cell::Cell<acceptance::Integrator>=const{std::cell::Cell::new(acceptance::Integrator::Euler)};
 }
 
 pub const PROFILE: &str = "experimental-operational-field/1;reference-uncertified;cuts-unknown";
@@ -276,15 +277,26 @@ pub fn activate_with_reference(
     field: Option<std::sync::Arc<PreparedField>>,
     cuts: Vec<acceptance::ReferenceCut>,
 ) -> Result<(), String> {
+    activate_with_reference_and_integrator(field,cuts,acceptance::Integrator::Euler)
+}
+
+/// Explicit legacy-replay integration choice. Owned rollouts keep their own
+/// immutable profile; ordinary activation always restores the Euler baseline.
+pub fn activate_with_reference_and_integrator(
+    field: Option<std::sync::Arc<PreparedField>>,
+    cuts: Vec<acceptance::ReferenceCut>,
+    integrator: acceptance::Integrator,
+) -> Result<(), String> {
     if acceptance::is_pinned() {
         return Err("FrozenIdentity: replacement during rollout evaluation".into());
     }
     acceptance::validate_reference_cuts(&cuts)?;
-    if field.is_none() && !cuts.is_empty() {
+    if field.is_none() && (!cuts.is_empty() || integrator!=acceptance::Integrator::Euler) {
         return Err("reference evidence requires a field".into());
     }
     ACTIVE.with(|active| *active.borrow_mut() = field);
     ACTIVE_REFERENCE.with(|r| *r.borrow_mut() = cuts);
+    ACTIVE_INTEGRATOR.with(|r| r.set(integrator));
     Ok(())
 }
 

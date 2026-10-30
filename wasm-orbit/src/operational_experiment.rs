@@ -1,7 +1,7 @@
 //! Thin experimental bindings. All field/mechanical math stays in Rust core.
 use runtime_core::operational_field::{
     acceptance::{
-        frozen_experiment_report_with_manifest, reference_policy_for_field, FrozenRollout,
+        frozen_experiment_report_with_integrator, reference_policy_for_field, FrozenRollout,
         Integrator, MechanicalState, PhysicsProfile, ReferenceCut, EXPERIMENT_MANIFEST,
     },
     PreparedField,
@@ -21,16 +21,25 @@ impl ExperimentalOperationalField {
     #[wasm_bindgen(constructor)]
     pub fn new(asset: &[u8]) -> Result<ExperimentalOperationalField, JsValue> {
         let field = Arc::new(PreparedField::from_asset_bytes(asset).map_err(JsValue::from_str)?);
-        Self::from_parts(field, vec![])
+        Self::from_parts(field, vec![], Integrator::Euler)
     }
     #[wasm_bindgen(js_name=withPolicy)]
     pub fn with_policy(
         asset: &[u8],
         policy: &str,
     ) -> Result<ExperimentalOperationalField, JsValue> {
+        Self::with_policy_and_integrator(asset, policy, "Euler")
+    }
+    #[wasm_bindgen(js_name=withPolicyAndIntegrator)]
+    pub fn with_policy_and_integrator(
+        asset: &[u8],
+        policy: &str,
+        integrator: &str,
+    ) -> Result<ExperimentalOperationalField, JsValue> {
+        let method = Integrator::parse_name(integrator).map_err(|e| JsValue::from_str(&e))?;
         let field = Arc::new(PreparedField::from_asset_bytes(asset).map_err(JsValue::from_str)?);
         let cuts = reference_policy_for_field(&field, policy).map_err(|e| JsValue::from_str(&e))?;
-        Self::from_parts(field, cuts)
+        Self::from_parts(field, cuts, method)
     }
     pub fn profile_json(&self) -> String {
         self.rollout.profile().manifest().to_string()
@@ -41,12 +50,16 @@ impl ExperimentalOperationalField {
 }
 
 impl ExperimentalOperationalField {
-    fn from_parts(field: Arc<PreparedField>, cuts: Vec<ReferenceCut>) -> Result<Self, JsValue> {
+    fn from_parts(
+        field: Arc<PreparedField>,
+        cuts: Vec<ReferenceCut>,
+        method: Integrator,
+    ) -> Result<Self, JsValue> {
         let profile = PhysicsProfile::new(
             runtime_core::manifold::ManifoldConfig::default(),
             0.001,
             0.0,
-            Integrator::Euler,
+            method,
         )
         .map_err(|e| JsValue::from_str(&e))?;
         let rollout =
@@ -102,10 +115,11 @@ impl ExperimentalOperationalField {
     }
     pub fn report_with_manifest(&self, manifest: &str) -> Result<String, JsValue> {
         serde_json::to_string(
-            &frozen_experiment_report_with_manifest(
+            &frozen_experiment_report_with_integrator(
                 self.field.clone(),
                 manifest,
                 self.rollout.reference_cuts(),
+                self.rollout.profile().integrator(),
             )
             .map_err(|e| JsValue::from_str(&e))?,
         )

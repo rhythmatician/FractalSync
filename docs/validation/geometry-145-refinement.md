@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest candidate: [the separately frozen finite-contour experiment](geometry-145-operational-contour.md). It removes the old audit's 43 sign counterexamples but exposes two different scalar-budget violations. Seventeen fixed trajectories have conclusive reference Shore crossings. Python is 25 passed, 2 failed, including a crossing-time refinement regression. Original thresholds remain intact; the earlier raster-backed field and its reports remain preserved.
+Latest candidate: [the explicit four-substep RK4 profile](geometry-145-operational-integrators.md) clears crossing-time refinement and coarse-step drag failures on the unchanged contour field. Python is 26 passed, 1 failed; both original crossing scenarios have conclusive reference evidence. Two scalar counterexamples and the original neighboring-Hessian diagnostic remain red. Original thresholds, fixtures and crossing bodies remain intact; earlier profiles and failures are preserved.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
