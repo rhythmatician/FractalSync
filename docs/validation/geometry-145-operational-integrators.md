@@ -1,5 +1,10 @@
 # Geometry #145: bounded RK4 substeps on the frozen contour field
 
+Latest follow-up: [the neighboring-derivative verifier correction](geometry-145-operational-verifier.md)
+passes self-consistency at the unchanged tolerance while preserving the raw
+central-difference failure. Physical trajectories and scalar counterexamples below
+remain unchanged.
+
 October 30, 2026. The [contour field](geometry-145-operational-contour.md) and its
 two scalar counterexamples remain unchanged. This follow-up fixes the observed
 crossing-refinement and coarse-step drag failures with an explicit experimental

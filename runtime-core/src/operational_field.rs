@@ -4,6 +4,7 @@
 
 pub mod acceptance;
 pub mod preparation;
+pub mod verification;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FieldJet {

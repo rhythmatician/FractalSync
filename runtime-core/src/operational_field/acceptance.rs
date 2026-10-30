@@ -245,10 +245,13 @@ pub fn frozen_experiment_report_with_integrator(
     ] {
         parity.push(match field.query(p) {Ok(j)=>serde_json::json!({"point":p,"availability":"available","jet":[j.value,j.gradient[0],j.gradient[1],j.hessian[0][0],j.hessian[0][1],j.hessian[1][1]]}),Err(_)=>serde_json::json!({"point":p,"availability":"GeometryUnavailable"})});
     }
+    let neighboring = super::verification::fixed_neighbor_report(&field)
+        .map_err(|e| format!("Neighbor differential verification refused: {e:?}"))?;
     Ok(
         serde_json::json!({"experiment_manifest":resolved,"selected_integrator":method,"field_id":format!("{:016x}",field.identity()),"barrier":barrier,"launch_speed":launch,"runs":runs,"parity_samples":parity,
         "reference_scalar_fidelity":{"status":"unknown","certified_regions":0,"measured_raster_discrepancy_is_not_a_bound":true},
         "energy_runs":energy_runs,
+        "neighbor_differential_self_consistency":neighboring,
         "join_differential_self_consistency":{"gradient_absolute_error":join_gradient,"hessian_normalized_error":join_hessian,"tolerance":1e-4,"passed":join_gradient<1e-4 && join_hessian<1e-4},
         "reference_differential_fidelity":"unknown",
         "reference_singularity_policy":"authoritative evidence refuses before operational query; no reference-cut coverage certificate for this corridor",

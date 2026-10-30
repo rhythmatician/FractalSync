@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest candidate: [the explicit four-substep RK4 profile](geometry-145-operational-integrators.md) clears crossing-time refinement and coarse-step drag failures on the unchanged contour field. Python is 26 passed, 1 failed; both original crossing scenarios have conclusive reference evidence. Two scalar counterexamples and the original neighboring-Hessian diagnostic remain red. Original thresholds, fixtures and crossing bodies remain intact; earlier profiles and failures are preserved.
+Latest follow-up: [the neighboring-derivative verifier correction](geometry-145-operational-verifier.md) passes self-consistency at the unchanged tolerance and retains the raw central-difference failure as a diagnostic. All 35 physical trajectories remain exactly unchanged. Python is 26 passed, 1 failed; two scalar counterexamples and missing reference bounds remain blockers. Original thresholds, fixtures and crossing bodies remain intact; earlier profiles and failures are preserved.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the

@@ -167,10 +167,12 @@ fn main() -> Result<(), String> {
         "transactional_step_profile":frozen.profile().manifest(),"transactional_step":stats(transactional_times),"transactional_step_work":transactional_counts,
         "frozen_experiment":experiment,
         "measured_raster_max_scalar_difference":max_scalar_difference,
-        "neighbor_gradient_max_absolute_error":max_gradient_absolute_error,
-        "neighbor_hessian_max_relative_error":max_hessian_relative_error,
+        "derivative_verifier":experiment["neighbor_differential_self_consistency"]["verifier"],
+        "neighbor_gradient_max_absolute_error":experiment["neighbor_differential_self_consistency"]["evidence"]["gradient_max_absolute_error"],
+        "neighbor_hessian_max_relative_error":experiment["neighbor_differential_self_consistency"]["evidence"]["hessian_max_normalized_error"],
+        "legacy_central_differences":{"gradient_max_absolute_error":max_gradient_absolute_error,"hessian_max_normalized_error":max_hessian_relative_error,"tolerance":1e-4,"passed":max_gradient_absolute_error<1e-4 && max_hessian_relative_error<1e-4,"role":"preserved finite-increment diagnostic; not a truncation-corrected derivative estimate"},
         "derivative_tolerance_unchanged":1e-4,
-        "derivative_checks_pass":max_gradient_absolute_error<1e-4 && max_hessian_relative_error<1e-4,
+        "derivative_checks_pass":experiment["neighbor_differential_self_consistency"]["passed"],
         "notes":"No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading."
     })).unwrap());
     Ok(())

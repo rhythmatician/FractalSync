@@ -1,4 +1,4 @@
-//! Diagnose the existing neighboring-derivative failure without changing its gate.
+//! Preserve the original diagnostic and compare the corrected consistency check.
 use runtime_core::operational_field::PreparedField;
 use serde_json::json;
 fn main() -> Result<(), String> {
@@ -53,9 +53,11 @@ fn main() -> Result<(), String> {
         let richardson = (4.0 * sample(delta / 2.0) - fd) / 3.0;
         witness.push(json!({"delta":delta,"central_difference":fd,"normalized_error":(fd-jet.hessian[b][a]).abs()/jet.hessian[b][a].abs().max(1.0),"richardson":richardson,"richardson_normalized_error":(richardson-jet.hessian[b][a]).abs()/jet.hessian[b][a].abs().max(1.0)}));
     }
+    let corrected = runtime_core::operational_field::verification::fixed_neighbor_report(&field)
+        .map_err(|e| format!("{e:?}"))?;
     println!(
         "{}",
-        json!({"field_id":format!("{:016x}",field.identity()),"original_tolerance":1e-4,"original_gate_passed":records.iter().filter(|r|r["original_increment"]==true).all(|r|r["gradient_max_absolute_error"].as_f64().unwrap()<1e-4 && r["hessian_max_normalized_error"].as_f64().unwrap()<1e-4),"grid_by_delta":records,"worst_original_witness":{"point":p,"gradient_component":b,"difference_axis":a,"returned_hessian":jet.hessian[b][a],"increments":witness},"claim":"Finite-increment diagnostic only; original gate retained; no reference differential fidelity claim"})
+        json!({"field_id":format!("{:016x}",field.identity()),"original_tolerance":1e-4,"original_gate_passed":records.iter().filter(|r|r["original_increment"]==true).all(|r|r["gradient_max_absolute_error"].as_f64().unwrap()<1e-4 && r["hessian_max_normalized_error"].as_f64().unwrap()<1e-4),"grid_by_delta":records,"corrected_fixed_grid":corrected,"worst_original_witness":{"point":p,"gradient_component":b,"difference_axis":a,"returned_hessian":jet.hessian[b][a],"increments":witness},"claim":"Original central measurements preserved; corrected consistency verifier retains the same points, base increments and tolerance; no reference differential fidelity claim"})
     );
     Ok(())
 }

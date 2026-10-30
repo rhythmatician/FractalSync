@@ -103,6 +103,12 @@ try {
   const spec = experiment.experiment_manifest;
   const differences = [];
   if (results.field_id !== native.identity) differences.push('field identity differs for identical asset bytes');
+  const nativeNeighbor=experiment.neighbor_differential_self_consistency;
+  const browserNeighbor=results.experiment.neighbor_differential_self_consistency;
+  if (nativeNeighbor || browserNeighbor) {
+    for (const key of ['verifier','passed','points','tolerance']) if (nativeNeighbor?.[key]!==browserNeighbor?.[key]) differences.push(`neighbor differential ${key} differs`);
+    if (JSON.stringify(nativeNeighbor?.base_increments)!==JSON.stringify(browserNeighbor?.base_increments)) differences.push('neighbor differential increments differ');
+  }
   if (native.transactional_step_profile && results.transactional_step_profile_id!==native.transactional_step_profile.physics_profile_id) differences.push('timed-step Physics profile differs');
   for (let i=0;i<experiment.parity_samples.length;i++) {
     const a=experiment.parity_samples[i], b=results.experiment.parity_samples[i];
