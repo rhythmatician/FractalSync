@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [source-raster isolation and the original native reference crossing](geometry-145-operational-source.md). The unchanged native driven trace now has a conclusive reference inside/outside pair. Source diagnostics show that finer coefficient spacing cannot repair the raster's errors. The field still has 43 scalar-budget violations; Python remains 26 passed, 1 failed. Original thresholds remain intact.
+Latest candidate: [the separately frozen finite-contour experiment](geometry-145-operational-contour.md). It removes the old audit's 43 sign counterexamples but exposes two different scalar-budget violations. Seventeen fixed trajectories have conclusive reference Shore crossings. Python is 25 passed, 2 failed, including a crossing-time refinement regression. Original thresholds remain intact; the earlier raster-backed field and its reports remain preserved.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the

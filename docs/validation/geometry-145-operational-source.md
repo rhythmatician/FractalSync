@@ -1,5 +1,9 @@
 # Geometry #145: isolate raster defects and verify the native reference crossing
 
+Latest follow-up: [the separately frozen finite-contour experiment](geometry-145-operational-contour.md)
+has two different scalar counterexamples and a crossing-time refinement failure.
+The raster-backed asset and source diagnosis below remain preserved.
+
 October 30, 2026. This follows the [frozen browser/fidelity replay](geometry-145-operational-followup.md).
 The field bytes, Physics profile, original tests and thresholds are unchanged.
 No new asset was constructed. ADR 0005 remains authorized for a bounded prototype

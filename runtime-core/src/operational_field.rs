@@ -3,6 +3,7 @@
 //! measured separately; smoothness never certifies Mandelbrot membership.
 
 pub mod acceptance;
+pub mod preparation;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FieldJet {

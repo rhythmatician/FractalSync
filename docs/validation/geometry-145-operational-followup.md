@@ -1,9 +1,9 @@
 # Geometry #145: frozen browser replay and scalar-fidelity audit
 
-Latest follow-up: [source-raster isolation and the original native reference crossing](geometry-145-operational-source.md).
-The source study rules out finer coefficient spacing as a repair. The original
-native driven trace now has a certified inside/outside pair; the separate 35
-fixed runs below retain their unverified reference verdicts.
+Latest candidate: [the separately frozen finite-contour experiment](geometry-145-operational-contour.md).
+The [source diagnosis](geometry-145-operational-source.md) ruled out finer raster
+resampling as a repair. The older field and measurements below remain frozen;
+the new source's successes and failures are reported separately.
 
 October 30, 2026. ADR 0005 authorizes this bounded prototype only. Shipping
 adoption, reference-cut motion policy and device targets remain pending.
