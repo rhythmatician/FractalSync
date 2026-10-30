@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [the neighboring-derivative verifier correction](geometry-145-operational-verifier.md) passes self-consistency at the unchanged tolerance and retains the raw central-difference failure as a diagnostic. All 35 physical trajectories remain exactly unchanged. Python is 26 passed, 1 failed; two scalar counterexamples and missing reference bounds remain blockers. Original thresholds, fixtures and crossing bodies remain intact; earlier profiles and failures are preserved.
+Latest follow-up: [the globally refined reference-grid experiment](geometry-145-operational-reference-grid.md) removes both prior sign-based counterexamples and verifies 21/21 reference crossing trajectories. Derivative, join, energy and provisional p99 cost checks pass on native/WASM. The unchanged Python suite is 25 passed, 2 failed: sampled crossing-time refinement regressed and scalar quality remains unknown. This candidate is not merge-ready; earlier assets and failures remain preserved.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
