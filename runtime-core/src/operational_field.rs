@@ -251,6 +251,7 @@ fn basis(t: f64) -> [[f64; 6]; 3] {
 
 thread_local! {
     static ACTIVE: std::cell::RefCell<Option<std::sync::Arc<PreparedField>>> = const { std::cell::RefCell::new(None) };
+    static ACTIVE_REFERENCE:std::cell::RefCell<Vec<acceptance::ReferenceCut>>=const{std::cell::RefCell::new(Vec::new())};
 }
 
 pub const PROFILE: &str = "experimental-operational-field/1;reference-uncertified;cuts-unknown";
@@ -267,10 +268,22 @@ pub fn activate(field: Option<std::sync::Arc<PreparedField>>) {
 }
 
 pub fn try_activate(field: Option<std::sync::Arc<PreparedField>>) -> Result<(), String> {
+    activate_with_reference(field, Vec::new())
+}
+
+pub fn activate_with_reference(
+    field: Option<std::sync::Arc<PreparedField>>,
+    cuts: Vec<acceptance::ReferenceCut>,
+) -> Result<(), String> {
     if acceptance::is_pinned() {
         return Err("FrozenIdentity: replacement during rollout evaluation".into());
     }
+    acceptance::validate_reference_cuts(&cuts)?;
+    if field.is_none() && !cuts.is_empty() {
+        return Err("reference evidence requires a field".into());
+    }
     ACTIVE.with(|active| *active.borrow_mut() = field);
+    ACTIVE_REFERENCE.with(|r| *r.borrow_mut() = cuts);
     Ok(())
 }
 
@@ -290,6 +303,17 @@ pub(crate) fn active_query(
             let jet = field
                 .query([c.re, c.im])
                 .map_err(|_| "GeometryUnavailable: outside prepared coverage".to_string())?;
+            // FrozenRollout owns its own evidence. Raw adapters must honor the
+            // separately loaded immutable policy too, without an online proof.
+            let reference_cut = !acceptance::is_pinned()
+                && ACTIVE_REFERENCE.with(|r| {
+                    r.borrow().iter().any(|cut| {
+                        c.re >= cut.bounds[0]
+                            && c.re <= cut.bounds[2]
+                            && c.im >= cut.bounds[1]
+                            && c.im <= cut.bounds[3]
+                    })
+                });
             Ok(GeometryJet {
                 d: jet.value,
                 grad_d: jet.gradient,
@@ -298,8 +322,16 @@ pub(crate) fn active_query(
                 requested_scale: 0.1 * jet.value.hypot(epsilon),
                 // Unknown true-Shore error; never pass this off as certification.
                 estimated_error: f64::MAX,
-                validity: GeometryValidity::Regular,
-                singularity: SingularityKind::None,
+                validity: if reference_cut {
+                    GeometryValidity::Singular
+                } else {
+                    GeometryValidity::Regular
+                },
+                singularity: if reference_cut {
+                    SingularityKind::CutLocus
+                } else {
+                    SingularityKind::None
+                },
                 provider_version: PROFILE.into(),
                 tile_id: format!("operational:{:016x}", field.identity),
                 is_bridge: false,
@@ -311,11 +343,36 @@ pub(crate) fn active_query(
 /// Offline baseline only: smooth samples of the existing raster. This deliberately
 /// carries no true-boundary fidelity or reference-cut certificate.
 pub fn prepare_raster_baseline() -> Result<PreparedField, String> {
-    let origin = [-0.1, -0.2];
-    let spacing = 0.0005;
-    let shape = [1605, 1005];
+    prepare_raster_region([-0.1, -0.2], 0.0005, [1605, 1005])
+}
+
+/// Offline preparation for a separately declared finite experiment. Calling
+/// this never extends a live field; it returns a new immutable asset.
+pub fn prepare_raster_region(
+    origin: [f64; 2],
+    spacing: f64,
+    shape: [usize; 2],
+) -> Result<PreparedField, String> {
+    if !origin.iter().all(|v| v.is_finite())
+        || !spacing.is_finite()
+        || spacing <= 0.0
+        || !(1.0 / spacing.powi(2)).is_finite()
+        || shape.iter().any(|n| *n < 6)
+        || origin
+            .iter()
+            .zip(shape)
+            .any(|(o, n)| !(o + spacing * n as f64).is_finite())
+    {
+        return Err("invalid raster preparation layout".into());
+    }
+    let count = shape[0]
+        .checked_mul(shape[1])
+        .ok_or("raster preparation size overflow")?;
+    let mut coefficients = Vec::new();
+    coefficients
+        .try_reserve_exact(count)
+        .map_err(|_| "raster preparation allocation refused")?;
     crate::distance_field::load_builtin_distance_field("default")?;
-    let mut coefficients = Vec::with_capacity(shape[0] * shape[1]);
     for y in 0..shape[1] {
         let row: Vec<_> = (0..shape[0])
             .map(|x| {
@@ -461,5 +518,45 @@ mod tests {
                 .unwrap()
                 .id()
         );
+    }
+
+    #[test]
+    fn preparation_rejects_invalid_layout_before_allocation() {
+        assert!(prepare_raster_region([f64::NAN, 0.0], 0.0005, [8, 8]).is_err());
+        assert!(prepare_raster_region([0.0; 2], 0.0, [8, 8]).is_err());
+        assert!(prepare_raster_region([0.0; 2], 0.0005, [usize::MAX, 8]).is_err());
+        let field = prepare_raster_region([0.3, 0.05], 0.0005, [8, 8]).unwrap();
+        assert!(field.query([0.3015, 0.0515]).is_ok());
+        assert!(field.query([0.3, 0.05]).is_err());
+        let restored = PreparedField::from_asset_bytes(&field.asset_bytes()).unwrap();
+        assert_eq!(field.identity(), restored.identity());
+    }
+
+    #[test]
+    fn raw_adapter_honors_frozen_reference_refusal() {
+        let field = std::sync::Arc::new(
+            PreparedField::new([-1.5, -0.5], 0.01, [101; 2], vec![1.0; 101 * 101]).unwrap(),
+        );
+        let cuts = vec![acceptance::ReferenceCut {
+            bounds: [-1.0, 0.0, -1.0, 0.0],
+            authority: "synthetic policy-enforcement fixture".into(),
+        }];
+        let wrong = serde_json::json!({"field_id":"0000000000000000","refusals":cuts});
+        assert!(acceptance::reference_policy_for_field(&field, &wrong.to_string()).is_err());
+        let policy =
+            serde_json::json!({"field_id":format!("{:016x}",field.identity()),"refusals":cuts});
+        let cuts = acceptance::reference_policy_for_field(&field, &policy.to_string()).unwrap();
+        activate_with_reference(Some(field), cuts).unwrap();
+        let c = num_complex::Complex64::new(-1.0, 0.0);
+        let jet = crate::geometry_provider::query_geometry(c, 1e-4).unwrap();
+        assert_eq!(
+            jet.validity,
+            crate::geometry_provider::GeometryValidity::Singular
+        );
+        assert!(
+            crate::manifold::scale_gradient(c, &crate::manifold::ManifoldConfig::default())
+                .is_err()
+        );
+        activate(None);
     }
 }

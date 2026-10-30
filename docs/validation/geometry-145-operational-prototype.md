@@ -1,5 +1,10 @@
 # Geometry #145: one frozen operational-field experiment
 
+This preserves the October 28 experiment at `55ebb8a`. The separate
+[October 30 coverage/policy replay](geometry-145-operational-coverage.md) clears
+the original native crossing and energy coverage refusals; its full Python
+physics run is 26 passed, 1 failed. The original evidence below is unchanged.
+
 **Decision: this asset does not satisfy all retained acceptance tests.** Within
 its declared corridor, the field passes differential, mechanical and provisional
 evaluation-cost checks. Remaining failures identify coverage and reference

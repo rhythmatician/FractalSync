@@ -44,7 +44,8 @@ fn main() {
     let field=Arc::new(PreparedField::from_asset_bytes(&std::fs::read(asset).unwrap()).unwrap());
     let beta=controls::MotionControls{direction:[1.0,0.0],throttle:0.0,brake:0.0,grip:0.0,impulse:0.0}.friction_beta();
     let config=ManifoldConfig{d_ref:0.1,epsilon:1e-4,lambda_sq:1.0,kappa:0.5,mu:std::f64::consts::FRAC_1_PI};
-    let frame=FrozenRollout::new(field,PhysicsProfile::new(config,0.02,beta,Integrator::Euler).unwrap(),vec![]).unwrap();
+    let cuts=std::env::args().nth(2).map(|path|runtime_core::operational_field::acceptance::reference_policy_for_field(&field,&std::fs::read_to_string(path).unwrap()).unwrap()).unwrap_or_default();
+    let frame=FrozenRollout::new(field,PhysicsProfile::new(config,0.02,beta,Integrator::Euler).unwrap(),cuts).unwrap();
     let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||frame.evaluate(|_|{
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(controls_drive_can_cross_shore_without_wall)).map_err(panic_text)
     })));
@@ -59,9 +60,13 @@ fn main() {
     try:
         generated.write_text(prefix+body+suffix,encoding="utf-8")
         args=["rtk","cargo","run","--manifest-path","runtime-core/Cargo.toml","--release","--features","experimental-operational-field","--example","__operational_original_crossing","--",str(asset)]
+        policy=(root / sys.argv[3]).resolve() if len(sys.argv)>3 else None
+        if policy:
+            args.append(str(policy))
         run=subprocess.run(args,cwd=root,text=True,encoding="utf-8",capture_output=True,timeout=180,check=False)
         verdict=json.loads(run.stdout.strip())
         verdict.update({"test":"manifold::tests::controls_drive_can_cross_shore_without_wall","test_body_sha256":hashlib.sha256(original[start:end]).hexdigest(),"source_unchanged":original==source.read_bytes(),"asset_sha256":hashlib.sha256(asset.read_bytes()).hexdigest(),"exit_code":run.returncode,"setup":"verbatim original body in generated example; field/profile pinned around entire test; no assertion changes"})
+        verdict["reference_policy_sha256"]=hashlib.sha256(policy.read_bytes()).hexdigest() if policy else None
         if run.returncode:
             verdict["stderr"]=run.stderr.replace(str(root),"${REPO}")[-3000:]
         output.write_text(json.dumps(verdict,indent=2)+"\n",encoding="utf-8")

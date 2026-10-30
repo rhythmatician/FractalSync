@@ -41,6 +41,10 @@ experimental-operational-field = []
 name = "operational_field_report"
 required-features = ["experimental-operational-field"]
 
+[[example]]
+name = "operational_coverage_prepare"
+required-features = ["experimental-operational-field"]
+
 [build-dependencies]
 # Use a lightweight build script which invokes the Python-side stub generator
 # if available. We avoid adding a Rust dependency so developers can use their

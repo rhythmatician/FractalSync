@@ -1,5 +1,9 @@
 # Geometry #145: coherent refinement and integration
 
+Latest follow-up: [the October 30 coverage/policy replay](geometry-145-operational-coverage.md)
+passes the original native controlled crossing and 26 of 27 Python physics tests.
+Reference fidelity and the unchanged scalar-quality gate remain unresolved.
+
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
 original native/Python crossing tests remain intact.

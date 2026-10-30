@@ -369,10 +369,43 @@ impl PhysicsProfile {
 
 /// Authoritative evidence supplied before replay, scoped to a closed box.
 /// Synthetic analytic controls must identify themselves, never as Map proofs.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct ReferenceCut {
     pub bounds: [f64; 4], // xmin, ymin, xmax, ymax
     pub authority: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ReferencePolicy {
+    field_id: String,
+    refusals: Vec<ReferenceCut>,
+}
+
+pub fn reference_policy_for_field(
+    field: &PreparedField,
+    json: &str,
+) -> Result<Vec<ReferenceCut>, String> {
+    let policy: ReferencePolicy = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if policy.field_id != format!("{:016x}", field.identity()) {
+        return Err("reference policy belongs to another field".into());
+    }
+    validate_reference_cuts(&policy.refusals)?;
+    Ok(policy.refusals)
+}
+
+pub fn validate_reference_cuts(cuts: &[ReferenceCut]) -> Result<(), String> {
+    if cuts.len() > 64
+        || cuts.iter().any(|c| {
+            !c.bounds.iter().all(|v| v.is_finite())
+                || c.bounds[0] > c.bounds[2]
+                || c.bounds[1] > c.bounds[3]
+                || c.authority.is_empty()
+                || c.authority.len() > 512
+        })
+    {
+        return Err("invalid frozen reference evidence".into());
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
@@ -517,17 +550,7 @@ impl FrozenRollout {
         mut profile: PhysicsProfile,
         cuts: Vec<ReferenceCut>,
     ) -> Result<Self, String> {
-        if cuts.len() > 64
-            || cuts.iter().any(|c| {
-                !c.bounds.iter().all(|v| v.is_finite())
-                    || c.bounds[0] > c.bounds[2]
-                    || c.bounds[1] > c.bounds[3]
-                    || c.authority.is_empty()
-                    || c.authority.len() > 512
-            })
-        {
-            return Err("invalid frozen reference evidence".into());
-        }
+        validate_reference_cuts(&cuts)?;
         let evidence = cuts.iter().flat_map(|c| {
             c.bounds
                 .map(f64::to_bits)

@@ -22,6 +22,7 @@ def main() -> int:
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--asset", type=Path, required=True)
+    parser.add_argument("--reference-policy",type=Path)
     parser.add_argument("--staging", type=Path, help=argparse.SUPPRESS)
     args, pytest_args = parser.parse_known_args()
     if args.staging is None:
@@ -31,7 +32,7 @@ def main() -> int:
             return subprocess.run([
                 sys.executable, str(Path(__file__).resolve()), str(args.wheel.resolve()),
                 "--report", str(args.report.resolve()), "--staging", staging, *pytest_args,
-                "--asset", str(args.asset.resolve()),
+                "--asset", str(args.asset.resolve()), *(["--reference-policy",str(args.reference_policy.resolve())] if args.reference_policy else []),
             ], check=False).returncode
     root = Path(__file__).resolve().parents[1]
     wheel = args.wheel.resolve()
@@ -65,7 +66,7 @@ def main() -> int:
         extension = next(Path(staging).rglob("*.pyd"))
         started = time.perf_counter()
         asset=args.asset.read_bytes()
-        identity = runtime_core.experimental_load_operational_asset(asset)
+        identity = runtime_core.experimental_load_operational_asset_with_policy(asset,args.reference_policy.read_text(encoding="utf-8")) if args.reference_policy else runtime_core.experimental_load_operational_asset(asset)
         preparation = time.perf_counter() - started
         started = time.perf_counter()
         selected_args=pytest_args or [str(test.relative_to(root)), "-q", "-k", "TestEnergyDrift or TestShoreCrossings or TestSignedSdfContinuity"]
@@ -83,6 +84,7 @@ def main() -> int:
             },
             "asset_loading_seconds": preparation,
             "asset_sha256":hashlib.sha256(asset).hexdigest(),
+            "reference_policy_sha256":hashlib.sha256(args.reference_policy.read_bytes()).hexdigest() if args.reference_policy else None,
             "pytest_seconds": time.perf_counter() - started,
             "pytest_args": selected_args,
             "pytest_exit_code": int(code),

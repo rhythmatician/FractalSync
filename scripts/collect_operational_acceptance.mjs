@@ -48,7 +48,8 @@ const qualityFailures=python.tests.filter(t=>t.outcome==='failed' && t.nodeid.en
 const command=['cargo','test','--manifest-path','runtime-core/Cargo.toml','--release','--features','experimental-operational-field','operational_field','--','--test-threads=1'];
 const units=spawnSync('rtk',command,{encoding:'utf8',timeout:120000});
 const summary=units.stdout+units.stderr;
-required(units.status===0 && /14 passed/.test(summary),'Executable contract controls failed or ran no tests');
+const contractCount=Number(summary.match(/cargo test: (\d+) passed/)?.[1] ?? 0);
+required(units.status===0 && contractCount>=14,'Executable contract controls failed or ran too few tests');
 const defaultCheck=spawnSync('rtk',['cargo','check','--manifest-path','runtime-core/Cargo.toml'],{encoding:'utf8',timeout:120000});
 required(defaultCheck.status===0,'Default native build failed');
 const sourcePaths=['Cargo.lock','runtime-core/Cargo.toml','runtime-core/src/lib.rs','runtime-core/src/operational_field.rs','runtime-core/src/operational_field/acceptance.rs','runtime-core/src/geometry_provider.rs','runtime-core/src/geometry_provider/uniform_box.rs','runtime-core/src/geometry_provider/affine_return.rs','runtime-core/src/distance_field.rs','runtime-core/src/controls.rs','runtime-core/src/manifold.rs','runtime-core/src/pybindings.rs','runtime-core/examples/operational_field_report.rs','wasm-orbit/Cargo.toml','wasm-orbit/src/lib.rs','wasm-orbit/src/operational_experiment.rs',originalTest,'backend/src/cspace_proxies.py','docs/validation/geometry-145-operational-experiment.json','runtime-core/data/mandelbrot_distance_1024.bin','runtime-core/data/mandelbrot_distance_1024.json','scripts/validate_operational_field.py','scripts/validate_operational_field_browser.mjs','scripts/validate_operational_native_crossing.py'];
@@ -76,7 +77,7 @@ const availability=experiment.runs.every(r=>r.availability==='complete');
 const differentials=runs.every(r=>r.derivative_checks_pass) && experiment.join_differential_self_consistency.passed;
 const outcomes={
   field_and_physics_profile_identity:'passed',
-  analytic_chain_and_transaction_controls:'passed; 14 native executable controls',
+  analytic_chain_and_transaction_controls:`passed; ${contractCount} native executable controls`,
   differential_self_consistency:differentials?'passed':'failed',
   reference_scalar_fidelity:'unknown; retained scalar-quality gate fails',
   reference_differential_fidelity:'unknown',
@@ -98,7 +99,7 @@ const report={date:'2026-10-28',authorization:'ADR 0005 accepted for bounded pro
     derivative_controls:{max_gradient_absolute_error:runs[0].neighbor_gradient_max_absolute_error,max_hessian_normalized_error:runs[0].neighbor_hessian_max_relative_error,tolerance:1e-4},
     measured_raster_max_scalar_difference:runs[0].measured_raster_max_scalar_difference},
   experiment,browser,retained_tests:python,original_native_crossing:originalNative,
-  contract_tests:{command:['rtk',...command],exit_code:units.status,passed:14,summary:clean(summary.slice(-2500))},
+  contract_tests:{command:['rtk',...command],exit_code:units.status,passed:contractCount,summary:clean(summary.slice(-2500))},
   default_native_check:{exit_code:defaultCheck.status,summary:clean((defaultCheck.stdout+defaultCheck.stderr).slice(-1000))},
   outcomes};
 // Keep complete ordered evidence without adding ~96,000 generated JSON lines
