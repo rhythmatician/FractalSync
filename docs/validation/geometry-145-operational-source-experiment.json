@@ -1,0 +1,14 @@
+{
+  "schema": "operational-source-audit/1",
+  "date": "2026-10-30",
+  "field_id": "068e8e016b4ad6b7",
+  "parent_audit": "geometry-145-operational-fidelity-experiment.json",
+  "origin": [-1.002, -0.702],
+  "coefficient_spacings": [0.001, 0.0005, 0.00025, 0.000125],
+  "angle_divisions": 256,
+  "multiplier_insets": [0.000001, 0.00001, 0.0001],
+  "epsilon": 0.0001,
+  "quality_fraction": 0.25,
+  "purpose": "Separate source-raster sign defects from reconstruction smoothing; offline probes only, no replacement field or resumed rollout",
+  "reference": "existing conservative membership only; raster and probes remain measured data"
+}

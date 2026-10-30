@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [browser parity, resource measurements and scalar-fidelity audit](geometry-145-operational-followup.md). The frozen field passes 35 mechanical expectations and native/WASM parity, but 43 fixed samples prove scalar-budget violations. The full Python physics file remains 26 passed, 1 failed. Original thresholds remain intact.
+Latest follow-up: [source-raster isolation and the original native reference crossing](geometry-145-operational-source.md). The unchanged native driven trace now has a conclusive reference inside/outside pair. Source diagnostics show that finer coefficient spacing cannot repair the raster's errors. The field still has 43 scalar-budget violations; Python remains 26 passed, 1 failed. Original thresholds remain intact.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the

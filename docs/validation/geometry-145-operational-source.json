@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-30",
+  "scope": "offline source diagnosis and original native test trace; no field, physics, test-body or threshold change",
+  "source_audit": {
+    "baseline_reproduction_max_absolute_error": 3.544256901855114e-16,
+    "certified_budget_violation_counts": [
+      60,
+      43,
+      14,
+      43,
+      58,
+      60
+    ],
+    "claim": "Pointwise certified error floors only; no regional fidelity bound; offline diagnostic probes are not rollout assets",
+    "field_id": "068e8e016b4ad6b7",
+    "plan": {
+      "angle_divisions": 256,
+      "coefficient_spacings": [
+        0.001,
+        0.0005,
+        0.00025,
+        0.000125
+      ],
+      "date": "2026-10-30",
+      "epsilon": 0.0001,
+      "field_id": "068e8e016b4ad6b7",
+      "multiplier_insets": [
+        1e-06,
+        1e-05,
+        0.0001
+      ],
+      "origin": [
+        -1.002,
+        -0.702
+      ],
+      "parent_audit": "geometry-145-operational-fidelity-experiment.json",
+      "purpose": "Separate source-raster sign defects from reconstruction smoothing; offline probes only, no replacement field or resumed rollout",
+      "quality_fraction": 0.25,
+      "reference": "existing conservative membership only; raster and probes remain measured data",
+      "schema": "operational-source-audit/1"
+    },
+    "raster_metadata": [
+      1024,
+      1024,
+      -2.0,
+      0.4711,
+      -1.122,
+      1.122,
+      0.0024155425219941347,
+      0.0021935483870967744
+    ],
+    "samples": 765,
+    "sign_controls": [
+      -0.25501349568367004,
+      0.6593775153160095
+    ],
+    "stage_order": "raw raster, existing asset, then coefficient_spacings in declared order",
+    "unknown_realms": 0
+  },
+  "native_crossing": {
+    "error": null,
+    "field_id": "068e8e016b4ad6b7",
+    "passed": true,
+    "physics_profile": {
+      "beta": 0.05,
+      "d_ref": 0.1,
+      "dt": 0.02,
+      "epsilon": 0.0001,
+      "integrator": "Euler",
+      "kappa": 0.5,
+      "lambda_sq": 1.0,
+      "mu": 0.3183098861837907,
+      "physics_profile_id": "b61c1e0bbba796e4",
+      "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+      "work_rule": "left-endpoint control-plus-drag power"
+    },
+    "reference_crossing": "passed",
+    "work": {
+      "coefficient_reads_upper_bound": 495000,
+      "geometry_evaluations": 13750
+    },
+    "test": "manifold::tests::controls_drive_can_cross_shore_without_wall",
+    "test_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895",
+    "source_unchanged": true,
+    "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+    "exit_code": 0,
+    "setup": "verbatim original body in generated example; field/profile pinned around entire test; no assertion changes",
+    "reference_policy_sha256": "029024d540c8f63397f70b87d7097456ab4165ea5ac6819c4764d734d1429101"
+  },
+  "reference_trajectories": [
+    {
+      "accepted_steps": 400,
+      "name": "undriven",
+      "reference_crossing": "unverified",
+      "reference_pair": null
+    },
+    {
+      "accepted_steps": 182,
+      "name": "driven",
+      "reference_crossing": "passed",
+      "reference_pair": [
+        {
+          "kind": "certified",
+          "mechanical_time": 0.0,
+          "position": [
+            0.3,
+            0.05
+          ],
+          "realm": "Inside"
+        },
+        {
+          "kind": "certified",
+          "mechanical_time": 2.92,
+          "position": [
+            0.3211973028902156,
+            0.048080168058688866
+          ],
+          "realm": "Outside"
+        }
+      ]
+    }
+  ],
+  "evidence_source": "existing conservative reference_realm; point-scoped membership only; evaluated offline after the test",
+  "continuous_trajectory": "piecewise-linear reconstruction of successful accepted endpoints; not the exact ODE solution",
+  "source_sha256": {
+    "runtime-core/examples/operational_source_audit.rs": "7b5c1b1f63934a6518e2dcf18e2ca1145d43915801e5a9e269a214cd8cc42c2e",
+    "scripts/validate_operational_native_crossing.py": "3988348b1ab1fa58b7a8a86558b3c15602f381bb7ddb2ab1e68ea1e64161c7d6",
+    "docs/validation/geometry-145-operational-source-experiment.json": "b854a7a2a69be6d18b6b68d85ae0aed3fcc59e622f958f2c8d506112a84af0d2"
+  },
+  "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+  "evidence_archive": {
+    "path": "experiments/geometry-145-operational/source-and-crossing-evidence.zip",
+    "bytes": 80836,
+    "sha256": "d94e80765ef19679ff5d9c4dcfe3f1d847fd51b35e80f89fc9c1551eccf159f6",
+    "members_sha256": {
+      "geometry145-source-audit.json": "c501332d0acf15f216f3cd4d6d68a66f671fc28a4b997ee5ed514791c9752bf4",
+      "geometry145-native-reference-trace.json": "c0064a43d96a4cdd1193f57710d4c999255dd0c62675f7a44fd7f5f4b015d515"
+    }
+  },
+  "remaining": "The asset still has 43 scalar-budget violations. This native reference crossing does not verify the separate 35 fixed operational runs or reference differential fidelity; adoption and other gates remain pending."
+}
