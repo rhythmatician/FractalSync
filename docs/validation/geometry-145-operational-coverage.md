@@ -1,5 +1,7 @@
 # Geometry #145: fresh coverage and reference-policy replay
 
+Latest follow-up: [browser parity, resource measurements and scalar-fidelity audit](geometry-145-operational-followup.md). The larger field passes browser mechanical/parity checks but has 43 conclusive scalar-budget violations. The measurements below preserve the earlier coverage checkpoint.
+
 October 30, 2026. This is a separate experiment after `55ebb8a`; the first
 [frozen experiment](geometry-145-operational-prototype.md) and its failures remain
 preserved. Shipping adoption and reference-cut motion policy remain pending.

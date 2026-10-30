@@ -34,7 +34,41 @@ pub struct Experiment {
 }
 
 pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json::Value, String> {
-    let spec: Experiment = serde_json::from_str(EXPERIMENT_MANIFEST).map_err(|e| e.to_string())?;
+    frozen_experiment_report_with_manifest(field, EXPERIMENT_MANIFEST, &[])
+}
+
+/// Inherit the fixed mechanical test contract; a coverage declaration may only
+/// supply its prepared domain. It cannot change launches, tolerances or targets.
+pub fn resolve_experiment_manifest(text: &str) -> Result<serde_json::Value, String> {
+    let declared: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let mut base: serde_json::Value =
+        serde_json::from_str(EXPERIMENT_MANIFEST).map_err(|e| e.to_string())?;
+    if declared == base {
+        return Ok(base);
+    }
+    if declared["parent_experiment"] != "geometry-145-operational-experiment.json"
+        || declared["schema"] != "operational-coverage-experiment/1"
+    {
+        return Err("unsupported experiment parent or schema".into());
+    }
+    let preparation = declared
+        .get("preparation")
+        .ok_or("missing prepared domain")?
+        .clone();
+    let _: Preparation = serde_json::from_value(preparation.clone()).map_err(|e| e.to_string())?;
+    base["preparation"] = preparation;
+    base["coverage_declaration"] = declared;
+    Ok(base)
+}
+
+pub fn frozen_experiment_report_with_manifest(
+    field: Arc<PreparedField>,
+    manifest: &str,
+    cuts: &[ReferenceCut],
+) -> Result<serde_json::Value, String> {
+    validate_reference_cuts(cuts)?;
+    let resolved = resolve_experiment_manifest(manifest)?;
+    let spec: Experiment = serde_json::from_value(resolved.clone()).map_err(|e| e.to_string())?;
     if field.origin != spec.preparation.origin
         || field.spacing != spec.preparation.spacing
         || field.shape != spec.preparation.shape
@@ -50,7 +84,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
         let frozen = FrozenRollout::new(
             field.clone(),
             PhysicsProfile::new(ManifoldConfig::default(), 0.002, 0.0, Integrator::Euler)?,
-            vec![],
+            cuts.to_vec(),
         )?;
         let mut state = frozen.initial_state(start, [0.0, 0.02])?;
         let initial = state;
@@ -103,7 +137,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
     let locate = FrozenRollout::new(
         field.clone(),
         PhysicsProfile::new(config.clone(), 0.001, 0.0, Integrator::Euler)?,
-        vec![],
+        cuts.to_vec(),
     )?;
     let ((barrier, launch), _) = locate.evaluate(|config| {
         let (mut lo, mut hi) = (0.2, 0.5);
@@ -137,7 +171,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
             let rollout = FrozenRollout::new(
                 field.clone(),
                 PhysicsProfile::new(config.clone(), *dt, 0.0, Integrator::Euler)?,
-                vec![],
+                cuts.to_vec(),
             )?;
             runs.push(replay(
                 &rollout,
@@ -152,7 +186,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
         let rollout = FrozenRollout::new(
             field.clone(),
             PhysicsProfile::new(config.clone(), 0.001, 0.0, Integrator::Euler)?,
-            vec![],
+            cuts.to_vec(),
         )?;
         runs.push(replay(
             &rollout,
@@ -170,7 +204,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
                 0.0,
                 Integrator::Euler,
             )?,
-            vec![],
+            cuts.to_vec(),
         )?;
         runs.push(replay(
             &rollout,
@@ -198,7 +232,7 @@ pub fn frozen_experiment_report(field: Arc<PreparedField>) -> Result<serde_json:
         parity.push(match field.query(p) {Ok(j)=>serde_json::json!({"point":p,"availability":"available","jet":[j.value,j.gradient[0],j.gradient[1],j.hessian[0][0],j.hessian[0][1],j.hessian[1][1]]}),Err(_)=>serde_json::json!({"point":p,"availability":"GeometryUnavailable"})});
     }
     Ok(
-        serde_json::json!({"experiment_manifest":serde_json::from_str::<serde_json::Value>(EXPERIMENT_MANIFEST).unwrap(),"field_id":format!("{:016x}",field.identity()),"barrier":barrier,"launch_speed":launch,"runs":runs,"parity_samples":parity,
+        serde_json::json!({"experiment_manifest":resolved,"field_id":format!("{:016x}",field.identity()),"barrier":barrier,"launch_speed":launch,"runs":runs,"parity_samples":parity,
         "reference_scalar_fidelity":{"status":"unknown","certified_regions":0,"measured_raster_discrepancy_is_not_a_bound":true},
         "energy_runs":energy_runs,
         "join_differential_self_consistency":{"gradient_absolute_error":join_gradient,"hessian_normalized_error":join_hessian,"tolerance":1e-4,"passed":join_gradient<1e-4 && join_hessian<1e-4},
@@ -436,6 +470,20 @@ pub enum Realm {
     Inside,
     Outside,
     Unknown,
+}
+
+/// Pointwise error floor for a returned scalar with sign opposite a conclusive
+/// reference realm. This needs no nearest-boundary or differentiability claim.
+/// Unknown or sign agreement supplies no useful error floor.
+pub fn certified_realm_scalar_error_floor(value: f64, realm: Realm) -> Option<f64> {
+    if !value.is_finite() {
+        return None;
+    }
+    match realm {
+        Realm::Inside if value > 0.0 => Some(value),
+        Realm::Outside if value < 0.0 => Some(-value),
+        _ => None,
+    }
 }
 
 /// A point-scoped distance claim. The measured and unknown variants cannot
@@ -784,6 +832,30 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn coverage_manifest_preserves_declared_mechanics() {
+        let coverage = include_str!(
+            "../../../docs/validation/geometry-145-operational-coverage-experiment.json"
+        );
+        let resolved = resolve_experiment_manifest(coverage).unwrap();
+        let base: serde_json::Value = serde_json::from_str(EXPERIMENT_MANIFEST).unwrap();
+        let declared: serde_json::Value = serde_json::from_str(coverage).unwrap();
+        assert_eq!(resolved["preparation"], declared["preparation"]);
+        for key in [
+            "perturbations",
+            "crossing_timesteps",
+            "crossing_horizon_seconds",
+            "launch_energy_factors",
+            "parity_scalar_abs_tolerance",
+            "parity_hessian_relative_tolerance",
+        ] {
+            assert_eq!(resolved[key], base[key]);
+        }
+        assert!(resolve_experiment_manifest(
+            r#"{"parent_experiment":"unapproved-parent.json","preparation":{}}"#
+        )
+        .is_err());
+    }
     fn constant(missing: Option<f64>) -> Arc<PreparedField> {
         let (shape, h, origin) = ([5005, 20], 1e-5, [0.39, -0.0001]);
         let mut c = vec![Some(1.0); shape[0] * shape[1]];
@@ -825,6 +897,29 @@ mod tests {
         );
         assert_eq!(reference_realm([0.0, 0.0]), Realm::Inside);
         assert_eq!(reference_realm([1.0, 0.5]), Realm::Outside);
+    }
+    #[test]
+    fn opposite_certified_realm_bounds_returned_scalar_error() {
+        assert_eq!(
+            certified_realm_scalar_error_floor(0.01, Realm::Inside),
+            Some(0.01)
+        );
+        assert_eq!(
+            certified_realm_scalar_error_floor(-0.02, Realm::Outside),
+            Some(0.02)
+        );
+        assert_eq!(
+            certified_realm_scalar_error_floor(0.01, Realm::Unknown),
+            None
+        );
+        assert_eq!(
+            certified_realm_scalar_error_floor(-0.01, Realm::Inside),
+            None
+        );
+        assert_eq!(
+            certified_realm_scalar_error_floor(f64::NAN, Realm::Inside),
+            None
+        );
     }
     #[test]
     fn asset_roundtrip_and_cache_stress_preserve_jets_and_refusals() {

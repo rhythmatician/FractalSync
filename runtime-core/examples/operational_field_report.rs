@@ -3,7 +3,10 @@ use num_complex::Complex64;
 use runtime_core::{
     manifold,
     operational_field::{
-        acceptance::{frozen_experiment_report, FrozenRollout, Integrator, PhysicsProfile},
+        acceptance::{
+            frozen_experiment_report_with_manifest, reference_policy_for_field, FrozenRollout,
+            Integrator, PhysicsProfile, EXPERIMENT_MANIFEST,
+        },
         prepare_raster_baseline, PreparedField,
     },
 };
@@ -18,12 +21,15 @@ fn stats(mut times: Vec<f64>) -> serde_json::Value {
 
 fn main() -> Result<(), String> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 3 {
+    if args.len() < 3 || args.len() % 2 != 1 {
         return Err(
             "use --prepare asset.bin once, then --asset asset.bin for frozen replay".into(),
         );
     }
     if args[1] == "--prepare" {
+        if args.len() != 3 {
+            return Err("prepare takes exactly one output path".into());
+        }
         let start = Instant::now();
         let field = prepare_raster_baseline()?;
         let preparation = start.elapsed().as_secs_f64();
@@ -42,6 +48,30 @@ fn main() -> Result<(), String> {
     let bytes = std::fs::read(&args[2]).map_err(|e| e.to_string())?;
     let field = Arc::new(PreparedField::from_asset_bytes(&bytes).map_err(str::to_string)?);
     let loading = start.elapsed().as_secs_f64();
+    let policy_start = Instant::now();
+    let mut manifest = EXPERIMENT_MANIFEST.to_string();
+    let mut policy = None;
+    let mut seen = std::collections::HashSet::new();
+    for pair in args[3..].chunks_exact(2) {
+        if !seen.insert(&pair[0]) {
+            return Err("duplicate replay option".into());
+        }
+        match pair[0].as_str() {
+            "--manifest" => {
+                manifest = std::fs::read_to_string(&pair[1]).map_err(|e| e.to_string())?
+            }
+            "--policy" => {
+                policy = Some(std::fs::read_to_string(&pair[1]).map_err(|e| e.to_string())?)
+            }
+            _ => return Err("unknown replay option".into()),
+        }
+    }
+    let cuts = policy
+        .as_deref()
+        .map(|p| reference_policy_for_field(&field, p))
+        .transpose()?
+        .unwrap_or_default();
+    let policy_loading = policy_start.elapsed().as_secs_f64();
     let first = Instant::now();
     black_box(
         field
@@ -116,7 +146,7 @@ fn main() -> Result<(), String> {
             0.0,
             Integrator::Euler,
         )?,
-        vec![],
+        cuts.clone(),
     )?;
     let mut transactional_times = Vec::new();
     let mut transactional_counts = None;
@@ -127,11 +157,12 @@ fn main() -> Result<(), String> {
         transactional_times.push(now.elapsed().as_secs_f64() * 1e6);
         transactional_counts = Some(counts);
     }
-    let experiment = frozen_experiment_report(field.clone())?;
+    let experiment = frozen_experiment_report_with_manifest(field.clone(), &manifest, &cuts)?;
     println!("{}",serde_json::to_string_pretty(&json!({
         "profile":"experimental-operational-field/1", "identity":format!("{:016x}",field.identity()),
         "reference":"existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
-        "coverage":{"origin":[-0.1,-0.2],"shape":[1605,1005],"spacing":field.spacing(),"epsilon_min":1e-4,"lower_halo_nodes":2,"upper_halo_nodes":3},
+        "coverage":experiment["experiment_manifest"]["preparation"],
+        "policy_loading_seconds":policy_loading,
         "coefficient_bytes":field.coefficient_bytes(),"asset_loading_seconds":loading,
         "first_prepared_query_us":first_us,"distinct_queries":stats(times),"unavailable_queries":stats(misses),
         "cache_stress_queries":stats(cold),"cache_stress_eviction_bytes":eviction.len()*8,

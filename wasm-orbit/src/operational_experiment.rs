@@ -1,7 +1,8 @@
 //! Thin experimental bindings. All field/mechanical math stays in Rust core.
 use runtime_core::operational_field::{
     acceptance::{
-        frozen_experiment_report, FrozenRollout, Integrator, MechanicalState, PhysicsProfile,
+        frozen_experiment_report_with_manifest, reference_policy_for_field, FrozenRollout,
+        Integrator, MechanicalState, PhysicsProfile, ReferenceCut, EXPERIMENT_MANIFEST,
     },
     PreparedField,
 };
@@ -20,6 +21,27 @@ impl ExperimentalOperationalField {
     #[wasm_bindgen(constructor)]
     pub fn new(asset: &[u8]) -> Result<ExperimentalOperationalField, JsValue> {
         let field = Arc::new(PreparedField::from_asset_bytes(asset).map_err(JsValue::from_str)?);
+        Self::from_parts(field, vec![])
+    }
+    #[wasm_bindgen(js_name=withPolicy)]
+    pub fn with_policy(
+        asset: &[u8],
+        policy: &str,
+    ) -> Result<ExperimentalOperationalField, JsValue> {
+        let field = Arc::new(PreparedField::from_asset_bytes(asset).map_err(JsValue::from_str)?);
+        let cuts = reference_policy_for_field(&field, policy).map_err(|e| JsValue::from_str(&e))?;
+        Self::from_parts(field, cuts)
+    }
+    pub fn profile_json(&self) -> String {
+        self.rollout.profile().manifest().to_string()
+    }
+    pub fn state_json(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.state).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+}
+
+impl ExperimentalOperationalField {
+    fn from_parts(field: Arc<PreparedField>, cuts: Vec<ReferenceCut>) -> Result<Self, JsValue> {
         let profile = PhysicsProfile::new(
             runtime_core::manifold::ManifoldConfig::default(),
             0.001,
@@ -27,14 +49,18 @@ impl ExperimentalOperationalField {
             Integrator::Euler,
         )
         .map_err(|e| JsValue::from_str(&e))?;
-        let rollout = FrozenRollout::new(field.clone(), profile, vec![])
-            .map_err(|e| JsValue::from_str(&e))?;
+        let rollout =
+            FrozenRollout::new(field.clone(), profile, cuts).map_err(|e| JsValue::from_str(&e))?;
         Ok(Self {
             field,
             rollout,
             state: None,
         })
     }
+}
+
+#[wasm_bindgen]
+impl ExperimentalOperationalField {
     pub fn identity(&self) -> String {
         format!("{:016x}", self.field.identity())
     }
@@ -72,8 +98,16 @@ impl ExperimentalOperationalField {
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
     pub fn report(&self) -> Result<String, JsValue> {
+        self.report_with_manifest(EXPERIMENT_MANIFEST)
+    }
+    pub fn report_with_manifest(&self, manifest: &str) -> Result<String, JsValue> {
         serde_json::to_string(
-            &frozen_experiment_report(self.field.clone()).map_err(|e| JsValue::from_str(&e))?,
+            &frozen_experiment_report_with_manifest(
+                self.field.clone(),
+                manifest,
+                self.rollout.reference_cuts(),
+            )
+            .map_err(|e| JsValue::from_str(&e))?,
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))
     }

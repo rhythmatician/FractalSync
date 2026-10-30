@@ -1,8 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [the October 30 coverage/policy replay](geometry-145-operational-coverage.md)
-passes the original native controlled crossing and 26 of 27 Python physics tests.
-Reference fidelity and the unchanged scalar-quality gate remain unresolved.
+Latest follow-up: [browser parity, resource measurements and scalar-fidelity audit](geometry-145-operational-followup.md). The frozen field passes 35 mechanical expectations and native/WASM parity, but 43 fixed samples prove scalar-budget violations. The full Python physics file remains 26 passed, 1 failed. Original thresholds remain intact.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
