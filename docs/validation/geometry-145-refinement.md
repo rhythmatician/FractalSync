@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [the globally refined reference-grid experiment](geometry-145-operational-reference-grid.md) removes both prior sign-based counterexamples and verifies 21/21 reference crossing trajectories. Derivative, join, energy and provisional p99 cost checks pass on native/WASM. The unchanged Python suite is 25 passed, 2 failed: sampled crossing-time refinement regressed and scalar quality remains unknown. This candidate is not merge-ready; earlier assets and failures remain preserved.
+Latest follow-up: [the frozen-source sensitivity and event diagnostics](geometry-145-operational-source-refinement.md) find 1,099/1,768 fixed points outside the source-comparison budget. A five-timestep diagnostic shows converging bracketed zero times despite identical first-negative-sample times; it does not replace the original failed assertion. All 28 Rust controls pass. Python remains 25 passed, 2 failed, with scalar quality unknown and source stability unresolved. The earlier reference-grid experiment and all assets/failures remain preserved. This candidate is not merge-ready.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the

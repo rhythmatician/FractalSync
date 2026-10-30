@@ -35,7 +35,7 @@ fn main() -> Result<(), String> {
         || p.drag != 0.0
         || p.horizon_seconds != 5.0
         || p.timesteps != [0.002, 0.001, 0.0005, 0.00025, 0.000125]
-        || p.methods != ["Euler", "Rk4"]
+        || (p.methods != ["Euler", "Rk4"] && p.methods != ["Rk4FourSubsteps"])
     {
         return Err("changed integration diagnostic contract".into());
     }
@@ -81,7 +81,8 @@ fn main() -> Result<(), String> {
         ))
     })?;
     let mut runs = Vec::new();
-    for method in [Integrator::Euler, Integrator::Rk4] {
+    for name in &p.methods {
+        let method = Integrator::parse_name(name)?;
         for dt in &p.timesteps {
             let frame = FrozenRollout::new(
                 field.clone(),

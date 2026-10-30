@@ -9,6 +9,60 @@ pub enum VerificationError {
     NonfiniteJet,
 }
 
+/// Point-scoped sensitivity to a declared source refinement, in distance units.
+/// This is neither a reference-distance bound nor a regional quality certificate.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct SourceRefinementEvidence {
+    pub scalar_difference: f64,
+    pub scaled_gradient_difference: f64,
+    pub scaled_hessian_difference: f64,
+    pub maximum_difference: f64,
+}
+
+pub fn source_refinement_evidence(
+    coarse: FieldJet,
+    fine: FieldJet,
+    coarse_source_spacing: f64,
+) -> Result<SourceRefinementEvidence, VerificationError> {
+    if !coarse_source_spacing.is_finite() || coarse_source_spacing <= 0.0 {
+        return Err(VerificationError::InvalidNeighborhood);
+    }
+    if !finite(&coarse) || !finite(&fine) {
+        return Err(VerificationError::NonfiniteJet);
+    }
+    let scalar_difference = (fine.value - coarse.value).abs();
+    let scaled_gradient_difference = coarse_source_spacing
+        * (fine.gradient[0] - coarse.gradient[0]).hypot(fine.gradient[1] - coarse.gradient[1]);
+    let mut hessian_norm = 0.0_f64;
+    for (a, b) in fine
+        .hessian
+        .iter()
+        .flatten()
+        .zip(coarse.hessian.iter().flatten())
+    {
+        hessian_norm = hessian_norm.hypot(a - b);
+    }
+    let scaled_hessian_difference = coarse_source_spacing * coarse_source_spacing * hessian_norm;
+    if ![
+        scalar_difference,
+        scaled_gradient_difference,
+        scaled_hessian_difference,
+    ]
+    .iter()
+    .all(|v| v.is_finite())
+    {
+        return Err(VerificationError::NonfiniteJet);
+    }
+    Ok(SourceRefinementEvidence {
+        scalar_difference,
+        scaled_gradient_difference,
+        scaled_hessian_difference,
+        maximum_difference: scalar_difference
+            .max(scaled_gradient_difference)
+            .max(scaled_hessian_difference),
+    })
+}
+
 #[derive(Clone, Copy, Debug, Default, Serialize)]
 pub struct DifferentialEvidence {
     pub gradient_max_absolute_error: f64,
@@ -173,6 +227,43 @@ pub fn fixed_neighbor_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn source_refinement_counts_cross_derivatives_and_rejects_nonfinite_evidence() {
+        let zero = FieldJet {
+            value: 0.0,
+            gradient: [0.0; 2],
+            hessian: [[0.0; 2]; 2],
+        };
+        // A symmetric mixed derivative contributes twice to the Frobenius norm.
+        let mixed = FieldJet {
+            hessian: [[0.0, 3.0], [3.0, 0.0]],
+            ..zero
+        };
+        let e = source_refinement_evidence(zero, mixed, 0.5).unwrap();
+        assert!((e.maximum_difference - 0.75 * 2.0_f64.sqrt()).abs() < 1e-14);
+        let slope = FieldJet {
+            value: 1.0,
+            gradient: [3.0, 4.0],
+            ..zero
+        };
+        assert_eq!(
+            source_refinement_evidence(zero, slope, 0.5)
+                .unwrap()
+                .maximum_difference,
+            2.5
+        );
+        assert!(source_refinement_evidence(zero, slope, f64::NAN).is_err());
+        assert!(source_refinement_evidence(
+            zero,
+            FieldJet {
+                value: f64::INFINITY,
+                ..zero
+            },
+            0.5
+        )
+        .is_err());
+        assert!(source_refinement_evidence(zero, mixed, f64::MAX).is_err());
+    }
     fn quartic(p: [f64; 2]) -> Result<FieldJet, GeometryUnavailable> {
         let [x, y] = p;
         let a = 1e8;
