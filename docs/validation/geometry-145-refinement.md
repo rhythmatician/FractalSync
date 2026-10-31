@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [coefficient-witness seeding](geometry-145-operational-seeded.md) fixes a reproduced contour omission and reduces source-comparison failures from 1,099 to 720, including 381 to 27 on the neighboring grid. All 29 Rust controls, 35 per-run expectations, 21 reference crossings, parity and provisional p99 cost checks pass. Original Python remains 25 passed, 2 failed; scalar quality and sampled crossing-time refinement remain unresolved. Earlier assets and failures are preserved. This candidate is not merge-ready.
+Latest follow-up: [observed internal contour-edge closure](geometry-145-operational-closure.md) fixes a reproduced truncation and reduces source-comparison failures from 720 to 52. All 30 Rust controls, 35 per-run expectations, 21 reference crossings, parity and provisional p99 cost checks pass. Experimental Python remains 25 passed, 2 failed. Shipping-profile CI separately fails the original Rust/backend crossings. Feature-gated controls now have an additional CI step. Earlier assets and failures are preserved. This candidate is not merge-ready.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the

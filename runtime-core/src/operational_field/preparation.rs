@@ -23,6 +23,10 @@ pub struct ContourPreparation {
     /// homogeneous reference cells. False preserves prior experiment recipes.
     #[serde(default)]
     pub coefficient_witness_seeding: bool,
+    /// Continue sampled edge crossings through internal reference-cell edges.
+    /// False retains the traversal and coordinates of earlier frozen recipes.
+    #[serde(default)]
+    pub contour_cell_closure: bool,
 }
 
 #[derive(Default, Serialize)]
@@ -33,6 +37,7 @@ pub struct PreparationStats {
     pub segments: usize,
     pub coefficient_count: usize,
     pub coefficient_seeded_cells: usize,
+    pub contour_closure_cells: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -221,14 +226,28 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
         used: 0,
         limit: p.max_membership_queries,
     };
+    let r = p.refinement;
+    let h = p.reference_spacing / r as f64;
+    // Shared fine-grid nodes must have identical coordinates regardless of
+    // which incident coarse cell reached them. The legacy mode is preserved.
+    let lattice_point = |x: usize, y: usize| {
+        [
+            p.reference_origin[0] + x as f64 * h,
+            p.reference_origin[1] + y as f64 * h,
+        ]
+    };
     let mut mask = Vec::with_capacity(nodes);
     let [nx, ny] = p.reference_shape;
     for y in 0..ny {
         for x in 0..nx {
-            mask.push(classify.at([
-                p.reference_origin[0] + x as f64 * p.reference_spacing,
-                p.reference_origin[1] + y as f64 * p.reference_spacing,
-            ])?);
+            mask.push(classify.at(if p.contour_cell_closure {
+                lattice_point(x * r, y * r)
+            } else {
+                [
+                    p.reference_origin[0] + x as f64 * p.reference_spacing,
+                    p.reference_origin[1] + y as f64 * p.reference_spacing,
+                ]
+            })?);
         }
     }
     let mut stats = PreparationStats {
@@ -292,8 +311,15 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
         None
     };
     let mut segments = Vec::new();
-    let r = p.refinement;
-    let h = p.reference_spacing / r as f64;
+    let mut pending = std::collections::VecDeque::new();
+    let mut scheduled = vec![
+        false;
+        if p.contour_cell_closure {
+            (nx - 1) * (ny - 1)
+        } else {
+            0
+        }
+    ];
     for y in 0..ny - 1 {
         for x in 0..nx - 1 {
             let a = mask[y * nx + x];
@@ -309,67 +335,121 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
                 continue;
             }
             stats.coefficient_seeded_cells += usize::from(homogeneous && coefficient_seed);
-            stats.refined_cells += 1;
-            let o = [
-                p.reference_origin[0] + x as f64 * p.reference_spacing,
-                p.reference_origin[1] + y as f64 * p.reference_spacing,
+            pending.push_back((x, y));
+            if p.contour_cell_closure {
+                scheduled[y * (nx - 1) + x] = true;
+            }
+        }
+    }
+    while let Some((x, y)) = pending.pop_front() {
+        stats.refined_cells += 1;
+        let o = [
+            p.reference_origin[0] + x as f64 * p.reference_spacing,
+            p.reference_origin[1] + y as f64 * p.reference_spacing,
+        ];
+        let mut fine = Vec::with_capacity((r + 1) * (r + 1));
+        for j in 0..=r {
+            for i in 0..=r {
+                fine.push(classify.at(if p.contour_cell_closure {
+                    lattice_point(x * r + i, y * r + j)
+                } else {
+                    [o[0] + i as f64 * h, o[1] + j as f64 * h]
+                })?);
+            }
+        }
+        if p.contour_cell_closure {
+            let neighbors = [
+                y.checked_sub(1).map(|j| (x, j)),
+                (x + 1 < nx - 1).then_some((x + 1, y)),
+                (y + 1 < ny - 1).then_some((x, y + 1)),
+                x.checked_sub(1).map(|i| (i, y)),
             ];
-            let mut fine = Vec::with_capacity((r + 1) * (r + 1));
-            for j in 0..=r {
-                for i in 0..=r {
-                    fine.push(classify.at([o[0] + i as f64 * h, o[1] + j as f64 * h])?);
+            for (edge, neighbor) in neighbors.into_iter().enumerate() {
+                let value = |k: usize| match edge {
+                    0 => fine[k],
+                    1 => fine[k * (r + 1) + r],
+                    2 => fine[r * (r + 1) + k],
+                    _ => fine[k * (r + 1)],
+                };
+                if (1..=r).any(|k| value(k) != value(0)) {
+                    // This closes observed INTERNAL edges only. The fixed
+                    // reference rectangle is never extended by preparation.
+                    if let Some((i, j)) = neighbor {
+                        let index = j * (nx - 1) + i;
+                        if !scheduled[index] {
+                            scheduled[index] = true;
+                            pending.push_back((i, j));
+                            stats.contour_closure_cells += 1;
+                        }
+                    }
                 }
             }
-            for j in 0..r {
-                for i in 0..r {
-                    let corners = [
+        }
+        for j in 0..r {
+            for i in 0..r {
+                let corners = if p.contour_cell_closure {
+                    [
+                        lattice_point(x * r + i, y * r + j),
+                        lattice_point(x * r + i + 1, y * r + j),
+                        lattice_point(x * r + i + 1, y * r + j + 1),
+                        lattice_point(x * r + i, y * r + j + 1),
+                    ]
+                } else {
+                    [
                         [o[0] + i as f64 * h, o[1] + j as f64 * h],
                         [o[0] + (i + 1) as f64 * h, o[1] + j as f64 * h],
                         [o[0] + (i + 1) as f64 * h, o[1] + (j + 1) as f64 * h],
                         [o[0] + i as f64 * h, o[1] + (j + 1) as f64 * h],
-                    ];
-                    let inside = [
-                        fine[j * (r + 1) + i],
-                        fine[j * (r + 1) + i + 1],
-                        fine[(j + 1) * (r + 1) + i + 1],
-                        fine[(j + 1) * (r + 1) + i],
-                    ];
-                    let mut cross = Vec::with_capacity(4);
-                    for edge in 0..4 {
-                        let next = (edge + 1) % 4;
-                        if inside[edge] == inside[next] {
-                            continue;
-                        }
-                        let (mut lo, mut hi) = (corners[edge], corners[next]);
-                        for _ in 0..p.bisections {
-                            let mid = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5];
-                            if classify.at(mid)? == inside[edge] {
-                                lo = mid;
-                            } else {
-                                hi = mid;
-                            }
-                        }
-                        cross.push([(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5]);
+                    ]
+                };
+                let inside = [
+                    fine[j * (r + 1) + i],
+                    fine[j * (r + 1) + i + 1],
+                    fine[(j + 1) * (r + 1) + i + 1],
+                    fine[(j + 1) * (r + 1) + i],
+                ];
+                let mut cross = Vec::with_capacity(4);
+                for edge in 0..4 {
+                    let next = (edge + 1) % 4;
+                    if inside[edge] == inside[next] {
+                        continue;
                     }
-                    let pairs = match cross.len() {
-                        2 => vec![(0, 1)],
-                        4 => {
-                            let center = [o[0] + (i as f64 + 0.5) * h, o[1] + (j as f64 + 0.5) * h];
-                            if classify.at(center)? != inside[0] {
-                                vec![(0, 3), (1, 2)]
-                            } else {
-                                vec![(0, 1), (2, 3)]
-                            }
+                    let (mut lo, mut hi) = (corners[edge], corners[next]);
+                    for _ in 0..p.bisections {
+                        let mid = [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5];
+                        if classify.at(mid)? == inside[edge] {
+                            lo = mid;
+                        } else {
+                            hi = mid;
                         }
-                        0 => Vec::new(),
-                        _ => return Err("incomplete contour cell".into()),
-                    };
-                    for (a, b) in pairs {
-                        if segments.len() >= p.max_segments {
-                            return Err("offline contour-segment budget exhausted".into());
-                        }
-                        segments.push(Segment(cross[a], cross[b]));
                     }
+                    cross.push([(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5]);
+                }
+                let pairs = match cross.len() {
+                    2 => vec![(0, 1)],
+                    4 => {
+                        let center = if p.contour_cell_closure {
+                            [
+                                p.reference_origin[0] + ((x * r + i) as f64 + 0.5) * h,
+                                p.reference_origin[1] + ((y * r + j) as f64 + 0.5) * h,
+                            ]
+                        } else {
+                            [o[0] + (i as f64 + 0.5) * h, o[1] + (j as f64 + 0.5) * h]
+                        };
+                        if classify.at(center)? != inside[0] {
+                            vec![(0, 3), (1, 2)]
+                        } else {
+                            vec![(0, 1), (2, 3)]
+                        }
+                    }
+                    0 => Vec::new(),
+                    _ => return Err("incomplete contour cell".into()),
+                };
+                for (a, b) in pairs {
+                    if segments.len() >= p.max_segments {
+                        return Err("offline contour-segment budget exhausted".into());
+                    }
+                    segments.push(Segment(cross[a], cross[b]));
                 }
             }
         }
@@ -402,6 +482,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn observed_edge_crossings_continue_into_homogeneous_neighbor_cells() {
+        let plan = ContourPreparation {
+            origin: [-0.35, -0.325],
+            spacing: 0.05,
+            shape: [25, 25],
+            reference_origin: [-0.4, -0.4],
+            reference_spacing: 0.2,
+            reference_shape: [9, 9],
+            refinement: 16,
+            bisections: 12,
+            membership_iterations: 128,
+            max_membership_queries: 200_000,
+            max_reference_nodes: 1000,
+            max_segments: 10_000,
+            maximum_coefficient_bytes: 10_000,
+            coefficient_witness_seeding: true,
+            contour_cell_closure: true,
+        };
+        // A thin horizontal extension leaves a sampled disk, crosses a refined
+        // cell edge, but misses all coarse corners and coefficient rows ahead.
+        let classify = |p: [f64; 2]| {
+            (p[0] + 0.1).hypot(p[1] - 0.05) < 0.14
+                || ((-0.1..0.65).contains(&p[0]) && (p[1] - 0.05).abs() < 0.008)
+        };
+        let (field, stats) = prepare_with_membership(&plan, classify).unwrap();
+        assert!(stats.contour_closure_cells > 0);
+        // Here every contributing coefficient lies above the flat extension,
+        // so the expected reconstruction is the linear distance y - 0.058.
+        let actual = field.query([0.45, 0.25]).unwrap().value;
+        assert!(
+            (actual - 0.192).abs() < 0.003,
+            "truncated contour: {actual}"
+        );
+        let mut refined = plan.clone();
+        refined.reference_spacing *= 0.5;
+        refined.reference_shape = [17, 17];
+        refined.refinement /= 2;
+        let (refined_field, _) = prepare_with_membership(&refined, classify).unwrap();
+        // Same finite lattice and closed observed component, independent of
+        // coarse partition. This is a same-build analytic control, not a new
+        // native/WASM bitwise parity requirement or a Mandelbrot certificate.
+        assert_eq!(field.asset_bytes(), refined_field.asset_bytes());
+        let mut exhausted = plan.clone();
+        exhausted.max_membership_queries = stats.membership_queries - 1;
+        assert!(prepare_with_membership(&exhausted, classify).is_err());
+    }
+
+    #[test]
     fn coefficient_membership_witness_retains_a_component_hidden_between_reference_corners() {
         let plan = ContourPreparation {
             origin: [-0.35, -0.15],
@@ -418,6 +546,7 @@ mod tests {
             max_segments: 10_000,
             maximum_coefficient_bytes: 300_000,
             coefficient_witness_seeding: true,
+            contour_cell_closure: false,
         };
         let classify =
             |p: [f64; 2]| (p[0] + 0.2).hypot(p[1]) < 0.12 || (p[0] - 0.3).hypot(p[1] - 0.3) < 0.04;
@@ -485,6 +614,7 @@ mod tests {
             max_segments: 1000,
             maximum_coefficient_bytes: 80_000,
             coefficient_witness_seeding: false,
+            contour_cell_closure: false,
         };
         let classify =
             |p: [f64; 2]| (p[0] - 0.5).hypot(p[1]) < 0.2 || (p[0] + 0.5).hypot(p[1]) < 0.2;
@@ -522,6 +652,7 @@ mod tests {
             max_segments: 1000,
             maximum_coefficient_bytes: 20_000,
             coefficient_witness_seeding: false,
+            contour_cell_closure: false,
         };
         let (field, stats) = prepare_with_membership(&plan, |p| p[0] < 0.0).unwrap();
         assert!(stats.membership_queries <= plan.max_membership_queries);

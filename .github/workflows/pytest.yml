@@ -211,6 +211,10 @@ jobs:
           cd runtime-core
           cargo test --release
 
+      - name: Run bounded operational-field controls
+        if: ${{ !cancelled() }}
+        run: cargo test --manifest-path runtime-core/Cargo.toml --release --features experimental-operational-field operational_field --lib
+
   wasm-orbit-build:
     name: WASM-Orbit Build (wasm-pack)
     runs-on: ubuntu-latest
