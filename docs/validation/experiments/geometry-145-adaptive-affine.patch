@@ -1,0 +1,42 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1967,6 +1967,7 @@
+ }
+ 
+ fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
++    eprintln!("[QUERY145] {:.17} {:.17}",c.re,c.im);
+     #[cfg(test)]
+     QUERY_EVALUATIONS.with(|count| count.set(count.get() + 1));
+     if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -251,7 +251,7 @@
+  let mut z=[0.;2];let mut d=[0.;2];let mut remainder=0.;
+  let mut centers=vec![z];let mut all_bounded=true;
+  let mut radius=0.;
+- for n in 1..=512 {
++ for n in 1usize..=4096 {
+   let magnitude=norm_upper(z);let sensitivity=norm_upper(d);
+   let total=upper_add(upper_mul(sensitivity,cr),remainder);
+   let a=upper_add(magnitude,total);
+@@ -275,9 +275,17 @@
+   if n<512 && (low-radius).next_down()>2. {return Some(false);}
+   all_bounded &= Ball{z,radius}.bounded();
+   centers.push(z);
+- }
+- if !all_bounded {return None;}
+- periodic_trap(z,radius,&centers,c,cr)
++  if n>=512 {
++   // Exterior semantics remain limited to the minimum ordinary budget.
++   // Additional prefix work may prove interior only, with every earlier
++   // enclosure bounded and the same strict periodic-return certificate.
++   if !all_bounded {return None;}
++   if n.is_power_of_two() {
++    if let Some(result)=periodic_trap(z,radius,&centers,c,cr) {return Some(result);}
++   }
++  }
++ }
++ None
+ }
+ 
+ pub(super) fn affine_box(re0:f64,im0:f64,width:f64)->Option<bool> {

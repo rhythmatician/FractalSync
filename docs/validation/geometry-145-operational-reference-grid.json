@@ -1,0 +1,667 @@
+{
+  "schema": "operational-reference-grid-report/1",
+  "date": "2026-10-30",
+  "merge_ready": false,
+  "shipping_adoption": false,
+  "field_id": "37ec6365e602ae31",
+  "asset_sha256": "ca2b9a78c482946fe3760d8fb7919e48fc5bf4638a8c7eb47b499a8c6313d041",
+  "preparation": {
+    "asset_bytes": 77405056,
+    "field_id": "37ec6365e602ae31",
+    "manifest": {
+      "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+      "controlled_change": "Reference coarse spacing 0.002 -> 0.001; subdivision 16 -> 8 retains fine spacing 0.000125; all remaining source/evaluator/physics settings fixed",
+      "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+      "date": "2026-10-30",
+      "parent_experiment": "geometry-145-operational-experiment.json",
+      "preparation": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "purpose": "One globally refined reference grid to isolate missed homogeneous-cell features; preserve contour-v1 and all failures",
+      "schema": "operational-coverage-experiment/1",
+      "selected_integrator": "Rk4FourSubsteps",
+      "shipping_adoption": false,
+      "source_evidence": "measured finite-orbit contour only; no true-distance upper bound; homogeneous cells may still hide features",
+      "source_preparation": {
+        "bisections": 8,
+        "max_membership_queries": 50000000,
+        "max_reference_nodes": 20000000,
+        "max_segments": 500000,
+        "maximum_coefficient_bytes": 80000000,
+        "membership_iterations": 8192,
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "reference_origin": [
+          -2.1,
+          -2.1
+        ],
+        "reference_shape": [
+          4201,
+          4201
+        ],
+        "reference_spacing": 0.001,
+        "refinement": 8,
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      }
+    },
+    "preparation_compute_seconds": 126.7107045,
+    "preparation_total_seconds": 126.9684194,
+    "reference_fidelity": "unknown; finite-mask contour is measured data only",
+    "statistics": {
+      "coefficient_count": 9675625,
+      "membership_queries": 34513294,
+      "reference_nodes": 17648401,
+      "refined_cells": 26799,
+      "segments": 313421
+    }
+  },
+  "preparation_process": {
+    "exit_code": 0,
+    "process_seconds": 127.2273375,
+    "sampled_os_peak_working_set_bytes": 216313856,
+    "asset_sha256": "ca2b9a78c482946fe3760d8fb7919e48fc5bf4638a8c7eb47b499a8c6313d041",
+    "executable_sha256": "393c1be90845c0d536d0a3fa32c1d4303a3813ce24841847738514834f47218b",
+    "manifest_sha256": "7ac76714c6b32ccf58e74f393a27ad349975e52134968b417bcb9477962b3d9d",
+    "device": "Intel(R) Core(TM) i9-14900",
+    "memory_note": "20 ms polling of OS peak working set for standalone offline preparation; includes serialization"
+  },
+  "native_metadata": {
+    "integrator": "Rk4FourSubsteps",
+    "device": "Intel(R) Core(TM) i9-14900",
+    "os": "Microsoft Windows NT 10.0.26100.0",
+    "asset_sha256": "ca2b9a78c482946fe3760d8fb7919e48fc5bf4638a8c7eb47b499a8c6313d041",
+    "executable_sha256": "d67d1e1d020f2cf4020216147052ad16ff060180811c4f20643b9465f68e2357",
+    "manifest_sha256": "73a0d55956f977859a6b57e3a1b6e96c54125768e05ee45979b31d65f78b08ad",
+    "reference_policy_sha256": "b21837d606e90e406350d373852bf922b8415f5b44fecc554ebead00a3e6b1c9",
+    "memory_note": "OS peak working set sampled every 20 ms; includes asset/input copies, reference diagnostics, cache-stress scratch and serialization, not only coefficients",
+    "runs": [
+      {
+        "run": 0,
+        "exit_code": 0,
+        "process_seconds": 12.831443,
+        "sampled_os_peak_working_set_bytes": 247390208,
+        "stdout_file": "run-0.json"
+      },
+      {
+        "run": 1,
+        "exit_code": 0,
+        "process_seconds": 11.1398546,
+        "sampled_os_peak_working_set_bytes": 247001088,
+        "stdout_file": "run-1.json"
+      },
+      {
+        "run": 2,
+        "exit_code": 0,
+        "process_seconds": 10.7461693,
+        "sampled_os_peak_working_set_bytes": 240709632,
+        "stdout_file": "run-2.json"
+      }
+    ]
+  },
+  "native_timings": [
+    {
+      "asset_loading_seconds": 0.1649261,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 2.5,
+        "max_us": 25.2,
+        "p50_us": 2.3,
+        "p99_us": 4.8,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 1.7,
+        "max_us": 39.9,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.39999999999999997,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 4.300000000000001,
+      "identity": "37ec6365e602ae31",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 1.6282128081357428e-06,
+        "hessian_max_normalized_error": 0.00010332042744349189,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.05902588898251551,
+      "neighbor_gradient_max_absolute_error": 1.2051277531455185e-08,
+      "neighbor_hessian_max_relative_error": 2.7055127127448072e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0185507,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 108.5,
+        "max_us": 250.1,
+        "p50_us": 101.3,
+        "p99_us": 159.4,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.0,
+        "max_us": 1.2,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    },
+    {
+      "asset_loading_seconds": 0.1416758,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 1.4,
+        "max_us": 18.7,
+        "p50_us": 1.5,
+        "p99_us": 3.9,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 0.7999999999999999,
+        "max_us": 23.0,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.3,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 4.1,
+      "identity": "37ec6365e602ae31",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 1.6282128081357428e-06,
+        "hessian_max_normalized_error": 0.00010332042744349189,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.05902588898251551,
+      "neighbor_gradient_max_absolute_error": 1.2051277531455185e-08,
+      "neighbor_hessian_max_relative_error": 2.7055127127448072e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0003916,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 116.89999999999999,
+        "max_us": 243.0,
+        "p50_us": 107.2,
+        "p99_us": 185.5,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.0,
+        "max_us": 0.09999999999999999,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    },
+    {
+      "asset_loading_seconds": 0.200291,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 2.9000000000000004,
+        "max_us": 32.6,
+        "p50_us": 2.5,
+        "p99_us": 4.6,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 2.3,
+        "max_us": 795.6,
+        "p50_us": 0.3,
+        "p99_us": 0.5,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 8.399999999999999,
+      "identity": "37ec6365e602ae31",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 1.6282128081357428e-06,
+        "hessian_max_normalized_error": 0.00010332042744349189,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.05902588898251551,
+      "neighbor_gradient_max_absolute_error": 1.2051277531455185e-08,
+      "neighbor_hessian_max_relative_error": 2.7055127127448072e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0007832,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 108.2,
+        "max_us": 450.7,
+        "p50_us": 94.2,
+        "p99_us": 135.20000000000002,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.09999999999999999,
+        "max_us": 139.5,
+        "p50_us": 0.09999999999999999,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    }
+  ],
+  "browser": {
+    "device": "Intel(R) Core(TM) i9-14900",
+    "browser": "153.0.8010.12",
+    "date": "2026-10-30",
+    "integrator": "Rk4FourSubsteps",
+    "asset_sha256": "ca2b9a78c482946fe3760d8fb7919e48fc5bf4638a8c7eb47b499a8c6313d041",
+    "wasm_sha256": "102a8b6cfc076072b70e5da792cd8b04bbe1f1bd22a7d72fd5d4206b4320f58d",
+    "wasm_file_bytes": 5035406,
+    "reference_policy_sha256": "b21837d606e90e406350d373852bf922b8415f5b44fecc554ebead00a3e6b1c9",
+    "coverage_manifest_sha256": "73a0d55956f977859a6b57e3a1b6e96c54125768e05ee45979b31d65f78b08ad",
+    "parity": {
+      "passed": true,
+      "differences": [],
+      "state_and_ledger_relative_tolerance": 1e-06,
+      "scalar_abs_tolerance": 1e-06,
+      "gradient_abs_tolerance": 0.0001,
+      "hessian_relative_tolerance": 0.0001
+    },
+    "provisional_targets": {
+      "query_p99_us": 100,
+      "step_p99_us": 2000,
+      "query_passed": true,
+      "step_passed": true,
+      "shipping_ratified": false
+    }
+  },
+  "browser_timings": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "cross_origin_isolated": true,
+    "wasm_initialization_ms": 24.78499984741211,
+    "asset_fetch_ms": 115.7350001335144,
+    "asset_decode_ms": 169.2699999809265,
+    "policy_manifest_fetch_ms": 6.045000076293945,
+    "asset_bytes": 77405056,
+    "first_prepared_query_us": 184.99994277954102,
+    "distinct_queries": {
+      "samples": 20000,
+      "first_us": 4.999876022338867,
+      "p50_us": 0,
+      "p99_us": 5.000114440917969,
+      "max_us": 825.0000476837158
+    },
+    "unavailable_queries": {
+      "samples": 20000,
+      "first_us": 0,
+      "p50_us": 0,
+      "p99_us": 5.000114440917969,
+      "max_us": 335.00003814697266
+    },
+    "cache_stress_queries": {
+      "samples": 1000,
+      "first_us": 55.00006675720215,
+      "p50_us": 14.999866485595703,
+      "p99_us": 39.999961853027344,
+      "max_us": 1679.999828338623
+    },
+    "cache_stress_eviction_bytes": 67108864,
+    "transactional_step": {
+      "samples": 1000,
+      "first_us": 1920.0000762939453,
+      "p50_us": 144.99998092651367,
+      "p99_us": 289.99996185302734,
+      "max_us": 1920.0000762939453
+    },
+    "transactional_step_work": {
+      "coefficient_reads_upper_bound": 5760,
+      "geometry_evaluations": 160
+    },
+    "transactional_step_profile_id": "54b525d2266d27eb",
+    "field_id": "37ec6365e602ae31",
+    "identity_fixed": true,
+    "jet_invariance": true,
+    "wasm_linear_memory_bytes": 160301056,
+    "known_refusal_probe": {
+      "point": [
+        -1,
+        0
+      ],
+      "field_query_available": true,
+      "physics_initialization_refused": true,
+      "state_preserved": true,
+      "error": "ReferenceSingularity: current canonical geometry-provider/6 scale-aware:6:-64:0:1.95e-3 CutLocus; exact point only"
+    },
+    "timing_note": "Browser bridge and return-value allocation/serialization included. Asset fetch/decoding and WASM initialization excluded from queries. Single-call timing is quantized by the browser timer."
+  },
+  "mechanics": {
+    "per_run_expectations": {
+      "passed": 35
+    },
+    "availability": {
+      "complete": 35
+    },
+    "operational_crossing": {
+      "passed": 21,
+      "not_observed": 14
+    },
+    "reference_crossing": {
+      "passed": 21
+    },
+    "energy": [
+      {
+        "absolute_drift": 6.661338147750939e-15,
+        "field_id": "37ec6365e602ae31",
+        "final": {
+          "energy": 1.3693337299968136,
+          "field_id": "37ec6365e602ae31",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.3000000000000002,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.4002784913887409,
+            0.054910284550999514
+          ],
+          "velocity": [
+            0.0019078148291574914,
+            0.013093252110236719
+          ]
+        },
+        "initial": {
+          "energy": 1.3693337299968202,
+          "field_id": "37ec6365e602ae31",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 1.7985612998927536e-14,
+        "name": "high_curvature",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 1.0,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        },
+        "unchanged_limit": 0.05
+      },
+      {
+        "absolute_drift": 1.7825296794171663e-11,
+        "field_id": "37ec6365e602ae31",
+        "final": {
+          "energy": 3.881554813092508,
+          "field_id": "37ec6365e602ae31",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.20000000000000015,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.30008742873425776,
+            0.05464576751392414
+          ],
+          "velocity": [
+            0.0012387320971975185,
+            0.026598812179290048
+          ]
+        },
+        "initial": {
+          "energy": 3.8815548131103332,
+          "field_id": "37ec6365e602ae31",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.3,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 4.041966761292315e-11,
+        "name": "near_shore",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 1.0,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        },
+        "unchanged_limit": 0.05
+      }
+    ],
+    "neighbor": {
+      "base_increments": [
+        1e-06,
+        1e-07
+      ],
+      "evidence": {
+        "gradient_max_absolute_error": 1.2051277531455185e-08,
+        "gradient_resolution_max_absolute_error": 1.762479051592436e-08,
+        "hessian_max_normalized_error": 2.7055127127448072e-06,
+        "hessian_resolution_max_normalized_error": 4.771923597046701e-06,
+        "legacy_gradient_max_absolute_error": 1.6282128081357428e-06,
+        "legacy_hessian_max_normalized_error": 0.00010332042744349189
+      },
+      "legacy_central_difference_passed": false,
+      "passed": true,
+      "points": 1000,
+      "scope": "measured differential self-consistency only; no reference fidelity or singularity permission",
+      "tolerance": 0.0001,
+      "verifier": "richardson-neighbor/1"
+    },
+    "join": {
+      "gradient_absolute_error": 1.5650462170668789e-07,
+      "hessian_normalized_error": 5.162462644538554e-06,
+      "passed": true,
+      "tolerance": 0.0001
+    },
+    "original_sampled_crossing_times": [
+      2.0439999999999965,
+      2.043999999999886,
+      2.04399999999985
+    ],
+    "python_counts": {
+      "passed": 25,
+      "failed": 2
+    },
+    "python_failures": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 1.1040858998894691,
+        "failure": "_step(\n                        rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n        crossed_high, min_d_high, _, energy_log, guard_fired_high, _ = attempts[1]\n    \n        # More mechanical energy must buy real progress up the same ridge.\n        assert min_d_high < min_d_under, (\n            f\"higher-energy launch did not penetrate farther: \"\n            f\"low={min_d_under}, high={min_d_high}\"\n        )\n    \n        assert crossed_high, (\n            f\"above-barrier launch did not cross: min D={min_d_high}, \"\n            f\"hard_guard_fired={guard_fired_high}\"\n        )\n        assert energy_log\n        k, u, e = energy_log[0]\n        assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)\n    \n        crossing_times = [attempt[5] for attempt in attempts]\n        assert all(attempt[0] for attempt in attempts), (\n            f\"crossing did not survive timestep refinement: {attempts}\"\n        )\n        assert all(time is not None for time in crossing_times)\n        coarse_time, middle_time, fine_time = crossing_times\n        assert coarse_time is not None\n        assert middle_time is not None\n        assert fine_time is not None\n        coarse_gap = abs(coarse_time - middle_time)\n        fine_gap = abs(middle_time - fine_time)\n>       assert fine_gap < coarse_gap\nE       assert 0.0 < 0.0\n\nbackend\\tests\\test_manifold_physics.py:559: AssertionError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.0003551000263541937,
+        "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x00000211DCAF1D10>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.0017233190106909326)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
+      }
+    ],
+    "python_test_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "original_native_crossing_passed": true,
+    "original_native_reference_crossing": "passed",
+    "native_test_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895"
+  },
+  "scalar_audit": {
+    "certified_sign_mismatches": 0,
+    "claim": "pointwise error floor of returned scalar versus true signed distance, using conclusive reference realm; no distance upper bound or derivative-fidelity claim",
+    "conclusive_reference_realms": 765,
+    "field_id": "37ec6365e602ae31",
+    "plan": {
+      "angle_divisions": 256,
+      "date": "2026-10-30",
+      "epsilon": 0.0001,
+      "field_id": "37ec6365e602ae31",
+      "generator": "canonical geometry::lobe_point_at_angle(1, 0, theta, 1-inset)",
+      "multiplier_insets": [
+        1e-06,
+        1e-05,
+        0.0001
+      ],
+      "parent_audit": "geometry-145-operational-fidelity-experiment.json",
+      "quality_fraction": 0.25,
+      "reference": "existing conservative operational_reference_membership; no escalation",
+      "schema": "operational-fidelity-audit/1",
+      "scope": "pointwise returned-scalar error lower bounds only; no regional distance or derivative certificate",
+      "source_experiment": "geometry-145-operational-reference-grid-experiment.json"
+    },
+    "quality_violations": [],
+    "unavailable": 0
+  },
+  "reference_fidelity": "unknown; absence of sign-based lower-bound violations is not a distance-error upper bound",
+  "archive": "docs/validation/experiments/geometry-145-operational/reference-grid-evidence.zip",
+  "archive_sha256": "6de59aadc5593263d4ce00b60cd38dd2167c60552e8d9593a111480425314639",
+  "evidence_files": {
+    "tmp/geometry145-reference-grid-v2-preparation.json": "03f456ccaf544e052d0395689c7428d392beb8162a4f1364515af392971ac2f3",
+    "tmp/geometry145-reference-grid-v2-preparation-memory.json": "1c640228f033dd5ac7105c9bb85012acd627c8a711dbc485e81ebbc910546398",
+    "tmp/geometry145-reference-grid-v2-fidelity-plan.json": "ff541a65c8e7096be2bbd920c1f76a392d06d8b47eadc6a4f025a3362f3d909a",
+    "tmp/geometry145-reference-grid-v2-fidelity.json": "056a320810997cad86c1b67a55245b2c83f3d52f2a6f19d968ed582581007953",
+    "tmp/geometry145-reference-grid-v2-policy-plan.json": "466f6702024a89e889aa0ba498792319c034446642e519ebc2d96958d6a2b918",
+    "tmp/geometry145-reference-grid-v2-policy.json": "b21837d606e90e406350d373852bf922b8415f5b44fecc554ebead00a3e6b1c9",
+    "tmp/geometry145-reference-grid-v2-python.json": "40598eafcf4abe186bd23080d611f4d5a87c888035a61325be65b7264e505495",
+    "tmp/geometry145-reference-grid-v2-native-crossing.json": "5d6ef6032d216957b523b58aaa96b6c9e3a1cacc0fdad9a2cae58e7ef23dcd94",
+    "tmp/geometry145-reference-grid-v2-browser.json": "9cc3e201ed4c7dbe1d874877a1235b75eb7c9f53d9f9904d036857b1673c9ddd",
+    "tmp/geometry145-reference-grid-v2-native/metadata.json": "52badc304b88ef4a861d4aa83311182e59e90eca9066e228b46c98c2930290ef",
+    "tmp/geometry145-reference-grid-v2-native/run-0.json": "36100396a325e887cea163874d5a06abdae0f4767f7c55ec95f898764c3c15a3",
+    "tmp/geometry145-reference-grid-v2-native/run-1.json": "8ffcfc5fa8a4df4a2a7b4f81fb128c69eac4e98e2cb3cb8929dafc48cf2935b1",
+    "tmp/geometry145-reference-grid-v2-native/run-2.json": "4d6956d2d583b3503cfa7c6dba49eb7fb7f44c09a3b6c4970858490dcae26b4c",
+    "docs/validation/geometry-145-operational-reference-grid-experiment.json": "7ac76714c6b32ccf58e74f393a27ad349975e52134968b417bcb9477962b3d9d",
+    "docs/validation/geometry-145-operational-reference-grid-replay.json": "73a0d55956f977859a6b57e3a1b6e96c54125768e05ee45979b31d65f78b08ad"
+  }
+}

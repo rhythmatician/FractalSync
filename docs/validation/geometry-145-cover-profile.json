@@ -1,0 +1,128 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "c554bd2",
+  "production_adoption": false,
+  "profile_enabled_tests_passed": 78,
+  "default_tests_passed": 78,
+  "terminal_runs": [
+    {
+      "name": "python",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 133.83330529998057,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 654,
+          "elapsed_s": 3.428308
+        },
+        {
+          "name": "phase",
+          "calls": 236,
+          "elapsed_s": 0.9093092
+        },
+        {
+          "name": "certify",
+          "calls": 236,
+          "elapsed_s": 22.5478171
+        },
+        {
+          "name": "edge",
+          "calls": 192,
+          "elapsed_s": 0.0038651
+        },
+        {
+          "name": "join",
+          "calls": 191,
+          "elapsed_s": 0.0099507
+        },
+        {
+          "name": "geometry",
+          "calls": 192,
+          "elapsed_s": 0.0481044
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 0.0732787
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "outputs_sha256": {
+        ".json": "01ebfe1eb5843f24bfa5a0125c2dd89e7b6cdb59cebaa742bcf9961b766516e1",
+        ".log": "82a7f984c85d6101d77e65c658c9c57ddb523a57287a398f2688b819cb6e8bf5"
+      }
+    },
+    {
+      "name": "native",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 498.90249209990725,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 13474,
+          "elapsed_s": 31.1731488
+        },
+        {
+          "name": "phase",
+          "calls": 5364,
+          "elapsed_s": 11.2851861
+        },
+        {
+          "name": "certify",
+          "calls": 5364,
+          "elapsed_s": 375.1561671
+        },
+        {
+          "name": "edge",
+          "calls": 2837,
+          "elapsed_s": 0.056872
+        },
+        {
+          "name": "join",
+          "calls": 2836,
+          "elapsed_s": 0.1007913
+        },
+        {
+          "name": "geometry",
+          "calls": 2837,
+          "elapsed_s": 1.1088902
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 1.6601668
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "outputs_sha256": {
+        ".json": "7e726e4d37af4b598c2190aeb00a201be7c859edb9c47313b19a0dcd17520af2",
+        ".log": "394113b3850e6a25c6de8c87b323d9f00bfbc142e0a46096c8fbf052f2a59665"
+      }
+    }
+  ],
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "d23a5c9efce82a3d15b3812618323e917e5af0c80f83a9710d0d07e7662a67a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/cover_profile.rs": "bec58e11de6f93e23981e37d8c9c246ec6b0c0e073e58e608a7a9ced0335e482",
+    "docs/validation/experiments/geometry-145-point-proof/src/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "54885dd76f5003b4464ba0ed57691777c5f06f716c28da076423405715ca5ce8",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quintic_field.rs": "0615d5ca65d441f9b5c859f70e7bbef36a113a17a4f9766578fbeecc0e8f5de9",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "30dd690afe7e753a9bc1c7f8fdaab1422b9849a5521e6a841f25fc242a4d051c"
+  },
+  "frozen_binary_sha256": "b9fdb96a9540ef0fef0b21540d3114033520bd76a15f235b6852a59e7921244a",
+  "limitation": "Observed exclusive named phases only; remaining time includes witness search, subdivision and output. Different concurrent loads; no controlled speedup claim."
+}

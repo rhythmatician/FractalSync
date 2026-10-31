@@ -109,9 +109,63 @@ void main() { color = vec4(1.0); }`);
     light.position.set(3, 6, 4);
     scene.add(light);
     const config = new wasm.ManifoldConfig(0.23, 0.0001, 2.25, 1, 1 / Math.PI);
-    const snap = wasm.debugSnapshotFromState(-0.74, 0.132, 0.001, 0.001, undefined, 0, 0, 0, config, NaN, 0);
-    if (!snap.physics.upperHalf) throw new Error('WASM upperHalf geometry missing');
-    const patch = wasm.debugTerrainPatch(...snap.physics.c, snap.physics.rho * 6, 512, config);
+    // Use a point verified regular under the adaptive provider. Near-Shore
+    // samples can now correctly produce partial /5 snapshots without an
+    // upper-half jet, so make the render-test preconditions explicit.
+    const snap = wasm.debugSnapshotFromState(-0.5, 0.1, 0.001, 0.001, undefined, 0, 0, 0, config, NaN, 0);
+    if (!snap.diagnostics.valid || !snap.physics.derivativeValid) {
+      throw new Error(`GPU fixture must be a regular physics snapshot: ${snap.diagnostics.lastError ?? 'invalid diagnostics'}`);
+    }
+    if (snap.diagnostics.geometry?.validity !== 'regular') {
+      throw new Error(`GPU fixture geometry must be regular, got ${snap.diagnostics.geometry?.validity ?? 'missing diagnostics'}`);
+    }
+    if (!snap.physics.upperHalf || snap.physics.rho === null) {
+      throw new Error('Regular GPU fixture is missing upper-half geometry or rho');
+    }
+    const terrainHalf = Math.min(snap.physics.rho * 6, 0.05);
+    // Dense adaptive-provider queries are the separate #145 throughput gate.
+    // This harness tests GPU projection/rendering, so query a canonical 3x3
+    // patch and bilinearly expand those Rust-owned values to the same 512x512
+    // mesh resolution. This is test-fixture interpolation only; it makes no
+    // claim about dense geometry-provider accuracy.
+    const coarse = wasm.debugTerrainPatch(...snap.physics.c, terrainHalf, 3, config);
+    const resolution = 512;
+    const interpolate = (values, components, x, y, component = 0) => {
+      const gx = x * (coarse.n - 1);
+      const gy = y * (coarse.n - 1);
+      const x0 = Math.floor(gx);
+      const y0 = Math.floor(gy);
+      const x1 = Math.min(x0 + 1, coarse.n - 1);
+      const y1 = Math.min(y0 + 1, coarse.n - 1);
+      const tx = gx - x0;
+      const ty = gy - y0;
+      const at = (ix, iy) => values[(iy * coarse.n + ix) * components + component];
+      const top = at(x0, y0) * (1 - tx) + at(x1, y0) * tx;
+      const bottom = at(x0, y1) * (1 - tx) + at(x1, y1) * tx;
+      return top * (1 - ty) + bottom * ty;
+    };
+    const dense = {
+      ...coarse,
+      n: resolution,
+      positions: new Array(resolution * resolution * 3),
+      upperZ: new Array(resolution * resolution),
+      signed: new Array(resolution * resolution),
+      realm: new Array(resolution * resolution),
+    };
+    for (let row = 0; row < resolution; row++) {
+      for (let col = 0; col < resolution; col++) {
+        const i = row * resolution + col;
+        const x = col / (resolution - 1);
+        const y = row / (resolution - 1);
+        for (let component = 0; component < 3; component++) {
+          dense.positions[3 * i + component] = interpolate(coarse.positions, 3, x, y, component);
+        }
+        dense.upperZ[i] = interpolate(coarse.upperZ, 1, x, y);
+        dense.signed[i] = interpolate(coarse.signed, 1, x, y);
+        dense.realm[i] = dense.signed[i] < 0 ? -1 : dense.signed[i] > 0 ? 1 : 0;
+      }
+    }
+    const patch = dense;
     const mesh = cockpit.buildTerrainMesh(patch);
     scene.add(mesh);
     const rider = await cockpit.buildRider();
@@ -137,7 +191,7 @@ void main() { color = vec4(1.0); }`);
     const triangles = renderer.info.render.triangles;
     if (triangles < 2 * 511 * 511) throw new Error(`Terrain not rendered: ${triangles} triangles`);
     // Keep the scene for screenshot capture.
-    return { cases: cases.length, maxError, vertices: upper.count, triangles, updateMs };
+    return { cases: cases.length, maxError, vertices: upper.count, triangles, updateIterations: 1000, updateMs };
   }, golden.hyperbolic_cases);
   await page.screenshot({ path: resolve(tmpdir(), 'fractalsync-hyperbolic-gpu.png') });
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('\n')}`);

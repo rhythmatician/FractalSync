@@ -1,0 +1,425 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -33,6 +33,8 @@
+ mod interval;
+ mod certified_cardioid;
+ mod feature_cover;
++mod range_jet;
++use self::range_jet::RangeJet;
+ 
+ /// Version of the geometry provider contract. Bump when jet shape, semantics,
+ /// or validity classification changes in the same commit as manifold/debug
+@@ -1169,6 +1171,7 @@
+ }
+ 
+ struct FieldModel {
++    range:RangeJet,
+     size_bound:f64,
+     field: FieldJet,
+     h: f64,
+@@ -1224,6 +1227,7 @@
+         Self {
+             models: vec![FieldModel {
+                 size_bound:f64::INFINITY,
++                range:RangeJet::exact(field.d,field.g,field.h),
+                 field,
+                 h: jet.resolved_scale,
+                 detail,
+@@ -1237,7 +1241,7 @@
+         }
+     }
+     fn new_bounded(jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet,size_bound:f64)->Self {
+-        let mut value=Self::new(jet,epsilon,certified,detail);value.models[0].size_bound=size_bound;value
++        let mut value=Self::new(jet,epsilon,certified,detail);value.models[0].size_bound=size_bound;if !certified {value.models[0].range=unknown_field_range(size_bound);} value
+     }
+     fn advance(&mut self,jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet) {
+         self.advance_bounded(jet,epsilon,certified,detail,f64::INFINITY);
+@@ -1245,6 +1249,7 @@
+     fn advance_bounded(&mut self, jet: &GeometryJet, epsilon: f64, certified: bool, detail: FieldJet,size_bound:f64) {
+         self.models.push(FieldModel {
+             size_bound,
++            range:if certified {RangeJet::exact(jet.d,jet.grad_d,jet.hessian_d)} else {unknown_field_range(size_bound)},
+             field: FieldJet::from_geometry(jet),
+             h: jet.resolved_scale,
+             detail,
+@@ -1302,6 +1307,28 @@
+             product = next;
+         }
+     }
++    fn enclosed_output(&self,epsilon:f64)->Option<RangeJet> {
++        let mut product=RangeJet::constant(1.);let mut prefix=RangeJet::constant(0.);
++        let mut sum=self.models.first()?.range;
++        for i in 0..self.models.len().saturating_sub(2) {
++            let coarse=&self.models[i];let first=&self.models[i+1];
++            let weight=coarse.range.size_weight(coarse.h,epsilon,GEOMETRY_SCALE_ALPHA/128.)?;
++            let (next,retained)=if weight.is_constant(1.) {
++                (product,RangeJet::constant(0.))
++            } else if weight.is_constant(0.) {
++                (RangeJet::constant(0.),product)
++            } else {
++                let next=product.mul(weight);(next,product.add(next.scale(-1.)))
++            };
++            prefix=prefix.add(retained.mul(coarse.range));
++            sum=prefix.add(next.mul(first.range));
++            if next.is_constant(0.) {return sum.finite().then_some(sum);}
++            product=next;
++        }
++        // A numerical zero cannot close an uncertain ideal tail. The whole
++        // interval must reach the constant-zero plateau before acceptance.
++        if self.closed {None} else {sum.finite().then_some(sum)}
++    }
+     fn output(&self, raw: &GeometryJet, epsilon: f64) -> GeometryJet {
+         let mut result = raw.clone();
+         let ge = (self.sum.g[0] - raw.grad_d[0]).hypot(self.sum.g[1] - raw.grad_d[1]);
+@@ -1315,6 +1342,8 @@
+             .max((self.sum.d - raw.d).abs())
+             .max(comparison_h * ge)
+             .max(comparison_h * comparison_h * he);
++        let analytic_error=self.enclosed_output(epsilon).map(|range|range.error(self.sum.d,self.sum.g,self.sum.h,comparison_h)).unwrap_or(f64::INFINITY);
++        result.estimated_error=result.estimated_error.max(analytic_error);
+         result.d = self.sum.d;
+         result.grad_d = self.sum.g;
+         result.hessian_d = self.sum.h;
+@@ -1448,21 +1477,46 @@
+  if bulb.finite() && bulb.hi<0.0625 {return Some(false);}
+  None
+ }
+-static COMPONENT_VALUE_CACHE: Lazy<RwLock<LruCache<(u64,u64),f64>>> = Lazy::new(||RwLock::new(LruCache::new(4096)));
++type ComponentCache=RwLock<LruCache<(u64,u64),(f64,BoundaryInterval)>>;
++static COMPONENT_VALUE_CACHE: Lazy<ComponentCache> = Lazy::new(||RwLock::new(LruCache::new(4096)));
++fn component_sample_using(c:Complex64,cache:Option<&ComponentCache>)->Option<(f64,BoundaryInterval)> {
++ let key=(c.re.to_bits(),c.im.to_bits());
++ if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {if let Some(value)=guard.get(&key) {return Some(value);}}}
++ let kind=component_kind(c)?;
++ let enclosure=if kind {
++  let bounds=certified_cardioid::distance_bounds([c.re,c.im],1e-13,8192)?;
++  BoundaryInterval{lo:-bounds.upper,hi:-bounds.lower}
++ } else {
++  let x=BoundaryInterval::point(c.re).add(BoundaryInterval::point(1.));let y=BoundaryInterval::point(c.im);
++  let square=x.square().add(y.square());
++  BoundaryInterval{lo:square.lo.max(0.).sqrt().next_down().max(0.),hi:square.hi.sqrt().next_up()}.sub(BoundaryInterval::point(0.25))
++ };
++ let value=(if kind {cardioid_distance([c.re,c.im])} else {(c.re+1.).hypot(c.im)-0.25}).clamp(enclosure.lo,enclosure.hi);
++ let sample=(value,enclosure);
++ if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {guard.insert(key,sample);}}
++ Some(sample)
++}
++fn component_sample(c:Complex64)->Option<(f64,BoundaryInterval)> {
++ component_sample_using(c,Some(&*COMPONENT_VALUE_CACHE))
++}
+ fn component_distance(c:Complex64)->Option<f64> {
+- let kind=component_kind(c)?;
+- let key=(c.re.to_bits(),c.im.to_bits());
+- if let Ok(mut cache)=COMPONENT_VALUE_CACHE.write() {if let Some(value)=cache.get(&key) {return Some(value);}}
+- let value=if kind {
+-  let bounds=certified_cardioid::distance_bounds([c.re,c.im],1e-13,8192)?;
+-  // The old root guess only selects a scalar inside a certified global
+-  // enclosure. It cannot establish completeness or bypass exhaustion.
+-  cardioid_distance([c.re,c.im]).clamp(-bounds.upper,-bounds.lower)
+- } else {
+-  (c.re+1.).hypot(c.im)-0.25
+- };
+- if let Ok(mut cache)=COMPONENT_VALUE_CACHE.write() {cache.insert(key,value);}
+- Some(value)
++ component_sample(c).map(|sample|sample.0)
++}
++fn component_enclosure(c:Complex64)->Option<BoundaryInterval> {
++ if c.im==0. && (c.re==0.25 || c.re== -0.75) {return Some(BoundaryInterval::point(0.));}
++ component_sample(c).map(|sample|sample.1)
++}
++fn unknown_field_range(bound:f64)->RangeJet {
++ let unknown=BoundaryInterval{lo:f64::NEG_INFINITY,hi:f64::INFINITY};
++ RangeJet{d:BoundaryInterval{lo:-bound,hi:bound},g:[unknown;2],h:[[unknown;2];2]}
++}
++fn field_enclosure(c:Complex64,h:f64,stencil:&[(f64,f64,f64)])->Option<RangeJet> {
++ let nodes:Option<Vec<_>>=distance_stencil(c,h).zip(stencil).enumerate().map(|(index,(p,&(_,_,value)))| {
++  if index<9 || index%9==0 {return Some(BoundaryInterval::point(value));}
++  if component_kind(p).is_some() || (p.im==0. && (p.re==0.25 || p.re== -0.75)) {component_enclosure(p)}
++  else {Some(BoundaryInterval::point(value))}
++ }).collect();
++ range_jet::quintic([c.re,c.im],h,&nodes?)
+ }
+ 
+ static FIELD_NODE_CACHE: Lazy<RwLock<LruCache<(u32,u64,u64),f64>>> = Lazy::new(|| RwLock::new(LruCache::new(4096)));
+@@ -2072,6 +2126,10 @@
+         } else {
+             hierarchy = Some(FieldHierarchy::new_bounded(&jet, epsilon, nodes_certified, detail,size_bound));
+         }
++        if let Some(field)=&mut hierarchy {
++            let range=if nodes_certified {field_enclosure(c,h,&stencil).unwrap_or_else(||RangeJet::exact(f64::NAN,[f64::NAN;2],[[f64::NAN;2];2]))} else {unknown_field_range(size_bound)};
++            field.models.last_mut().unwrap().range=range;
++        }
+         if ties.is_some() {
+             pending = None;
+         }
+@@ -3323,3 +3381,51 @@
+   assert!(point_membership_stable(c,&tile));
+  }
+ }
++
++#[cfg(test)] mod ranged_integration_tests {
++ use super::*;
++ #[test] fn component_value_and_enclosure_do_not_depend_on_cache_retention() {
++  let cache=RwLock::new(LruCache::new(1));let c=Complex64::new(0.3,0.05);
++  let expected=component_sample_using(c,None).unwrap();
++  for other in [Complex64::new(-0.5,0.1),Complex64::new(0.,0.),Complex64::new(-1.,0.)] {
++   let first=component_sample_using(c,Some(&cache)).unwrap();
++   component_sample_using(other,Some(&cache)).unwrap();
++   assert!(cache.write().unwrap().get(&(c.re.to_bits(),c.im.to_bits())).is_none());
++   let second=component_sample_using(c,Some(&cache)).unwrap();
++   for result in [first,second,component_sample_using(c,None).unwrap()] {
++    assert_eq!(result.0.to_bits(),expected.0.to_bits());
++    assert_eq!(result.1.lo.to_bits(),expected.1.lo.to_bits());assert_eq!(result.1.hi.to_bits(),expected.1.hi.to_bits());
++   }
++  }
++ }
++ #[test] fn output_gate_accounts_for_retained_coefficient_uncertainty() {
++  let epsilon=1e-4;let mut raw=failure_jet(0.04,0.0001,GeometryValidity::Regular,SingularityKind::None);
++  raw.grad_d=[0.;2];raw.hessian_d=[[0.;2];2];raw.estimated_error=0.;
++  raw.requested_scale=GEOMETRY_SCALE_ALPHA*(raw.d*raw.d+epsilon*epsilon).sqrt();
++  let mut field=FieldHierarchy::new(&raw,epsilon,true,FieldJet::constant(0.));
++  for h in [0.00005,0.000025,0.0000125,0.00000625] {
++   raw.resolved_scale=h;field.advance(&raw,epsilon,true,FieldJet::constant(0.));
++  }
++  assert!(field.closed && field.certified);
++  assert!(field.output(&raw,epsilon).estimated_error<DYADIC_FIT_ERROR_FACTOR*raw.requested_scale);
++  field.models[1].range=RangeJet{d:BoundaryInterval{lo:0.039,hi:0.041},..RangeJet::constant(0.)};
++  let output=field.output(&raw,epsilon);
++  assert!(output.estimated_error.is_finite());
++  assert!(output.estimated_error>DYADIC_FIT_ERROR_FACTOR*output.requested_scale);
++ }
++ #[test] fn interval_quintic_contains_the_actual_non_affine_scalar_and_derivatives() {
++  for k in [3,13,24] {
++   let h=dyadic_h(k);
++   for c in [Complex64::new(h.next_down(),-0.31*h),Complex64::new(h,0.73*h),Complex64::new(h.next_up(),-2.2*h)] {
++    let nodes:Vec<_>=distance_stencil(c,h).enumerate().map(|(i,p)| {
++     (p.re-c.re,p.im-c.im,0.01+0.001*((i*17+11)%37) as f64)
++    }).collect();
++    let values:Vec<_>=nodes.iter().map(|node|BoundaryInterval::point(node.2)).collect();
++    let range=range_jet::quintic([c.re,c.im],h,&values).unwrap();let (actual,_)=quintic_field(c,h,&nodes);
++    let contains=|v:BoundaryInterval,x:f64|v.lo<=x && v.hi>=x;
++    assert!(contains(range.d,actual.d));
++    for i in 0..2 {assert!(contains(range.g[i],actual.g[i]));for j in 0..2 {assert!(contains(range.h[i][j],actual.h[i][j]));}}
++   }
++  }
++ }
++}
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/range_jet.rs
+@@ -0,0 +1,216 @@
++use super::interval::Interval as I;
++use super::QUINTIC_BASIS;
++
++pub(super) fn quintic(c:[f64;2],h:f64,nodes:&[I])->Option<RangeJet> {
++    if nodes.len()!=81 || !c.iter().all(|v|v.is_finite()) || !h.is_finite() || h<=0. || !nodes.iter().all(|v|v.finite()) {return None;}
++    let t=[c[0]/h-(c[0]/h).floor(),c[1]/h-(c[1]/h).floor()];
++    let basis=|t:f64|->[[I;6];3] {std::array::from_fn(|derivative|std::array::from_fn(|basis| {
++        let mut value=I::point(0.);
++        for power in (derivative..6).rev() {
++            let factor=(0..derivative).fold(1.,|product,i|product*(power-i) as f64);
++            value=value.mul(I::point(t)).add(I::point(QUINTIC_BASIS[basis][power]).mul(I::point(factor)));
++        }
++        value.div_positive(I::point(120.))
++    }))};
++    let wx=basis(t[0]);let wy=basis(t[1]);
++    let reference=nodes[40];
++    let sx=nodes[41].sub(nodes[39]).mul(I::point(0.5));
++    let sy=nodes[49].sub(nodes[31]).mul(I::point(0.5));
++    let mut derivatives=[[I::point(0.);3];3];
++    for y in 0..6 {for x in 0..6 {
++        let index=(y+2)*9+x+2;let center=nodes[index];
++        let laplacian=nodes[index-1].sub(center).add(nodes[index+1].sub(center))
++            .add(nodes[index-9].sub(center)).add(nodes[index+9].sub(center));
++        let coefficient=center.sub(I::point(0.25).mul(laplacian)).sub(reference)
++            .sub(sx.mul(I::point(x as f64-2.))).sub(sy.mul(I::point(y as f64-2.)));
++        for dx in 0..3 {for dy in 0..3-dx {
++            let denominator=(0..dx+dy).fold(I::point(1.),|value,_|value.mul(I::point(h)));
++            if !denominator.finite() || denominator.lo<=0. {return None;}
++            derivatives[dx][dy]=derivatives[dx][dy].add(wx[dx][x].mul(wy[dy][y]).mul(coefficient).div_positive(denominator));
++        }}
++    }}
++    derivatives[0][0]=derivatives[0][0].add(reference).add(sx.mul(I::point(t[0]))).add(sy.mul(I::point(t[1])));
++    derivatives[1][0]=derivatives[1][0].add(sx.div_positive(I::point(h)));
++    derivatives[0][1]=derivatives[0][1].add(sy.div_positive(I::point(h)));
++    let result=RangeJet{d:derivatives[0][0],g:[derivatives[1][0],derivatives[0][1]],
++        h:[[derivatives[2][0],derivatives[1][1]],[derivatives[1][1],derivatives[0][2]]]};
++    result.finite().then_some(result)
++}
++
++#[derive(Clone,Copy)]
++pub(super) struct RangeJet {
++    pub(super) d:I,
++    pub(super) g:[I;2],
++    pub(super) h:[[I;2];2],
++}
++impl RangeJet {
++    fn invalid()->Self {Self::exact(f64::NAN,[f64::NAN;2],[[f64::NAN;2];2])}
++    fn well_formed(self)->bool {
++        let contains_finite=|v:I|v.lo<=v.hi && v.lo<f64::INFINITY && v.hi>f64::NEG_INFINITY;
++        contains_finite(self.d) && self.g.iter().chain(self.h.iter().flatten()).all(|v|contains_finite(*v))
++    }
++    pub(super) fn constant(d:f64)->Self {Self{d:I::point(d),g:[I::point(0.);2],h:[[I::point(0.);2];2]}}
++    pub(super) fn exact(d:f64,g:[f64;2],h:[[f64;2];2])->Self {
++        Self{d:I::point(d),g:g.map(I::point),h:h.map(|row|row.map(I::point))}
++    }
++    pub(super) fn is_constant(self,value:f64)->bool {
++        self.d.lo==value && self.d.hi==value && self.g.iter().chain(self.h.iter().flatten()).all(|v|v.lo==0. && v.hi==0.)
++    }
++    pub(super) fn add(self,other:Self)->Self {
++        if !self.well_formed() || !other.well_formed() {return Self::invalid();}
++        if self.is_constant(0.) {return other;}
++        if other.is_constant(0.) {return self;}
++        if self.d.lo.is_finite() && self.is_constant(-other.d.lo) && other.is_constant(other.d.lo) {return Self::constant(0.);}
++        Self{d:self.d.add(other.d),g:std::array::from_fn(|i|self.g[i].add(other.g[i])),
++            h:std::array::from_fn(|i|std::array::from_fn(|j|self.h[i][j].add(other.h[i][j])))}
++    }
++    pub(super) fn scale(self,factor:f64)->Self {self.mul(Self::constant(factor))}
++    pub(super) fn mul(self,other:Self)->Self {
++        if !self.well_formed() || !other.well_formed() {return Self::invalid();}
++        if self.is_constant(0.) || other.is_constant(0.) {return Self::constant(0.);}
++        if self.is_constant(1.) {return other;}
++        if other.is_constant(1.) {return self;}
++        Self{d:self.d.mul(other.d),g:std::array::from_fn(|i|self.g[i].mul(other.d).add(self.d.mul(other.g[i]))),
++            h:std::array::from_fn(|i|std::array::from_fn(|j|self.h[i][j].mul(other.d)
++                .add(self.g[i].mul(other.g[j])).add(self.g[j].mul(other.g[i])).add(self.d.mul(other.h[i][j]))))}
++    }
++    pub(super) fn square(self)->Self {let mut result=self.mul(self);result.d=self.d.square();result}
++    fn compose(self,value:I,first:I,second:I)->Self {
++        Self{d:value,g:self.g.map(|v|first.mul(v)),
++            h:std::array::from_fn(|i|std::array::from_fn(|j|first.mul(self.h[i][j]).add(second.mul(self.g[i]).mul(self.g[j]))))}
++    }
++    pub(super) fn reciprocal_positive(self)->Option<Self> {
++        if !self.d.finite() || self.d.lo<=0. {return None;}
++        let square=self.d.square();let cube=square.mul(self.d);
++        if !square.finite() || square.lo<=0. || !cube.finite() || cube.lo<=0. {return None;}
++        let inverse=I::point(1.).div_positive(self.d);
++        let first=I::point(-1.).div_positive(square);
++        let second=I::point(2.).div_positive(cube);
++        Some(self.compose(inverse,first,second))
++    }
++    pub(super) fn sqrt_positive(self)->Option<Self> {
++        if !self.d.finite() || self.d.lo<=0. {return None;}
++        let value=I{lo:self.d.lo.sqrt().next_down(),hi:self.d.hi.sqrt().next_up()};
++        if value.lo<=0. {return None;}
++        let denominator=self.d.mul(value);
++        if !denominator.finite() || denominator.lo<=0. {return None;}
++        Some(self.compose(value,I::point(0.5).div_positive(value),I::point(-0.25).div_positive(denominator)))
++    }
++    pub(super) fn smoothstep(self)->Self {
++        if !self.well_formed() || !self.d.finite() {return Self::invalid();}
++        if self.d.hi<=0. {return Self::constant(0.);}
++        if self.d.lo>=1. {return Self::constant(1.);}
++        let x=I{lo:self.d.lo.max(0.),hi:self.d.hi.min(1.)};
++        let p=I::point;
++        let value=x.square().mul(x).mul(p(10.).add(p(-15.).mul(x)).add(p(6.).mul(x.square())));
++        let first=p(30.).mul(x.square()).mul(x.sub(p(1.)).square());
++        let second=p(60.).mul(x).mul(p(2.).mul(x.square()).add(p(-3.).mul(x)).add(p(1.)));
++        self.compose(value,first,second)
++    }
++    // Test the scalar plateau before forming derivatives. A certified plateau
++    // removes every derivative dependency, even if those bounds are unknown.
++    pub(super) fn size_weight(self,h:f64,epsilon:f64,alpha:f64)->Option<Self> {
++        if !h.is_finite() || h<=0. || !epsilon.is_finite() || epsilon<=0. || !alpha.is_finite() || alpha<=0. {return None;}
++        if !self.well_formed() || !self.d.finite() {return None;}
++        let square=self.d.square().add(I::point(epsilon).square());
++        if !square.finite() || square.lo<=0. {return None;}
++        let rho=I{lo:square.lo.sqrt().next_down(),hi:square.hi.sqrt().next_up()};
++        if rho.lo<=0. {return None;}
++        let factor=h/alpha;
++        if !factor.is_finite() || factor<=0. {return None;}
++        let ratio=I::point(factor).div_positive(rho);
++        if ratio.lo>=2. {return Some(Self::constant(1.));}
++        if ratio.hi<=1. {return Some(Self::constant(0.));}
++        self.square().add(Self::constant(epsilon*epsilon)).sqrt_positive()?
++            .reciprocal_positive().map(|v|v.scale(factor).add(Self::constant(-1.)).smoothstep())
++    }
++    pub(super) fn finite(self)->bool {
++        self.d.finite() && self.g.iter().chain(self.h.iter().flatten()).all(|v|v.finite())
++    }
++    pub(super) fn error(self,d:f64,g:[f64;2],h:[[f64;2];2],scale:f64)->f64 {
++        if !self.finite() || !scale.is_finite() || scale<0. || !d.is_finite() || !g.iter().chain(h.iter().flatten()).all(|v|v.is_finite()) {return f64::INFINITY;}
++        let difference=|range:I,value:f64|range.sub(I::point(value)).abs_upper();
++        let de=difference(self.d,d);
++        let ge=I::point(difference(self.g[0],g[0])).square().add(I::point(difference(self.g[1],g[1])).square()).hi.sqrt().next_up();
++        let mut hs=I::point(0.);
++        for i in 0..2 {for j in 0..2 {hs=hs.add(I::point(difference(self.h[i][j],h[i][j])).square());}}
++        let he=hs.hi.sqrt().next_up();
++        de.max(I::point(scale).mul(I::point(ge)).hi)
++            .max(I::point(scale).square().mul(I::point(he)).hi)
++    }
++}
++
++#[cfg(test)] mod tests {
++    use super::*;
++    fn encloses(range:I,value:f64)->bool {range.lo<=value && range.hi>=value}
++    #[test] fn multiplication_encloses_sampled_value_gradient_and_hessian() {
++        let x=RangeJet{d:I{lo:1.,hi:2.},g:[I{lo:-2.,hi:3.};2],h:[[I{lo:-4.,hi:5.};2];2]};
++        let y=RangeJet{d:I{lo:3.,hi:4.},g:[I{lo:-1.,hi:2.};2],h:[[I{lo:-3.,hi:4.};2];2]};
++        let product=x.mul(y);
++        for a in [1.,1.5,2.] {for b in [3.,3.5,4.] {for ga in [-2.,0.,3.] {for gb in [-1.,0.,2.] {
++            assert!(encloses(product.d,a*b));
++            assert!(encloses(product.g[0],ga*b+a*gb));
++            for ha in [-4.,5.] {for hb in [-3.,4.] {assert!(encloses(product.h[0][1],ha*b+2.*ga*gb+a*hb));}}
++        }}}}
++    }
++    #[test] fn unknown_derivatives_disappear_only_on_a_proved_constant_plateau() {
++        let unknown=I{lo:f64::NEG_INFINITY,hi:f64::INFINITY};
++        let x=RangeJet{d:I{lo:-1e-6,hi:1e-6},g:[unknown;2],h:[[unknown;2];2]};
++        let one=x.size_weight(1.,1e-4,0.1).unwrap();assert!(one.is_constant(1.));
++        assert!(one.add(RangeJet::constant(-1.)).mul(x).is_constant(0.));
++        let partial=x.size_weight(1.5e-5,1e-4,0.1).unwrap();assert!(!partial.finite());
++    }
++    #[test] fn smoothstep_crossing_plateaus_encloses_constant_branch_derivatives() {
++        let x=RangeJet{d:I{lo:-0.1,hi:1.1},g:[I::point(2.);2],h:[[I::point(3.);2];2]}.smoothstep();
++        assert!(encloses(x.d,0.) && encloses(x.d,1.));
++        assert!(encloses(x.g[0],0.) && encloses(x.h[0][0],0.));
++    }
++    #[test] fn differential_uncertainty_is_scaled_into_the_existing_error_units() {
++        let x=RangeJet{d:I{lo:-1e-13,hi:1e-13},g:[I{lo:-1e-8,hi:1e-8};2],h:[[I{lo:-1e-2,hi:1e-2};2];2]};
++        let error=x.error(0.,[0.;2],[[0.;2];2],1e-5);
++        assert!(error>=2e-12 && error<2.1e-12);
++    }
++    #[test] fn invalid_domains_cannot_supply_a_finite_certificate() {
++        assert!(RangeJet::constant(0.).reciprocal_positive().is_none());
++        assert!(RangeJet::constant(-1.).sqrt_positive().is_none());
++        assert!(RangeJet::constant(1.).size_weight(1.,0.,0.1).is_none());
++        assert!(RangeJet::constant(1e-300).reciprocal_positive().is_none());
++        assert!(RangeJet::constant(1e-300).sqrt_positive().is_none());
++        assert!(!RangeJet::constant(0.).mul(RangeJet::invalid()).finite());
++        assert!(!RangeJet::invalid().smoothstep().finite());
++        assert!(!RangeJet::exact(f64::NAN,[0.;2],[[0.;2];2]).error(0.,[0.;2],[[0.;2];2],1.).is_finite());
++    }
++    #[test] fn nonfinite_comparison_jets_cannot_supply_finite_errors() {
++        for invalid in [f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
++            assert!(!RangeJet::constant(0.).error(invalid,[0.;2],[[0.;2];2],1.).is_finite());
++            assert!(!RangeJet::constant(0.).error(0.,[invalid,0.],[[0.;2];2],1.).is_finite());
++            assert!(!RangeJet::constant(0.).error(0.,[0.;2],[[invalid;2];2],1.).is_finite());
++        }
++    }
++    #[test] fn invalid_operands_cannot_be_cancelled_to_finite_zero() {
++        for invalid in [f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
++            assert!(!RangeJet::constant(0.).mul(RangeJet::constant(invalid)).finite());
++            assert!(!RangeJet::constant(0.).mul(RangeJet::exact(0.,[invalid;2],[[0.;2];2])).finite());
++            assert!(!RangeJet::constant(0.).mul(RangeJet::exact(0.,[0.;2],[[invalid;2];2])).finite());
++        }
++        let reversed=RangeJet{d:I{lo:2.,hi:1.},..RangeJet::constant(0.)};
++        assert!(!RangeJet::constant(0.).mul(reversed).finite());
++    }
++    #[test] fn uncertain_nodal_values_enclose_affine_fields_and_their_derivatives() {
++        let h=2f64.powi(-10);let delta=1e-10;
++        for c in [[0.37*h,0.61*h],[-2.3*h,3.2*h],[h.next_down(),0.],[h,0.],[h.next_up(),0.]] {
++            let cell=[(c[0]/h).floor(),(c[1]/h).floor()];
++            let mut nodes=Vec::new();
++            for y in -4..=4 {for x in -4..=4 {
++                let value=0.001+0.2*(cell[0]+x as f64)*h+0.1*(cell[1]+y as f64)*h;
++                nodes.push(I{lo:(value-delta).next_down(),hi:(value+delta).next_up()});
++            }}
++            let range=quintic(c,h,&nodes).unwrap();
++            for offset in [-delta*0.5,0.,delta*0.5] {for dx in [-delta/(32.*h),delta/(32.*h)] {for dy in [-delta/(32.*h),delta/(32.*h)] {
++                let d=0.001+0.2*c[0]+0.1*c[1]+offset+dx*(c[0]-cell[0]*h)+dy*(c[1]-cell[1]*h);
++                assert!(encloses(range.d,d));assert!(encloses(range.g[0],0.2+dx));assert!(encloses(range.g[1],0.1+dy));
++                assert!(range.h.iter().flatten().all(|v|encloses(*v,0.)));
++            }}}
++        }
++    }
++}

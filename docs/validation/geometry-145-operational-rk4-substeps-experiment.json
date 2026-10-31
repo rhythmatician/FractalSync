@@ -1,0 +1,27 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "field_id": "b45293bd1d6a1bd6",
+  "asset_sha256": "2a7afa0f10119b508bde3fdfb80438c3724137d824ed037239eb8173f9330dfc",
+  "reference_policy_sha256": "990870ca9a516984f824c37f7aed06f2ea7551e3deddfc830c911b03a73de86d",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "source_experiment": "geometry-145-operational-contour-experiment.json",
+  "purpose": "Fresh fixed-four-substep RK4 profiles on identical field coefficients; preserve single-step RK4 and Euler failures; no velocity or energy clamps",
+  "coverage_policy": "complete asset loaded before replay; no coefficient, coverage, policy or method replacement within a rollout",
+  "acceptance": "original starts, perturbations, energy factors, horizons, timesteps, crossing bodies and tolerances retained; report raw Euler baseline separately",
+  "reference_fidelity": "two certified scalar counterexamples persist; no scalar upper bound or reference derivative certificate",
+  "shipping_adoption": false,
+  "substeps": 4
+}

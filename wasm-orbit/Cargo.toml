@@ -6,6 +6,9 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+experimental-operational-field = ["runtime_core/experimental-operational-field"]
+
 [dependencies]
 runtime_core = { path = "../runtime-core" }
 wasm-bindgen = "0.2"

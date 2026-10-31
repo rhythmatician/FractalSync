@@ -189,6 +189,7 @@ export function computeHyperbolicCameraFrame(
   const { a, z: riderZ, gradient } = upperHalfGeometry(snap);
   // This angle is in c-space, in every camera mode.
   const heading = smoothedHeading ?? 0;
+  if (snap.physics.rho === null) throw new Error('Hyperbolic camera requires available rho');
   const backC = 0.48 * snap.physics.rho;
   const camUpperX = cx - Math.cos(heading) * backC;
   const camUpperY = cy - Math.sin(heading) * backC;

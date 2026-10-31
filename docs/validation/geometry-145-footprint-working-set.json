@@ -1,0 +1,249 @@
+{
+  "provider_version": "geometry-provider/6",
+  "expansion_radius": 5,
+  "protocol": "Instrumented isolated cold and immediate-repeat public query traces, replayed through bounded deterministic LRUs. Timing excluded. Tile payload includes inline ShoreTile and allocated segment/unstable-node vectors; excludes keys, map buckets, temporary combined contours and orbit construction states.",
+  "rows": [
+    {
+      "case": "cut_locus",
+      "epsilon": 0.0001,
+      "requests": 276,
+      "unique_tiles": 270,
+      "lru_trace_replay": [
+        {
+          "capacity": 256,
+          "cold_misses": 270,
+          "repeat_misses": 270
+        },
+        {
+          "capacity": 384,
+          "cold_misses": 270,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 512,
+          "cold_misses": 270,
+          "repeat_misses": 0
+        }
+      ],
+      "observed_cache_payload_at_256": [
+        {
+          "phase": "cold",
+          "entries": 256,
+          "tile_payload_bytes": 493824
+        },
+        {
+          "phase": "warm",
+          "entries": 256,
+          "tile_payload_bytes": 493824
+        }
+      ],
+      "jet": {
+        "D": -0.24776407821825547,
+        "estimated_error": 0.0022311121502981146,
+        "grad_D": [
+          0.0004893198555497857,
+          -2.220446049250313e-16
+        ],
+        "hessian_D": [
+          [
+            197.6689579393676,
+            -3.410605131648481e-13
+          ],
+          [
+            -3.410605131648481e-13,
+            197.39015091816145
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.024776409839874263,
+        "resolved_scale": 0.001953125,
+        "singularity": "cut_locus",
+        "tile_id": "scale-aware:6:-64:0:1.95e-3",
+        "validity": "singular"
+      }
+    },
+    {
+      "case": "remaining_crossing_refusal",
+      "epsilon": 0.0001,
+      "requests": 168,
+      "unique_tiles": 163,
+      "lru_trace_replay": [
+        {
+          "capacity": 256,
+          "cold_misses": 163,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 384,
+          "cold_misses": 163,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 512,
+          "cold_misses": 163,
+          "repeat_misses": 0
+        }
+      ],
+      "observed_cache_payload_at_256": [
+        {
+          "phase": "cold",
+          "entries": 163,
+          "tile_payload_bytes": 204432
+        },
+        {
+          "phase": "warm",
+          "entries": 163,
+          "tile_payload_bytes": 204432
+        }
+      ],
+      "jet": {
+        "D": -0.13014784572056254,
+        "estimated_error": 8.519527330651007e-05,
+        "grad_D": [
+          0.6194982159061659,
+          -0.7653758460691469
+        ],
+        "hessian_D": [
+          [
+            153.48005570929308,
+            97.13540570971236
+          ],
+          [
+            97.13540570971236,
+            54.55697708426851
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.013014788413840371,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:55:32:4.88e-4",
+        "validity": "regular"
+      }
+    },
+    {
+      "case": "live_training_refusal",
+      "epsilon": 0.0001,
+      "requests": 167,
+      "unique_tiles": 161,
+      "lru_trace_replay": [
+        {
+          "capacity": 256,
+          "cold_misses": 161,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 384,
+          "cold_misses": 161,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 512,
+          "cold_misses": 161,
+          "repeat_misses": 0
+        }
+      ],
+      "observed_cache_payload_at_256": [
+        {
+          "phase": "cold",
+          "entries": 161,
+          "tile_payload_bytes": 161536
+        },
+        {
+          "phase": "warm",
+          "entries": 161,
+          "tile_payload_bytes": 161536
+        }
+      ],
+      "jet": {
+        "D": 0.0004389061197643488,
+        "estimated_error": 1.1483973467194073e-07,
+        "grad_D": [
+          -0.9588916946660184,
+          -0.28366379746958037
+        ],
+        "hessian_D": [
+          [
+            183.43545603845268,
+            -619.7056059597526
+          ],
+          [
+            -619.7056059597526,
+            2095.0825195182115
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 4.501539536276416e-05,
+        "resolved_scale": 1.9073486328125e-06,
+        "singularity": "none",
+        "tile_id": "scale-aware:16:20153:1885:1.91e-6",
+        "validity": "regular"
+      }
+    },
+    {
+      "case": "kinetic_crossing_refusal",
+      "epsilon": 0.0001,
+      "requests": 217,
+      "unique_tiles": 210,
+      "lru_trace_replay": [
+        {
+          "capacity": 256,
+          "cold_misses": 210,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 384,
+          "cold_misses": 210,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 512,
+          "cold_misses": 210,
+          "repeat_misses": 0
+        }
+      ],
+      "observed_cache_payload_at_256": [
+        {
+          "phase": "cold",
+          "entries": 210,
+          "tile_payload_bytes": 96416
+        },
+        {
+          "phase": "warm",
+          "entries": 210,
+          "tile_payload_bytes": 96416
+        }
+      ],
+      "jet": {
+        "D": 0.00011043874062980251,
+        "estimated_error": 2.4774824592709087e-08,
+        "grad_D": [
+          0.5707211470927485,
+          0.8211234660966569
+        ],
+        "hessian_D": [
+          [
+            6105.14210037142,
+            -4243.212598071434
+          ],
+          [
+            -4243.212598071434,
+            2949.2607532348484
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 1.489856215609305e-05,
+        "resolved_scale": 4.76837158203125e-07,
+        "singularity": "none",
+        "tile_id": "scale-aware:18:93624:16727:4.77e-7",
+        "validity": "regular"
+      }
+    }
+  ],
+  "trace_cache_capacity": 256,
+  "selected_cache_capacity": 384
+}

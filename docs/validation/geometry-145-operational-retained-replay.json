@@ -1,0 +1,27 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "Retain physical probe blocks when subdividing source cells, including observed isolated components",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "controlled_change": "Hold source probe-block spacing at 0.002: coarse block=1, refined block=2; all field/physics/test parameters unchanged",
+  "source_evidence": "measured finite-orbit contour; retained sampled search regions do not establish complete contour or distance upper bounds",
+  "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+  "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+  "shipping_adoption": false,
+  "field_id": "9721bb7647a0b8e6",
+  "asset_sha256": "bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb",
+  "reference_policy_sha256": "7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd",
+  "source_experiment": "geometry-145-operational-retained-fine-experiment.json"
+}

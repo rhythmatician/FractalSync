@@ -1,0 +1,699 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "80704c5",
+  "production_adoption": false,
+  "scope": "Requested-width mathematical Mandelbrot interior distance bounds; no canonical floating-orbit equivalence or distance-jet certificate.",
+  "runs": [
+    {
+      "name": "cardioid-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.0733964999672025,
+        "timed_out": false
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=cardioid jet=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] } step=0.00023815848417896567 gradient_error=0.00000003250299013268787 distance_scaled_hessian_error=0.00000005828187588315019\n[WITNESS_JET145] name=cardioid numerical_only=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] }\n[WITNESS_SCREEN145] name=cardioid candidates=443 numerical_only=true\n[SCREENED_WITNESS145] name=cardioid rank=0 precision=128 offset=0.0001 tangent=0 numerical_update=5695 point=[-0.7315844629408805, 0.15567265550266585] elapsed_s=0.236389 escape_update=Some(5695)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=65 max_depth=1 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=64 minimum_clearance=0.22818230002738363 elapsed_s=0.2184854 result=Ok(ClosedCover { edges: 65, winding: 1, curve_distance_lower: 0.23640311671742031 })\n[DISTANCE_BRACKET145] name=cardioid bracket=DistanceBracket { query: [-0.5, 0.1], lower: 0.23640311671742031, upper: 0.2381823000273836, width: 0.0017791833099632967 }\n[BRACKET_ACCURACY145] name=cardioid requested_width=0.01 proved=true\n[DOMAIN_COST145] name=cardioid accepted_queries=10000 query_box_half_width=0.0002364031167174203 elapsed_s=0.1915183 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.7002683\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=490.6762525974347 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=0.0000000000000000000040760073254265655 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=490.6762525974446 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=0.0000000000000000000040760073254264835 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=490.6762525974351 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=490.67625259743517 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=490.6762525974439 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=0.0000000000000000000040760073254264895 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=490.67625259743545 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=0.0000000000000000000040760073254265595 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=490.67625259743534 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=0.00000000000000000000407600732542656 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=490.67625259743704 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=0.000000000000000000004076007325426546 included=true contracting=true"
+      ],
+      "stderr_bytes": 18450,
+      "stderr_sha256": "e6f948a79d867f328b4af52264e78dd4918647f5964834a9762c32a919482dff"
+    },
+    {
+      "name": "native-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 155.71362020005472,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.6711091 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=70 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=130 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=256 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=302 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=334 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007468852001752011 elapsed_s=154.1060041 result=Ok(ClosedCover { edges: 238, winding: 1, curve_distance_lower: 7.500128320338055e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.500128320338055e-6, upper: 7.66885200175201e-6, width: 1.6872368141395535e-7 }\n[BRACKET_ACCURACY145] name=native requested_width=0.0000002 proved=true\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007500128320338056 elapsed_s=0.1938285 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=155.3476241\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_bytes": 142235,
+      "stderr_sha256": "bf7edde12c9de40987173d6f9adcdc6df438ba95ec755acb4be95ca25c6b4eea"
+    },
+    {
+      "name": "python-v1",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 161.21618670015596,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=1.1942037 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017109496124937463 elapsed_s=158.889046 result=Ok(ClosedCover { edges: 172, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7240936517760065e-7, upper: 1.7309496124937462e-7, width: 6.855960717739659e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.000000002 proved=true\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017240936517760066 elapsed_s=0.1676889 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=160.8534448\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_bytes": 83622,
+      "stderr_sha256": "e87c76fc37e6390482d1e6e7412779dab4f5bab641295aa2d6b9e82f75557704"
+    },
+    {
+      "name": "cardioid-v2",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.0533819999545813,
+        "timed_out": false
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=cardioid jet=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] } step=0.00023815848417896567 gradient_error=0.00000003250299013268787 distance_scaled_hessian_error=0.00000005828187588315019\n[WITNESS_JET145] name=cardioid numerical_only=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] }\n[WITNESS_SCREEN145] name=cardioid candidates=443 numerical_only=true\n[SCREENED_WITNESS145] name=cardioid rank=0 precision=128 offset=0.0001 tangent=0 numerical_update=5695 point=[-0.7315844629408805, 0.15567265550266585] elapsed_s=0.2447532 escape_update=Some(5695)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=65 max_depth=1 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=64 minimum_clearance=0.22818230002738363 elapsed_s=0.2164402 result=Ok(ClosedCover { edges: 65, winding: 1, curve_distance_lower: 0.23640311671742031 })\n[DISTANCE_BRACKET145] name=cardioid bracket=DistanceBracket { query: [-0.5, 0.1], lower: 0.23640311671742031, upper: 0.2381823000273836, width: 0.0017791833099632967 }\n[BRACKET_ACCURACY145] name=cardioid requested_width=0.01 proved=true\n[DOMAIN_COST145] name=cardioid accepted_queries=10000 query_box_half_width=0.0002364031167174203 elapsed_s=0.2103915 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.7182032\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=490.6762525974347 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=0.0000000000000000000040760073254265655 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=490.6762525974446 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=0.0000000000000000000040760073254264835 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=490.6762525974351 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=490.67625259743517 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=490.6762525974439 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=0.0000000000000000000040760073254264895 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=490.67625259743545 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=0.0000000000000000000040760073254265595 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=490.67625259743534 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=0.00000000000000000000407600732542656 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=490.67625259743704 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=0.000000000000000000004076007325426546 included=true contracting=true"
+      ],
+      "stderr_bytes": 18450,
+      "stderr_sha256": "e6f948a79d867f328b4af52264e78dd4918647f5964834a9762c32a919482dff"
+    },
+    {
+      "name": "native-v2",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 145.50523240002804,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.7306502 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=70 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=130 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=256 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=302 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=334 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007468852001752011 elapsed_s=143.8473503 result=Ok(ClosedCover { edges: 238, winding: 1, curve_distance_lower: 7.500128320338055e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.500128320338055e-6, upper: 7.66885200175201e-6, width: 1.6872368141395535e-7 }\n[BRACKET_ACCURACY145] name=native requested_width=0.0000002 proved=true\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007500128320338056 elapsed_s=0.1924475 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=145.1670021\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_bytes": 142235,
+      "stderr_sha256": "bf7edde12c9de40987173d6f9adcdc6df438ba95ec755acb4be95ca25c6b4eea"
+    },
+    {
+      "name": "python-v2",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 151.88486009999178,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=1.3446825 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017109496124937463 elapsed_s=149.2506135 result=Ok(ClosedCover { edges: 172, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7240936517760065e-7, upper: 1.7309496124937462e-7, width: 6.855960717739659e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.000000002 proved=true\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017240936517760066 elapsed_s=0.3470568 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=151.543809\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_bytes": 83622,
+      "stderr_sha256": "e87c76fc37e6390482d1e6e7412779dab4f5bab641295aa2d6b9e82f75557704"
+    },
+    {
+      "name": "cardioid-v3",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.2836559999268502,
+        "timed_out": false
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=cardioid jet=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] } step=0.00023815848417896567 gradient_error=0.00000003250299013268787 distance_scaled_hessian_error=0.00000005828187588315019\n[WITNESS_JET145] name=cardioid numerical_only=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] }\n[WITNESS_SCREEN145] name=cardioid candidates=443 numerical_only=true\n[SCREENED_WITNESS145] name=cardioid rank=0 precision=128 offset=0.0001 tangent=0 numerical_update=5695 point=[-0.7315844629408805, 0.15567265550266585] elapsed_s=0.27889 escape_update=Some(5695)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=64 minimum_clearance=0.22818230002738363 elapsed_s=0.2590004 result=Ok(ClosedCover { edges: 64, winding: 1, curve_distance_lower: 0.23640311671742031 })\n[DISTANCE_BRACKET145] name=cardioid bracket=DistanceBracket { query: [-0.5, 0.1], lower: 0.23640311671742031, upper: 0.2381823000273836, width: 0.0017791833099632967 }\n[BRACKET_ACCURACY145] name=cardioid requested_width=0.01 proved=true\n[DOMAIN_COST145] name=cardioid accepted_queries=10000 query_box_half_width=0.0002364031167174203 elapsed_s=0.2381259 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.8332657\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=0.0000000000000000000040760073254265655 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=490.6762525974446 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=0.0000000000000000000040760073254264835 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=490.6762525974351 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=490.67625259743517 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=490.6762525974439 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=0.0000000000000000000040760073254264895 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=490.67625259743545 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=0.0000000000000000000040760073254265595 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=490.67625259743534 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=0.00000000000000000000407600732542656 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=490.67625259743704 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=0.000000000000000000004076007325426546 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0000000000000000000000000000000000000022040933494260823 contraction=0.000000000000000002 included=true contracting=true"
+      ],
+      "stderr_bytes": 18222,
+      "stderr_sha256": "85cefae3921d0fcfc00556c21c8e623b82d4974ad34bcdd82e083bff66c91432"
+    },
+    {
+      "name": "native-v3",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 144.68150970013812,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.8301075 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=70 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=130 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=256 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=302 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=334 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007468852001752011 elapsed_s=142.7458033 result=Ok(ClosedCover { edges: 238, winding: 1, curve_distance_lower: 7.500128320338055e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.500128320338055e-6, upper: 7.66885200175201e-6, width: 1.6872368141395535e-7 }\n[BRACKET_ACCURACY145] name=native requested_width=0.0000002 proved=true\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007500128320338056 elapsed_s=0.2015124 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=144.2269751\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_bytes": 142235,
+      "stderr_sha256": "bf7edde12c9de40987173d6f9adcdc6df438ba95ec755acb4be95ca25c6b4eea"
+    },
+    {
+      "name": "python-v3",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 152.70026340009645,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=1.4613804 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017109496124937463 elapsed_s=149.7678675 result=Ok(ClosedCover { edges: 172, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7240936517760065e-7, upper: 1.7309496124937462e-7, width: 6.855960717739659e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.000000002 proved=true\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017240936517760066 elapsed_s=0.3027695 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=152.2456474\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_bytes": 83622,
+      "stderr_sha256": "e87c76fc37e6390482d1e6e7412779dab4f5bab641295aa2d6b9e82f75557704"
+    },
+    {
+      "name": "cardioid-v4",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.2755642000120133,
+        "timed_out": false
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=cardioid jet=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] } step=0.00023815848417896567 gradient_error=0.00000003250299013268787 distance_scaled_hessian_error=0.00000005828187588315019\n[WITNESS_JET145] name=cardioid numerical_only=DistanceJet { d: 0.23815848417896568, g: [0.9722992133095343, -0.23373968383152413], h: [[-0.12811472117250314, -0.5329255202517533], [-0.5329255202517533, -2.216838217625205]] }\n[SCREEN_PREPARATION_COST145] name=cardioid elapsed_s=0.0730696 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=cardioid candidates=443 numerical_only=true\n[SCREENED_WITNESS145] name=cardioid rank=0 precision=128 offset=0.0001 tangent=0 numerical_update=5695 point=[-0.7315844629408805, 0.15567265550266585] elapsed_s=0.2899829 escape_update=Some(5695)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=64 max_depth=0 latest_proof_attempts=2\n[CLOSED_COVER145] period=1 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=64 minimum_clearance=0.22818230002738363 elapsed_s=0.2870142 result=Ok(ClosedCover { edges: 64, winding: 1, curve_distance_lower: 0.23640311671742031 })\n[DISTANCE_BRACKET145] name=cardioid bracket=DistanceBracket { query: [-0.5, 0.1], lower: 0.23640311671742031, upper: 0.2381823000273836, width: 0.0017791833099632967 }\n[BRACKET_ACCURACY145] name=cardioid requested_width=0.01 proved=true validation_elapsed_s=0.0000136\n[DOMAIN_COST145] name=cardioid accepted_queries=10000 query_box_half_width=0.0002364031167174203 elapsed_s=0.2623312 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.9128506\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000601907962157654 contraction=0.0000000000000000000040760073254265655 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=490.6762525974446 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576781 contraction=0.0000000000000000000040760073254264835 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=490.6762525974351 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576548 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=490.67625259743517 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576549 contraction=0.0000000000000000000040760073254265625 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=490.6762525974439 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576764 contraction=0.0000000000000000000040760073254264895 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=490.67625259743545 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576557 contraction=0.0000000000000000000040760073254265595 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=490.67625259743534 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576555 contraction=0.00000000000000000000407600732542656 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=490.67625259743704 included=false contracting=false",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0006019079621576596 contraction=0.000000000000000000004076007325426546 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0000000000000000000000000000000000000022040933494260823 contraction=0.000000000000000002 included=true contracting=true"
+      ],
+      "stderr_bytes": 18222,
+      "stderr_sha256": "85cefae3921d0fcfc00556c21c8e623b82d4974ad34bcdd82e083bff66c91432"
+    },
+    {
+      "name": "native-v4",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 177.34994119987823,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[SCREEN_PREPARATION_COST145] name=native elapsed_s=0.4263531 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.9189813 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=70 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=130 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=256 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=192 regions=302 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=224 regions=334 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007468852001752011 elapsed_s=175.4119676 result=Ok(ClosedCover { edges: 238, winding: 1, curve_distance_lower: 7.500128320338055e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.500128320338055e-6, upper: 7.66885200175201e-6, width: 1.6872368141395535e-7 }\n[BRACKET_ACCURACY145] name=native requested_width=0.0000002 proved=true validation_elapsed_s=0.0000119\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007500128320338056 elapsed_s=0.2043812 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=176.962168\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_bytes": 142235,
+      "stderr_sha256": "bf7edde12c9de40987173d6f9adcdc6df438ba95ec755acb4be95ca25c6b4eea"
+    },
+    {
+      "name": "python-v4",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 182.40324300015345,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[SCREEN_PREPARATION_COST145] name=python elapsed_s=0.7427505 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=1.5908562000000002 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017109496124937463 elapsed_s=179.4671341 result=Ok(ClosedCover { edges: 172, winding: 1, curve_distance_lower: 1.7240936517760065e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7240936517760065e-7, upper: 1.7309496124937462e-7, width: 6.855960717739659e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.000000002 proved=true validation_elapsed_s=0.0000122\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017240936517760066 elapsed_s=0.2027195 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=182.003893\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002674926262705281 inclusion_c=0.00000000026278547732360885 contraction=0.11392859238968572 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002903063637915298 inclusion_c=0.0000000002845001478498861 contraction=0.02263397960672469 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_bytes": 83622,
+      "stderr_sha256": "e87c76fc37e6390482d1e6e7412779dab4f5bab641295aa2d6b9e82f75557704"
+    },
+    {
+      "name": "native-strict-v4",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 184.20674119982868,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[WITNESS_JET145] name=native numerical_only=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] }\n[SCREEN_PREPARATION_COST145] name=native elapsed_s=0.4268337 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=native candidates=56 numerical_only=true\n[SCREENED_WITNESS145] name=native rank=0 precision=128 offset=0.001 tangent=0.07 numerical_update=17192 point=[0.3204953007346294, 0.04734146125985035] elapsed_s=0.8962771 escape_update=Some(17192)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=69 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=131 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=193 max_depth=5 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=257 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=192 regions=312 max_depth=5 latest_proof_attempts=3\n[COVER_PROGRESS145] edges=224 regions=344 max_depth=5 latest_proof_attempts=2\n[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.000007618852001752011 elapsed_s=182.3375641 result=Ok(ClosedCover { edges: 248, winding: 1, curve_distance_lower: 7.619670297802715e-6 })\n[DISTANCE_BRACKET145] name=native bracket=DistanceBracket { query: [0.3204998863980762, 0.04733531447355364], lower: 7.619670297802715e-6, upper: 7.66885200175201e-6, width: 4.9181703949295564e-8 }\n[BRACKET_ACCURACY145] name=native requested_width=0.00000005 proved=true validation_elapsed_s=0.0000106\n[DOMAIN_COST145] name=native accepted_queries=10000 query_box_half_width=0.000000007619670297802714 elapsed_s=0.1825485 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=183.843709\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009363640839337525 inclusion_c=0.000000025885514440584603 contraction=0.4319594245621129 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010769280677309915 inclusion_c=0.000000029714352928755255 contraction=0.029256550135667397 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009339233124218495 inclusion_c=0.000000025736340824627833 contraction=0.43544570287197915 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001073538261577265 inclusion_c=0.000000029529133510229098 contraction=0.02945684851011972 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009324214592402417 inclusion_c=0.000000025615408996375086 contraction=0.43874693652909935 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010713293361924822 inclusion_c=0.00000002937917569605357 contraction=0.029650312247429887 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009340167338933777 inclusion_c=0.000000025578881550181104 contraction=0.4418906092365245 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010729972420959062 inclusion_c=0.000000029335563357548266 contraction=0.029843829366307133 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009386444074437009 inclusion_c=0.000000025627518071838576 contraction=0.4448653755149774 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010784662004434463 inclusion_c=0.000000029398827562735003 contraction=0.030034867906315623 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009443927091531896 inclusion_c=0.00000002571538869198464 contraction=0.4476299133125571 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010853642431642437 inclusion_c=0.0000000295106051459221 contraction=0.030214212658271608 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000009511096993515618 inclusion_c=0.00000002584047917418963 contraction=0.45017225006379735 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.000010935108354592317 inclusion_c=0.000000029668322048535807 contraction=0.030380181905249836 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000958718140416853 inclusion_c=0.000000026002439487893133 contraction=0.452481671097451 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00001102818690507042 inclusion_c=0.000000029871570931056054 contraction=0.03053203620202344 included=true contracting=true"
+      ],
+      "stderr_bytes": 148541,
+      "stderr_sha256": "3f283b6495e4c22599a6075c57e69c5575a99ccfc1f258ca8f57d243bdf05b4c"
+    },
+    {
+      "name": "python-strict-v4",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 184.40558470017277,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout": "[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[WITNESS_JET145] name=python numerical_only=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] }\n[SCREEN_PREPARATION_COST145] name=python elapsed_s=0.7347427 includes=numerical_jet_derivative_checks_and_screen\n[WITNESS_SCREEN145] name=python candidates=129 numerical_only=true\n[SCREENED_WITNESS145] name=python rank=0 precision=128 offset=0.001 tangent=0.025 numerical_update=30890 point=[0.3565937290805682, 0.0640464148561528] elapsed_s=1.5777079 escape_update=Some(30890)\n[COVER_PROGRESS145] edges=32 regions=32 max_depth=0 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=64 regions=68 max_depth=2 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=96 regions=128 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=128 regions=172 max_depth=4 latest_proof_attempts=2\n[COVER_PROGRESS145] edges=160 regions=204 max_depth=4 latest_proof_attempts=2\n[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017259496124937463 elapsed_s=181.546264 result=Ok(ClosedCover { edges: 173, winding: 1, curve_distance_lower: 1.7262428611786175e-7 })\n[DISTANCE_BRACKET145] name=python bracket=DistanceBracket { query: [0.3565938105543324, 0.0640465675777667], lower: 1.7262428611786175e-7, upper: 1.7309496124937462e-7, width: 4.706751315128663e-10 }\n[BRACKET_ACCURACY145] name=python requested_width=0.0000000005 proved=true validation_elapsed_s=0.0000104\n[DOMAIN_COST145] name=python accepted_queries=10000 query_box_half_width=0.00000000017262428611786176 elapsed_s=0.1924562 operation=scalar_bounds_only\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=184.051619\n",
+      "stderr_tail": [
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000006637511697980537 inclusion_c=0.00000000006520691300942246 contraction=0.05621070585348551 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000006915468655335589 inclusion_c=0.00000000006785124225496743 contraction=0.011024936504701323 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002653590156865111 inclusion_c=0.0000000002602236719675577 contraction=0.11411313223093694 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028785861775684104 inclusion_c=0.00000000028161421245751194 contraction=0.022649607168211093 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026357799562931744 inclusion_c=0.0000000002580552617836026 contraction=0.11428618075952889 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028581570308707306 inclusion_c=0.00000000027917445990462576 contraction=0.02266613527409695 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002621360992736175 inclusion_c=0.0000000002562757731957406 contraction=0.1144483902306539 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028416205975488723 inclusion_c=0.00000000027717477449612563 contraction=0.022683171738381254 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.0000002610210132005302 inclusion_c=0.0000000002548809172458645 contraction=0.11460033724734164 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028288355519538264 inclusion_c=0.000000000275609444705128 contraction=0.022700363850441697 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000026022202569550476 inclusion_c=0.00000000025386685527843776 contraction=0.11474251248672844 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028196797000623196 inclusion_c=0.00000000027447346215590853 contraction=0.02271741035564365 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025973031143985317 inclusion_c=0.0000000002532303384150703 contraction=0.11487531068831988 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028140530090565004 inclusion_c=0.00000000027376267445407405 contraction=0.02273407006627007 included=true contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000025953906225292355 inclusion_c=0.00000000025296873304709017 contraction=0.11499902130079402 included=false contracting=true",
+        "[BRANCH_BOUNDS145] inclusion_z=0.00000028118789314471735 inclusion_c=0.0000000002734738075177129 contraction=0.022750167205006916 included=true contracting=true"
+      ],
+      "stderr_bytes": 84267,
+      "stderr_sha256": "428af690c40b39cc41cf0f24682e68a7aaca253655e3b44f0e899761ba2f2427"
+    }
+  ],
+  "binary_sha256": {
+    "geometry145_accuracy_20261026a.exe": "6fbf55bc0722e06c72ab61ec91dd7f0805dce7127ef25c1c4d431286bb0bcb61",
+    "geometry145_accuracy_20261026b.exe": "8cc41fa3741913022ded6950a804fd4d1d60c662ee13cf3a693e33c7de0f6ee6",
+    "geometry145_accuracy_20261026c.exe": "84b8d7e1fdcaf9677fc528d4bd74e9c5f5ab22355bae2cbfbf9ec23b6028a4da",
+    "geometry145_accuracy_20261026d.exe": "6932910b3ed1885bec82c30d7e44b65792b79bb3470d8641dcd041e7a833c0c2"
+  },
+  "variant_provenance": {
+    "a": "Initial screen/clearance implementation, before strict-screen cutoff regression.",
+    "b": "Strict screen and typed proposal proof gate; no point bridge.",
+    "c": "Point bridge; before extracting independently tested final accuracy gates.",
+    "d": "Final archived source and executable, all 54 tests present."
+  },
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "ac58c91f74330822e85ffc6560b0ba790de917582b619435344479c44761ebff",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "885344f67ea66924f81b2fc52088b9c2eb3a6eb9e7435c0d3813e1c2c36a645e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "01a3c0ee3513bccc022357f911ff9603426b27f4b20f9580f8fcd87deb68c397",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "3e86b1431d8ee165c418d77b3714415bdcf31f02dfc45a75ae3dcf5c8b427f38"
+  },
+  "manifest_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6"
+  },
+  "tests": "cargo test: 54 passed (2 suites, 2.48s)\n",
+  "mutations": {
+    "point-proof": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "component": [
+      {
+        "mutation": "trap-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "affine-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-multiplier-second-derivative",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-hessian-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-interior-orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-escape-cutoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-point-binding",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "branch": [
+      {
+        "mutation": "self-inclusion",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "contraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "operation-roundoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-remainder",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "remainder-transport",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-parameter-domain",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-c-identity",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-cycle-phase",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-attraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-domain",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "cover": [
+      {
+        "mutation": "closed-parameter-path",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cycle-joins",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "region-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-refinement",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-clearance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-construction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-left",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-right",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-clearance",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "bracket": [
+      {
+        "mutation": "outside-proof",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-distance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "travel-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "subtraction-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-interior",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-binding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "upper-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-width",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "limits": {
+    "screened_proposals": 567,
+    "selected_proposals": 32,
+    "proof_precisions": [
+      128,
+      256
+    ],
+    "orbit_updates": 32768,
+    "cover_regions": 8192,
+    "cover_depth": 24,
+    "automatic_attempts_per_call": 12
+  },
+  "cost_scope": "Four final high-period processes ran concurrently with mutation compilation. Screen-preparation timer includes numerical jet/derivative checks. Witness proofs, cover/final-curve validation, final width validation, and 10000 scalar-domain queries are separately timed.",
+  "unchanged_production_failures": "Original native CutLocus and Python Unresolved failures remain; see geometry-145-closed-cover.json. No production sources changed."
+}

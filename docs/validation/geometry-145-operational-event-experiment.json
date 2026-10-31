@@ -1,0 +1,55 @@
+{
+  "schema": "operational-integration-diagnostic/1",
+  "date": "2026-10-30",
+  "field_id": "37ec6365e602ae31",
+  "source_experiment": "geometry-145-operational-reference-grid-experiment.json",
+  "start": [
+    0.4,
+    0.05
+  ],
+  "epsilon": 0.0001,
+  "kappa": 0.1,
+  "launch_energy_factor": 25.0,
+  "drag": 0.0,
+  "horizon_seconds": 5.0,
+  "timesteps": [
+    0.002,
+    0.001,
+    0.0005,
+    0.00025,
+    0.000125
+  ],
+  "methods": [
+    "Rk4FourSubsteps"
+  ],
+  "drag_controls": {
+    "position_float32": [
+      -0.5,
+      0.1
+    ],
+    "velocity_float32": [
+      0.2,
+      0.2
+    ],
+    "dt": 0.01,
+    "beta": 0.5,
+    "method": "Rk4",
+    "profiles": [
+      "default potential and wall",
+      "kappa=0 and mu=0"
+    ],
+    "claim": "separate potential conversion from dissipative drag work; retain the kinetic threshold on the actual force-disabled control",
+    "substep_sweep": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ]
+  },
+  "purpose": "Separate integration error from sampled crossing-event timing on identical frozen coefficients; original Euler test and its refinement assertion remain authoritative",
+  "event_diagnostics": "retain original first-negative-sample time; separately bisect F along the final accepted segment; no replacement crossing definition or acceptance threshold",
+  "adoption": false
+}

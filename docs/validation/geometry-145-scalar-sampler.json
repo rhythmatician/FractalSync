@@ -1,0 +1,19 @@
+{
+  "production_adoption": false,
+  "base": "d8ec37a plus the ten ranged-field patches",
+  "scope": "Explicit scalar sampling seam preserves the synthetic endpoint-distance assertion and its tolerance; runtime sampling is unchanged.",
+  "prior_result": {
+    "passed": 76,
+    "failed": 1,
+    "elapsed_s": 145.27,
+    "failure": "signed_stencil_preserves_distance_to_segment_endpoint returned actual Mandelbrot distance 1.7525267751610076 for a synthetic segment"
+  },
+  "targeted_endpoint_test": {
+    "passed": 1,
+    "failed": 0
+  },
+  "before_normalized_source_sha256": "b48d803b14015e7c076ea0334a51a4e6c85933b15b50ca08b2c75ba97f677154",
+  "after_normalized_source_sha256": "9a90d07bb4798278e8fe907eecdf625913942933a7c7b53a8048dc263296306e",
+  "patch_sha256": "7213db7032f1723766d9432694b2430c30ff337467cde431047e06a76e52f258",
+  "full_rerun_log": "cargo test: 77 passed, 224 filtered out (23 suites, 141.62s)\n"
+}

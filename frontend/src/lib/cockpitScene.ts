@@ -529,6 +529,9 @@ export function placeRider(
   // Slope lateral = dY_lat / hScale.
   const hScale = SCENE_SCALE;
 
+  if (snap.physics.scaleGradient === null || snap.physics.sigma === null) {
+    throw new Error('Cannot orient rider: snapshot surface derivatives are unavailable');
+  }
   const [gx, gy] = snap.physics.scaleGradient;
   const dYdSigma =
     (surfaceY(snap.physics.sigma + 0.01) - surfaceY(snap.physics.sigma - 0.01)) / 0.02;
@@ -592,6 +595,7 @@ export function buildTrail(trajectory: CockpitTrajectory, upTo: number): THREE.L
   for (let i = 0; i < count; i++) {
     const [cx, cy] = trajectory.snapshots[i].physics.c;
     const z = trajectory.snapshots[i].physics.sigma;
+    if (z === null) continue;
     const yCoord = surfaceY(z) + 0.05;
     points.push(new THREE.Vector3(cx * SCENE_SCALE, yCoord, -cy * SCENE_SCALE));
   }

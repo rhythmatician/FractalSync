@@ -1,0 +1,64 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1189,10 +1189,10 @@
+             .sqrt();
+         let size = rho
+             .reciprocal()
+-            .scale(h / (GEOMETRY_SCALE_ALPHA / 8.))
++            .scale(h / (GEOMETRY_SCALE_ALPHA / 128.))
+             .add(FieldJet::constant(-1.))
+             .smoothstep();
+-        Self::either(size, detail)
++        size
+     }
+     fn either(a: FieldJet, b: FieldJet) -> FieldJet {
+         FieldJet::constant(1.).add(
+@@ -1253,7 +1253,7 @@
+             let size = Self::next_weight(coarse.field, coarse.h, epsilon, coarse.detail);
+             let error1 = Self::disagreement(coarse.field, first.field, epsilon);
+             let error2 = Self::disagreement(coarse.field, second.field, epsilon);
+-            let weight = Self::either(size, Self::either(error1, error2));
++            let weight = size;
+             let next = if weight.d == 1. && weight.g == [0.; 2] && weight.h == [[0.; 2]; 2] {
+                 product
+             } else if field_zero(weight) {
+@@ -1463,6 +1463,14 @@
+  }
+  eprintln!("[NODE145] unresolved k={k} c=({:.17},{:.17})",c.re,c.im);
+  None
++}
++
++
++fn component_field_model(c:Complex64,h:f64,raw:&GeometryJet)->Option<(GeometryJet,FieldJet)> {
++ let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p| component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
++ let (field,detail)=quintic_field(c,h,&stencil?);
++ let mut model=raw.clone();model.d=field.d;model.grad_d=field.g;model.hessian_d=field.h;model.resolved_scale=h;
++ Some((model,detail))
+ }
+
+ fn compute_jet_at_level(
+@@ -1877,6 +1885,24 @@
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
++
++        if let (Some(raw),Some(field))=(&pending,&mut hierarchy) {
++            if !field.closed {
++                if let Some((model,detail))=component_field_model(c,h,raw) {
++                    field.advance(&model,epsilon,true,detail);
++                    let output=field.output(raw,epsilon);
++                    if field.closed && field.certified
++                        && output.resolved_scale<=output.requested_scale
++                        && output.estimated_error<=DYADIC_FIT_ERROR_FACTOR*output.requested_scale {
++                        return Ok(output);
++                    }
++                    // A skipped contour level cannot form a consecutive raw pair.
++                    previous=None;
++                    k+=1;
++                    continue;
++                }
++            }
++        }
+         let (tile, certified) = match contained_tile(c, k) {
+             Ok(tile) => tile,
+             Err(TileQueryError::FootprintUnresolved) => return Ok(last),

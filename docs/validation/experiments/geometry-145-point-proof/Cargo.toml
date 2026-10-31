@@ -1,0 +1,14 @@
+[package]
+name = "geometry145_precision_probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+astro-float = "=0.9.6"
+
+[[bin]]
+name = "component_probe"
+path = "src/component_probe.rs"

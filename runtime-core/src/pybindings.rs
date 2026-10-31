@@ -9,6 +9,36 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyComplex, PyDict};
 
+#[cfg(feature = "experimental-operational-field")]
+#[pyfunction]
+fn experimental_prepare_operational_field() -> PyResult<String> {
+    let field = crate::operational_field::prepare_raster_baseline().map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let identity = format!("operational:{:016x}",field.identity());
+    crate::operational_field::activate(Some(std::sync::Arc::new(field)));
+    Ok(identity)
+}
+
+#[cfg(feature = "experimental-operational-field")]
+#[pyfunction]
+fn experimental_load_operational_asset(bytes:&[u8]) -> PyResult<String> {
+    let field=crate::operational_field::PreparedField::from_asset_bytes(&bytes).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let identity=format!("operational:{:016x}",field.identity());
+    crate::operational_field::activate(Some(std::sync::Arc::new(field)));
+    Ok(identity)
+}
+
+#[cfg(feature = "experimental-operational-field")]
+#[pyfunction]
+#[pyo3(signature=(bytes,policy,integrator="Euler"))]
+fn experimental_load_operational_asset_with_policy(bytes:&[u8],policy:&str,integrator:&str) -> PyResult<String> {
+    let method=crate::operational_field::acceptance::Integrator::parse_name(integrator).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let field=crate::operational_field::PreparedField::from_asset_bytes(bytes).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let cuts=crate::operational_field::acceptance::reference_policy_for_field(&field,policy).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    let id=format!("operational:{:016x}",field.identity());
+    crate::operational_field::activate_with_reference_and_integrator(Some(std::sync::Arc::new(field)),cuts,method).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
+    Ok(id)
+}
+
 use crate::controller::{
     OrbitState as RustOrbitState,
     ResidualParams as RustResidualParams,
@@ -398,7 +428,7 @@ impl OrbitController {
 
     /// Set the persistent c position (momentum/shore-bias paths).
     fn set_c(&mut self, re: f64, im: f64) {
-        self.inner.c = num_complex::Complex64::new(re, im);
+        self.inner.set_c(re, im);
     }
 
     // ---- Manifold physics (issue #106) ----
@@ -408,7 +438,7 @@ impl OrbitController {
     /// generalized force covector for the musically-ignorant manifold kernel.
     /// Transitional; not destination Controls v2 (issue #107).
     fn set_manifold_physics(&mut self, on: bool) {
-        self.inner.manifold_physics = on;
+        self.inner.set_manifold_physics_enabled(on);
     }
 
     /// Whether manifold physics is currently enabled.
@@ -1121,6 +1151,10 @@ fn geometry_provider_query(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<S
 
 #[pyfunction]
 fn geometry_provider_version() -> String {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(profile) = crate::operational_field::active_profile() {
+        return profile.to_string();
+    }
     crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string()
 }
 
@@ -2485,6 +2519,12 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_apply_generalized_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_drag_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_integrate_step, m)?)?;
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_function(wrap_pyfunction!(experimental_prepare_operational_field, m)?)?;
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_function(wrap_pyfunction!(experimental_load_operational_asset, m)?)?;
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_function(wrap_pyfunction!(experimental_load_operational_asset_with_policy, m)?)?;
     m.add_function(wrap_pyfunction!(controls_integrate_step, m)?)?;
     m.add_function(wrap_pyfunction!(motion_drive_covector, m)?)?;
     m.add_function(wrap_pyfunction!(debug_snapshot_from_state, m)?)?;

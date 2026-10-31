@@ -1,0 +1,43 @@
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -548,10 +548,8 @@
+                 .collect();
+             let mut unproven = 0;
+             let mut proven = 0;
+-            let mut permanent = Vec::with_capacity(inside_next.len());
+             for (member, orbit) in inside_next.iter().zip(&orbits) {
+                 if !member {
+-                    permanent.push(true);
+                     continue;
+                 }
+                 let bounded = match orbit.evidence() {
+@@ -564,25 +562,15 @@
+                         )
+                     }
+                 };
+-                permanent.push(bounded);
+                 if bounded {
+                     proven += 1;
+                 } else {
+                     unproven += 1;
+                 }
+             }
+-            let before = unstable_nodes.len();
+-            unstable_nodes.retain(|&(x, y)| {
+-                let i = ((x - re0) / h).round() as isize;
+-                let j = ((y - im0) / h).round() as isize;
+-                if i < 5 || j < 5 || i + 5 >= n as isize || j + 5 >= n as isize {
+-                    return true;
+-                }
+-                !(-5..=5).all(|dy| {
+-                    (-5..=5).all(|dx| permanent[((j + dy) as usize) * n + (i + dx) as usize])
+-                })
+-            });
+-            eprintln!("[LOCAL145] before={before} after={}", unstable_nodes.len());
++            if unproven == 0 {
++                unstable_nodes.clear();
++            }
+             eprintln!("[TAIL145] k={k} origin=({re0},{im0}) proven={proven} unproven={unproven} remaining_changes={}",unstable_nodes.len());
+             max_iter = next_n;
+             inside = inside_next;

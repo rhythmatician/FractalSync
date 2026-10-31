@@ -1,0 +1,143 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1189,10 +1189,10 @@
+             .sqrt();
+         let size = rho
+             .reciprocal()
+-            .scale(h / (GEOMETRY_SCALE_ALPHA / 8.))
++            .scale(h / (GEOMETRY_SCALE_ALPHA / 128.))
+             .add(FieldJet::constant(-1.))
+             .smoothstep();
+-        Self::either(size, detail)
++        size
+     }
+     fn either(a: FieldJet, b: FieldJet) -> FieldJet {
+         FieldJet::constant(1.).add(
+@@ -1253,7 +1253,7 @@
+             let size = Self::next_weight(coarse.field, coarse.h, epsilon, coarse.detail);
+             let error1 = Self::disagreement(coarse.field, first.field, epsilon);
+             let error2 = Self::disagreement(coarse.field, second.field, epsilon);
+-            let weight = Self::either(size, Self::either(error1, error2));
++            let weight = size;
+             let next = if weight.d == 1. && weight.g == [0.; 2] && weight.h == [[0.; 2]; 2] {
+                 product
+             } else if field_zero(weight) {
+@@ -1463,6 +1463,42 @@
+  }
+  eprintln!("[NODE145] unresolved k={k} c=({:.17},{:.17})",c.re,c.im);
+  None
++}
++
++
++fn component_features(c:Complex64,h:f64)->Option<Vec<NearestFeature>> {
++ component_distance(c)?;
++ let r=(c.re+1.).hypot(c.im);
++ let points=if r<0.25 {
++  if r==0. {vec![[-0.75,0.],[-1.25,0.]]} else {
++   let v=[0.25*(c.re+1.)/r,0.25*c.im/r];vec![[-1.+v[0],v[1]],[-1.-v[0],-v[1]]]
++  }
++ } else {
++  let x=c.re;let y=c.im;let a=[0.5-2.*x,-6.*y,6.*x+0.5,2.*y];let mut theta=vec![0.];
++  theta.extend(roots(a).into_iter().map(|s|2.*s.atan()));
++  theta.extend(roots([a[3],a[2],a[1],a[0]]).into_iter().map(|r|std::f64::consts::PI-2.*r.atan()));
++  theta.into_iter().map(|t|[0.5*t.cos()-0.25*(2.*t).cos(),0.5*t.sin()-0.25*(2.*t).sin()]).collect()
++ };
++ let best=points.iter().map(|p|(c.re-p[0]).hypot(c.im-p[1])).fold(f64::INFINITY,f64::min);
++ let features:Vec<_>=points.into_iter().filter_map(|p| {
++  let d=(c.re-p[0]).hypot(c.im-p[1]);
++  (d>0. && d-best<=DYADIC_CUT_TIE_FACTOR*h).then_some(NearestFeature{projection:(p[0],p[1]),direction:((c.re-p[0])/d,(c.im-p[1])/d)})
++ }).collect();
++ Some(features)
++}
++fn component_level(c:Complex64,epsilon:f64,k:u32,h:f64)->Option<FittedJet> {
++ let d0=component_distance(c)?;
++ let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p|component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
++ let stencil=stencil?;
++ let center:Vec<_>=(1..8).flat_map(|y|(1..8).map(move|x|(y,x))).map(|(y,x)|stencil[y*9+x]).collect();
++ let (_,rms)=fit_quadratic_jet(&center)?;
++ let (field,detail)=quintic_field(c,h,&stencil);
++ let rms=rms.max((field.d-d0).abs());
++ let mut jet=failure_jet(field.d,h,GeometryValidity::Regular,SingularityKind::None);
++ jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms;
++ jet.requested_scale=GEOMETRY_SCALE_ALPHA*(field.d*field.d+epsilon*epsilon).sqrt();
++ jet.tile_id=format!("component:{k}");jet.is_bridge=false;
++ Some(FittedJet{nodes_certified:true,detail,jet,fit_rms:rms,stencil})
+ }
+
+ fn compute_jet_at_level(
+@@ -1742,6 +1778,7 @@
+ }
+
+ struct PreviousLevel {
++    component:bool,
+     jet: GeometryJet,
+     fit_rms: f64,
+     ties: Option<Vec<NearestFeature>>,
+@@ -1877,6 +1914,11 @@
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
++        let (fitted,certified,segs,ties,component)=if let Some(model)=component_level(c,epsilon,k,h) {
++            let features=component_features(c,h).expect("component center");
++            let ties=has_competing_directions(&features).then_some(features);
++            (model,true,Vec::new(),ties,true)
++        } else {
+         let (tile, certified) = match contained_tile(c, k) {
+             Ok(tile) => tile,
+             Err(TileQueryError::FootprintUnresolved) => return Ok(last),
+@@ -1890,23 +1932,19 @@
+         if !certified {
+             previous = None;
+         }
+-        let Some(FittedJet {
+-            nodes_certified,
+-            detail,
+-            mut jet,
+-            fit_rms: rms,
+-            stencil,
+-        }) = compute_jet_at_level(c, epsilon, k, h, &tile)
+-        else {
+-            return Ok(last);
++
++            let Some(model)=compute_jet_at_level(c,epsilon,k,h,&tile) else {return Ok(last);};
++            let ties=competing_normals(c,&tile.segments,h);
++            (model,certified,tile.segments,ties,false)
+         };
++        if !certified {previous=None;}
++        if previous.as_ref().is_some_and(|p|p.component && !component) {previous=None;}
++        let FittedJet{nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
+         if let Some(field) = &mut hierarchy {
+             field.advance(&jet, epsilon, nodes_certified, detail);
+         } else {
+             hierarchy = Some(FieldHierarchy::new(&jet, epsilon, nodes_certified, detail));
+         }
+-        let segs = tile.segments;
+-        let ties = competing_normals(c, &segs, h);
+         if ties.is_some() {
+             pending = None;
+         }
+@@ -1933,10 +1971,12 @@
+         }
+         if let Some(previous) = &previous {
+             let prev = &previous.jet;
+-            let Some(field_error) =
+-                stencil_distance_disagreement(c, prev.resolved_scale, &stencil, &previous.segments)
+-            else {
+-                return Ok(last);
++            let field_error=if previous.component {
++                let errors:Option<Vec<_>>=stencil.iter().map(|&(dx,dy,d)|component_distance(Complex64::new(c.re+dx,c.im+dy)).map(|value|(value-d).abs())).collect();
++                let Some(errors)=errors else {return Ok(last);};
++                errors.into_iter().fold(0.,f64::max)
++            } else {
++                let Some(error)=stencil_distance_disagreement(c,prev.resolved_scale,&stencil,&previous.segments) else {return Ok(last);};error
+             };
+             let grad_diff = (jet.grad_d[0] - prev.grad_d[0]).hypot(jet.grad_d[1] - prev.grad_d[1]);
+             let hess_diff = ((jet.hessian_d[0][0] - prev.hessian_d[0][0]).powi(2)
+@@ -1995,6 +2035,7 @@
+         // Skipping levels can jump to a tile too small to contain the Shore.
+         // Refine monotonically one level at a time until the ruler and error agree.
+         previous = certified.then_some(PreviousLevel {
++            component,
+             jet,
+             fit_rms: rms,
+             ties,

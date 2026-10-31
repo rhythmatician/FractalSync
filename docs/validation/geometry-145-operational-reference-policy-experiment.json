@@ -1,0 +1,8 @@
+{
+  "schema": "operational-reference-policy-experiment/1",
+  "date": "2026-10-30",
+  "field_id": "068e8e016b4ad6b7",
+  "points": [[-1.0, 0.0]],
+  "purpose": "Snapshot existing canonical cut-locus refusals before fresh replays; no new geometry proof or region inference",
+  "unknown_elsewhere": true
+}

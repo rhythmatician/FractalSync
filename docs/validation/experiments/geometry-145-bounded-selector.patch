@@ -1,0 +1,391 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1067,6 +1067,7 @@
+ }
+ 
+ struct FittedJet {
++    size_bound:f64,
+     nodes_certified:bool,
+     detail: FieldJet,
+     jet: GeometryJet,
+@@ -1165,6 +1166,7 @@
+ }
+ 
+ struct FieldModel {
++    size_bound:f64,
+     field: FieldJet,
+     h: f64,
+     detail: FieldJet,
+@@ -1218,6 +1220,7 @@
+         let field = FieldJet::from_geometry(jet);
+         Self {
+             models: vec![FieldModel {
++                size_bound:f64::INFINITY,
+                 field,
+                 h: jet.resolved_scale,
+                 detail,
+@@ -1230,8 +1233,15 @@
+             certified,
+         }
+     }
+-    fn advance(&mut self, jet: &GeometryJet, epsilon: f64, certified: bool, detail: FieldJet) {
++    fn new_bounded(jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet,size_bound:f64)->Self {
++        let mut value=Self::new(jet,epsilon,certified,detail);value.models[0].size_bound=size_bound;value
++    }
++    fn advance(&mut self,jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet) {
++        self.advance_bounded(jet,epsilon,certified,detail,f64::INFINITY);
++    }
++    fn advance_bounded(&mut self, jet: &GeometryJet, epsilon: f64, certified: bool, detail: FieldJet,size_bound:f64) {
+         self.models.push(FieldModel {
++            size_bound,
+             field: FieldJet::from_geometry(jet),
+             h: jet.resolved_scale,
+             detail,
+@@ -1265,11 +1275,12 @@
+             // A flat coefficient alone cannot certify the inputs selecting it.
+             // A certified operand that independently forces OR to one can
+             // dominate other unknown operands; a zero plateau cannot.
+-            weights_certified &= coarse.certified
++            let bounded_one=one(size) && size_saturated_by_bound(coarse.h,epsilon,coarse.size_bound);
++            weights_certified &= bounded_one || (coarse.certified
+                 && (one(size)
+                     || (first.certified && one(error1))
+                     || (second.certified && one(error2))
+-                    || (first.certified && second.certified));
++                    || (first.certified && second.certified)));
+             let retained = product.add(next.scale(-1.));
+             if !field_zero(retained) {
+                 prefix = prefix.add(retained.mul(coarse.field));
+@@ -1320,8 +1331,7 @@
+ }
+ 
+ // Exact integer coefficient polynomials, ordered from t^0 through t^5.
+-fn quintic_basis(t: f64) -> [[f64; 6]; 5] {
+-    const P: [[f64; 6]; 6] = [
++const QUINTIC_BASIS: [[f64;6];6] = [
+         [1., -5., 10., -10., 5., -1.],
+         [26., -50., 20., 20., -20., 5.],
+         [66., 0., -60., 0., 30., -10.],
+@@ -1329,13 +1339,14 @@
+         [1., 5., 10., 10., 5., -5.],
+         [0., 0., 0., 0., 0., 1.],
+     ];
++fn quintic_basis(t: f64) -> [[f64;6];5] {
+     let mut result = [[0.; 6]; 5];
+     for derivative in 0..5 {
+         for basis in 0..6 {
+             let mut value = 0.;
+             for power in (derivative..6).rev() {
+                 let factor = (0..derivative).fold(1., |product, i| product * (power - i) as f64);
+-                value = value * t + P[basis][power] * factor;
++                value = value * t + QUINTIC_BASIS[basis][power] * factor;
+             }
+             result[derivative][basis] = value / 120.;
+         }
+@@ -1440,7 +1451,7 @@
+  })
+ }
+ fn field_node(c:Complex64,k:u32,source:&ShoreTile)->Option<f64> {
+- if let Some(value)=component_distance(c) {return Some(value);}
++ if let Some(value)=bounded_component_distance(c) {return Some(value);}
+  let key=(k,c.re.to_bits(),c.im.to_bits());
+  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {if let Some(v)=cache.get(&key){return Some(v);}}
+ 
+@@ -1467,7 +1478,7 @@
+ 
+ 
+ fn component_features(c:Complex64,h:f64)->Option<Vec<NearestFeature>> {
+- component_distance(c)?;
++ bounded_component_distance(c)?;
+  let r=(c.re+1.).hypot(c.im);
+  let points=if r<0.25 {
+   if r==0. {vec![[-0.75,0.],[-1.25,0.]]} else {
+@@ -1487,8 +1498,8 @@
+  Some(features)
+ }
+ fn component_level(c:Complex64,epsilon:f64,k:u32,h:f64)->Option<FittedJet> {
+- let d0=component_distance(c)?;
+- let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p|component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
++ let d0=bounded_component_distance(c)?;
++ let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p|bounded_component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
+  let stencil=stencil?;
+  let center:Vec<_>=(1..8).flat_map(|y|(1..8).map(move|x|(y,x))).map(|(y,x)|stencil[y*9+x]).collect();
+  let (_,rms)=fit_quadratic_jet(&center)?;
+@@ -1498,7 +1509,90 @@
+  jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms;
+  jet.requested_scale=GEOMETRY_SCALE_ALPHA*(field.d*field.d+epsilon*epsilon).sqrt();
+  jet.tile_id=format!("component:{k}");jet.is_bridge=false;
+- Some(FittedJet{nodes_certified:true,detail,jet,fit_rms:rms,stencil})
++ Some(FittedJet{size_bound:f64::INFINITY,nodes_certified:true,detail,jet,fit_rms:rms,stencil})
++}
++
++
++fn boundary_parameters(c:[f64;2])->Vec<(f64,bool)> {
++ let [x,y]=c;let a=[0.5-2.*x,-6.*y,6.*x+0.5,2.*y];
++ let mut values=vec![(0.,false),(0.,true)];
++ values.extend(roots(a).into_iter().map(|s|(s,false)));
++ values.extend(roots([a[3],a[2],a[1],a[0]]).into_iter().map(|s|(s,true)));
++ values
++}
++#[derive(Clone,Copy)]
++struct BoundaryInterval {lo:f64,hi:f64}
++impl BoundaryInterval {
++    fn point(x:f64)->Self {Self{lo:x,hi:x}}
++    fn add(self,b:Self)->Self {Self{lo:(self.lo+b.lo).next_down(),hi:(self.hi+b.hi).next_up()}}
++    fn neg(self)->Self {Self{lo:-self.hi,hi:-self.lo}}
++    fn sub(self,b:Self)->Self {self.add(b.neg())}
++    fn mul(self,b:Self)->Self {
++        let p=[self.lo*b.lo,self.lo*b.hi,self.hi*b.lo,self.hi*b.hi];
++        Self{lo:p.into_iter().fold(f64::INFINITY,f64::min).next_down(),hi:p.into_iter().fold(f64::NEG_INFINITY,f64::max).next_up()}
++    }
++    fn div_positive(self,b:Self)->Self {
++        assert!(b.lo>0.);
++        self.mul(Self{lo:(1./b.hi).next_down(),hi:(1./b.lo).next_up()})
++    }
++    fn abs_upper(self)->f64 {self.lo.abs().max(self.hi.abs())}
++}
++fn boundary_box(parameter:f64,cotangent:bool)->[BoundaryInterval;2] {
++    let one=BoundaryInterval::point(1.);
++    let s=BoundaryInterval::point(parameter);
++    let q=s.mul(s);
++    let denominator=one.add(q);
++    let numerator=if cotangent {q.sub(one)} else {one.sub(q)};
++    let u=numerator.div_positive(denominator);
++    let v=BoundaryInterval::point(2.).mul(s).div_positive(denominator);
++    let half=BoundaryInterval::point(0.5);
++    let quarter=BoundaryInterval::point(0.25);
++    [half.mul(u).sub(quarter.mul(u.mul(u).sub(v.mul(v)))),half.mul(v).sub(half.mul(u.mul(v)))]
++}
++fn distance_upper(c:[f64;2])->f64 {
++    boundary_parameters(c).into_iter().map(|(s,cot)| {
++        let p=boundary_box(s,cot);
++        let x=BoundaryInterval::point(c[0]).sub(p[0]).abs_upper();
++        let y=BoundaryInterval::point(c[1]).sub(p[1]).abs_upper();
++        ((x*x).next_up()+(y*y).next_up()).next_up().sqrt().next_up()
++    }).fold(f64::INFINITY,f64::min)
++}
++
++fn bounded_component_distance(c:Complex64)->Option<f64> {
++ component_distance(c).map(|d| {let upper=distance_upper([c.re,c.im]);d.clamp(-upper,upper)})
++}
++fn scalar_field_bound(c:Complex64,h:f64)->f64 {
++ let tx=c.re/h-(c.re/h).floor();let ty=c.im/h-(c.im/h).floor();
++ let basis=|t:f64|->Vec<BoundaryInterval> {
++  QUINTIC_BASIS.iter().map(|polynomial| {
++   let mut value=BoundaryInterval::point(0.);
++   for &coefficient in polynomial.iter().rev() {
++    value=value.mul(BoundaryInterval::point(t)).add(BoundaryInterval::point(coefficient));
++   }
++   value.div_positive(BoundaryInterval::point(120.))
++  }).collect()
++ };
++ let wx=basis(tx);let wy=basis(ty);
++ let nodes:Vec<_>=distance_stencil(c,h).map(|p| {let upper=distance_upper([p.re,p.im]);BoundaryInterval{lo:-upper,hi:upper}}).collect();
++ let reference=nodes[40];
++ let half=BoundaryInterval::point(0.5);let quarter=BoundaryInterval::point(0.25);
++ let sx=nodes[41].sub(nodes[39]).mul(half);let sy=nodes[49].sub(nodes[31]).mul(half);
++ let mut sum=BoundaryInterval::point(0.);
++ for y in 0..6 {for x in 0..6 {
++  let index=(y+2)*9+x+2;let center=nodes[index];
++  let laplacian=nodes[index-1].sub(center).add(nodes[index+1].sub(center)).add(nodes[index-9].sub(center)).add(nodes[index+9].sub(center));
++  let coefficient=center.sub(quarter.mul(laplacian)).sub(reference).sub(sx.mul(BoundaryInterval::point(x as f64-2.))).sub(sy.mul(BoundaryInterval::point(y as f64-2.)));
++  sum=sum.add(wx[x].mul(wy[y]).mul(coefficient));
++ }}
++ sum.add(reference.add(sx.mul(BoundaryInterval::point(tx))).add(sy.mul(BoundaryInterval::point(ty)))).abs_upper()
++}
++fn size_saturated_by_bound(h:f64,epsilon:f64,bound:f64)->bool {
++ if !bound.is_finite() {return false;}
++ let b=BoundaryInterval::point(bound);let e=BoundaryInterval::point(epsilon);
++ let rho_upper=b.mul(b).add(e.mul(e)).hi.sqrt().next_up();
++ let inverse_lower=(1./rho_upper).next_down();
++ let scale_lower=(h/(GEOMETRY_SCALE_ALPHA/128.)).next_down();
++ (inverse_lower*scale_lower).next_down()>2.
+ }
+ 
+ fn compute_jet_at_level(
+@@ -1516,6 +1610,8 @@
+     let mut nodes_certified=true;
+     for (index,sample) in distance_stencil(c, h).enumerate() {
+         let value=if index<9 || index%9==0 {signed_shore_distance(sample,h,&tile.segments)?} else if let Some(value)=field_node(sample,k,tile) {value} else {nodes_certified=false;signed_shore_distance(sample,h,&tile.segments)?};
++        let upper=distance_upper([sample.re,sample.im]);
++        let value=value.clamp(-upper,upper);
+         stencil.push((sample.re-c.re,sample.im-c.im,value));
+     }
+     let center_stencil: Vec<_> = (1..8)
+@@ -1552,6 +1648,7 @@
+         is_bridge: false,
+     };
+     Some(FittedJet {
++        size_bound:if nodes_certified {f64::INFINITY} else {scalar_field_bound(c,h)},
+         nodes_certified,
+         detail,
+         jet,
+@@ -1914,6 +2011,26 @@
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
++
++        // No raw convergence sample is made here. Every admissible coefficient
++        // assignment forces this model's size gate to one, so its field value
++        // is discarded independently of the unresolved membership values.
++        if hierarchy.as_ref().is_none_or(|field|!field.closed) {
++            let bound=scalar_field_bound(c,h);
++            if size_saturated_by_bound(h,epsilon,bound) {
++                let mut model=failure_jet(0.,h,GeometryValidity::Unresolved,SingularityKind::None);
++                model.grad_d=[0.;2];model.hessian_d=[[0.;2];2];
++                let zero=FieldJet::constant(0.);
++                if let Some(field)=&mut hierarchy {
++                    field.advance_bounded(&model,epsilon,false,zero,bound);
++                } else {
++                    hierarchy=Some(FieldHierarchy::new_bounded(&model,epsilon,false,zero,bound));
++                }
++                previous=None;
++                k+=1;
++                continue;
++            }
++        }
+         let (fitted,certified,segs,ties,component)=if let Some(model)=component_level(c,epsilon,k,h) {
+             let features=component_features(c,h).expect("component center");
+             let ties=has_competing_directions(&features).then_some(features);
+@@ -1939,11 +2056,11 @@
+         };
+         if !certified {previous=None;}
+         if previous.as_ref().is_some_and(|p|p.component && !component) {previous=None;}
+-        let FittedJet{nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
++        let FittedJet{size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
+         if let Some(field) = &mut hierarchy {
+-            field.advance(&jet, epsilon, nodes_certified, detail);
++            field.advance_bounded(&jet, epsilon, nodes_certified, detail,size_bound);
+         } else {
+-            hierarchy = Some(FieldHierarchy::new(&jet, epsilon, nodes_certified, detail));
++            hierarchy = Some(FieldHierarchy::new_bounded(&jet, epsilon, nodes_certified, detail,size_bound));
+         }
+         if ties.is_some() {
+             pending = None;
+@@ -1972,7 +2089,7 @@
+         if let Some(previous) = &previous {
+             let prev = &previous.jet;
+             let field_error=if previous.component {
+-                let errors:Option<Vec<_>>=stencil.iter().map(|&(dx,dy,d)|component_distance(Complex64::new(c.re+dx,c.im+dy)).map(|value|(value-d).abs())).collect();
++                let errors:Option<Vec<_>>=stencil.iter().map(|&(dx,dy,d)|bounded_component_distance(Complex64::new(c.re+dx,c.im+dy)).map(|value|(value-d).abs())).collect();
+                 let Some(errors)=errors else {return Ok(last);};
+                 errors.into_iter().fold(0.,f64::max)
+             } else {
+@@ -2922,7 +3039,7 @@
+             d,
+             grad_d: [0.; 2],
+             hessian_d: [[0.; 2]; 2],
+-            resolved_scale: h,
++            resolved_scale: h / 16.,
+             requested_scale: GEOMETRY_SCALE_ALPHA * d,
+             estimated_error: 0.,
+             validity: GeometryValidity::Regular,
+@@ -2934,16 +3051,18 @@
+     }
+     #[test]
+     fn agreeing_pair_does_not_hide_later_distance_change() {
+-        let zero = FieldJet::constant(0.);
+-        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
+-        f.advance(&jet(0.04, 0.00005), 1e-4, true, zero);
+-        f.advance(&jet(0.035, 0.000025), 1e-4, true, zero);
+-        assert!(!f.closed);
+-        f.advance(&jet(0.035, 0.0000125), 1e-4, true, zero);
+-        assert!(!f.closed);
+-        f.advance(&jet(0.035, 0.00000625), 1e-4, true, zero);
++        let zero=FieldJet::constant(0.);
++        let mut f=FieldHierarchy::new(&jet(0.04,0.0001),1e-4,true,zero);
++        f.advance(&jet(0.04,0.00005),1e-4,true,zero);
++        f.advance(&jet(0.035,0.000025),1e-4,true,zero);
+         assert!(f.closed && f.certified);
+-        assert_eq!(f.sum.d, 0.035);
++        let raw=jet(0.035,0.000025);
++        let output=f.output(&raw,1e-4);
++        assert!(output.estimated_error>DYADIC_FIT_ERROR_FACTOR*output.requested_scale);
++        f.advance(&jet(0.035,0.0000125),1e-4,true,zero);
++        assert_eq!(f.sum.d,0.04);
++        let output=f.output(&raw,1e-4);
++        assert!(output.estimated_error>DYADIC_FIT_ERROR_FACTOR*output.requested_scale);
+     }
+     #[test]
+     fn discarded_values_still_taint_a_dependent_gate() {
+@@ -2953,7 +3072,7 @@
+         f.advance(&jet(0.04, 0.03125), 1e-4, true, zero);
+         f.advance(&jet(0.04, 0.015625), 1e-4, true, zero);
+         assert!(!f.certified);
+-        assert_eq!(f.effective_h, 0.03125);
++        assert_eq!(f.effective_h, 0.03125 / 16.);
+     }
+     #[test]
+     fn uncertified_zero_weight_lookahead_is_refused() {
+@@ -2971,7 +3090,7 @@
+             d: a + 0.2 * x + 0.1 * x * x,
+             grad_d: [0.2 + 0.2 * x, 0.],
+             hessian_d: [[0.2, 0.], [0., 0.]],
+-            resolved_scale: h,
++            resolved_scale: h / 16.,
+             requested_scale: 0.,
+             estimated_error: 0.,
+             ..jet(a, h)
+@@ -3095,3 +3214,62 @@
+         assert!((f.h[1][1] - 0.6).abs() < 1e-8);
+     }
+ }
++
++#[cfg(test)] mod bounded_selector_tests {
++ use super::*;
++ fn make(d:f64,h:f64)->GeometryJet {
++  let mut jet=failure_jet(d,h,GeometryValidity::Regular,SingularityKind::None);
++  jet.grad_d=[0.;2];jet.hessian_d=[[0.;2];2];jet.estimated_error=0.;jet
++ }
++ #[test] fn interval_field_bound_encloses_node_endpoint_extrema() {
++  let c=Complex64::new(0.32046083605181780,0.04736134021833255);let h=dyadic_h(13);
++  let bound=scalar_field_bound(c,h);
++  let points:Vec<_>=distance_stencil(c,h).collect();
++  let upper:Vec<_>=points.iter().map(|p|distance_upper([p.re,p.im])).collect();
++  let mut nodes:Vec<_>=points.iter().map(|p|(p.re-c.re,p.im-c.im,0.)).collect();
++  let mut weights=Vec::new();
++  for i in 0..81 {nodes[i].2=1.;weights.push(quintic_field(c,h,&nodes).0.d);nodes[i].2=0.;}
++  for i in 0..81 {nodes[i].2=upper[i].copysign(weights[i]);}
++  assert!(quintic_field(c,h,&nodes).0.d.abs()<=bound);
++  for i in 0..81 {nodes[i].2= -nodes[i].2;}
++  assert!(quintic_field(c,h,&nodes).0.d.abs()<=bound);
++  assert!(size_saturated_by_bound(h,1e-4,bound));
++ }
++ #[test] fn interval_certificate_forces_the_actual_gate_for_the_full_scalar_range() {
++  let c=Complex64::new(0.32046083605181780,0.04736134021833255);let h=dyadic_h(13);
++  let bound=scalar_field_bound(c,h);
++  for i in -100..=100 {
++   let field=FieldJet {d:bound*f64::from(i)/100.,g:[100.,-200.],h:[[300.,400.],[400.,-500.]]};
++   let weight=FieldHierarchy::next_weight(field,h,1e-4,FieldJet::constant(0.));
++   assert_eq!(weight.d,1.);assert_eq!(weight.g,[0.;2]);assert_eq!(weight.h,[[0.;2];2]);
++  }
++ }
++ #[test] fn independently_bounded_one_can_discard_an_uncertified_coarse_model() {
++  let c=Complex64::new(0.32046083605181780,0.04736134021833255);let h=dyadic_h(13);
++  let zero=FieldJet::constant(0.);let bound=scalar_field_bound(c,h);
++  let mut bounded=FieldHierarchy::new_bounded(&make(4e-5,h),1e-4,false,zero,bound);
++  let mut unknown=FieldHierarchy::new(&make(4e-5,h),1e-4,false,zero);
++  for k in 14..=28 {
++   let jet=make(4e-5,dyadic_h(k));
++   bounded.advance(&jet,1e-4,true,zero);unknown.advance(&jet,1e-4,true,zero);
++  }
++  assert!(bounded.closed && bounded.certified);
++  assert!(unknown.closed && !unknown.certified);
++  assert_eq!(bounded.sum.d,4e-5);
++ }
++ #[test] fn a_small_or_zero_weight_cannot_use_the_one_certificate() {
++  let h=dyadic_h(26);let zero=FieldJet::constant(0.);
++  assert!(!size_saturated_by_bound(h,1e-4,0.));
++  let mut field=FieldHierarchy::new_bounded(&make(0.,h),1e-4,false,zero,0.);
++  for k in 27..=30 {field.advance(&make(0.,dyadic_h(k)),1e-4,true,zero);}
++  assert!(field.closed && !field.certified);
++ }
++ #[test] fn an_unbounded_finer_dependency_still_prevents_certification() {
++  let c=Complex64::new(0.32046083605181780,0.04736134021833255);let h=dyadic_h(13);
++  let zero=FieldJet::constant(0.);
++  let mut field=FieldHierarchy::new_bounded(&make(4e-5,h),1e-4,false,zero,scalar_field_bound(c,h));
++  field.advance(&make(4e-5,dyadic_h(14)),1e-4,false,zero);
++  for k in 15..=28 {field.advance(&make(4e-5,dyadic_h(k)),1e-4,true,zero);}
++  assert!(field.closed && !field.certified);
++ }
++}

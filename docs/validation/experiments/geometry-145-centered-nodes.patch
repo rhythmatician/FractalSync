@@ -1,0 +1,100 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -505,8 +505,11 @@
+     true
+ }
+ 
+-fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> Option<ShoreTile> {
+-    let n = DYADIC_TILE_NODES;
++fn generate_shore_tile(k:u32,h:f64,re0:f64,im0:f64)->Option<ShoreTile> {
++    generate_shore_tile_sized(k,h,re0,im0,DYADIC_TILE_NODES)
++}
++fn generate_shore_tile_sized(k:u32,h:f64,re0:f64,im0:f64,n:usize)->Option<ShoreTile> {
++    if n<3 || n%2==0 {return None;}
+     let cur_n = dyadic_n0(k);
+     // Membership budgets grow monotonically for this tile. Retain each
+     // critical orbit while certifying it instead of replaying its prefix at
+@@ -559,8 +562,8 @@
+     }
+ 
+     let mut segments = Vec::new();
+-    for j in 0..DYADIC_TILE_CELLS {
+-        for i in 0..DYADIC_TILE_CELLS {
++    for j in 0..n-1 {
++        for i in 0..n-1 {
+             let a = inside[j * n + i];
+             let b = inside[j * n + (i + 1)];
+             let c_ = inside[(j + 1) * n + i];
+@@ -1533,6 +1536,20 @@
+    (projection.0-x).abs().max((projection.1-y).abs())>DYADIC_STABILITY_BAND_CELLS as f64*tile.h)
+  })
+ }
++// A nodal coefficient needs one distance, rather than the complete 9x9
++// derivative stencil required by a public query. The four-cell uncertainty
++// band is retained; unseen contours must remain beyond that same margin.
++fn centered_node_sample(c:Complex64,k:u32,n:usize)->Option<(ShoreTile,bool)> {
++ let h=dyadic_h(k);let half=(n/2) as f64;
++ let origin=[((c.re/h).floor()-half)*h,((c.im/h).floor()-half)*h];
++ let tile=generate_shore_tile_sized(k,h,origin[0],origin[1],n)?;
++ if tile.segments.is_empty() {return None;}
++ let width=(n-1) as f64*h;
++ let margin=(c.re-origin[0]).min(origin[0]+width-c.re)
++     .min(c.im-origin[1]).min(origin[1]+width-c.im);
++ let contained=nearest_shore_distance(c,&tile)+DYADIC_STABILITY_BAND_CELLS as f64*h<margin;
++ contained.then(||{let stable=point_membership_stable(c,&tile);(tile,stable)})
++}
+ fn field_node(c:Complex64,k:u32,_source:&ShoreTile)->Option<f64> {
+  if let Some(value)=bounded_component_distance(c) {return Some(value);}
+  let key=(k,c.re.to_bits(),c.im.to_bits());
+@@ -1541,6 +1558,16 @@
+  // A retained node is defined only by its own coordinates and start level.
+  // Query-centered source reuse is excluded until equivalence is proved.
+  for q in k..=(k+8).min(32) {
++  let mut local_uncertain=false;
++  for nodes in [17,33,57] {
++   if let Some((tile,stable))=centered_node_sample(c,q,nodes) {
++    if !stable {local_uncertain=true;break;}
++    let value=signed_shore_distance(c,tile.h,&tile.segments)?;
++    if let Ok(mut cache)=FIELD_NODE_CACHE.write() {cache.insert(key,value);}
++    return Some(value);
++   }
++  }
++  if local_uncertain {continue;}
+   let Ok((tile,_))=contained_tile(c,q) else {continue;};
+   if !point_membership_stable(c,&tile) {continue;}
+   let value=signed_shore_distance(c,tile.h,&tile.segments)?;
+@@ -3429,3 +3456,34 @@
+   }
+  }
+ }
++
++#[cfg(test)] mod centered_node_tests {
++ use super::*;
++ #[test] fn sized_query_tile_reconstructs_the_original_generator() {
++  let c=Complex64::new(0.3,0.05);let k=8;let h=dyadic_h(k);
++  let (_,_,re,im)=dyadic_tile_origin(c,h);
++  let old=generate_shore_tile(k,h,re,im).unwrap();
++  let new=generate_shore_tile_sized(k,h,re,im,DYADIC_TILE_NODES).unwrap();
++  assert_eq!(old.unstable_nodes,new.unstable_nodes);assert_eq!(old.segments.len(),new.segments.len());
++  for (a,b) in old.segments.iter().zip(&new.segments) {assert_eq!(a.p1,b.p1);assert_eq!(a.p2,b.p2);assert_eq!(a.normal,b.normal);}
++ }
++ #[test] fn centered_scalar_tiles_never_supply_uncontained_or_unstable_values() {
++  for c in [Complex64::new(0.3,0.05),Complex64::new(0.35,0.05),Complex64::new(0.4,0.05)] {
++   for k in [5,8,11] {for nodes in [17,33,57] {
++    if let Some((tile,stable))=centered_node_sample(c,k,nodes) {
++     assert_eq!(stable,point_membership_stable(c,&tile));
++     let width=(nodes-1) as f64*tile.h;
++     let margin=(c.re-tile.origin_re).min(tile.origin_re+width-c.re)
++      .min(c.im-tile.origin_im).min(tile.origin_im+width-c.im);
++     assert!(nearest_shore_distance(c,&tile)+DYADIC_STABILITY_BAND_CELLS as f64*tile.h<margin);
++    }
++   }}
++  }
++ }
++ #[test] fn recorded_next_driven_point_resolves() {
++  let jet=query_geometry(Complex64::new(0.32049988639807619,0.04733531447355364),1e-4).unwrap();
++  assert_eq!(jet.validity,GeometryValidity::Regular,"{jet:?}");
++  assert!(jet.resolved_scale<=jet.requested_scale);
++  assert!(jet.estimated_error<=DYADIC_FIT_ERROR_FACTOR*jet.requested_scale);
++ }
++}

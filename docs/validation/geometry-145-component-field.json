@@ -1,0 +1,328 @@
+{
+  "adopted": false,
+  "thresholds_and_original_crossing_tests_unchanged": true,
+  "tests": {
+    "passed": 15,
+    "suites": 2
+  },
+  "mutations": [
+    {
+      "mutation": "trap-parameter-radius",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "affine-parameter-radius",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "quadratic-parameter-radius",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "curve-multiplier-second-derivative",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "curve-hessian-sign",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "curve-interior-orientation",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "inclusive-budget",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "nonstrict-radius",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "nonstrict-trap",
+      "exit_code": 101,
+      "caught": true
+    }
+  ],
+  "node_evidence": [
+    {
+      "blocking_nodes": 0,
+      "blocking_samples": [],
+      "distance": 7.687183243545701e-06,
+      "distance_in_cells": 64.48476685427342,
+      "elapsed_s": 2.0551644,
+      "h": 1.1920928955078125e-07,
+      "k": 20,
+      "nearest_projections": [
+        [
+          0.32049429416656494,
+          0.04734059423208237
+        ],
+        [
+          0.32049429416656494,
+          0.04734059423208237
+        ]
+      ],
+      "point_stable": true,
+      "segments": 1184,
+      "unstable_nodes": 25
+    },
+    {
+      "blocking_nodes": 1,
+      "blocking_samples": [
+        {
+          "blocks_projection": true,
+          "blocks_sphere": true,
+          "c": [
+            0.3204946517944336,
+            0.04734092950820923
+          ],
+          "membership": [
+            [
+              512,
+              true
+            ],
+            [
+              1856,
+              true
+            ],
+            [
+              3712,
+              true
+            ],
+            [
+              16384,
+              true
+            ],
+            [
+              32768,
+              false
+            ]
+          ]
+        }
+      ],
+      "distance": 7.68490550112431e-06,
+      "distance_in_cells": 128.9313195319508,
+      "elapsed_s": 4.4229205,
+      "h": 5.960464477539063e-08,
+      "k": 21,
+      "nearest_projections": [
+        [
+          0.3204946517944336,
+          0.04734091833233833
+        ],
+        [
+          0.3204946517944336,
+          0.04734091833233833
+        ]
+      ],
+      "point_stable": false,
+      "segments": 2292,
+      "unstable_nodes": 32
+    },
+    {
+      "blocking_nodes": 1,
+      "blocking_samples": [
+        {
+          "blocks_projection": false,
+          "blocks_sphere": true,
+          "c": [
+            0.3204946517944336,
+            0.04734092950820923
+          ],
+          "membership": [
+            [
+              512,
+              true
+            ],
+            [
+              1920,
+              true
+            ],
+            [
+              3840,
+              true
+            ],
+            [
+              16384,
+              true
+            ],
+            [
+              32768,
+              false
+            ]
+          ]
+        }
+      ],
+      "distance": 7.675031315096117e-06,
+      "distance_in_cells": 257.53131636026325,
+      "elapsed_s": 8.7801242,
+      "h": 2.9802322387695312e-08,
+      "k": 22,
+      "nearest_projections": [
+        [
+          0.3204944431781769,
+          0.047340719029307365
+        ],
+        [
+          0.3204944431781769,
+          0.047340719029307365
+        ]
+      ],
+      "point_stable": false,
+      "segments": 3252,
+      "unstable_nodes": 44
+    },
+    {
+      "blocking_nodes": 1,
+      "blocking_samples": [
+        {
+          "blocks_projection": false,
+          "blocks_sphere": true,
+          "c": [
+            0.3204946517944336,
+            0.04734092950820923
+          ],
+          "membership": [
+            [
+              512,
+              true
+            ],
+            [
+              1984,
+              true
+            ],
+            [
+              3968,
+              true
+            ],
+            [
+              16384,
+              true
+            ],
+            [
+              32768,
+              false
+            ]
+          ]
+        }
+      ],
+      "distance": 7.674499976238435e-06,
+      "distance_in_cells": 515.0269751733883,
+      "elapsed_s": 21.1626784,
+      "h": 1.4901161193847656e-08,
+      "k": 23,
+      "nearest_projections": [
+        [
+          0.3204944459721446,
+          0.047340720891952515
+        ],
+        [
+          0.3204944459721446,
+          0.047340720891952515
+        ]
+      ],
+      "point_stable": false,
+      "segments": 7562,
+      "unstable_nodes": 46
+    }
+  ],
+  "point_witness_distance_search": {
+    "status": {
+      "exit_code": 0,
+      "elapsed_s": 129.89943939994555,
+      "timed_out": false
+    },
+    "output": "[BOX_DISTANCE_REQUIRED145] analytic interior/exterior enclosures and explicit refusal checks passed\n[BOX_DISTANCE145] name=next_native tolerance=0.00001 elapsed_s=45.580377 result=Ok(Bounds { inside: true, lower: 5.327583485736401e-6, upper: 8.005428749326619e-6, visits: 5361, depth: 21 })\n[BOX_DISTANCE145] name=next_native tolerance=0.0000001 elapsed_s=43.4924462 result=Err(Failure { reason: WorkBudget, lower: 5.647053953724085e-6, upper: 8.005428749326619e-6, visits: 8192, depth: 26 })\n[BOX_DISTANCE145] name=next_native tolerance=0.000000001 elapsed_s=32.8512593 result=Err(Failure { reason: WorkBudget, lower: 5.647053953724085e-6, upper: 8.005428749326619e-6, visits: 8192, depth: 26 })\n",
+    "precision": 128,
+    "budget": 32768,
+    "maximum_hp_calls": 64,
+    "resource_scope": "Shared fixed-precision proof cache and 64-call cap across the three tolerance rows in this process; tighter rows are not independent fresh-cap runs."
+  },
+  "box_distance_search": {
+    "status": {
+      "elapsed_s": 180.08681279991288,
+      "timed_out": true
+    },
+    "output": "[BOX_DISTANCE_REQUIRED145] analytic interior/exterior enclosures and explicit refusal checks passed\n[BOX_DISTANCE145] name=next_native tolerance=0.00001 elapsed_s=129.5435124 result=Ok(Bounds { inside: true, lower: 5.327583485736401e-6, upper: 8.005428749326619e-6, visits: 5361, depth: 21 })\n[BOX_DISTANCE145] name=next_native tolerance=0.0000001 elapsed_s=29.6851501 result=Err(Failure { reason: WorkBudget, lower: 5.647053953724085e-6, upper: 8.005428749326619e-6, visits: 8192, depth: 26 })\n",
+    "precision": 128,
+    "maximum_hp_point_calls": 16,
+    "maximum_hp_box_calls": 256,
+    "box_budget": 2048,
+    "box_width_maximum": "2^-20",
+    "point_budget": 32768
+  },
+  "affine_boxes": {
+    "status": {
+      "exit_code": 0,
+      "elapsed_s": 17.86038249998819,
+      "timed_out": false
+    },
+    "output": "[HP_BOX145] name=native q=20 x=0.32049942016601562 y=0.04733467102050781 elapsed_s=1.9409967 result=None\n[HP_BOX145] name=native q=24 x=0.32049983739852905 y=0.04733526706695557 elapsed_s=0.0865018 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=28 x=0.32049988582730293 y=0.04733531177043915 elapsed_s=0.0871432 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=32 x=0.32049988629296422 y=0.04733531433157623 elapsed_s=0.0848031 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=40 x=0.32049988639755611 y=0.04733531447345740 elapsed_s=0.0893954 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=blocking q=20 x=0.32049465179443359 y=0.04734039306640625 elapsed_s=0.1224722 result=None\n[HP_BOX145] name=blocking q=24 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=0.2164475 result=None\n[HP_BOX145] name=blocking q=28 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=1.0561955 result=None\n[HP_BOX145] name=blocking q=32 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=2.5710461000000002 result=None\n[HP_BOX145] name=blocking q=40 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=3.0132143 result=None\n[HP_BOX145] name=python q=20 x=0.35659313201904297 y=0.06404590606689453 elapsed_s=0.0194679 result=None\n[HP_BOX145] name=python q=24 x=0.35659378767013550 y=0.06404656171798706 elapsed_s=3.821424 result=None\n[HP_BOX145] name=python q=28 x=0.35659381002187729 y=0.06404656544327736 elapsed_s=3.8202349 result=None\n[HP_BOX145] name=python q=32 x=0.35659381048753858 y=0.06404656753875315 elapsed_s=0.3895848 result=Some(Inside { prefix: 2048, period: 308, precision: 128 })\n[HP_BOX145] name=python q=40 x=0.35659381055393169 y=0.06404656757695193 elapsed_s=0.4280072 result=Some(Inside { prefix: 2048, period: 308, precision: 128 })\n"
+  },
+  "quadratic_boxes": {
+    "status": {
+      "exit_code": 0,
+      "elapsed_s": 31.950215900084004,
+      "timed_out": false
+    },
+    "output": "[HP_BOX145] name=native q=20 x=0.32049942016601562 y=0.04733467102050781 elapsed_s=2.6694125 result=None\n[HP_BOX145] name=native q=24 x=0.32049983739852905 y=0.04733526706695557 elapsed_s=0.1075844 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=28 x=0.32049988582730293 y=0.04733531177043915 elapsed_s=0.1104983 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=32 x=0.32049988629296422 y=0.04733531433157623 elapsed_s=0.1465445 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=native q=40 x=0.32049988639755611 y=0.04733531447345740 elapsed_s=0.2180168 result=Some(Inside { prefix: 1024, period: 85, precision: 128 })\n[HP_BOX145] name=blocking q=20 x=0.32049465179443359 y=0.04734039306640625 elapsed_s=0.391405 result=None\n[HP_BOX145] name=blocking q=24 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=0.9113705 result=None\n[HP_BOX145] name=blocking q=28 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=2.2879322 result=None\n[HP_BOX145] name=blocking q=32 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=3.2399533 result=None\n[HP_BOX145] name=blocking q=40 x=0.32049465179443359 y=0.04734092950820923 elapsed_s=5.9119397 result=None\n[HP_BOX145] name=python q=20 x=0.35659313201904297 y=0.06404590606689453 elapsed_s=0.0600448 result=None\n[HP_BOX145] name=python q=24 x=0.35659378767013550 y=0.06404656171798706 elapsed_s=7.4984811 result=None\n[HP_BOX145] name=python q=28 x=0.35659381002187729 y=0.06404656544327736 elapsed_s=6.3546597 result=None\n[HP_BOX145] name=python q=32 x=0.35659381048753858 y=0.06404656753875315 elapsed_s=0.9719683 result=Some(Inside { prefix: 2048, period: 308, precision: 128 })\n[HP_BOX145] name=python q=40 x=0.35659381055393169 y=0.06404656757695193 elapsed_s=0.934148 result=Some(Inside { prefix: 2048, period: 308, precision: 128 })\n"
+  },
+  "component_traces": {
+    "native": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 29.563127500005066,
+        "timed_out": false
+      },
+      "output": "[HP_COMPONENT145] name=native period=85 multiplier_norm=0.8137853688931568 closure=0.000000000000000000000000000000000000018368017563602096\n[HP_COMPONENT_CENTER145] name=native coordinate=[0.32052226711598863, 0.0473077087787968] critical_closure=0.0000000000000000000000000000000000002080090814281705 minimum_proper_divisor_closure=0.3239946651213143\n[HP_COMPONENT_CURVE145] name=native radius=0.9 samples=512 nearest_distance=0.00000355957548415 nearest=[0.3204975773809067, 0.047338023535630866] theta=6.0820276147281005 closure_c=0.000000000000000000017953222779008372 closure_z=0.000000000000000021710294848047556\n[HP_COMPONENT_CURVE145] name=native radius=0.99 samples=512 nearest_distance=0.00000723641767257 nearest=[0.32049516800206157, 0.047340801046234365] theta=6.082644917727271 closure_c=0.000000000000000000019541049475625752 closure_z=0.0000000000000002029399030785811\n[HP_COMPONENT_CURVE145] name=native radius=0.999 samples=512 nearest_distance=0.00000760193760067 nearest=[0.3204949270553885, 0.047341075929566705] theta=6.082728272209697 closure_c=0.00000000000000000001969442193131244 closure_z=0.031609519078230106\n[HP_COMPONENT_CURVE145] name=native radius=0.9999 samples=512 nearest_distance=0.00000763846809926 nearest=[0.3204949029602384, 0.047341103389015135] theta=6.082736819917254 closure_c=0.000000000000000000019692252050037627 closure_z=0.5675524649199856\n[HP_COMPONENT_CURVE145] name=native radius=0.999999 samples=512 nearest_distance=0.00000764248621569 nearest=[0.3204949003097716, 0.04734110640923834] theta=6.082737762338611 closure_c=0.000000000000000000019692013393853182 closure_z=0.6346580810210926\n[HP_COMPONENT_JET145] name=native jet=DistanceJet { d: 7.642526802481138e-6, g: [0.6524170736276781, -0.7578601203646333], h: [[-14959.337973399337, -12878.006431209018], [-12878.006431209018, -11086.255951778252]] } step=0.000000007642526802481139 gradient_error=0.000000007381344757639852 distance_scaled_hessian_error=0.0000000031850055366383623\n[HP_COMPONENT_CURVE145] name=native radius=1 samples=512 nearest_distance=0.00000764252680248 nearest=[0.3204949002831936, 0.0473411064399127] theta=6.082737765539512 closure_c=0.000000000000000000019692010983215745 closure_z=0.6303069061418002\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=29.2465677\n"
+    },
+    "python": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 63.38206360000186,
+        "timed_out": false
+      },
+      "output": "[HP_COMPONENT145] name=python period=154 multiplier_norm=0.7813270498396074 closure=0.0000000000000000000000000031543911829693485\n[HP_COMPONENT_CENTER145] name=python coordinate=[0.35659407294152295, 0.0640471169719507] critical_closure=0.000000000000000000000000000000000003264895902931089 minimum_proper_divisor_closure=0.007896510286635869\n[HP_COMPONENT_CURVE145] name=python radius=0.9 samples=512 nearest_distance=0.00000009368523100 nearest=[0.3565937688338753, 0.0640464836949558] theta=2.759690791349863 closure_c=0.0000000000000000000003258510095554931 closure_z=0.0000000000000000009362093207201863\n[HP_COMPONENT_CURVE145] name=python radius=0.99 samples=512 nearest_distance=0.00000016494011255 nearest=[0.3565937366311919, 0.06404642013079308] theta=2.759139496417111 closure_c=0.00000000000000000000035719436849441833 closure_z=0.00000000000000000575776212468479\n[HP_COMPONENT_CURVE145] name=python radius=0.999 samples=512 nearest_distance=0.00000017207523521 nearest=[0.3565937333820823, 0.06404641377812308] theta=2.7590682447787773 closure_c=0.0000000000000000000003602501950543178 closure_z=0.000000000000000009573302080119127\n[HP_COMPONENT_CURVE145] name=python radius=0.9999 samples=512 nearest_distance=0.00000017278884333 nearest=[0.3565937330568793, 0.06404641314289648] theta=2.7590609687225807 closure_c=0.00000000000000000000036023571019337673 closure_z=0.0007848241517149077\n[HP_COMPONENT_CURVE145] name=python radius=0.999999 samples=512 nearest_distance=0.00000017286734129 nearest=[0.3565937330210982, 0.06404641307302478] theta=2.759060158898434 closure_c=0.0000000000000000000003602341168490446 closure_z=0.0007845922829503416\n[HP_COMPONENT_JET145] name=python jet=DistanceJet { d: 1.728681341973857e-7, g: [0.4485129360162399, 0.8937763401579235], h: [[-1333774.799147164, 669312.023905516], [669312.023905516, -335872.7317617205]] } step=0.0000000001728681341973857 gradient_error=0.00000001484367900816963 distance_scaled_hessian_error=0.000000009584482186711782\n[HP_COMPONENT_CURVE145] name=python radius=1 samples=512 nearest_distance=0.00000017286813420 nearest=[0.356593733020737, 0.06404641307231888] theta=2.759060151063184 closure_c=0.00000000000000000000036023410075464765 closure_z=0.0007845901006829696\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=63.3560072\n"
+    }
+  },
+  "limitations": [
+    "Numerical component traces are not a validated global boundary cover.",
+    "Local projection and derivative checks do not prove global nearest-feature uniqueness.",
+    "Newton continuation may permute cycle phase; coordinate closure is checked separately.",
+    "Period-308 trapping proof is valid but Python query numerical cycle has least period 154.",
+    "Cold tracing times are not runtime query benchmarks.",
+    "No production coherent-field integration or crossing success is claimed."
+  ],
+  "production_native_crossing": {
+    "command": "cargo test --release --jobs 1 --manifest-path runtime-core/Cargo.toml manifold::tests::controls_drive_can_cross_shore_without_wall -- --nocapture",
+    "exit_code": 1,
+    "passed": 0,
+    "failed": 1,
+    "filtered_out": 94,
+    "test_elapsed_s": 2.54,
+    "output": "\nrunning 1 test\ntest manifold::tests::controls_drive_can_cross_shore_without_wall ... FAILED\n\nfailures:\n\nfailures:\n    manifold::tests::controls_drive_can_cross_shore_without_wall\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 94 filtered out; finished in 2.54s\n\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n   Compiling runtime_core v0.1.0 (C:\\Users\\JeffHall\\git\\FractalSync\\runtime-core)\n    Finished `release` profile [optimized] target(s) in 2m 52s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (102176) panicked at runtime-core\\src\\manifold.rs:972:41:\nundriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `--lib`\n"
+  },
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "f90294094813ef876aabda012a00394e027ddeb6462d9a8dbfe8595db38f5a2c",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "0338fa35ad083a1a5ea7feba5692de3f00ebf0fbb699ec1fe3c047ade7767e2d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "a0f6634e112e236591c9a9197b4ce59e96a52f85a40c6d5e4f7d0379b05f5270",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "6ed78dc0d56f78c1e164bb54f0a9c9b589c5f6e253307708fa695c5274849771",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6",
+    "docs/validation/experiments/geometry-145-component-mutations.py": "7294c7e349cf802e81ec0580a110fb7e78da617466417cf7164ff206c64d018d",
+    "docs/validation/experiments/geometry-145-point-proof-mutations.py": "f09428c458e2eba3abb54bde0847a94272cb0dc6eabea4c467d33c5104374c42"
+  },
+  "recorded_commit": "1972547",
+  "subsequent_experiment": "geometry-145-validated-branches.json"
+}

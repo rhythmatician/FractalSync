@@ -1,0 +1,711 @@
+{
+  "date": "2026-10-26",
+  "production_commits": [
+    "5816b5c",
+    "07053e1"
+  ],
+  "scope": "Bounded whole-box membership proof optimization; no coherent field adoption.",
+  "source_sha256": {
+    "runtime-core/src/geometry_provider/uniform_box.rs": "4c5ce8b6f1001c99a13f757ce49e91a64843032b27afdf20e3c4532493f5d1a7",
+    "runtime-core/src/geometry_provider/affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387"
+  },
+  "box_ablation": {
+    "boxes": 1296,
+    "new_certificates": 593,
+    "existing_certificates_unchanged": true,
+    "baseline_counts": {
+      "-1": 972,
+      "0": 0,
+      "1": 324
+    },
+    "candidate_counts": {
+      "-1": 379,
+      "0": 0,
+      "1": 917
+    },
+    "baseline_s": 0.3731595,
+    "candidate_s": 0.6332392,
+    "baseline_kind": "False retains the new 4096-prefix schedule; Original512 additionally restores the original prefix cap.",
+    "original512_s": 0.0698589,
+    "original512_counts": {
+      "-1": 1296,
+      "0": 0,
+      "1": 0
+    },
+    "baseline_result_sha256": "1fbfa1e949ea826b8fa0c2c670cbd9302a22f1f5d1bb2cc3d451791f9a443761",
+    "candidate_result_sha256": "219ba5d87a1937a4f64305f665ca9040cb6e39b7c96cf8763cb36f4503351ce0",
+    "standalone_tests": "\nrunning 5 tests\ntest uniform::affine_return::tests::neutral_and_invalid_returns_refuse ... ok\ntest uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient ... ok\ntest uniform::affine_return::tests::correlated_return_covers_a_parameter_disk ... ok\ntest uniform::validation::rounded_square_encloses_a_known_binary_remainder ... ok\ntest uniform::validation::initial_disk_must_contain_the_enclosed_prefix ... ok\n\ntest result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+    "mutations": [
+      {
+        "mutation": "prefix-inclusion",
+        "caught": true,
+        "output": "\nrunning 5 tests\ntest uniform::affine_return::tests::correlated_return_covers_a_parameter_disk ... ok\ntest uniform::affine_return::tests::neutral_and_invalid_returns_refuse ... ok\ntest uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient ... ok\ntest uniform::validation::rounded_square_encloses_a_known_binary_remainder ... ok\ntest uniform::validation::initial_disk_must_contain_the_enclosed_prefix ... FAILED\n\nfailures:\n\n---- uniform::validation::initial_disk_must_contain_the_enclosed_prefix stdout ----\n\nthread 'uniform::validation::initial_disk_must_contain_the_enclosed_prefix' (48228) panicked at C:\\Users\\JeffHall\\AppData\\Local\\Temp\\geometry145-correlated-t5tzmu1i\\uniform.rs:629:3:\nassertion failed: !prefix.traps([0.; 2], 0., 1, 1e-5)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    uniform::validation::initial_disk_must_contain_the_enclosed_prefix\n\ntest result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+      },
+      {
+        "mutation": "parameter-coefficient",
+        "caught": true,
+        "output": "\nrunning 5 tests\ntest uniform::affine_return::tests::correlated_return_covers_a_parameter_disk ... ok\ntest uniform::validation::initial_disk_must_contain_the_enclosed_prefix ... ok\ntest uniform::affine_return::tests::neutral_and_invalid_returns_refuse ... ok\ntest uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient ... FAILED\ntest uniform::validation::rounded_square_encloses_a_known_binary_remainder ... ok\n\nfailures:\n\n---- uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient stdout ----\n\nthread 'uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient' (78384) panicked at C:\\Users\\JeffHall\\AppData\\Local\\Temp\\geometry145-correlated-t5tzmu1i\\child.rs:127:9:\nassertion failed: !prefix.traps([0.09, 0.], 0.001, 1, 1e-5)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient\n\ntest result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+      },
+      {
+        "mutation": "machine-rounding",
+        "caught": true,
+        "output": "\nrunning 5 tests\ntest uniform::affine_return::tests::correlated_return_covers_a_parameter_disk ... ok\ntest uniform::affine_return::tests::neutral_and_invalid_returns_refuse ... ok\ntest uniform::affine_return::tests::return_must_account_for_the_changed_parameter_coefficient ... ok\ntest uniform::validation::initial_disk_must_contain_the_enclosed_prefix ... ok\ntest uniform::validation::rounded_square_encloses_a_known_binary_remainder ... FAILED\n\nfailures:\n\n---- uniform::validation::rounded_square_encloses_a_known_binary_remainder stdout ----\n\nthread 'uniform::validation::rounded_square_encloses_a_known_binary_remainder' (14176) panicked at C:\\Users\\JeffHall\\AppData\\Local\\Temp\\geometry145-correlated-t5tzmu1i\\uniform.rs:636:3:\nassertion failed: next.remainder >= 2f64.powi(-54)\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    uniform::validation::rounded_square_encloses_a_known_binary_remainder\n\ntest result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n"
+      }
+    ]
+  },
+  "production_comparison": {
+    "production_commit": "5816b5c",
+    "cases": 64,
+    "changed_serialized_jets": 0,
+    "rows": [
+      {
+        "case": "regular_interior",
+        "epsilon": 0.01,
+        "jet_sha256": "c8e5c2745e8fefe56d5881669ca39e0b4397777c39ae1545518e13e3b7431d25",
+        "matches_baseline": true,
+        "baseline_cold_us": 83923,
+        "cold_us": 77018,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 0.0001,
+        "jet_sha256": "99d58c9c74b6cefe91ea5800a7f171bad86590bca284b330ef620b5f4d7afd1f",
+        "matches_baseline": true,
+        "baseline_cold_us": 79972,
+        "cold_us": 81953,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 1e-06,
+        "jet_sha256": "9acefd76f5983ef9974e690eee0baf1ebe8fa14509855503237bb4f2aab20e69",
+        "matches_baseline": true,
+        "baseline_cold_us": 76061,
+        "cold_us": 83349,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 1e-08,
+        "jet_sha256": "bf815d834f56598907dddf65814379ed00b3e5b441b4ab1fceac9ac25aa93a5e",
+        "matches_baseline": true,
+        "baseline_cold_us": 77737,
+        "cold_us": 79460,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 0.01,
+        "jet_sha256": "3f820398d7f3d7bd0f46ae9f9cec2e8e5a2397c0da871d242cad7dd9628b33be",
+        "matches_baseline": true,
+        "baseline_cold_us": 39593,
+        "cold_us": 40809,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 0.0001,
+        "jet_sha256": "126468a6d9ea78e4bbf7959e483b26fa963d75423843c0364ef1b48b6996f060",
+        "matches_baseline": true,
+        "baseline_cold_us": 132097,
+        "cold_us": 139235,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 1e-06,
+        "jet_sha256": "f0cd25315c40721b46eddd3edd16529df1e5393a6d152873520e06384995b31b",
+        "matches_baseline": true,
+        "baseline_cold_us": 131438,
+        "cold_us": 138755,
+        "warm_us": 0
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 1e-08,
+        "jet_sha256": "610095e5eee22c0d7e3e3374332fb86828dc028ed48f9d838fea41f791e63c16",
+        "matches_baseline": true,
+        "baseline_cold_us": 134055,
+        "cold_us": 147509,
+        "warm_us": 0
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 0.01,
+        "jet_sha256": "e3375f6a250707dcf2ddf34cddf676b36c42518865340396a9868ce675d9819b",
+        "matches_baseline": true,
+        "baseline_cold_us": 235013,
+        "cold_us": 241451,
+        "warm_us": 0
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 0.0001,
+        "jet_sha256": "657784df98b6831d9b3cbcf198c238feed140d393a732b039b5d5957ca80b2f7",
+        "matches_baseline": true,
+        "baseline_cold_us": 232615,
+        "cold_us": 239531,
+        "warm_us": 0
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 1e-06,
+        "jet_sha256": "db4d8e490f8a0b33e2c11c3f010646c79da6b49f51009c458630bc1a3d091f7c",
+        "matches_baseline": true,
+        "baseline_cold_us": 213600,
+        "cold_us": 243501,
+        "warm_us": 0
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 1e-08,
+        "jet_sha256": "2629de7416c93384b7b9bbf3491b78b813022f18452de78b6bd31c3a7ca95258",
+        "matches_baseline": true,
+        "baseline_cold_us": 220183,
+        "cold_us": 244920,
+        "warm_us": 0
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 0.01,
+        "jet_sha256": "02ddd795db4f22f5ca00f5ed66c51b9f2b6ce0b665b58a474d2b934d30a7802f",
+        "matches_baseline": true,
+        "baseline_cold_us": 72828,
+        "cold_us": 76891,
+        "warm_us": 0
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 0.0001,
+        "jet_sha256": "44217738b6d9e7aecbd5f6cfea816496b4a7c764b393f56ba6e90cbccaa86ec1",
+        "matches_baseline": true,
+        "baseline_cold_us": 72035,
+        "cold_us": 76240,
+        "warm_us": 0
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 1e-06,
+        "jet_sha256": "e39fd92ca809a18ab85a2bf19823014dc8e113825aefc35fcfd0c4eb0e7afff2",
+        "matches_baseline": true,
+        "baseline_cold_us": 73111,
+        "cold_us": 80012,
+        "warm_us": 0
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 1e-08,
+        "jet_sha256": "33bc1a5bbca3a678b43863c721e43797e71f8255dff6d3f6d536c1b74436891c",
+        "matches_baseline": true,
+        "baseline_cold_us": 78362,
+        "cold_us": 80007,
+        "warm_us": 1
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 0.01,
+        "jet_sha256": "4daaf95739e3dd0220b408a89cdb6ae426488345667c7e60d795ae37d82bd1d9",
+        "matches_baseline": true,
+        "baseline_cold_us": 1808703,
+        "cold_us": 1811492,
+        "warm_us": 0
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 0.0001,
+        "jet_sha256": "6ae51ce44ff72adf53330d90cc1e5ac76ba5a1eb728b3db1bbfc0f9116ace360",
+        "matches_baseline": true,
+        "baseline_cold_us": 1735587,
+        "cold_us": 1815774,
+        "warm_us": 0
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 1e-06,
+        "jet_sha256": "19f45e084f394269a4986971bb50bec68ca660b6dd977ae21a1e7482c16c60eb",
+        "matches_baseline": true,
+        "baseline_cold_us": 1688244,
+        "cold_us": 1843690,
+        "warm_us": 0
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 1e-08,
+        "jet_sha256": "fe8f2c0f2385209f600cd3ea2294fea05d2bad0e7b4d377994e4ddf49af196fa",
+        "matches_baseline": true,
+        "baseline_cold_us": 1874515,
+        "cold_us": 1834083,
+        "warm_us": 0
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 0.01,
+        "jet_sha256": "8fe4b277eda94bc095cec2195eb9d61eab79a596db01a480c3998df184a9ccdf",
+        "matches_baseline": true,
+        "baseline_cold_us": 9,
+        "cold_us": 16,
+        "warm_us": 0
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 0.0001,
+        "jet_sha256": "4d1695d80756af0abb02e7cf787601907f3fdc001e8a6b92f65e231b24334961",
+        "matches_baseline": true,
+        "baseline_cold_us": 9,
+        "cold_us": 16,
+        "warm_us": 0
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 1e-06,
+        "jet_sha256": "1d6d986a137e5aefb566e2458b9a12b64b1b12fa64afa7e9326ea847d6bb2fec",
+        "matches_baseline": true,
+        "baseline_cold_us": 9,
+        "cold_us": 15,
+        "warm_us": 0
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 1e-08,
+        "jet_sha256": "9c0fc3c512f8bc452f680a2224bf13067e55c8f7adc6ca6cfeb21438233221a1",
+        "matches_baseline": true,
+        "baseline_cold_us": 10,
+        "cold_us": 17,
+        "warm_us": 0
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 0.01,
+        "jet_sha256": "b242f6c1af1331c6015b37087d343ea38e56ddf657ab70420191fad4cdfd546f",
+        "matches_baseline": true,
+        "baseline_cold_us": 69031,
+        "cold_us": 72200,
+        "warm_us": 0
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 0.0001,
+        "jet_sha256": "cc7ef42dbdcb2ea962d661d7ec9929dda32ccc998893fee730bb58cb97f0c5ac",
+        "matches_baseline": true,
+        "baseline_cold_us": 164235,
+        "cold_us": 170916,
+        "warm_us": 0
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 1e-06,
+        "jet_sha256": "52ba0015d28324012ae5f1da37204e245f339211ec8250e7a5601f8f3afdd4d0",
+        "matches_baseline": true,
+        "baseline_cold_us": 162572,
+        "cold_us": 161406,
+        "warm_us": 0
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 1e-08,
+        "jet_sha256": "aa6c71d57d718a6914aa3fc9db1256efa6ca49033880c567502359f92ccfd803",
+        "matches_baseline": true,
+        "baseline_cold_us": 194515,
+        "cold_us": 166302,
+        "warm_us": 0
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 0.01,
+        "jet_sha256": "2700bd41848cf9e6b1578f0a3097e2545d80be9e6311f9b2f8eed33106e9ff0f",
+        "matches_baseline": true,
+        "baseline_cold_us": 184161,
+        "cold_us": 167925,
+        "warm_us": 0
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 0.0001,
+        "jet_sha256": "e09153a482dc6ce98d17ba14093d56079fb824eb2ad7071be42ec5943320970a",
+        "matches_baseline": true,
+        "baseline_cold_us": 176401,
+        "cold_us": 171167,
+        "warm_us": 0
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 1e-06,
+        "jet_sha256": "6a13abf912d08a1c4959c69936f8d98fea64672039b8eaea1ee6b71058e7e4f3",
+        "matches_baseline": true,
+        "baseline_cold_us": 181651,
+        "cold_us": 165545,
+        "warm_us": 1
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 1e-08,
+        "jet_sha256": "d4513543f975b37c4cecfab15fda03f72db3b0c5fa5ee2206060b0c0d75a7748",
+        "matches_baseline": true,
+        "baseline_cold_us": 202750,
+        "cold_us": 180482,
+        "warm_us": 0
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "bea5053883c63ff1391e57747e705374ae1872f1a5356ffbfb70cbaa70ecacc3",
+        "matches_baseline": true,
+        "baseline_cold_us": 473887,
+        "cold_us": 428847,
+        "warm_us": 0
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "756f2ad18e67c78659b86105770cd7dcd21bc1a38556fd37a25499eff09104e6",
+        "matches_baseline": true,
+        "baseline_cold_us": 404942,
+        "cold_us": 431552,
+        "warm_us": 0
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "b13bfee7777d56378b29c38789dc9554f5952b9d3586488e7fce3313f1701301",
+        "matches_baseline": true,
+        "baseline_cold_us": 413897,
+        "cold_us": 459430,
+        "warm_us": 0
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "ebc7b045efae15a33a23abfb2171a198c8acc52d91b951468b74101fa3c9b619",
+        "matches_baseline": true,
+        "baseline_cold_us": 426081,
+        "cold_us": 472790,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 0.01,
+        "jet_sha256": "10c1888ee78b28e33d56deafb188e5fefdad0aedf22d0c065e8b328f1ab90861",
+        "matches_baseline": true,
+        "baseline_cold_us": 217091,
+        "cold_us": 243444,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 0.0001,
+        "jet_sha256": "ce98b9341d9dddb35ee33576bb8e60287ade889a70f5ddbeb6ca552f4c6f4335",
+        "matches_baseline": true,
+        "baseline_cold_us": 223791,
+        "cold_us": 251989,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 1e-06,
+        "jet_sha256": "2dc7ca1e441aa4b32f00ecbdc17d1ec34e5e4950e49d283edf424ab396ff9f90",
+        "matches_baseline": true,
+        "baseline_cold_us": 247040,
+        "cold_us": 242871,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 1e-08,
+        "jet_sha256": "49a0d18185805c2693faae8471ea5b855fe01c90d08e3aa97a3e94d912c9870e",
+        "matches_baseline": true,
+        "baseline_cold_us": 246146,
+        "cold_us": 234497,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 0.01,
+        "jet_sha256": "b97dcf1e10f21a0954d6875832fce766e9cdbc28fbcbfa0f1f4a89765f05f1ad",
+        "matches_baseline": true,
+        "baseline_cold_us": 223304,
+        "cold_us": 228491,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 0.0001,
+        "jet_sha256": "e15a5cfd58fea068168128d7b5c8022ddcabe72389618e53c73df39a081cc7d6",
+        "matches_baseline": true,
+        "baseline_cold_us": 203485,
+        "cold_us": 232934,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 1e-06,
+        "jet_sha256": "94a33e004caa2ca0287ca944a2d33bfd69dbd0e237629f13b5d5834824081c78",
+        "matches_baseline": true,
+        "baseline_cold_us": 213321,
+        "cold_us": 232212,
+        "warm_us": 0
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 1e-08,
+        "jet_sha256": "d23b8e73e64d7f3efbcef8f513c90dfd5742bdb789d5290c8bc96613d52bc105",
+        "matches_baseline": true,
+        "baseline_cold_us": 201722,
+        "cold_us": 234277,
+        "warm_us": 0
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "1266337142dd0e101e50ba6aae2bcee3ee95dbdef9bac2318a7339f6335e99a0",
+        "matches_baseline": true,
+        "baseline_cold_us": 223107,
+        "cold_us": 248315,
+        "warm_us": 0
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "06ab34d9134ba435c094a89d45897e3136ff38201af7caf0b374e98dee29af8f",
+        "matches_baseline": true,
+        "baseline_cold_us": 233009,
+        "cold_us": 248770,
+        "warm_us": 0
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "8d72edcb1eafb4e24bc3a85856948918116bfc4aa6fd254095819cd414963b07",
+        "matches_baseline": true,
+        "baseline_cold_us": 226535,
+        "cold_us": 240511,
+        "warm_us": 0
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "a40cadef7139fba42f4a6739d6d24a5f4af53365e5e1bef28e79c9df689e2bd1",
+        "matches_baseline": true,
+        "baseline_cold_us": 233365,
+        "cold_us": 243596,
+        "warm_us": 0
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "9429f6a219953ab473b9957f29ce96c1cbb73c8d165f5c239493781761e84871",
+        "matches_baseline": true,
+        "baseline_cold_us": 110487,
+        "cold_us": 120914,
+        "warm_us": 0
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "d52c6c355084da6e65297f60c20f113748db949b0ca003bbf58803d830909481",
+        "matches_baseline": true,
+        "baseline_cold_us": 767346,
+        "cold_us": 833501,
+        "warm_us": 0
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "9cc2d0811f241bf1da3c3fc955bc7e4024b6c3702a0961de863836bd38ecd569",
+        "matches_baseline": true,
+        "baseline_cold_us": 786833,
+        "cold_us": 841235,
+        "warm_us": 0
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "de29b1a2dbd109497421adf14b1746f2beda5cd8264c5a17899581be1c636654",
+        "matches_baseline": true,
+        "baseline_cold_us": 784406,
+        "cold_us": 835575,
+        "warm_us": 1
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "567dab6b2b1ebf8cc1db75dc1f3cdaa19532028263bde95071f0591f59b5fc69",
+        "matches_baseline": true,
+        "baseline_cold_us": 47494,
+        "cold_us": 53915,
+        "warm_us": 0
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "2eaca822ffea5e1379fa8260a9b2016d61e871fc5cac36f9e6dc9523850dd0f8",
+        "matches_baseline": true,
+        "baseline_cold_us": 276000,
+        "cold_us": 317345,
+        "warm_us": 0
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "7c65cc317d4be644ada556f8534671027e196355332423ed0d15ba5831c5e039",
+        "matches_baseline": true,
+        "baseline_cold_us": 297128,
+        "cold_us": 311020,
+        "warm_us": 0
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "09f7c395efad80258162816303a1bc9c895298cb0bd2d7370bd2478899753b83",
+        "matches_baseline": true,
+        "baseline_cold_us": 282663,
+        "cold_us": 314780,
+        "warm_us": 0
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "33d0655ddc5245e6cbcb956feee119b3687ae56f4f6acf225008f9a430989a0f",
+        "matches_baseline": true,
+        "baseline_cold_us": 334901,
+        "cold_us": 386388,
+        "warm_us": 0
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "06c4e9f9b7b216b67546759f95ded82f1d60965f689812425332384fe527d7ae",
+        "matches_baseline": true,
+        "baseline_cold_us": 362742,
+        "cold_us": 390161,
+        "warm_us": 0
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "944633ff629e35277cba22cfcecc8247ea37af35f72a61b21efb61cc95cf6ca9",
+        "matches_baseline": true,
+        "baseline_cold_us": 343919,
+        "cold_us": 395464,
+        "warm_us": 0
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "6d61cde78d887e51ab6f6d519b8e7eb6da9ed836ddbca1ec8c26a8b08e6d0e5f",
+        "matches_baseline": true,
+        "baseline_cold_us": 345638,
+        "cold_us": 396650,
+        "warm_us": 0
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 0.01,
+        "jet_sha256": "007a57e584980ff9cd66526a27042de65bfbee9ef3f774a4b9a4f963daf9cbaf",
+        "matches_baseline": true,
+        "baseline_cold_us": 43774,
+        "cold_us": 52899,
+        "warm_us": 0
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 0.0001,
+        "jet_sha256": "40d2a9ade5bd4440a6782f67bb84bd709f7770ddb7c1ff556cb4f0c10055f748",
+        "matches_baseline": true,
+        "baseline_cold_us": 2663162,
+        "cold_us": 2917430,
+        "warm_us": 1
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 1e-06,
+        "jet_sha256": "83f591dccab2e002933de239a487f43d8b82f30aa924de15975299da86cfd3a6",
+        "matches_baseline": true,
+        "baseline_cold_us": 2716457,
+        "cold_us": 2826631,
+        "warm_us": 0
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 1e-08,
+        "jet_sha256": "7e1e19cef7096e4ae3b97aebc34a3479fcad29b0decf16dbbe9e6ca09a800ce5",
+        "matches_baseline": true,
+        "baseline_cold_us": 2527246,
+        "cold_us": 2776060,
+        "warm_us": 0
+      }
+    ],
+    "binary_sha256": "5fd362398bb93ad8530e0cf8a5a1e8c7113c1ef3a74c688b44cd23fe02ef2983",
+    "summed_cold_s": 29.076181,
+    "summed_warm_s": 4e-06,
+    "report_mode": "Identical parent report mode, including its Rust JSON parse/serialize boundary.",
+    "invalid_initial_comparison": "Direct child output bypasses the parent JSON parse. Comparing these unlike reporting modes produced 35 one-ulp serialization differences; no numerical tolerance was used in the corrected exact comparison.",
+    "timing_limit": "Separate runs under different concurrent loads; no controlled speedup claim."
+  },
+  "rust_totals": {
+    "passed": 261,
+    "failed": 1,
+    "ignored": 1,
+    "known_failure": "Original native crossing, same CutLocus coordinate .21474166530729011,.12774018997553147"
+  },
+  "production_provider_tests_after_scope_cleanup": "cargo test: 39 passed, 224 filtered out (23 suites, 1.48s)\n",
+  "production_library_tests": "---- manifold::tests::controls_drive_can_cross_shore_without_wall stdout ----\n\nthread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (35772) panicked at runtime-core\\src\\manifold.rs:972:41:\nundriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\ntest result: FAILED. 98 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.85s\n[full output: \"$HOME/AppData/Local/rtk/tee/1793062580_cargo_test.log\"]\n",
+  "production_integration_tests": "cargo test: 163 passed, 1 ignored (20 suites, 270.63s)\n",
+  "python_physics_totals": {
+    "passed": 26,
+    "failed": 1,
+    "known_failure": "Original crossing, same Unresolved coordinate .35659381055433242,.06404656757776669"
+  },
+  "python_physics": ".................F.........                                              [100%]\n================================== FAILURES ===================================\n_ TestShoreCrossings.test_shore_ridge_reflects_below_barrier_and_crosses_above_it _\n\nself = <test_manifold_physics.TestShoreCrossings object at 0x000001D24065B230>\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\n\n    def test_shore_ridge_reflects_below_barrier_and_crosses_above_it(self, rc):\n        \"\"\"Scale-relative kinetic energy can carry a native Shore crossing.\"\"\"\n        config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        shore_y = 0.05\n        c0 = (0.4, shore_y)\n        x_shore = _locate_shore_x(rc, y=shore_y, x_lo=0.2, x_hi=0.5)\n        assert 0.2 < x_shore < 0.5\n    \n        u0 = rc.manifold_potential_energy(complex(*c0), rc_config)\n        u_crest = rc.manifold_potential_energy(complex(x_shore, shore_y), rc_config)\n        barrier = u_crest - u0\n        assert barrier > 0.0\n    \n        g0 = rc.manifold_induced_metric(complex(*c0), rc_config)\n        g_xx = g0[0][0]\n        assert math.isfinite(g_xx) and g_xx > 0.0\n    \n        def _vx_for_ke(target_ke):\n            # For v=(-vx,0), K = 1/2 * G_xx(c0) * vx^2.\n            vx = math.sqrt(2.0 * target_ke / g_xx)\n            measured = rc.manifold_kinetic_energy(vx, 0.0, complex(*c0), rc_config)\n            assert measured == pytest.approx(target_ke, rel=1e-9, abs=1e-12)\n            return vx\n    \n        def _crest_attempt(vx, dt):\n            c = c0\n            v = (-vx, 0.0)\n            crossed = False\n            min_d = math.inf\n            energy_log = []\n            guard_fired = False\n            crossing_time = None\n            for step in range(round(5.0 / dt)):\n                # The |c| < 2 hard invariant (outer-domain wall) may fail the\n                # step closed if the trajectory would leave the valid disk.\n                # That is a defined outcome (\"did not cross\"), not a crash.\n                try:\n                    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n                        rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n>       attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nbackend\\tests\\test_manifold_physics.py:531: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\nbackend\\tests\\test_manifold_physics.py:496: in _crest_attempt\n    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\nc = (0.35659512991586934, 0.06404443350221226)\nv = (-0.0006602770310771159, 0.0010669118815194072), q = (0.0, 0.0), beta = 0.0\ndt = 0.002\nconfig = ManifoldConfig(d_ref=0.1, epsilon=0.0001, lambda_sq=1.0, kappa=0.1, mu=0.3183098861837907)\n\n    def _rust_step(rc, c, v, q, beta, dt, config):\n        \"\"\"Call the Rust scalar binding with a Python config mirror.\"\"\"\n        rc_config = rc.ManifoldConfig(\n            config.d_ref, config.epsilon, config.lambda_sq, config.kappa\n        )\n>       return rc.manifold_integrate_step(\n            c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config\n        )\nE       RuntimeError: geometry not regular: Unresolved (singularity=None) at c=(0.35659381055433242, 0.06404656757776669); provider=geometry-provider/6, tile=scale-aware:23:2991325:537261:1.49e-8, requested=0.000010000015272244462, resolved=0.000000014901161193847656, error=inf\n\nbackend\\tests\\test_manifold_physics.py:68: RuntimeError\n============================== warnings summary ===============================\nbackend/tests/test_manifold_physics.py: 18 warnings\n  C:\\Users\\JeffHall\\git\\FractalSync\\.venv\\Lib\\site-packages\\torch\\jit\\_script.py:1480: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ===========================\nFAILED backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it\n",
+  "python_build": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n\ud83d\udd17 Found pyo3 bindings with abi3-py3.8 support\n\ud83d\udce1 Using build options features from pyproject.toml\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n   Compiling runtime_core v0.1.0 (C:\\Users\\JeffHall\\git\\FractalSync\\runtime-core)\nwarning: runtime_core@0.1.0: runtime_core pyi generated\nwarning: value assigned to `radius` is never read\n   --> runtime-core\\src\\geometry_provider\\uniform_box.rs:337:22\n    |\n337 |     let mut radius = 0.;\n    |                      ^^ this value is reassigned later and never used\n...\n343 |         radius = next.radius(cr);\n    |         ------------------------ `radius` is overwritten here before the previous value is read\n    |\n    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default\n\nwarning: `runtime_core` (lib) generated 1 warning\n    Finished `release` profile [optimized] target(s) in 43.75s\n\ud83d\udcd6 Found type stub file at runtime_core.pyi\n\ud83d\udce6 Built wheel for abi3 Python \u2265 3.8 to C:\\Users\\JeffHall\\AppData\\Local\\Temp\\.tmpzX8PRt\\runtime_core-0.1.0-cp38-abi3-win_amd64.whl\n\u270f\ufe0f Setting installed package as editable\n\ud83d\udee0 Installed runtime_core-0.1.0\n",
+  "installed_extension_sha256": "ea87ed5c65cf49af650d0afeea287320e0a7912312804eb09ff874e8017d5e5c",
+  "preflight": "C:\\Users\\JeffHall\\git\\FractalSync\\scripts\\preflight_parity.py:497: RuntimeWarning: overflow encountered in scalar multiply\n  lcg = lcg * MUL + ADD\nC:\\Users\\JeffHall\\git\\FractalSync\\scripts\\preflight_parity.py:497: RuntimeWarning: overflow encountered in scalar add\n  lcg = lcg * MUL + ADD\nMinimap artifacts present:\n  mandel_F_mips_f32.bin: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_F_mips_f32.bin\n  mandel_S_mips_f32.bin: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_S_mips_f32.bin\n  mandel_mips_meta.json: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_mips_meta.json\nMinimap binding available: runtime_core.load_mip_pyramid_py\n================================================================\nPreflight parity checks\n================================================================\nPASS  a) Carrier parity (Rust vs closed form)       max abs err = 0.000e+00\nPASS  b) Mirror parity (synthesize_c vs Rust)       max abs err = 1.211e-07\nPASS  c) Shared phase source                        max abs err = 0.000e+00\nPASS  e) Orbit mirror parity (trainer vs runtime)   max abs err = 3.320e-08\nPASS  e3) Shore-biased dynamics parity (Rust vs Rust-oracle) max abs err = 0.000e+00\nPASS  e4) Trainer-oracle consistency (mirror vs Rust forward) max abs err = 8.941e-08\nPASS  e5) Manifold physics parity (mirror vs Rust, issue #106) max abs err = 1.490e-08\nPASS  f) Golden vector version (stale-golden guard) max abs err = 0.000e+00\nPASS  g) Feature golden parity (Python mirror vs Rust) max abs err = 1.221e-15\nPASS  h) Feature golden version (stale-golden guard) max abs err = 0.000e+00\nPASS  d) Minimap availability (warning only)        max abs err = 0.000e+00\n================================================================\nAll mandatory parity checks PASSED.\n",
+  "architecture": "architecture guardrail: OK (97 files scanned, 9 manifested mirrors)\n",
+  "surfaces": "Canonical surfaces gate: PASS\n",
+  "wasm_check_after_scope_cleanup": "warning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\ncargo check: 0 errors, 1 warnings (2 crates)\n",
+  "review": {
+    "fixed_point": "8dc8248",
+    "reviewed_commit": "5816b5c",
+    "standards": "No documented violations or material smells found.",
+    "spec": "No actionable numerical or spec finding; bounded prefix, defects, strict return and cutoff preserved.",
+    "health": "No material regression established. Full-query benefit remains unproved; isolated proof work increases."
+  },
+  "unshipped_coherent_variant": {
+    "selected_tests": "cargo test: 81 passed, 224 filtered out (23 suites, 143.22s)\n",
+    "source_sha256": {
+      "runtime-core/src/geometry_provider.rs": "5395bafe056effd4d8c09d9e67e4376adef418612124a3be665ee5ac970257a1",
+      "runtime-core/src/geometry_provider/uniform_box.rs": "43b4231f27ba6aac43fb3f7ccc467ce6117e8d062a5d720578a012b772bf0863",
+      "runtime-core/src/geometry_provider/affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+      "runtime-core/src/geometry_provider/interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+      "runtime-core/src/geometry_provider/range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+      "runtime-core/src/geometry_provider/feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+      "runtime-core/src/geometry_provider/certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+      "runtime-core/examples/geometry145_query.rs": "4c1265135e241f89b3aead3b66fc292a37415e8ab8eb03ae595e11441f5d099f"
+    },
+    "binary_sha256": "e5010b3ec3e55d22c86c6f64fb7971ab65d7ca637c2d23415512231ca8abd9b1",
+    "patch_sha256": "caaec45fc1f158803635c462c71bfc6ae848ea3c19e8786f194017a330ee17c9",
+    "queries": [
+      {
+        "name": "native",
+        "status": {
+          "elapsed_s": 1200.0504957998637,
+          "timed_out": true,
+          "timeout_s": 1200
+        },
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "eed01b9bd479a71ffc64bf15ed4aad4ff3af0e0cee1c4549f5761daac9a764dc"
+      },
+      {
+        "name": "python",
+        "status": {
+          "elapsed_s": 1200.024326800136,
+          "timed_out": true,
+          "timeout_s": 1200
+        },
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "40ff71707e09292d859e4dec6e10525330c80fecc0f9d16b95ea72ac9372c89f"
+      }
+    ]
+  },
+  "timing_limit": "Different concurrent loads. More certificates do not establish a net full-query speedup; both coherent-field queries still time out."
+}

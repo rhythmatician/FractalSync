@@ -11,7 +11,7 @@
  * 7. Replay of recorded manual trajectory reproduces identical snapshots.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import {
   initOrbitSynth,
   setWasmModuleForTesting,
@@ -32,6 +32,26 @@ describe('manual Controls v2 driving (#121)', () => {
   beforeAll(async () => {
     setWasmModuleForTesting(mockModule as never);
     await initOrbitSynth();
+  });
+
+  it('leaves the controller default untouched when manual mode has no explicit seed', () => {
+    const setC = vi.spyOn(mockModule.OrbitController.prototype, 'setC');
+    const setVelocity = vi.spyOn(mockModule.OrbitController.prototype, 'setVelocity');
+    new ManualDriver();
+    expect(setC).not.toHaveBeenCalled();
+    expect(setVelocity).not.toHaveBeenCalled();
+    setC.mockRestore();
+    setVelocity.mockRestore();
+  });
+
+  it('honors an explicit manual seed', () => {
+    const setC = vi.spyOn(mockModule.OrbitController.prototype, 'setC');
+    const setVelocity = vi.spyOn(mockModule.OrbitController.prototype, 'setVelocity');
+    new ManualDriver([0.2, -0.3], [0.01, 0.02]);
+    expect(setC).toHaveBeenCalledWith(0.2, -0.3);
+    expect(setVelocity).toHaveBeenCalledWith(0.01, 0.02);
+    setC.mockRestore();
+    setVelocity.mockRestore();
   });
 
   it('maps neutral keyboard input to zero throttle, neutral steering, default grip', () => {
@@ -243,7 +263,9 @@ describe('manual Controls v2 driving (#121)', () => {
       const snap = currentSnapshot(replaySynth);
       expect(snap.physics.c[0]).toBeCloseTo(recordedSnaps[i].physics.c[0], 10);
       expect(snap.physics.c[1]).toBeCloseTo(recordedSnaps[i].physics.c[1], 10);
-      expect(snap.physics.kinetic).toBeCloseTo(recordedSnaps[i].physics.kinetic, 10);
+      expect(snap.physics.kinetic).not.toBeNull();
+      expect(recordedSnaps[i].physics.kinetic).not.toBeNull();
+      expect(snap.physics.kinetic!).toBeCloseTo(recordedSnaps[i].physics.kinetic!, 10);
     }
   });
 });

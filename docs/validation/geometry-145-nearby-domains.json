@@ -1,0 +1,322 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "1d2686f",
+  "production_adoption": false,
+  "scope": "Measured enclosure supplies a numerical domain-size hint; all new certificates remain fresh, strict proofs. Failed hints retain the original bounded search.",
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "d23a5c9efce82a3d15b3812618323e917e5af0c80f83a9710d0d07e7662a67a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/cover_profile.rs": "bec58e11de6f93e23981e37d8c9c246ec6b0c0e073e58e608a7a9ced0335e482",
+    "docs/validation/experiments/geometry-145-point-proof/src/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "54885dd76f5003b4464ba0ed57691777c5f06f716c28da076423405715ca5ce8",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quintic_field.rs": "0615d5ca65d441f9b5c859f70e7bbef36a113a17a4f9766578fbeecc0e8f5de9",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "4f6ed473a05a1609864ffba1da8deb1734eb5a464189de0eff320afd91502700",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "cff83b7d4ae2ff5a77faedec51fa62bae93fcafb27a9f86da8c93bd132957b22",
+    "docs/validation/experiments/geometry-145-branch-mutations.py": "abbbaa222934271279d0d1b3980b6d005cb7cbd33df084d233343b100e77cd4a"
+  },
+  "binary_sha256": {
+    "nearby": "d66c15431ac475951968ffa7f81d2d2ace2d7ed92a128dfe87b4e1b02a525f42",
+    "nearby-measured": "d98de707d10f3178b8bb979d627587c2e40db2adcadc6fbbda5871aa4bfcce8d"
+  },
+  "runs": [
+    {
+      "variant": "nearby",
+      "name": "python",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 113.2460229001008,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 754,
+          "elapsed_s": 4.081933
+        },
+        {
+          "name": "phase",
+          "calls": 276,
+          "elapsed_s": 1.1647385
+        },
+        {
+          "name": "certify",
+          "calls": 276,
+          "elapsed_s": 22.4762706
+        },
+        {
+          "name": "edge",
+          "calls": 232,
+          "elapsed_s": 0.0049685
+        },
+        {
+          "name": "join",
+          "calls": 231,
+          "elapsed_s": 0.011137
+        },
+        {
+          "name": "geometry",
+          "calls": 232,
+          "elapsed_s": 0.085431
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 0.1333574
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "results": [
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=28.4478706 result=Ok(ClosedCover { edges: 202, winding: 1, curve_distance_lower: 1.7264784381251928e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=28.6491018",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=112.8963434"
+      ],
+      "outputs_sha256": {
+        ".json": "457e7d3c60432599786ed51914d57df839f189f368653ea475bdec343e6e7512",
+        ".log": "3ee33db78632f08f33c4a0b734458582069e7663ce2d80c0904537fc57a012a2"
+      }
+    },
+    {
+      "variant": "nearby",
+      "name": "native",
+      "status": {
+        "exit_code": 1,
+        "elapsed_s": 63.878824200015515,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 426,
+          "elapsed_s": 0.9855552
+        },
+        {
+          "name": "phase",
+          "calls": 160,
+          "elapsed_s": 0.3556511
+        },
+        {
+          "name": "certify",
+          "calls": 160,
+          "elapsed_s": 4.1301387
+        },
+        {
+          "name": "edge",
+          "calls": 158,
+          "elapsed_s": 0.0031291
+        },
+        {
+          "name": "join",
+          "calls": 157,
+          "elapsed_s": 0.0052978
+        },
+        {
+          "name": "geometry",
+          "calls": 158,
+          "elapsed_s": 0.0362884
+        },
+        {
+          "name": "final",
+          "calls": 0,
+          "elapsed_s": 0.0
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": null,
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=5.7847566 result=Err(BuildFailure { reason: DepthBudget, attempted: 160, accepted: 106, depth: 24 })",
+        "[HP_COMPONENT_STATUS145] name=native complete=false elapsed_s=63.6127525"
+      ],
+      "outputs_sha256": {
+        ".json": "0193e35be28c351169550d68a1f2f3e866bcdd55f8d78c2fd40b74a5ace6bfda",
+        ".log": "d79c6e1787db272dade78316c0305663fa21131ee0088e23790a2dbdbf1316a8"
+      }
+    },
+    {
+      "variant": "nearby-measured",
+      "name": "python",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 105.91937649995089,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 654,
+          "elapsed_s": 3.4702965
+        },
+        {
+          "name": "phase",
+          "calls": 236,
+          "elapsed_s": 0.9391646
+        },
+        {
+          "name": "certify",
+          "calls": 236,
+          "elapsed_s": 17.6741454
+        },
+        {
+          "name": "edge",
+          "calls": 192,
+          "elapsed_s": 0.0039476
+        },
+        {
+          "name": "join",
+          "calls": 191,
+          "elapsed_s": 0.0067005
+        },
+        {
+          "name": "geometry",
+          "calls": 192,
+          "elapsed_s": 0.0521205
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 0.0758653
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "results": [
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=22.6903795 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267610988516428e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=22.8657711",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=105.5787912"
+      ],
+      "outputs_sha256": {
+        ".json": "a01a5d0e4658e6802d589841c27cbe004bd28e363c24a6fce75cc690aedc4913",
+        ".log": "8dee80d52057407b3c20c2e86afe703e26ef0ec50dcb8405b874ffb53f0d358d"
+      }
+    },
+    {
+      "variant": "nearby-measured",
+      "name": "native",
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 501.03231939999387,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "phases": [
+        {
+          "name": "solve",
+          "calls": 13609,
+          "elapsed_s": 31.3063796
+        },
+        {
+          "name": "phase",
+          "calls": 5418,
+          "elapsed_s": 11.474069
+        },
+        {
+          "name": "certify",
+          "calls": 5418,
+          "elapsed_s": 393.8530948
+        },
+        {
+          "name": "edge",
+          "calls": 2891,
+          "elapsed_s": 0.0571571
+        },
+        {
+          "name": "join",
+          "calls": 2890,
+          "elapsed_s": 0.1030726
+        },
+        {
+          "name": "geometry",
+          "calls": 2891,
+          "elapsed_s": 1.1410984
+        },
+        {
+          "name": "final",
+          "calls": 2,
+          "elapsed_s": 1.4734331
+        }
+      ],
+      "all81_samples_and_field_and_derivative_rows_identical": true,
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=439.8576553 result=Ok(ClosedCover { edges: 2773, winding: 1, curve_distance_lower: 7.6105555478383155e-6 })",
+        "[NODE_GRID_REFINED_STATUS145] name=native nodes=81 within_requested_width=81 elapsed_s=441.2803185",
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=501.0095172"
+      ],
+      "outputs_sha256": {
+        ".json": "e68ca7a09628452460f979cd43b6df3f3ae89f83124254d61f9770998cda4c25",
+        ".log": "672f78188cc8e729ac2d8c75ff0e82e9a48b17cee60dc981865ae4ef6ea056db"
+      }
+    }
+  ],
+  "branch_mutations": [
+    {
+      "mutation": "neighbor-requires-fresh-proof",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "neighbor-keeps-fallback",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "self-inclusion",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "contraction",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "operation-roundoff",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "quadratic-remainder",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "remainder-transport",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "glue-parameter-domain",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "glue-c-identity",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "glue-cycle-phase",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "segment-attraction",
+      "exit_code": 101,
+      "caught": true
+    },
+    {
+      "mutation": "segment-domain",
+      "exit_code": 101,
+      "caught": true
+    }
+  ],
+  "test_log": "cargo test: 79 passed (2 suites, 0.73s)\n",
+  "timing_limit": "Different concurrent loads; observations are not controlled speedup measurements.",
+  "candidate_adopted": false,
+  "decision": "Restore the default implementation: measured enclosure hints preserve all certified outputs but increase native edges and cover construction cost.",
+  "candidate_patch_sha256": "1de206673872d6ea222d7c600ae689057c1163f15c41f04453ba908010344e84"
+}
