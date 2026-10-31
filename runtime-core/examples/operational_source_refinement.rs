@@ -2,7 +2,10 @@
 use runtime_core::{
     geometry::lobe_point_at_angle,
     geometry_provider::GEOMETRY_SCALE_ALPHA,
-    operational_field::{verification::source_refinement_evidence, PreparedField},
+    operational_field::{
+        verification::{coefficient_magnitude_evidence, source_refinement_evidence},
+        PreparedField,
+    },
 };
 use serde::Deserialize;
 
@@ -93,6 +96,8 @@ fn main() -> Result<(), String> {
             "within_pointwise_comparison_budget":passes}),
         );
     }
+    let coefficient_retention = coefficient_magnitude_evidence(&coarse, &fine, 1e-12)
+        .map_err(|e| format!("invalid coefficient comparison: {e:?}"))?;
     println!(
         "{}",
         serde_json::json!({"schema":"operational-source-refinement/1",
@@ -102,6 +107,8 @@ fn main() -> Result<(), String> {
         "source_spacing_differs_from_coefficient_spacing":true,
         "samples":samples,"unavailable":unavailable,"pointwise_comparison_failures":failures,
         "all_pointwise_comparisons_within_budget":failures == 0 && unavailable == 0,
+        "coefficient_magnitude_comparison":coefficient_retention,
+        "coefficient_comparison_claim":"stored nodal magnitudes and signs only; no reconstructed-field or true-distance bound",
         "runtime_quality_metadata_changed":false})
     );
     Ok(())

@@ -1,0 +1,53 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "Retain physical probe blocks when subdividing source cells, including observed isolated components",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "source_preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ],
+    "reference_origin": [
+      -2.1,
+      -2.1
+    ],
+    "reference_spacing": 0.002,
+    "reference_shape": [
+      2101,
+      2101
+    ],
+    "refinement": 16,
+    "bisections": 8,
+    "membership_iterations": 8192,
+    "max_membership_queries": 50000000,
+    "max_reference_nodes": 5000000,
+    "max_segments": 500000,
+    "maximum_coefficient_bytes": 80000000,
+    "coefficient_witness_seeding": true,
+    "contour_cell_closure": true,
+    "refinement_block_cells": 1
+  },
+  "controlled_change": "Hold source probe-block spacing at 0.002: coarse block=1, refined block=2; all field/physics/test parameters unchanged",
+  "source_evidence": "measured finite-orbit contour; retained sampled search regions do not establish complete contour or distance upper bounds",
+  "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+  "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+  "shipping_adoption": false
+}

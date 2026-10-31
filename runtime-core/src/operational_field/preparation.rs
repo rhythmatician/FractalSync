@@ -3,6 +3,11 @@
 
 use super::PreparedField;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+
+fn default_refinement_block_cells() -> usize {
+    1
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ContourPreparation {
@@ -27,6 +32,10 @@ pub struct ContourPreparation {
     /// False retains the traversal and coordinates of earlier frozen recipes.
     #[serde(default)]
     pub contour_cell_closure: bool,
+    /// Queue complete aligned blocks. Holding spacing * block fixed across
+    /// subdivisions retains the coarse probe region and its sampled components.
+    #[serde(default = "default_refinement_block_cells")]
+    pub refinement_block_cells: usize,
 }
 
 #[derive(Default, Serialize)]
@@ -38,6 +47,30 @@ pub struct PreparationStats {
     pub coefficient_count: usize,
     pub coefficient_seeded_cells: usize,
     pub contour_closure_cells: usize,
+    pub block_expansion_cells: usize,
+}
+
+fn schedule_block(
+    cell: [usize; 2],
+    shape: [usize; 2],
+    block: usize,
+    scheduled: &mut [bool],
+    pending: &mut VecDeque<(usize, usize)>,
+) -> usize {
+    let begin = [cell[0] / block * block, cell[1] / block * block];
+    debug_assert!(begin[0] + block < shape[0] && begin[1] + block < shape[1]);
+    let mut added = 0;
+    for y in begin[1]..begin[1] + block {
+        for x in begin[0]..begin[0] + block {
+            let index = y * (shape[0] - 1) + x;
+            if !scheduled[index] {
+                scheduled[index] = true;
+                pending.push_back((x, y));
+                added += 1;
+            }
+        }
+    }
+    added
 }
 
 #[derive(Clone, Copy)]
@@ -201,6 +234,15 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
         || p.reference_shape.iter().any(|n| *n < 2)
         || p.refinement == 0
         || p.refinement > 32
+        || p.refinement_block_cells == 0
+        || !p.refinement_block_cells.is_power_of_two()
+        || p.refinement
+            .checked_mul(p.refinement_block_cells)
+            .is_none_or(|n| n > 32)
+        || (p.refinement_block_cells > 1 && !p.contour_cell_closure)
+        || p.reference_shape
+            .iter()
+            .any(|n| (n - 1) % p.refinement_block_cells != 0)
         || p.bisections > 20
         || p.membership_iterations == 0
         || p.membership_iterations > 32768
@@ -311,7 +353,7 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
         None
     };
     let mut segments = Vec::new();
-    let mut pending = std::collections::VecDeque::new();
+    let mut pending = VecDeque::new();
     let mut scheduled = vec![
         false;
         if p.contour_cell_closure {
@@ -335,9 +377,18 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
                 continue;
             }
             stats.coefficient_seeded_cells += usize::from(homogeneous && coefficient_seed);
-            pending.push_back((x, y));
             if p.contour_cell_closure {
-                scheduled[y * (nx - 1) + x] = true;
+                let direct = usize::from(!scheduled[y * (nx - 1) + x]);
+                let added = schedule_block(
+                    [x, y],
+                    [nx, ny],
+                    p.refinement_block_cells,
+                    &mut scheduled,
+                    &mut pending,
+                );
+                stats.block_expansion_cells += added - direct;
+            } else {
+                pending.push_back((x, y));
             }
         }
     }
@@ -377,8 +428,14 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
                     if let Some((i, j)) = neighbor {
                         let index = j * (nx - 1) + i;
                         if !scheduled[index] {
-                            scheduled[index] = true;
-                            pending.push_back((i, j));
+                            let added = schedule_block(
+                                [i, j],
+                                [nx, ny],
+                                p.refinement_block_cells,
+                                &mut scheduled,
+                                &mut pending,
+                            );
+                            stats.block_expansion_cells += added - 1;
                             stats.contour_closure_cells += 1;
                         }
                     }
@@ -482,6 +539,57 @@ mod tests {
     use super::*;
 
     #[test]
+    fn refining_the_coarse_partition_does_not_forget_an_observed_component() {
+        let plan = ContourPreparation {
+            origin: [-0.325, -0.325],
+            spacing: 0.05,
+            shape: [25, 25],
+            reference_origin: [-0.4, -0.4],
+            reference_spacing: 0.2,
+            reference_shape: [9, 9],
+            refinement: 16,
+            bisections: 12,
+            membership_iterations: 128,
+            max_membership_queries: 200_000,
+            max_reference_nodes: 1000,
+            max_segments: 10_000,
+            maximum_coefficient_bytes: 10_000,
+            coefficient_witness_seeding: true,
+            contour_cell_closure: true,
+            refinement_block_cells: 1,
+        };
+        // The large component seeds a coarse cell containing a small isolated
+        // component. The finer partition must retain that observed geometry,
+        // even though the isolated component misses its new seed locations.
+        let classify = |p: [f64; 2]| {
+            (p[0] - 0.05).hypot(p[1] - 0.05) < 0.04 || (p[0] - 0.15).hypot(p[1] - 0.15) < 0.008
+        };
+        let (coarse, _) = prepare_with_membership(&plan, classify).unwrap();
+        let mut refined = plan.clone();
+        refined.reference_spacing *= 0.5;
+        refined.reference_shape = [17, 17];
+        refined.refinement /= 2;
+        refined.refinement_block_cells = 2;
+        let (fine, stats) = prepare_with_membership(&refined, classify).unwrap();
+        assert!(stats.block_expansion_cells > 0);
+        let a = coarse.query([0.3, 0.35]).unwrap().value;
+        let b = fine.query([0.3, 0.35]).unwrap().value;
+        assert!(
+            b <= a + 1e-12,
+            "refinement forgot a component: coarse={a}, fine={b}"
+        );
+        assert_eq!(coarse.asset_bytes(), fine.asset_bytes());
+        for invalid in [0, 3, 8] {
+            let mut bad = refined.clone();
+            bad.refinement_block_cells = invalid;
+            assert!(prepare_with_membership(&bad, classify).is_err());
+        }
+        let mut bad = refined.clone();
+        bad.contour_cell_closure = false;
+        assert!(prepare_with_membership(&bad, classify).is_err());
+    }
+
+    #[test]
     fn observed_edge_crossings_continue_into_homogeneous_neighbor_cells() {
         let plan = ContourPreparation {
             origin: [-0.35, -0.325],
@@ -499,6 +607,7 @@ mod tests {
             maximum_coefficient_bytes: 10_000,
             coefficient_witness_seeding: true,
             contour_cell_closure: true,
+            refinement_block_cells: 1,
         };
         // A thin horizontal extension leaves a sampled disk, crosses a refined
         // cell edge, but misses all coarse corners and coefficient rows ahead.
@@ -547,6 +656,7 @@ mod tests {
             maximum_coefficient_bytes: 300_000,
             coefficient_witness_seeding: true,
             contour_cell_closure: false,
+            refinement_block_cells: 1,
         };
         let classify =
             |p: [f64; 2]| (p[0] + 0.2).hypot(p[1]) < 0.12 || (p[0] - 0.3).hypot(p[1] - 0.3) < 0.04;
@@ -615,6 +725,7 @@ mod tests {
             maximum_coefficient_bytes: 80_000,
             coefficient_witness_seeding: false,
             contour_cell_closure: false,
+            refinement_block_cells: 1,
         };
         let classify =
             |p: [f64; 2]| (p[0] - 0.5).hypot(p[1]) < 0.2 || (p[0] + 0.5).hypot(p[1]) < 0.2;
@@ -653,6 +764,7 @@ mod tests {
             maximum_coefficient_bytes: 20_000,
             coefficient_witness_seeding: false,
             contour_cell_closure: false,
+            refinement_block_cells: 1,
         };
         let (field, stats) = prepare_with_membership(&plan, |p| p[0] < 0.0).unwrap();
         assert!(stats.membership_queries <= plan.max_membership_queries);

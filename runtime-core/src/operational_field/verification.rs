@@ -5,8 +5,62 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationError {
     InvalidNeighborhood,
+    IncompatibleGrids,
     GeometryUnavailable,
     NonfiniteJet,
+}
+
+/// Whole-asset comparison of stored coefficient magnitudes. With contour-sample
+/// coefficients this detects forgotten sampled geometry. It is not a bound on
+/// the reconstructed field, its derivatives, or the true Shore distance.
+#[derive(Debug, Serialize)]
+pub struct CoefficientMagnitudeEvidence {
+    pub coefficient_count: usize,
+    pub comparison_tolerance: f64,
+    pub sign_changes: usize,
+    pub magnitude_increases_over_tolerance: usize,
+    pub magnitude_decreases_over_tolerance: usize,
+    pub maximum_magnitude_increase: f64,
+    pub maximum_magnitude_decrease: f64,
+    pub passes_sampled_magnitude_retention: bool,
+}
+pub fn coefficient_magnitude_evidence(
+    coarse: &PreparedField,
+    fine: &PreparedField,
+    tolerance: f64,
+) -> Result<CoefficientMagnitudeEvidence, VerificationError> {
+    if !tolerance.is_finite() || tolerance < 0.0 {
+        return Err(VerificationError::InvalidNeighborhood);
+    }
+    if coarse.origin != fine.origin || coarse.spacing != fine.spacing || coarse.shape != fine.shape
+    {
+        return Err(VerificationError::IncompatibleGrids);
+    }
+    if coarse.available.is_some() || fine.available.is_some() {
+        return Err(VerificationError::GeometryUnavailable);
+    }
+    let mut e = CoefficientMagnitudeEvidence {
+        coefficient_count: coarse.coefficients.len(),
+        comparison_tolerance: tolerance,
+        sign_changes: 0,
+        magnitude_increases_over_tolerance: 0,
+        magnitude_decreases_over_tolerance: 0,
+        maximum_magnitude_increase: 0.0,
+        maximum_magnitude_decrease: 0.0,
+        passes_sampled_magnitude_retention: false,
+    };
+    for (&a, &b) in coarse.coefficients.iter().zip(fine.coefficients.iter()) {
+        e.sign_changes +=
+            usize::from(a != 0.0 && b != 0.0 && a.is_sign_positive() != b.is_sign_positive());
+        let change = b.abs() - a.abs();
+        e.magnitude_increases_over_tolerance += usize::from(change > tolerance);
+        e.magnitude_decreases_over_tolerance += usize::from(change < -tolerance);
+        e.maximum_magnitude_increase = e.maximum_magnitude_increase.max(change);
+        e.maximum_magnitude_decrease = e.maximum_magnitude_decrease.max(-change);
+    }
+    e.passes_sampled_magnitude_retention =
+        e.sign_changes == 0 && e.magnitude_increases_over_tolerance == 0;
+    Ok(e)
 }
 
 /// Point-scoped sensitivity to a declared source refinement, in distance units.
@@ -227,6 +281,33 @@ pub fn fixed_neighbor_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn coefficient_retention_requires_complete_matching_grids_and_preserved_signs() {
+        let field = |v| PreparedField::new([0.0; 2], 1.0, [6, 6], vec![v; 36]).unwrap();
+        let a = field(2.0);
+        let b = field(1.0);
+        let e = coefficient_magnitude_evidence(&a, &b, 1e-12).unwrap();
+        assert!(e.passes_sampled_magnitude_retention);
+        assert_eq!(e.magnitude_decreases_over_tolerance, 36);
+        assert!(
+            !coefficient_magnitude_evidence(&b, &a, 1e-12)
+                .unwrap()
+                .passes_sampled_magnitude_retention
+        );
+        assert_eq!(
+            coefficient_magnitude_evidence(&a, &field(-2.0), 1e-12)
+                .unwrap()
+                .sign_changes,
+            36
+        );
+        let shifted = PreparedField::new([0.1, 0.0], 1.0, [6, 6], vec![1.0; 36]).unwrap();
+        assert!(coefficient_magnitude_evidence(&a, &shifted, 1e-12).is_err());
+        let mut values = vec![Some(1.0); 36];
+        values[0] = None;
+        let sparse = PreparedField::new_sparse([0.0; 2], 1.0, [6, 6], values).unwrap();
+        assert!(coefficient_magnitude_evidence(&a, &sparse, 1e-12).is_err());
+        assert!(coefficient_magnitude_evidence(&a, &b, f64::NAN).is_err());
+    }
     #[test]
     fn source_refinement_counts_cross_derivatives_and_rejects_nonfinite_evidence() {
         let zero = FieldJet {

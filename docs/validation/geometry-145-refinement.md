@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [observed internal contour-edge closure](geometry-145-operational-closure.md) fixes a reproduced truncation and reduces source-comparison failures from 720 to 52. All 30 Rust controls, 35 per-run expectations, 21 reference crossings, parity and provisional p99 cost checks pass. Experimental Python remains 25 passed, 2 failed. Shipping-profile CI separately fails the original Rust/backend crossings. Feature-gated controls now have an additional CI step. Earlier assets and failures are preserved. This candidate is not merge-ready.
+Latest follow-up: [retained physical probe blocks](geometry-145-operational-retained.md) prevent source subdivision from forgetting sampled components. Fixed source-comparison failures fall from 52 to zero; whole-coefficient magnitude increases fall from 172,562 to zero. All 32 Rust controls, 35 per-run expectations, 21 reference crossings, parity and provisional p99 cost checks pass, but browser query maximum is 9.05 ms. Experimental Python remains 25 passed, 2 failed; shipping CI separately fails both original crossings. Reference-distance quality remains unknown. Earlier assets and failures are preserved. This candidate is not merge-ready.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
