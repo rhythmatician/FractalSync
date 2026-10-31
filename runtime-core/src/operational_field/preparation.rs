@@ -19,6 +19,10 @@ pub struct ContourPreparation {
     pub max_reference_nodes: usize,
     pub max_segments: usize,
     pub maximum_coefficient_bytes: usize,
+    /// Reuse required coefficient membership samples to refine otherwise
+    /// homogeneous reference cells. False preserves prior experiment recipes.
+    #[serde(default)]
+    pub coefficient_witness_seeding: bool,
 }
 
 #[derive(Default, Serialize)]
@@ -28,6 +32,7 @@ pub struct PreparationStats {
     pub membership_queries: usize,
     pub segments: usize,
     pub coefficient_count: usize,
+    pub coefficient_seeded_cells: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -231,22 +236,79 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
         coefficient_count,
         ..Default::default()
     };
+    // The signs are needed for coefficients regardless. With seeding enabled,
+    // collect them before contour extraction so an observed component cannot
+    // be discarded solely because all four coarse corners missed it.
+    let mut seeded = vec![
+        false;
+        if p.coefficient_witness_seeding {
+            (nx - 1) * (ny - 1)
+        } else {
+            0
+        }
+    ];
+    let coefficient_membership = if p.coefficient_witness_seeding {
+        let mut values = Vec::with_capacity(coefficient_count);
+        for y in 0..p.shape[1] {
+            for x in 0..p.shape[0] {
+                let point = [
+                    p.origin[0] + x as f64 * p.spacing,
+                    p.origin[1] + y as f64 * p.spacing,
+                ];
+                let inside = classify.at(point)?;
+                values.push(inside);
+                let q = [
+                    (point[0] - p.reference_origin[0]) / p.reference_spacing,
+                    (point[1] - p.reference_origin[1]) / p.reference_spacing,
+                ];
+                let cell = [
+                    (q[0].floor() as usize).min(nx - 2),
+                    (q[1].floor() as usize).min(ny - 2),
+                ];
+                // A witness on a shared edge belongs to both incident cells.
+                let begin = [
+                    if q[0].fract() == 0.0 && cell[0] > 0 && q[0] < (nx - 1) as f64 {
+                        cell[0] - 1
+                    } else {
+                        cell[0]
+                    },
+                    if q[1].fract() == 0.0 && cell[1] > 0 && q[1] < (ny - 1) as f64 {
+                        cell[1] - 1
+                    } else {
+                        cell[1]
+                    },
+                ];
+                for j in begin[1]..=cell[1] {
+                    for i in begin[0]..=cell[0] {
+                        if mask[j * nx + i] != inside {
+                            seeded[j * (nx - 1) + i] = true;
+                        }
+                    }
+                }
+            }
+        }
+        Some(values)
+    } else {
+        None
+    };
     let mut segments = Vec::new();
     let r = p.refinement;
     let h = p.reference_spacing / r as f64;
     for y in 0..ny - 1 {
         for x in 0..nx - 1 {
             let a = mask[y * nx + x];
-            if [
+            let homogeneous = [
                 mask[y * nx + x + 1],
                 mask[(y + 1) * nx + x],
                 mask[(y + 1) * nx + x + 1],
             ]
             .iter()
-            .all(|b| *b == a)
-            {
+            .all(|b| *b == a);
+            let coefficient_seed = p.coefficient_witness_seeding && seeded[y * (nx - 1) + x];
+            if homogeneous && !coefficient_seed {
                 continue;
             }
+            stats.coefficient_seeded_cells += usize::from(homogeneous && coefficient_seed);
             stats.refined_cells += 1;
             let o = [
                 p.reference_origin[0] + x as f64 * p.reference_spacing,
@@ -321,7 +383,11 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
                 p.origin[0] + x as f64 * p.spacing,
                 p.origin[1] + y as f64 * p.spacing,
             ];
-            let sign = if classify.at(point)? { -1.0 } else { 1.0 };
+            let inside = match &coefficient_membership {
+                Some(values) => values[y * p.shape[0] + x],
+                None => classify.at(point)?,
+            };
+            let sign = if inside { -1.0 } else { 1.0 };
             coefficients.push(sign * contour.distance(point));
         }
     }
@@ -334,6 +400,37 @@ fn prepare_with_membership<F: FnMut([f64; 2]) -> bool>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coefficient_membership_witness_retains_a_component_hidden_between_reference_corners() {
+        let plan = ContourPreparation {
+            origin: [-0.35, -0.15],
+            spacing: 0.005,
+            shape: [201, 161],
+            reference_origin: [-0.4, -0.4],
+            reference_spacing: 0.2,
+            reference_shape: [9, 9],
+            refinement: 16,
+            bisections: 10,
+            membership_iterations: 128,
+            max_membership_queries: 1_000_000,
+            max_reference_nodes: 1000,
+            max_segments: 10_000,
+            maximum_coefficient_bytes: 300_000,
+            coefficient_witness_seeding: true,
+        };
+        let classify =
+            |p: [f64; 2]| (p[0] + 0.2).hypot(p[1]) < 0.12 || (p[0] - 0.3).hypot(p[1] - 0.3) < 0.04;
+        let (field, stats) = prepare_with_membership(&plan, classify).unwrap();
+        assert!(stats.coefficient_seeded_cells > 0);
+        // The small circle fits strictly inside one coarse reference cell.
+        // Its nearest boundary is nevertheless resolved by coefficient samples.
+        let actual = field.query([0.32, 0.3]).unwrap().value;
+        assert!(
+            (actual + 0.02).abs() < 0.003,
+            "hidden-component distance: {actual}"
+        );
+    }
 
     #[test]
     fn nearest_contour_search_preserves_both_components_even_at_a_tie() {
@@ -387,6 +484,7 @@ mod tests {
             max_reference_nodes: 1000,
             max_segments: 1000,
             maximum_coefficient_bytes: 80_000,
+            coefficient_witness_seeding: false,
         };
         let classify =
             |p: [f64; 2]| (p[0] - 0.5).hypot(p[1]) < 0.2 || (p[0] + 0.5).hypot(p[1]) < 0.2;
@@ -423,9 +521,17 @@ mod tests {
             max_reference_nodes: 1000,
             max_segments: 1000,
             maximum_coefficient_bytes: 20_000,
+            coefficient_witness_seeding: false,
         };
         let (field, stats) = prepare_with_membership(&plan, |p| p[0] < 0.0).unwrap();
         assert!(stats.membership_queries <= plan.max_membership_queries);
+        let mut seeded = plan.clone();
+        seeded.coefficient_witness_seeding = true;
+        let (seeded_field, seeded_stats) =
+            prepare_with_membership(&seeded, |p| p[0] < 0.0).unwrap();
+        assert_eq!(seeded_stats.coefficient_seeded_cells, 0);
+        assert_eq!(seeded_stats.membership_queries, stats.membership_queries);
+        assert_eq!(seeded_field.asset_bytes(), field.asset_bytes());
         for p in [[-0.1, 0.0], [0.0, 0.0], [0.1, 0.05]] {
             let jet = field.query(p).unwrap();
             assert!((jet.value - p[0]).abs() < 1e-6);
@@ -435,6 +541,8 @@ mod tests {
         }
         let mut exhausted = plan.clone();
         exhausted.max_membership_queries = 10;
+        assert!(prepare_with_membership(&exhausted, |p| p[0] < 0.0).is_err());
+        exhausted.coefficient_witness_seeding = true;
         assert!(prepare_with_membership(&exhausted, |p| p[0] < 0.0).is_err());
     }
 }

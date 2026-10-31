@@ -1,6 +1,6 @@
 # Geometry #145: coherent refinement and integration
 
-Latest follow-up: [the frozen-source sensitivity and event diagnostics](geometry-145-operational-source-refinement.md) find 1,099/1,768 fixed points outside the source-comparison budget. A five-timestep diagnostic shows converging bracketed zero times despite identical first-negative-sample times; it does not replace the original failed assertion. All 28 Rust controls pass. Python remains 25 passed, 2 failed, with scalar quality unknown and source stability unresolved. The earlier reference-grid experiment and all assets/failures remain preserved. This candidate is not merge-ready.
+Latest follow-up: [coefficient-witness seeding](geometry-145-operational-seeded.md) fixes a reproduced contour omission and reduces source-comparison failures from 1,099 to 720, including 381 to 27 on the neighboring grid. All 29 Rust controls, 35 per-run expectations, 21 reference crossings, parity and provisional p99 cost checks pass. Original Python remains 25 passed, 2 failed; scalar quality and sampled crossing-time refinement remain unresolved. Earlier assets and failures are preserved. This candidate is not merge-ready.
 
 PR #148 is not ready to merge. These are unshipped source snapshots following
 `97370ad`; production geometry is unchanged. Public quality thresholds and the
