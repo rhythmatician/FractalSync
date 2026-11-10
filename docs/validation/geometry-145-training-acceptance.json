@@ -1,0 +1,254 @@
+{
+  "profile": "experimental-operational-field/1",
+  "integrator": "Rk4FourSubsteps",
+  "legacy_step_contract": "explicit process-selected method; each legacy call pins its supplied config/dt/drag for the complete transaction; persistent mechanical ledgers are separately tested through owned FrozenRollout",
+  "field_identity": "operational:9721bb7647a0b8e6",
+  "wheel_sha256": "8612b77b23bedec1b77b4f02455d955ac46886778c86b3d7a91d905296cb12ad",
+  "extension_sha256": "e11c23fe15455cd355545cc73502f72fa632a612e6378c968badd90a3f1e96bb",
+  "test_source_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+  "test_source_unchanged": true,
+  "rust_source_sha256": {
+    "runtime-core/src/operational_field.rs": "d7101157f6857732fee2cb86d516c6722327656924f4f3f296f8e11990b19aa3",
+    "runtime-core/src/geometry_provider.rs": "16bbae3b665b0544cfa87692e4b4f9ba0f80c3adb1736a0c98d8cfda3a7fa107",
+    "runtime-core/src/pybindings.rs": "da2201833ca7ced8d62ffb6e0266d8d8fd1fa66ca44afd15e9e6377393702434",
+    "runtime-core/src/manifold.rs": "c691c0adfe480bff2cb2b8332305627129387cbec3daede427adfc61d04197fc"
+  },
+  "asset_loading_seconds": 0.11214189999736845,
+  "asset_sha256": "bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb",
+  "reference_policy_sha256": "7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd",
+  "pytest_seconds": 10.357778200006578,
+  "pytest_args": [
+    "-q",
+    "backend/tests/test_controls_v2_energy.py",
+    "backend/tests/test_controls_v2_smoke.py",
+    "backend/tests/test_manifold_physics.py",
+    "-q"
+  ],
+  "pytest_exit_code": 1,
+  "tests": [
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_sequence_preserves_rust_energy_info_without_fabricating_diagnostics",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0013352999812923372
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_sequence_matches_real_rust_energy_and_preserves_ste",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0015827000024728477
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_sequence_propagates_native_refusal_without_returning_partial_results",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0006939999875612557
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_sequence_refuses_when_native_controls_binding_is_missing",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00037080002948641777
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_retained_field_intermediate_stage_refusal_escapes_training_sequence",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0005286999512463808
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_energy.py::test_optimizer_updates_through_controls_sequence_ste",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 1.7332428999943659
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_smoke.py::test_controls_v2_model_output_order_and_ranges",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00014720001490786672
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_smoke.py::test_controls_v2_cspace_rollout_is_manifold_aware",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.003209899994544685
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_smoke.py::test_controls_v2_training_batch_smoke",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.8383222999982536
+    },
+    {
+      "nodeid": "backend/tests/test_controls_v2_smoke.py::test_controls_v2_onnx_export_stamps_named_contract",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 3.1951245000236668
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_symmetric_positive_definite",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00035039999056607485
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_inverse_bounded",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0001734999823383987
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_christoffel_finite_on_regular_geometry",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0002049999893642962
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_cut_locus_is_explicit_and_physics_fails_closed",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0002587999915704131
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_connection_matches_metric_derivative_definition",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.11717440001666546
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_scale_relative_metric_is_d_ref_gauge_invariant",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.001775600016117096
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_mirror_matches_rust_field",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0012502999743446708
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_power_nonpositive",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00013669999316334724
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_reduces_kinetic_energy",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.000278900028206408
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_no_forces",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.002451899985317141
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_near_shore",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.004602200002409518
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_low_curvature_rollout",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.006152099987957627
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_high_curvature_deep_scale_rollout",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.006690000009257346
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_near_shore_rollout",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0041662000003270805
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_potential_force_points_downhill_from_ridge",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 8.93000396899879e-05
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_h_signal_irrelevant_to_manifold_path",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00045039999531582
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_ridge_is_barrier_without_h_gate",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.009847800014540553
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+      "outcome": "failed",
+      "phase": "call",
+      "seconds": 0.8747024000040255,
+      "failure": "             rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n        crossed_high, min_d_high, _, energy_log, guard_fired_high, _ = attempts[1]\n    \n        # More mechanical energy must buy real progress up the same ridge.\n        assert min_d_high < min_d_under, (\n            f\"higher-energy launch did not penetrate farther: \"\n            f\"low={min_d_under}, high={min_d_high}\"\n        )\n    \n        assert crossed_high, (\n            f\"above-barrier launch did not cross: min D={min_d_high}, \"\n            f\"hard_guard_fired={guard_fired_high}\"\n        )\n        assert energy_log\n        k, u, e = energy_log[0]\n        assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)\n    \n        crossing_times = [attempt[5] for attempt in attempts]\n        assert all(attempt[0] for attempt in attempts), (\n            f\"crossing did not survive timestep refinement: {attempts}\"\n        )\n        assert all(time is not None for time in crossing_times)\n        coarse_time, middle_time, fine_time = crossing_times\n        assert coarse_time is not None\n        assert middle_time is not None\n        assert fine_time is not None\n        coarse_gap = abs(coarse_time - middle_time)\n        fine_gap = abs(middle_time - fine_time)\n>       assert fine_gap < coarse_gap\nE       assert 0.0004999999999997229 < 0.0\n\nbackend\\tests\\test_manifold_physics.py:559: AssertionError"
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_signed_distance_authority_sign_and_continuity",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0004947000415995717
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+      "outcome": "failed",
+      "phase": "call",
+      "seconds": 0.000215300009585917,
+      "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x00000268347BA210>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.001723318199799821)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_scale_continuous_inside_regular_patch",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00012420001439750195
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_metric_continuous_inside_regular_patch",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 9.99000039882958e-05
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_matches_rust_single_step",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.00041199999395757914
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_ste_smoke_gradients_flow",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0003964000497944653
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_matches_rust_controller",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.008312100020702928
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_energy_infos_populated",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.0018407999887131155
+    },
+    {
+      "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_ste_smoke_gradients_flow_to_targets",
+      "outcome": "passed",
+      "phase": "call",
+      "seconds": 0.002217999950516969
+    }
+  ]
+}
