@@ -1,0 +1,11 @@
+const fs = require("node:fs");
+const path = require("node:path");
+const { BoundedOperationalRollout } = require(path.resolve(process.argv[2]));
+const asset = fs.readFileSync(process.argv[3]);
+const policy = fs.readFileSync(process.argv[4], "utf8");
+const engine = new BoundedOperationalRollout(asset, policy, 0.1, 1e-4, 1, 0.1, 1 / Math.PI, 0.001, 0);
+const probe = JSON.parse(engine.probe(0.4, 0.05));
+engine.start(0.4, 0.05, -0.001, 0);
+let state;
+for (let i = 0; i < 10; i++) state = JSON.parse(engine.step(0, 0));
+console.log(JSON.stringify({ probe, state }));
