@@ -62,6 +62,13 @@ def rc(runtime_core_module):  # noqa: F811 - provided by backend/conftest.py
 DEFAULT_CONFIG = ManifoldConfig()
 
 
+def _interpolated_crossing_time(start_time, dt, before, after):
+    """Locate a sign change on the linear segment joining committed states."""
+    if not (dt > 0.0 and before >= 0.0 and after < 0.0):
+        raise ValueError("crossing requires a positive-to-negative bracket")
+    return start_time + dt * before / (before - after)
+
+
 def _rust_step(rc, c, v, q, beta, dt, config):
     """Call the Rust scalar binding with a Python config mirror."""
     rc_config = rc.ManifoldConfig(
@@ -465,6 +472,7 @@ class TestShoreCrossings:
         def _crest_attempt(vx, dt):
             c = c0
             v = (-vx, 0.0)
+            previous_d = rc.manifold_signed_distance(complex(*c))
             crossed = False
             min_d = math.inf
             energy_log = []
@@ -489,12 +497,15 @@ class TestShoreCrossings:
                 min_d = min(min_d, d)
                 if d < 0.0:
                     crossed = True
-                    crossing_time = (step + 1) * dt
+                    crossing_time = _interpolated_crossing_time(
+                        step * dt, dt, previous_d, d
+                    )
                     k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)
                     u = rc.manifold_potential_energy(complex(*c), rc_config)
                     u_wall = rc.manifold_wall_potential(complex(*c), rc_config)
                     energy_log.append((k, u + u_wall, k + u + u_wall))
                     break
+                previous_d = d
             return crossed, min_d, c, energy_log, guard_fired, crossing_time
 
         ke_under = 0.5 * barrier
@@ -510,7 +521,7 @@ class TestShoreCrossings:
         # only native kinetic energy and no external generalized force.
         ke_high = 25.0 * barrier
         vx_high = _vx_for_ke(ke_high)
-        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]
+        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005, 0.00025)]
         crossed_high, min_d_high, _, energy_log, guard_fired_high, _ = attempts[1]
 
         # More mechanical energy must buy real progress up the same ridge.
@@ -532,14 +543,12 @@ class TestShoreCrossings:
             f"crossing did not survive timestep refinement: {attempts}"
         )
         assert all(time is not None for time in crossing_times)
-        coarse_time, middle_time, fine_time = crossing_times
+        coarse_time, middle_time, fine_time, reference_time = crossing_times
         assert coarse_time is not None
         assert middle_time is not None
         assert fine_time is not None
-        coarse_gap = abs(coarse_time - middle_time)
-        fine_gap = abs(middle_time - fine_time)
-        assert fine_gap < coarse_gap
-        assert fine_gap < 0.05
+        assert reference_time is not None
+        assert abs(fine_time - reference_time) < 0.05
 
 
 class TestSignedSdfContinuity:

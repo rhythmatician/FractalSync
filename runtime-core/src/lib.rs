@@ -32,6 +32,10 @@ pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
+#[cfg(feature = "experimental-operational-field")]
+pub mod operational_field;
+#[cfg(feature = "experimental-operational-field")]
+pub mod operational_engine;
 pub mod manifold;
 pub mod proxies;
 pub mod controls;
@@ -44,6 +48,9 @@ pub mod model_io;
 
 #[cfg(feature = "python")]
 pub mod pybindings;
+
+#[cfg(all(feature = "python", feature = "experimental-operational-field"))]
+mod operational_python;
 
 #[cfg(feature = "wasm")]
 pub mod wasm_bindings;

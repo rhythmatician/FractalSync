@@ -2369,6 +2369,8 @@ fn compute_runtime_visual_metrics(py: Python,
 #[pymodule]
 #[allow(deprecated)]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
+    #[cfg(feature = "experimental-operational-field")]
+    m.add_class::<crate::operational_python::BoundedOperationalRollout>()?;
     // Shared constants
     m.add("SAMPLE_RATE", SAMPLE_RATE)?;
     m.add("HOP_LENGTH", HOP_LENGTH)?;

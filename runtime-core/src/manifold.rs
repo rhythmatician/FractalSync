@@ -121,6 +121,11 @@ pub fn derivative_step() -> f64 {
 /// symmetrically. It does not make a nonsmooth signed-distance field globally
 /// twice differentiable; cut loci still limit Hessian and connection validity.
 pub fn regularized_distance(c: Complex64, epsilon: f64) -> Result<f64, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    if crate::operational_engine::is_pinned() {
+        let d = crate::geometry_provider::query_geometry(c, epsilon)?.d;
+        return Ok((d * d + epsilon * epsilon).sqrt());
+    }
     let d = signed_distance(c)?;
     Ok((d * d + epsilon * epsilon).sqrt())
 }

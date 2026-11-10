@@ -3,6 +3,9 @@
 //! WebAssembly bindings to runtime_core for browser use.
 
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "experimental-operational-field")]
+mod operational_engine;
 use js_sys::Array;
 use serde::Serialize;
 use num_complex::Complex64 as RustComplex;

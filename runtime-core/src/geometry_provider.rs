@@ -108,6 +108,13 @@ impl SingularityKind {
 
 /// One coherent differential sample from the local geometry representation.
 ///
+/// Interpret metadata according to `provider_version`: for the opt-in
+/// experimental operational field, `d` is its scalar F, `resolved_scale` is
+/// coefficient spacing, and `Regular` means the complete operational jet is
+/// available. None of these certifies true Shore distance, its resolution, or
+/// reference differential fidelity. Its provider version explicitly reports
+/// `reference-distance-unknown`.
+///
 /// The invariant is that D, grad_D, and hessian_D come from one coherent
 /// local representation (scale-aware local stencil), not independent heuristics
 /// or nested finite differences of sigma.
@@ -424,6 +431,23 @@ pub fn query_geometry(
     c: Complex64,
     epsilon: f64,
 ) -> Result<GeometryJet, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(field) = crate::operational_field::ACTIVE.with(|active| active.borrow().clone()) {
+        crate::operational_engine::check_query(c, epsilon)?;
+        let jet = field.query([c.re, c.im]).map_err(|_| "GeometryUnavailable".to_string())?;
+        return Ok(GeometryJet {
+            d: jet.value,
+            grad_d: jet.gradient,
+            hessian_d: jet.hessian,
+            resolved_scale: field.spacing(),
+            requested_scale: GEOMETRY_SCALE_ALPHA * (jet.value * jet.value + epsilon * epsilon).sqrt(),
+            validity: GeometryValidity::Regular,
+            singularity: SingularityKind::None,
+            provider_version: "experimental-operational-field/1;reference-distance-unknown".into(),
+            tile_id: format!("operational:{:016x}", field.identity()),
+            is_bridge: false,
+        });
+    }
     query_bridge_geometry_with_alpha(c, epsilon, GEOMETRY_SCALE_ALPHA)
 }
 
