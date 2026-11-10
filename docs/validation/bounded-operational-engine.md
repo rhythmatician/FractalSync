@@ -64,6 +64,21 @@ The operational asset has field ID `9721bb7647a0b8e6`, SHA-256
 `bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb`;
 the policy SHA-256 is
 `7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd`.
+The [frozen policy](bounded-reference-policy.json) and
+[preparation recipe](bounded-field-preparation.json) are included here. To
+reproduce the asset without adding the adaptive provider to this change, run
+the following in a separate clean checkout of PR #148 source `e780e795`;
+the output path must not already exist:
+
+```text
+cargo run --release --manifest-path runtime-core/Cargo.toml --features experimental-operational-field --example operational_contour_prepare -- docs/validation/geometry-145-operational-retained-fine-experiment.json NEW_ASSET_PATH
+```
+
+Check its SHA-256 and field ID against the values above before replay. The
+previous recorded preparation took roughly 218 seconds and produced a
+77,405,056-byte asset; preparation is outside all live timings. The engine
+accepts supplied prepared assets and does not build or fetch one at runtime.
+
 The Rust Controls crossing and Python barrier crossing pass on that asset;
 their reference crossings remain **unverified**. The four interpolated Python
 times are `3.8632321511`, `3.8632678178`, `3.8632706835`, and `3.8632705541`
