@@ -6,6 +6,36 @@ on:
       - "*"
 
 jobs:
+  bounded-operational-controls:
+    name: Bounded Operational Controls
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+      - name: Check frozen mechanics and derivative controls
+        run: cargo test --manifest-path runtime-core/Cargo.toml --release --features experimental-operational-field --lib
+      - name: Build and exercise the opt-in Python binding
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install maturin
+          maturin build --release --manifest-path runtime-core/Cargo.toml --features python,experimental-operational-field --bindings pyo3 --out tmp/operational-wheel
+          python -m pip install tmp/operational-wheel/*.whl
+          python scripts/check_bounded_python.py
+      - name: Build and exercise the opt-in WASM binding
+        run: |
+          cargo install wasm-pack --locked
+          wasm-pack build wasm-orbit --target nodejs --out-dir ../tmp/final-wasm -- --features experimental-operational-field
+          node scripts/check_bounded_wasm.cjs tmp/final-wasm/orbit_synth_wasm.js
+
   backend-tests:
     name: Backend Tests (Python)
     needs: runtime-core-build

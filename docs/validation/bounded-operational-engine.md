@@ -33,3 +33,18 @@ operational crossing and energy replay on a frozen asset; analytical, join,
 refusal and transaction tests; Python and WASM parity; and recorded source,
 binary, asset and policy hashes. A measured field discrepancy is not a certified
 reference error bound.
+
+The frozen-asset replay uses the #148 starting positions and launch rules for
+the driven/undriven Controls case and the underpowered/above-barrier Python case.
+Its crossing verdict concerns the operational contour. Reference Shore crossing
+is separately unverified for this extraction. The two retained high-curvature
+and near-Shore energy replays compare absolute energy excursion and drift with
+the original `0.05` limit. The crossing replay also checks absolute energy
+excursion against that limit.
+
+The fixed 1,000-point neighboring check and explicit joins retain the `1e-4`
+tolerance. The neighboring verifier uses Richardson extrapolation at fixed
+increments and checks agreement at two resolutions. The report also exposes the
+original raw central-difference outcome separately; a failure there cannot be
+described as a passing raw diagnostic. These tests check field self-consistency,
+not fidelity to reference derivatives.

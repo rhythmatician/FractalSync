@@ -56,7 +56,7 @@ def main():
             state = json.loads(engine.step(0.0, 0.0))
             max_energy_excursion = max(
                 max_energy_excursion,
-                abs(state["energy"] - initial_energy) / max(abs(initial_energy), 1.0),
+                abs(state["energy"] - initial_energy),
             )
             d = json.loads(engine.probe(*state["position"]))["operational_value"]
             minimum = min(minimum, d)
