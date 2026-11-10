@@ -1,0 +1,27 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "Close observed internal contour-cell edge crossings on a canonical shared fine lattice",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "controlled_change": "Enable finite internal-cell closure; keep coefficient seeding and all previous source/evaluator/physics parameters",
+  "source_evidence": "measured finite-orbit contour; closure of observed internal sampled edges is not completeness or true-distance certification",
+  "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+  "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+  "shipping_adoption": false,
+  "field_id": "cc35adf2aad104b1",
+  "asset_sha256": "e2b8ae78a38a950721598afb23972f80776b72dac9f8632d82b12c9a34d11847",
+  "reference_policy_sha256": "3d8effad5900461f0a02490e9cd573dc84a33eeb26196bd9164c738f5b1493bd",
+  "source_experiment": "geometry-145-operational-closure-fine-experiment.json"
+}

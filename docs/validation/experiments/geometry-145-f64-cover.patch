@@ -1,0 +1,620 @@
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -287,6 +287,56 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn shared_closed_curves_meet_all_original_node_lower_windows() {
++        for (index, group) in cases::CERTIFIED_NODES.chunks_exact(81).enumerate() {
++            let start = std::time::Instant::now();
++            let mut targets = Vec::new();
++            for &(_, q, _, error) in group {
++                let point = C::new(q[0], q[1]);
++                let p = propose(point).unwrap();
++                targets.push((point, (p.distance - error).next_up()));
++            }
++            let q = targets[40].0;
++            let request = branch::cover::Request {
++                radius: 0.999999,
++                root_radius: 0.999,
++                root_width: 0.002,
++                initial_edges: 512,
++                max_regions: 65536,
++            };
++            let cover = branch::cover::build(q, request, &targets).unwrap();
++            let emit = std::env::var("GEOMETRY145_COVER_REFERENCE").is_ok();
++            if emit {
++                for row in cover.reference_rows() {
++                    eprintln!("[F64_COVER_ROW145] {index} {row:?}");
++                }
++            }
++            for ((point, minimum), &(_, _, interval, _)) in targets.iter().zip(group) {
++                let clearance = cover.clearance(*point).unwrap();
++                assert!(clearance.lower() >= *minimum);
++                assert!(clearance.lower() <= interval[1]);
++                assert_ne!(clearance.winding(), 0);
++                if emit {
++                    eprintln!(
++                        "[F64_COVER_TARGET145] {index} {:?}",
++                        [
++                            point.re,
++                            point.im,
++                            *minimum,
++                            clearance.lower(),
++                            clearance.winding() as f64
++                        ]
++                    );
++                }
++            }
++            eprintln!(
++                "[F64_COVER_NODES145] nodes=81 q={q:?} edges={} elapsed_s={}",
++                cover.edge_count(),
++                start.elapsed().as_secs_f64()
++            );
++        }
++    }
+     #[test]
+     fn all_discovered_node_branches_have_local_multiplier_disk_proofs() {
+         let start = std::time::Instant::now();
+--- a/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch.rs
+@@ -1,6 +1,8 @@
+ //! Local coupled-root proof only; no nearest-boundary or membership authority.
+ use super::super::interval::Interval as I;
+ use super::{cycle, finite, C};
++#[path = "branch/cover.rs"]
++pub(super) mod cover;
+
+ fn up_add(a: f64, b: f64) -> f64 {
+     (a + b).next_up()
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
+@@ -0,0 +1,547 @@
++//! Closed attracting curves only; no upper distance, boundary identity or jet.
++use super::{add, certify_auto, finite, glue, norm, up_add, Certificate, C, I};
++
++#[derive(Debug, PartialEq, Eq, Clone, Copy)]
++pub(in super::super) enum Refusal {
++    Invalid,
++    NotAttracting,
++    Outside,
++    Open,
++    Join,
++    Numerical,
++    Separated,
++    Orientation,
++    Winding,
++    Work,
++}
++#[derive(Clone, Copy)]
++struct Capsule {
++    a: C,
++    b: C,
++    radius: f64,
++}
++struct Edge {
++    patch: Certificate,
++    start: C,
++    end: C,
++    capsule: Capsule,
++}
++pub(in super::super) struct ClosedCover {
++    edges: Vec<Edge>,
++}
++#[derive(Debug)]
++pub(in super::super) struct Clearance {
++    lower: f64,
++    winding: i32,
++}
++impl Clearance {
++    pub(in super::super) fn lower(&self) -> f64 {
++        self.lower
++    }
++    pub(in super::super) fn winding(&self) -> i32 {
++        self.winding
++    }
++}
++impl ClosedCover {
++    pub(in super::super) fn reference_rows(&self) -> Vec<[f64; 25]> {
++        self.edges
++            .iter()
++            .map(|edge| {
++                let p = &edge.patch;
++                [
++                    p.centers[0].re,
++                    p.centers[0].im,
++                    p.centers[1].re,
++                    p.centers[1].im,
++                    p.parameter.re,
++                    p.parameter.im,
++                    p.period as f64,
++                    p.radii[0],
++                    p.radii[1],
++                    p.radii[2],
++                    p.inverse[0][0].re,
++                    p.inverse[0][0].im,
++                    p.inverse[0][1].re,
++                    p.inverse[0][1].im,
++                    p.inverse[1][0].re,
++                    p.inverse[1][0].im,
++                    p.inverse[1][1].re,
++                    p.inverse[1][1].im,
++                    p.inclusion[0],
++                    p.inclusion[1],
++                    p.contraction,
++                    edge.start.re,
++                    edge.start.im,
++                    edge.end.re,
++                    edge.end.im,
++                ]
++            })
++            .collect()
++    }
++    pub(in super::super) fn edge_count(&self) -> usize {
++        self.edges.len()
++    }
++    /// Nonzero winding around an attracting curve in M gives an interior disk
++    /// by fullness of M, as in the existing multiprecision cover. Not a jet.
++    pub(in super::super) fn clearance(&self, q: C) -> Result<Clearance, Refusal> {
++        if !finite(q) {
++            return Err(Refusal::Invalid);
++        }
++        let mut lower = f64::INFINITY;
++        let mut winding = 0i32;
++        for i in 0..self.edges.len() {
++            let a = &self.edges[i];
++            let b = &self.edges[(i + 1) % self.edges.len()];
++            for capsule in [a.capsule, connector(a, b)] {
++                let bound = distance_lower(capsule, q)?;
++                if bound <= 0. {
++                    return Err(Refusal::Separated);
++                }
++                lower = lower.min(bound);
++                winding = winding
++                    .checked_add(crossing(capsule.a, capsule.b, q)?)
++                    .ok_or(Refusal::Work)?;
++            }
++        }
++        if winding == 0 {
++            return Err(Refusal::Winding);
++        }
++        if !lower.is_finite() {
++            return Err(Refusal::Numerical);
++        }
++        Ok(Clearance { lower, winding })
++    }
++}
++fn edge(patch: Certificate, start: C, end: C) -> Result<Edge, Refusal> {
++    if ![start, end].into_iter().all(finite) {
++        return Err(Refusal::Invalid);
++    }
++    if norm(start) >= 1. || norm(end) >= 1. {
++        return Err(Refusal::NotAttracting);
++    }
++    let [_, (a, ea)] = patch.at(start).ok_or(Refusal::Outside)?;
++    let [_, (b, eb)] = patch.at(end).ok_or(Refusal::Outside)?;
++    Ok(Edge {
++        patch,
++        start,
++        end,
++        capsule: Capsule {
++            a,
++            b,
++            radius: ea.max(eb),
++        },
++    })
++}
++fn connector(a: &Edge, b: &Edge) -> Capsule {
++    Capsule {
++        a: a.capsule.b,
++        b: b.capsule.a,
++        radius: a.capsule.radius.max(b.capsule.radius),
++    }
++}
++fn cross(a: C, b: C, q: C) -> Result<(I, f64), Refusal> {
++    let p = I::point;
++    let x = p(b.re).sub(p(a.re));
++    let y = p(b.im).sub(p(a.im));
++    let dx = p(q.re).sub(p(a.re));
++    let dy = p(q.im).sub(p(a.im));
++    let value = x.mul(dy).sub(y.mul(dx));
++    let length = norm(C::new(x.abs_upper(), y.abs_upper()));
++    (value.finite() && length.is_finite())
++        .then_some((value, length))
++        .ok_or(Refusal::Numerical)
++}
++fn axis(q: f64, a: f64, b: f64) -> f64 {
++    if q < a.min(b) {
++        (a.min(b) - q).next_down().max(0.)
++    } else if q > a.max(b) {
++        (q - a.max(b)).next_down().max(0.)
++    } else {
++        0.
++    }
++}
++fn distance_lower(cap: Capsule, q: C) -> Result<f64, Refusal> {
++    if ![q, cap.a, cap.b].into_iter().all(finite) || !cap.radius.is_finite() || cap.radius < 0. {
++        return Err(Refusal::Invalid);
++    }
++    let dx = I::point(axis(q.re, cap.a.re, cap.b.re));
++    let dy = I::point(axis(q.im, cap.a.im, cap.b.im));
++    let box_lower = dx
++        .square()
++        .add(dy.square())
++        .lo
++        .max(0.)
++        .sqrt()
++        .next_down()
++        .max(0.);
++    let (cross, length) = cross(cap.a, cap.b, q)?;
++    let cross_lower = if cross.lo > 0. {
++        cross.lo
++    } else if cross.hi < 0. {
++        -cross.hi
++    } else {
++        0.
++    };
++    let line_lower = if length > 0. {
++        (cross_lower / length).next_down().max(0.)
++    } else {
++        0.
++    };
++    let lower = (box_lower.max(line_lower) - cap.radius).next_down().max(0.);
++    lower.is_finite().then_some(lower).ok_or(Refusal::Numerical)
++}
++fn crossing(a: C, b: C, q: C) -> Result<i32, Refusal> {
++    let upward = a.im <= q.im && b.im > q.im;
++    let downward = a.im > q.im && b.im <= q.im;
++    if !upward && !downward {
++        return Ok(0);
++    }
++    let (v, _) = cross(a, b, q)?;
++    if v.lo > 0. {
++        Ok(if upward { 1 } else { 0 })
++    } else if v.hi < 0. {
++        Ok(if downward { -1 } else { 0 })
++    } else {
++        Err(Refusal::Orientation)
++    }
++}
++fn join(a: &Certificate, b: &Certificate, mu: C) -> Result<(), Refusal> {
++    if glue(a, b, mu).is_some() || glue(b, a, mu).is_some() {
++        return Ok(());
++    }
++    let [(z, _), (c, _)] = a.at(mu).ok_or(Refusal::Join)?;
++    let (z, c) = super::super::solve(z, c, a.period, mu).ok_or(Refusal::Join)?;
++    let (point, _) = certify_auto(z, c, mu, a.period, 0.).ok_or(Refusal::Join)?;
++    let connects = |x: &Certificate| glue(x, &point, mu).is_some() || glue(&point, x, mu).is_some();
++    (connects(a) && connects(b))
++        .then_some(())
++        .ok_or(Refusal::Join)
++}
++fn closed(edges: Vec<Edge>, targets: &[(C, f64)]) -> Result<ClosedCover, Refusal> {
++    if edges.len() < 3 || edges.len() > 65536 {
++        return Err(Refusal::Invalid);
++    }
++    for i in 0..edges.len() {
++        let a = &edges[i];
++        let b = &edges[(i + 1) % edges.len()];
++        if a.end != b.start {
++            return Err(Refusal::Open);
++        }
++        join(&a.patch, &b.patch, a.end)?;
++    }
++    let cover = ClosedCover { edges };
++    for &(q, minimum) in targets {
++        let clearance = cover.clearance(q)?;
++        if clearance.lower < minimum {
++            return Err(Refusal::Separated);
++        }
++    }
++    Ok(cover)
++}
++
++#[derive(Clone, Copy)]
++pub(in super::super) struct Request {
++    pub(in super::super) radius: f64,
++    pub(in super::super) root_radius: f64,
++    pub(in super::super) root_width: f64,
++    pub(in super::super) initial_edges: usize,
++    pub(in super::super) max_regions: usize,
++}
++#[derive(Debug)]
++pub(in super::super) struct Failure {
++    pub(in super::super) reason: Refusal,
++    pub(in super::super) attempted: usize,
++    pub(in super::super) accepted: usize,
++    pub(in super::super) depth: u32,
++}
++struct Builder<'a> {
++    period: usize,
++    edges: Vec<Edge>,
++    attempted: usize,
++    max_regions: usize,
++    targets: &'a [(C, f64)],
++}
++impl Builder<'_> {
++    fn fail(&self, reason: Refusal, depth: u32) -> Failure {
++        Failure {
++            reason,
++            attempted: self.attempted,
++            accepted: self.edges.len(),
++            depth,
++        }
++    }
++    fn extend(&mut self, start: C, end: C, z: C, c: C, depth: u32) -> Result<(C, C), Failure> {
++        if self.attempted >= self.max_regions {
++            return Err(self.fail(Refusal::Work, depth));
++        }
++        self.attempted += 1;
++        let mu = (start + end) * 0.5;
++        if !finite(mu) || mu == start || mu == end {
++            return Err(self.fail(Refusal::Numerical, depth));
++        }
++        let radius = [start, end]
++            .into_iter()
++            .map(|v| {
++                let (d, e) = add(v, -mu);
++                up_add(norm(d), e)
++            })
++            .fold(0., f64::max);
++        let candidate = (|| -> Option<(Edge, C, C)> {
++            let (mut zm, mut cm) = super::super::solve(z, c, self.period, mu)?;
++            let mut best = zm;
++            let mut v = zm;
++            for _ in 0..self.period {
++                if v.norm_sqr() < best.norm_sqr() {
++                    best = v;
++                }
++                v = v * v + cm;
++            }
++            (zm, cm) = super::super::solve(best, cm, self.period, mu)?;
++            let (patch, _) = certify_auto(zm, cm, mu, self.period, radius)?;
++            let item = edge(patch, start, end).ok()?;
++            if let Some(previous) = self.edges.last() {
++                join(&previous.patch, &patch, start).ok()?;
++            }
++            for &(q, minimum) in self.targets {
++                if distance_lower(item.capsule, q).ok()? <= 0.
++                    || distance_lower(item.capsule, q).ok()? < minimum
++                {
++                    return None;
++                }
++                if let Some(previous) = self.edges.last() {
++                    let d = distance_lower(connector(previous, &item), q).ok()?;
++                    if d <= 0. || d < minimum {
++                        return None;
++                    }
++                }
++            }
++            let (ze, ce) = super::super::solve(zm, cm, self.period, end)?;
++            Some((item, ze, ce))
++        })();
++        if let Some((item, z, c)) = candidate {
++            self.edges.push(item);
++            return Ok((z, c));
++        }
++        if depth >= 24 {
++            eprintln!(
++                "[F64_COVER_REFUSAL145] mu={mu:?} local_root={:?} targets={:?}",
++                super::super::solve(z, c, self.period, mu).map(|(z, c)| (
++                    z,
++                    c,
++                    self.targets
++                        .iter()
++                        .map(|(q, m)| ((c - *q).norm(), *m))
++                        .collect::<Vec<_>>()
++                )),
++                self.targets
++            );
++            return Err(self.fail(Refusal::Work, depth));
++        }
++        let (z, c) = self.extend(start, mu, z, c, depth + 1)?;
++        self.extend(mu, end, z, c, depth + 1)
++    }
++}
++pub(in super::super) fn build(
++    query: C,
++    request: Request,
++    targets: &[(C, f64)],
++) -> Result<ClosedCover, Failure> {
++    let invalid = |reason| Failure {
++        reason,
++        attempted: 0,
++        accepted: 0,
++        depth: 0,
++    };
++    let proposal = super::super::propose(query).ok_or_else(|| invalid(Refusal::Numerical))?;
++    build_seeded(
++        proposal.root,
++        proposal.boundary,
++        proposal.multiplier,
++        proposal.period,
++        request,
++        targets,
++    )
++}
++fn build_seeded(
++    mut z: C,
++    mut c: C,
++    initial: C,
++    period: usize,
++    r: Request,
++    targets: &[(C, f64)],
++) -> Result<ClosedCover, Failure> {
++    let invalid = |reason| Failure {
++        reason,
++        attempted: 0,
++        accepted: 0,
++        depth: 0,
++    };
++    if ![z, c, initial].into_iter().all(finite)
++        || period == 0
++        || period > 512
++        || !r.radius.is_finite()
++        || r.radius <= 0.
++        || r.radius >= 1.
++        || !r.root_radius.is_finite()
++        || r.root_radius <= 0.
++        || r.root_radius > r.radius
++        || !r.root_width.is_finite()
++        || r.root_width <= 0.
++        || r.root_width > 1.
++        || r.initial_edges < 8
++        || r.initial_edges > 8192
++        || r.max_regions < r.initial_edges
++        || r.max_regions > 65536
++        || targets.is_empty()
++        || targets.len() > 1024
++        || targets
++            .iter()
++            .any(|(q, m)| !finite(*q) || !m.is_finite() || *m < 0.)
++    {
++        return Err(invalid(Refusal::Invalid));
++    }
++    let first = C::new(-r.radius, 0.);
++    for k in 1..=64 {
++        let t = k as f64 / 64.;
++        let mu = initial * (1. - t) + first * t;
++        (z, c) =
++            super::super::solve(z, c, period, mu).ok_or_else(|| invalid(Refusal::Numerical))?;
++    }
++    let mut vertices = vec![first];
++    for k in 1..r.initial_edges {
++        let angle =
++            std::f64::consts::PI + std::f64::consts::TAU * k as f64 / r.initial_edges as f64;
++        let offset = angle - std::f64::consts::TAU;
++        let local =
++            r.radius - (r.radius - r.root_radius) * (-(offset / r.root_width).powi(2)).exp();
++        vertices.push(C::from_polar(local, angle));
++    }
++    let mut builder = Builder {
++        period,
++        edges: Vec::new(),
++        attempted: 0,
++        max_regions: r.max_regions,
++        targets,
++    };
++    for i in 0..vertices.len() {
++        (z, c) = builder.extend(vertices[i], vertices[(i + 1) % vertices.len()], z, c, 0)?;
++    }
++    let attempted = builder.attempted;
++    let accepted = builder.edges.len();
++    closed(builder.edges, targets).map_err(|reason| Failure {
++        reason,
++        attempted,
++        accepted,
++        depth: 0,
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn request() -> Request {
++        Request {
++            radius: 0.5,
++            root_radius: 0.5,
++            root_width: 0.25,
++            initial_edges: 8,
++            max_regions: 1024,
++        }
++    }
++    #[test]
++    fn capsule_radius_and_orientation_bounds_are_not_optional() {
++        let zero = C::new(0., 0.);
++        let capsule = Capsule {
++            a: C::new(1., -1.),
++            b: C::new(1., 1.),
++            radius: 0.25,
++        };
++        let lower = distance_lower(capsule, zero).unwrap();
++        assert!(lower <= 0.75 && lower > 0.749999999999);
++        assert_eq!(
++            crossing(C::new(-1., -1.), C::new(1., 1.), zero),
++            Err(Refusal::Orientation)
++        );
++        assert!(distance_lower(
++            Capsule {
++                radius: f64::NAN,
++                ..capsule
++            },
++            zero
++        )
++        .is_err());
++        assert!(distance_lower(capsule, C::new(f64::INFINITY, 0.)).is_err());
++    }
++    #[test]
++    fn unclosed_paths_and_non_attracting_segments_refuse() {
++        let zero = C::new(0., 0.);
++        let cover = build_seeded(zero, zero, zero, 1, request(), &[(zero, 0.)]).unwrap();
++        let mut edges = cover.edges;
++        let last = edges.pop().unwrap();
++        edges.push(edge(last.patch, last.start, last.end * 0.999999).unwrap());
++        assert!(closed(edges, &[(zero, 0.)]).is_err());
++        let mu = C::new(1.1, 0.);
++        let z = mu * 0.5;
++        let c = mu * 0.5 - mu * mu * 0.25;
++        let (patch, _) = certify_auto(z, c, mu, 1, 0.01).unwrap();
++        assert!(edge(patch, mu, mu + C::new(0., 0.001)).is_err());
++    }
++    #[test]
++    fn exhausted_or_invalid_requests_never_return_a_prefix_cover() {
++        let zero = C::new(0., 0.);
++        let cover = build_seeded(zero, zero, zero, 1, request(), &[(zero, 0.)]).unwrap();
++        assert!(closed(cover.edges, &[(zero, 0.3)]).is_err());
++        let mut r = request();
++        r.max_regions = 8;
++        let failure = match build_seeded(zero, zero, zero, 1, r, &[(zero, 0.18)]) {
++            Err(f) => f,
++            Ok(_) => panic!("budget returned prefix"),
++        };
++        assert_eq!(failure.reason, Refusal::Work);
++        assert!(failure.attempted <= 8);
++        for minimum in [-1., f64::NAN, f64::INFINITY] {
++            assert!(build_seeded(zero, zero, zero, 1, request(), &[(zero, minimum)]).is_err());
++        }
++        assert!(build_seeded(zero, zero, zero, 1, request(), &[(zero, 0.3)]).is_err());
++    }
++    #[test]
++    fn cardioid_closed_curve_bounds_and_reuses_queries() {
++        let origin = C::new(0., 0.);
++        let cover = build_seeded(origin, origin, origin, 1, request(), &[(origin, 0.15)]).unwrap();
++        let proof = cover.clearance(origin).unwrap();
++        assert!(proof.lower > 0.15 && proof.lower < 0.1875 && proof.winding == 1);
++        assert!(cover.clearance(C::new(0.01, 0.)).unwrap().lower > 0.14);
++        assert!(cover.clearance(C::new(2., 0.)).is_err());
++    }
++    #[test]
++    fn high_period_generic_closed_covers() {
++        for (q, minimum) in [
++            (
++                C::new(0.32049988639807619, 0.04733531447355364),
++                7.64252680245677e-6 - 5e-8,
++            ),
++            (
++                C::new(0.35659381055433242, 0.06404656757776669),
++                1.728681342294706e-7 - 5e-10,
++            ),
++        ] {
++            let start = std::time::Instant::now();
++            let r = Request {
++                radius: 0.999999,
++                root_radius: 0.99,
++                root_width: 0.025,
++                initial_edges: 128,
++                max_regions: 65536,
++            };
++            let result = build(q, r, &[(q, minimum)]);
++            eprintln!(
++                "[F64_COVER145] q={q:?} result={:?} elapsed_s={}",
++                result
++                    .as_ref()
++                    .map(|c| (c.edge_count(), c.clearance(q).unwrap())),
++                start.elapsed().as_secs_f64()
++            );
++            assert!(result.is_ok());
++        }
++    }
++}

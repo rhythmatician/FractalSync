@@ -1,0 +1,213 @@
+{
+  "diagnostic_only": true,
+  "adopted": false,
+  "base_commit": "1972547",
+  "thresholds_and_original_crossing_tests_unchanged": true,
+  "tests": {
+    "passed": 28,
+    "suites": 2,
+    "command": "cargo test --release --jobs 1 --manifest-path docs/validation/experiments/geometry-145-point-proof/Cargo.toml --target-dir target/geometry145-precision"
+  },
+  "proof_scope": [
+    "Unique root in the stated predicted error polydisk for every multiplier in the supplied disk.",
+    "Verified cycle identity across a shared multiplier, including validated phase advances when necessary.",
+    "Continuous attracting local branch over guarded straight multiplier segments."
+  ],
+  "not_proven": [
+    "Least cycle period",
+    "Global component or boundary coverage",
+    "Nearest-boundary uniqueness or distance error",
+    "Production field validity",
+    "Crossing or training acceptance",
+    "Live runtime query cost"
+  ],
+  "mutations": {
+    "branch": [
+      {
+        "mutation": "self-inclusion",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "contraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "operation-roundoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-remainder",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "remainder-transport",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-parameter-domain",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-c-identity",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-cycle-phase",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-attraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-domain",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "retained_component": [
+      {
+        "mutation": "trap-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "affine-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-multiplier-second-derivative",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-hessian-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-interior-orientation",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "retained_point": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "selection_negative_checks": [
+    {
+      "arguments": [
+        "unknown-case"
+      ],
+      "exit_code": 1,
+      "stderr": "unknown mutation name(s): unknown-case\n",
+      "source_unchanged": true
+    },
+    {
+      "arguments": [
+        "self-inclusion",
+        "unknown-case"
+      ],
+      "exit_code": 1,
+      "stderr": "unknown mutation name(s): unknown-case\n",
+      "source_unchanged": true
+    }
+  ],
+  "probes": {
+    "cardioid": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 0.39965280005708337,
+        "timed_out": false
+      },
+      "stdout": "[BRANCH_POINT145] name=cardioid certificate=Certificate { period: 1, mu_radius: 0.0, z_error: 1e-23, c_error: 1e-27, inclusion: [0.0, 9.999999999999998e-47], contraction: 1.9999999999999997e-19 }\n[BRANCH_PATCH145] name=cardioid radius=0.00000001 z_error=0.000000000000001 c_error=0.000000000000000050000000000000005 elapsed_s=0.0013617 result=Ok(Certificate { period: 1, mu_radius: 1e-8, z_error: 1e-15, c_error: 5.0000000000000005e-17, inclusion: [0.0, 2.5000010000001002e-17], contraction: 2.0000004e-7 })\n[BRANCH_PATCH145] name=cardioid radius=0.000001 z_error=0.00000000001 c_error=0.0000000000005 elapsed_s=0.0015764 result=Ok(Certificate { period: 1, mu_radius: 1e-6, z_error: 1e-11, c_error: 5e-13, inclusion: [0.0, 2.5001000009999996e-13], contraction: 2.00004e-5 })\n[BRANCH_PATCH145] name=cardioid radius=0.0001 z_error=0.0000001 c_error=0.000000005 elapsed_s=0.0015051 result=Ok(Certificate { period: 1, mu_radius: 0.0001, z_error: 1e-7, c_error: 5e-9, inclusion: [0.0, 2.51001e-9], contraction: 0.002004 })\n[BRANCH_PATCH145] name=cardioid radius=0.001 z_error=0.000009999999999999999 c_error=0.0000005 elapsed_s=0.0012167 result=Ok(Certificate { period: 1, mu_radius: 0.001, z_error: 9.999999999999999e-6, c_error: 5e-7, inclusion: [0.0, 2.601e-7], contraction: 0.020399999999999998 })\n[BRANCH_GLUE145] name=cardioid first=AttractingSegment { period: 1, multiplier_norm_upper: 0.999999 } second=AttractingSegment { period: 1, multiplier_norm_upper: 0.999999 } glue=Glue { phase_advance: 0, z_margin: 9.999999999999999e-6, c_margin: 2.3983750012894096e-7 }\n[HP_COMPONENT_STATUS145] name=cardioid complete=true elapsed_s=0.03936\n",
+      "stderr": "[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00000000000000000000000000000000000000000000009999999999999998 contraction=0.00000000000000000019999999999999997 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.000000000000000025000010000001002 contraction=0.00000020000004 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00000000000025001000009999996 contraction=0.0000200004 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.00000000251001 contraction=0.002004 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0000002601 contraction=0.020399999999999998 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0 inclusion_c=0.0000002601 contraction=0.020399999999999998 included=true contracting=true\n"
+    },
+    "native": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 1.4380043998826295,
+        "timed_out": false
+      },
+      "stdout": "[BRANCH_POINT145] name=native certificate=Certificate { period: 85, mu_radius: 0.0, z_error: 1e-23, c_error: 1e-27, inclusion: [7.74509068941178e-36, 8.791255280054492e-39], contraction: 1.2746555221320344e-21 }\n[BRANCH_PATCH145] name=native radius=0.00000001 z_error=0.000000000000001 c_error=0.000000000000000001 elapsed_s=0.126813 result=Ok(Certificate { period: 85, mu_radius: 1e-8, z_error: 1e-15, c_error: 1e-18, inclusion: [1.6681366397203148e-16, 1.4047593943308987e-19], contraction: 4.994823372895251e-8 })\n[BRANCH_PATCH145] name=native radius=0.000001 z_error=0.00000000001 c_error=0.00000000000001 elapsed_s=0.1318295 result=Ok(Certificate { period: 85, mu_radius: 1e-6, z_error: 1e-11, c_error: 1e-14, inclusion: [1.6685811653685564e-12, 1.4051391350677643e-15], contraction: 4.995667443822949e-6 })\n[BRANCH_PATCH145] name=native radius=0.0001 z_error=0.0000001 c_error=0.0000000001 elapsed_s=0.1326017 result=Ok(Certificate { period: 85, mu_radius: 0.0001, z_error: 1e-7, c_error: 1e-10, inclusion: [1.7133527546158163e-8, 1.4433886126339977e-11], contraction: 0.0005080442660218467 })\n[BRANCH_PATCH145] name=native radius=0.001 z_error=0.000009999999999999999 c_error=0.00000001 elapsed_s=0.1256864 result=Ok(Certificate { period: 85, mu_radius: 0.001, z_error: 9.999999999999999e-6, c_error: 1e-8, inclusion: [2.1496623619611068e-6, 1.8163698444138377e-9], contraction: 0.005886951447590939 })\n[BRANCH_GLUE145] name=native first=AttractingSegment { period: 85, multiplier_norm_upper: 0.9999990000000001 } second=AttractingSegment { period: 85, multiplier_norm_upper: 0.9999990000000001 } glue=Glue { phase_advance: 0, z_margin: 7.850055013404484e-6, c_margin: 8.183629623553278e-9 }\n[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=1.0778401\n",
+      "stderr": "[BRANCH_BOUNDS145] inclusion_z=0.00000000000000000000000000000000000774509068941178 inclusion_c=0.000000000000000000000000000000000000008791255280054492 contraction=0.0000000000000000000012746555221320344 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.00000000000000016681366397203148 inclusion_c=0.00000000000000000014047593943308987 contraction=0.00000004994823372895251 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.0000000000016685811653685564 inclusion_c=0.0000000000000014051391350677643 contraction=0.000004995667443822949 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.000000017133527546158163 inclusion_c=0.000000000014433886126339977 contraction=0.0005080442660218467 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.0000021496623619611068 inclusion_c=0.0000000018163698444138377 contraction=0.005886951447590939 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.0000021733566756065055 inclusion_c=0.0000000018300129370194632 contraction=0.0059145645876079855 included=true contracting=true\n"
+    },
+    "python": {
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 2.234195499913767,
+        "timed_out": false
+      },
+      "stdout": "[BRANCH_POINT145] name=python certificate=Certificate { period: 154, mu_radius: 0.0, z_error: 1e-23, c_error: 1e-27, inclusion: [2.4334822561205196e-35, 2.9098159630637795e-38], contraction: 5.277725910742065e-20 }\n[BRANCH_PATCH145] name=python radius=0.00000001 z_error=0.000000000000001 c_error=0.000000000000000001 elapsed_s=0.2363908 result=Ok(Certificate { period: 154, mu_radius: 1e-8, z_error: 1e-15, c_error: 1e-18, inclusion: [4.406981172913798e-20, 4.335690054935863e-23], contraction: 8.683211082214748e-9 })\n[BRANCH_PATCH145] name=python radius=0.000001 z_error=0.00000000001 c_error=0.00000000000001 elapsed_s=0.2408058 result=Ok(Certificate { period: 154, mu_radius: 1e-6, z_error: 1e-11, c_error: 1e-14, inclusion: [4.576496489828302e-16, 4.497049019716918e-19], contraction: 8.800989503386788e-7 })\n[BRANCH_PATCH145] name=python radius=0.0001 z_error=0.0000001 c_error=0.0000000001 elapsed_s=0.2335265 result=Ok(Certificate { period: 154, mu_radius: 0.0001, z_error: 1e-7, c_error: 1e-10, inclusion: [3.6978234530196845e-11, 3.596441123968183e-14], contraction: 0.00020583760580989831 })\n[BRANCH_PATCH145] name=python radius=0.001 z_error=0.000009999999999999999 c_error=0.00000001 elapsed_s=0.2234936 result=Ok(Certificate { period: 154, mu_radius: 0.001, z_error: 9.999999999999999e-6, c_error: 1e-8, inclusion: [1.7466142713003061e-7, 1.7257261585807032e-10], contraction: 0.013028811319482185 })\n[BRANCH_GLUE145] name=python first=AttractingSegment { period: 154, multiplier_norm_upper: 0.9999990000000001 } second=AttractingSegment { period: 154, multiplier_norm_upper: 0.9999990000000001 } glue=Glue { phase_advance: 0, z_margin: 9.825338556105893e-6, c_margin: 9.827427380567607e-9 }\n[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=1.8713237999999999\n",
+      "stderr": "[BRANCH_BOUNDS145] inclusion_z=0.000000000000000000000000000000000024334822561205196 inclusion_c=0.000000000000000000000000000000000000029098159630637795 contraction=0.00000000000000000005277725910742065 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.00000000000000000004406981172913798 inclusion_c=0.00000000000000000000004335690054935863 contraction=0.000000008683211082214748 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.0000000000000004576496489828302 inclusion_c=0.0000000000000000004497049019716918 contraction=0.0000008800989503386788 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.000000000036978234530196845 inclusion_c=0.00000000000003596441123968183 contraction=0.00020583760580989831 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.00000017466142713003061 inclusion_c=0.00000000017257261585807032 contraction=0.013028811319482185 included=true contracting=true\n[BRANCH_BOUNDS145] inclusion_z=0.00000017464515970123301 inclusion_c=0.00000000017255035176910012 contraction=0.013027095282592098 included=true contracting=true\n"
+    }
+  },
+  "reviews": {
+    "mathematics": "No enclosure, contraction, gluing, or segment defect found.",
+    "certificate_integrity": "Mutable period metadata finding resolved: private certified period and private diagnostic fields.",
+    "standards": "Unknown focused mutation names and empty selections now reject before mutation."
+  },
+  "initial_native_neighborhood_refusal": {
+    "status": {
+      "exit_code": 1,
+      "elapsed_s": 1.360657999990508,
+      "timed_out": false
+    },
+    "stdout": "[BRANCH_POINT145] name=native certificate=Certificate { period: 85, mu_radius: 0.0, z_error: 1e-23, c_error: 1e-27, inclusion: [8.221090036286729e-36, 8.483629866789579e-39], contraction: 1.274656301751882e-21 }\n[BRANCH_PATCH145] name=native radius=0.00000001 z_error=0.000000000000001 c_error=0.00000000000000000010000000000000001 elapsed_s=0.1426148 result=Err(NumericalFailure)\n[BRANCH_PATCH145] name=native radius=0.000001 z_error=0.00000000001 c_error=0.000000000000001 elapsed_s=0.1452209 result=Err(NumericalFailure)\n[BRANCH_PATCH145] name=native radius=0.0001 z_error=0.0000001 c_error=0.000000000010000000000000001 elapsed_s=0.1493421 result=Err(NumericalFailure)\n[BRANCH_PATCH145] name=native radius=0.001 z_error=0.000009999999999999999 c_error=0.000000001 elapsed_s=0.1467303 result=Err(NumericalFailure)\n[HP_COMPONENT_STATUS145] name=native complete=false elapsed_s=1.0044329\n",
+    "interpretation": "Point certificate succeeded, but the initial requested c-error domains were too small. Strict gates rejected all four nonzero neighborhoods."
+  },
+  "production_native_crossing": {
+    "command": "cargo test --release --jobs 1 --manifest-path runtime-core/Cargo.toml manifold::tests::controls_drive_can_cross_shore_without_wall -- --nocapture",
+    "passed": 0,
+    "failed": 1,
+    "filtered_out": 94,
+    "exit_code": 1,
+    "test_elapsed_s": 1.85,
+    "output": "\nrunning 1 test\ntest manifold::tests::controls_drive_can_cross_shore_without_wall ... FAILED\n\nfailures:\n\nfailures:\n    manifold::tests::controls_drive_can_cross_shore_without_wall\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 94 filtered out; finished in 1.85s\n\nwarning: profiles for the non root package will be ignored, specify profiles at the workspace root:\npackage:   C:\\Users\\JeffHall\\git\\FractalSync\\wasm-orbit\\Cargo.toml\nworkspace: C:\\Users\\JeffHall\\git\\FractalSync\\Cargo.toml\n    Finished `release` profile [optimized] target(s) in 4.83s\n     Running unittests src\\lib.rs (target\\release\\deps\\runtime_core-d0a1cf3fb6940a37.exe)\n\nthread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (106104) panicked at runtime-core\\src\\manifold.rs:972:41:\nundriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nerror: test failed, to rerun pass `--lib`\n"
+  },
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "ac58c91f74330822e85ffc6560b0ba790de917582b619435344479c44761ebff",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "90b9929ffa9a8f43b215cad9d1836e6a3c91cdbb678d5f000ccbc15a1067d214",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "f22703aa8b59e368965a99fca55d088d36b7c09165264ab742b547f069ccfab1",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6",
+    "docs/validation/experiments/geometry-145-branch-mutations.py": "3445f6db7ac048587721469e490256c18543abe726a590ce14b4308d98f0fc6e",
+    "docs/validation/experiments/geometry-145-component-mutations.py": "512ba2bca6939d7451f685d279148fab2726af86fc650704c7c3d091c20d18fe",
+    "docs/validation/experiments/geometry-145-point-proof-mutations.py": "a834cd47c459ad3245b5432a17616f801d0ff191a6df5a9ceb9a8c1a1274cfe2"
+  }
+}

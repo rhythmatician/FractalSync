@@ -1,0 +1,362 @@
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -286,6 +286,7 @@
+ // Keep the footprint bounded, but allow the next level to separate recorded
+ // near ties and converge the small Shore features found during live rollouts.
+ // Radius 3 truncated those queries before their unchanged quality gates passed.
++const SHORE_TILE_EXPANSION_RADIUS: i64 = 6;
+-
++
+ #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+ struct TileKey {
+@@ -545,6 +546,44 @@
+                 .filter(|(_, (a, b))| a != b)
+                 .map(|(i, _)| (re0 + (i % n) as f64 * h, im0 + (i / n) as f64 * h))
+                 .collect();
++            let mut unproven = 0;
++            let mut proven = 0;
++            let mut permanent = Vec::with_capacity(inside_next.len());
++            for (member, orbit) in inside_next.iter().zip(&orbits) {
++                if !member {
++                    permanent.push(true);
++                    continue;
++                }
++                let bounded = match orbit.evidence() {
++                    crate::visual_metrics::MembershipEvidence::AnalyticInside => true,
++                    crate::visual_metrics::MembershipEvidence::Escaped => false,
++                    crate::visual_metrics::MembershipEvidence::Orbit { parameter, state } => {
++                        uniform_box::machine_tail_is_bounded(
++                            [parameter.re, parameter.im],
++                            [state.re, state.im],
++                        )
++                    }
++                };
++                permanent.push(bounded);
++                if bounded {
++                    proven += 1;
++                } else {
++                    unproven += 1;
++                }
++            }
++            let before = unstable_nodes.len();
++            unstable_nodes.retain(|&(x, y)| {
++                let i = ((x - re0) / h).round() as isize;
++                let j = ((y - im0) / h).round() as isize;
++                if i < 5 || j < 5 || i + 5 >= n as isize || j + 5 >= n as isize {
++                    return true;
++                }
++                !(-5..=5).all(|dy| {
++                    (-5..=5).all(|dx| permanent[((j + dy) as usize) * n + (i + dx) as usize])
++                })
++            });
++            eprintln!("[LOCAL145] before={before} after={}", unstable_nodes.len());
++            eprintln!("[TAIL145] k={k} origin=({re0},{im0}) proven={proven} unproven={unproven} remaining_changes={}",unstable_nodes.len());
+             max_iter = next_n;
+             inside = inside_next;
+             break;
+@@ -1467,7 +1506,6 @@
+     nearest_shore_distance(c, tile) + (5.0 * 2.0_f64.sqrt() + 4.0) * tile.h < margin
+ }
+-
++
+-#[cfg(test)]
+ fn contour_contained(c: Complex64, tile: &ShoreTile, cells: usize) -> bool {
+     contour_footprint_contains(c, tile, cells) && stencil_membership_stable(c, tile)
+ }
+@@ -1533,9 +1571,6 @@
+             .then_with(|| other.bounds.cmp(&self.bounds))
+     }
+ }
+-const FIELD_REGION_VISIT_LIMIT: usize = 131072;
+-const FIELD_LEAF_TILE_LIMIT: usize = 16384;
+-const FIELD_SEARCH_RADIUS: i64 = 4096;
+ struct RegionSearch {
+     visits: usize,
+     leaves: usize,
+@@ -1572,7 +1607,7 @@
+         });
+         while let Some(region) = heap.pop() {
+             self.visits += 1;
+-            if self.visits > FIELD_REGION_VISIT_LIMIT {
++            if self.visits > 131072 {
+                 eprintln!(
+                     "REGION_LIMIT k={k} leaves={} visits={}",
+                     self.leaves, self.visits
+@@ -1592,7 +1627,7 @@
+             }
+             if x0 == x1 && y0 == y1 {
+                 self.leaves += 1;
+-                if self.leaves > FIELD_LEAF_TILE_LIMIT {
++                if self.leaves > 16384 {
+                     eprintln!(
+                         "LEAF_LIMIT k={k} leaves={} visits={}",
+                         self.leaves, self.visits
+@@ -1639,7 +1674,7 @@
+     );
+     let origin =
+         |index: i64| (index * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
+-    let radius = FIELD_SEARCH_RADIUS;
++    let radius = 4096_i64;
+     let width = (2 * radius + 1) as usize * DYADIC_TILE_CELLS;
+     let mut search = RegionSearch {
+         visits: 0,
+@@ -1913,6 +1948,18 @@
+         } else {
+             jet.estimated_error = f64::INFINITY;
+         }
++        if ((c.re - 0.4005984941807052).abs() < 1e-13
++            && (c.im - 0.054142245287925383).abs() < 1e-13)
++            || ((c.re - 0.39265181093985307).abs() < 1e-13
++                && (c.im - 0.05016453839342096).abs() < 1e-13)
++            || ((c.re - 0.4).abs() < 1e-13 && (c.im - 0.05).abs() < 1e-13)
++            || ((c.re - 0.30007240651412576).abs() < 1e-13
++                && (c.im - 0.05348910097156354).abs() < 1e-13)
++        {
++            let f = hierarchy.as_ref().unwrap();
++            let o = f.output(&jet, epsilon);
++            eprintln!("TRACE k={} rawcert={} d={} rawerr={} sum={} outputerr={} prod={} closed={} cert={} h={} detail={}",k,certified,jet.d,jet.estimated_error,f.sum.d,o.estimated_error,f.product.d,f.closed,f.certified,f.effective_h,detail.d);
++        }
+         last = jet.clone();
+         if last.validity != GeometryValidity::Singular {
+             last.validity = GeometryValidity::Unresolved;
+diff --git a/runtime-core/src/visual_metrics.rs b/runtime-core/src/visual_metrics.rs
+--- a/runtime-core/src/visual_metrics.rs
++++ b/runtime-core/src/visual_metrics.rs
+@@ -196,6 +196,14 @@
+     bulb_radius_squared < 0.0625 - margin * (bulb_radius_squared + 0.0625)
+ }
+-
++
++pub(crate) enum MembershipEvidence {
++    AnalyticInside,
++    Escaped,
++    Orbit {
++        parameter: num_complex::Complex64,
++        state: num_complex::Complex64,
++    },
++}
+ pub(crate) struct MembershipOrbit {
+     c: num_complex::Complex64,
+     z: num_complex::Complex64,
+@@ -219,6 +227,18 @@
+         }
+     }
+-
++
++    pub(crate) fn evidence(&self) -> MembershipEvidence {
++        if self.safely_interior {
++            MembershipEvidence::AnalyticInside
++        } else if self.escaped_at.is_some() {
++            MembershipEvidence::Escaped
++        } else {
++            MembershipEvidence::Orbit {
++                parameter: self.c,
++                state: self.z,
++            }
++        }
++    }
+     pub(crate) fn inside_at(&mut self, max_iter: usize) -> bool {
+         if self.safely_interior {
+             return true;
+diff --git a/runtime-core/src/geometry_provider/uniform_box.rs b/runtime-core/src/geometry_provider/uniform_box.rs
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -177,19 +177,30 @@
+         (re.lo - c[0]).abs().max((re.hi - c[0]).abs()).next_up(),
+         (im.lo - c[1]).abs().max((im.hi - c[1]).abs()).next_up(),
+     ]);
+-    let mut orbit = Ball {
+-        z: [0.; 2],
+-        radius: 0.,
+-    };
++    bounded_cycle(
++        Ball {
++            z: [0.; 2],
++            radius: 0.,
++        },
++        c,
++        cr,
++    )
++    .then_some(true)
++}
++fn bounded_cycle(mut orbit: Ball, c: [f64; 2], cr: f64) -> bool {
+     let mut centers = [[0.; 2]; 65];
+-    let mut bounded = true;
++    centers[0] = orbit.z;
++    let mut bounded = orbit.bounded();
+     for slot in centers.iter_mut().skip(1) {
+-        orbit = orbit.step(c, cr)?;
++        let Some(next) = orbit.step(c, cr) else {
++            return false;
++        };
++        orbit = next;
+         *slot = orbit.z;
+         bounded &= orbit.bounded();
+     }
+     if !bounded {
+-        return None;
++        return false;
+     }
+     // A returned disk must contain the entire current critical-orbit disk.
+     // Strict inclusion after p steps makes it forward invariant under f_c^p.
+@@ -221,120 +232,49 @@
+             bounded &= end.bounded();
+         }
+         if bounded && upper_add(distance_upper(end.z, start.z), end.radius) < radius {
+-            return Some(true);
+-        }
+-    }
+-    None
++            return true;
++        }
++    }
++    false
++}
++
++// Proves future machine membership from a canonical, already-evaluated state.
++// It does not extend the empirical membership budget.
++pub(super) fn machine_tail_is_bounded(c: [f64; 2], z: [f64; 2]) -> bool {
++    c.iter().chain(z.iter()).all(|x| x.is_finite()) && bounded_cycle(Ball { z, radius: 0. }, c, 0.)
+ }
+-
++
+ #[cfg(test)]
+-mod tests {
+-    use super::membership;
+-
++mod tail_tests {
+     #[test]
+-    fn certifies_uniform_boxes_and_keeps_boundary_boxes_uncertain() {
+-        assert_eq!(membership(-0.1, -0.1, 0.2), Some(true));
+-        assert_eq!(membership(-1.05, -0.05, 0.1), Some(true));
+-        assert_eq!(membership(0.8, 0.5, 0.1), Some(false));
+-        assert_eq!(membership(0.24, -0.01, 0.02), None);
+-        assert_eq!(membership(-0.76, -0.01, 0.02), None);
+-    }
+-
++    fn attracting_cycles_prove_future_boundedness() {
++        for c in [
++            [0., 0.],
++            [-1., 0.],
++            [-0.1225611668766536, 0.7448617666197442],
++            [-0.1225611668766536, -0.7448617666197442],
++        ] {
++            assert!(super::machine_tail_is_bounded(c, [0.; 2]), "{c:?}");
++        }
++    }
+     #[test]
+-    fn box_certificates_agree_with_all_ordinary_tile_nodes() {
+-        for (re0, im0, width) in [
+-            (-0.1, -0.1, 0.2),
+-            (-1.05, -0.05, 0.1),
+-            (0.8, 0.5, 0.1),
+-            (0.4, 0.0, 0.02),
+-            (-1.8, 0.8, 0.1),
++    fn neutral_cycles_do_not_supply_tail_certificates() {
++        for (c, z) in [
++            ([0.25, 0.], [0.5, 0.]),
++            ([-0.75, 0.], [-0.5, 0.]),
++            ([0.2500001, 0.], [0.5, 0.]),
+         ] {
+-            let expected = membership(re0, im0, width).expect("uniform fixture");
+-            for y in 0..=56 {
+-                for x in 0..=56 {
+-                    let c = num_complex::Complex64::new(
+-                        re0 + x as f64 * width / 56.0,
+-                        im0 + y as f64 * width / 56.0,
+-                    );
+-                    for budget in [512, 32768] {
+-                        assert_eq!(
+-                            crate::visual_metrics::mandelbrot_membership(c, budget),
+-                            expected,
+-                            "{c:?}, budget={budget}"
+-                        );
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
++            assert!(!super::machine_tail_is_bounded(c, z), "{c:?}, {z:?}");
++        }
++    }
+     #[test]
+-    fn certificates_match_membership_across_the_map() {
+-        let mut certified = 0;
+-        let mut uncertain = 0;
+-        for y in -10..=10 {
+-            for x in -15..=5 {
+-                let re0 = x as f64 / 8.0;
+-                let im0 = y as f64 / 8.0;
+-                let width = 1.0 / 64.0;
+-                let Some(expected) = membership(re0, im0, width) else {
+-                    uncertain += 1;
+-                    continue;
+-                };
+-                certified += 1;
+-                for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)] {
+-                    let c = num_complex::Complex64::new(re0 + dx * width, im0 + dy * width);
+-                    for budget in [512, 32768] {
+-                        assert_eq!(
+-                            crate::visual_metrics::mandelbrot_membership(c, budget),
+-                            expected,
+-                            "{c:?}, budget={budget}"
+-                        );
+-                    }
+-                }
+-            }
+-        }
+-        assert!(certified > 100);
+-        assert!(uncertain > 0);
+-    }
+-
+-    #[test]
+-    fn periodic_disk_proof_covers_conjugate_period_three_tiles() {
+-        for im in [-0.7448617666197442, 0.7448617666197442] {
+-            let re0 = -0.1225611668766536 - 0.0005;
+-            let im0 = im - 0.0005;
+-            let width = 0.001;
+-            assert_eq!(membership(re0, im0, width), Some(true));
+-            for y in 0..=56 {
+-                for x in 0..=56 {
+-                    let c = num_complex::Complex64::new(
+-                        re0 + x as f64 * width / 56.0,
+-                        im0 + y as f64 * width / 56.0,
+-                    );
+-                    for budget in [512, 32768] {
+-                        assert!(crate::visual_metrics::mandelbrot_membership(c, budget));
+-                    }
+-                }
+-            }
+-        }
+-    }
+-
+-    #[test]
+-    fn neutral_cycles_do_not_supply_an_interior_disk_certificate() {
+-        for re in [0.25, 0.2500001, -0.75] {
+-            assert_eq!(membership(re, 0.0, 0.0), None);
+-        }
+-    }
+-
+-    #[test]
+-    fn invalid_boxes_do_not_supply_certificates() {
+-        for (re0, im0, width) in [
+-            (f64::NAN, 0.0, 1.0),
+-            (0.0, f64::INFINITY, 1.0),
+-            (0.0, 0.0, -1.0),
+-            (f64::MAX, 0.0, f64::MAX),
++    fn escaped_and_nonfinite_states_are_refused() {
++        for (c, z) in [
++            ([0., 0.], [2.01, 0.]),
++            ([f64::NAN, 0.], [0., 0.]),
++            ([0., 0.], [f64::INFINITY, 0.]),
+         ] {
+-            assert_eq!(membership(re0, im0, width), None);
+-        }
+-    }
+-}
++            assert!(!super::machine_tail_is_bounded(c, z));
++        }
++    }
++}

@@ -1,0 +1,414 @@
+//! Offline differential self-consistency evidence, not reference fidelity.
+use super::{FieldJet, GeometryUnavailable, PreparedField};
+use serde::Serialize;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VerificationError {
+    InvalidNeighborhood,
+    IncompatibleGrids,
+    GeometryUnavailable,
+    NonfiniteJet,
+}
+
+/// Whole-asset comparison of stored coefficient magnitudes. With contour-sample
+/// coefficients this detects forgotten sampled geometry. It is not a bound on
+/// the reconstructed field, its derivatives, or the true Shore distance.
+#[derive(Debug, Serialize)]
+pub struct CoefficientMagnitudeEvidence {
+    pub coefficient_count: usize,
+    pub comparison_tolerance: f64,
+    pub sign_changes: usize,
+    pub magnitude_increases_over_tolerance: usize,
+    pub magnitude_decreases_over_tolerance: usize,
+    pub maximum_magnitude_increase: f64,
+    pub maximum_magnitude_decrease: f64,
+    pub passes_sampled_magnitude_retention: bool,
+}
+pub fn coefficient_magnitude_evidence(
+    coarse: &PreparedField,
+    fine: &PreparedField,
+    tolerance: f64,
+) -> Result<CoefficientMagnitudeEvidence, VerificationError> {
+    if !tolerance.is_finite() || tolerance < 0.0 {
+        return Err(VerificationError::InvalidNeighborhood);
+    }
+    if coarse.origin != fine.origin || coarse.spacing != fine.spacing || coarse.shape != fine.shape
+    {
+        return Err(VerificationError::IncompatibleGrids);
+    }
+    if coarse.available.is_some() || fine.available.is_some() {
+        return Err(VerificationError::GeometryUnavailable);
+    }
+    let mut e = CoefficientMagnitudeEvidence {
+        coefficient_count: coarse.coefficients.len(),
+        comparison_tolerance: tolerance,
+        sign_changes: 0,
+        magnitude_increases_over_tolerance: 0,
+        magnitude_decreases_over_tolerance: 0,
+        maximum_magnitude_increase: 0.0,
+        maximum_magnitude_decrease: 0.0,
+        passes_sampled_magnitude_retention: false,
+    };
+    for (&a, &b) in coarse.coefficients.iter().zip(fine.coefficients.iter()) {
+        e.sign_changes +=
+            usize::from(a != 0.0 && b != 0.0 && a.is_sign_positive() != b.is_sign_positive());
+        let change = b.abs() - a.abs();
+        e.magnitude_increases_over_tolerance += usize::from(change > tolerance);
+        e.magnitude_decreases_over_tolerance += usize::from(change < -tolerance);
+        e.maximum_magnitude_increase = e.maximum_magnitude_increase.max(change);
+        e.maximum_magnitude_decrease = e.maximum_magnitude_decrease.max(-change);
+    }
+    e.passes_sampled_magnitude_retention =
+        e.sign_changes == 0 && e.magnitude_increases_over_tolerance == 0;
+    Ok(e)
+}
+
+/// Point-scoped sensitivity to a declared source refinement, in distance units.
+/// This is neither a reference-distance bound nor a regional quality certificate.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct SourceRefinementEvidence {
+    pub scalar_difference: f64,
+    pub scaled_gradient_difference: f64,
+    pub scaled_hessian_difference: f64,
+    pub maximum_difference: f64,
+}
+
+pub fn source_refinement_evidence(
+    coarse: FieldJet,
+    fine: FieldJet,
+    coarse_source_spacing: f64,
+) -> Result<SourceRefinementEvidence, VerificationError> {
+    if !coarse_source_spacing.is_finite() || coarse_source_spacing <= 0.0 {
+        return Err(VerificationError::InvalidNeighborhood);
+    }
+    if !finite(&coarse) || !finite(&fine) {
+        return Err(VerificationError::NonfiniteJet);
+    }
+    let scalar_difference = (fine.value - coarse.value).abs();
+    let scaled_gradient_difference = coarse_source_spacing
+        * (fine.gradient[0] - coarse.gradient[0]).hypot(fine.gradient[1] - coarse.gradient[1]);
+    let mut hessian_norm = 0.0_f64;
+    for (a, b) in fine
+        .hessian
+        .iter()
+        .flatten()
+        .zip(coarse.hessian.iter().flatten())
+    {
+        hessian_norm = hessian_norm.hypot(a - b);
+    }
+    let scaled_hessian_difference = coarse_source_spacing * coarse_source_spacing * hessian_norm;
+    if ![
+        scalar_difference,
+        scaled_gradient_difference,
+        scaled_hessian_difference,
+    ]
+    .iter()
+    .all(|v| v.is_finite())
+    {
+        return Err(VerificationError::NonfiniteJet);
+    }
+    Ok(SourceRefinementEvidence {
+        scalar_difference,
+        scaled_gradient_difference,
+        scaled_hessian_difference,
+        maximum_difference: scalar_difference
+            .max(scaled_gradient_difference)
+            .max(scaled_hessian_difference),
+    })
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct DifferentialEvidence {
+    pub gradient_max_absolute_error: f64,
+    pub hessian_max_normalized_error: f64,
+    pub gradient_resolution_max_absolute_error: f64,
+    pub hessian_resolution_max_normalized_error: f64,
+    pub legacy_gradient_max_absolute_error: f64,
+    pub legacy_hessian_max_normalized_error: f64,
+}
+impl DifferentialEvidence {
+    pub fn passes(&self, tolerance: f64) -> bool {
+        tolerance.is_finite()
+            && tolerance > 0.0
+            && [
+                self.gradient_max_absolute_error,
+                self.hessian_max_normalized_error,
+                self.gradient_resolution_max_absolute_error,
+                self.hessian_resolution_max_normalized_error,
+            ]
+            .iter()
+            .all(|e| e.is_finite() && *e < tolerance)
+    }
+    fn merge(&mut self, other: Self) {
+        self.gradient_max_absolute_error = self
+            .gradient_max_absolute_error
+            .max(other.gradient_max_absolute_error);
+        self.hessian_max_normalized_error = self
+            .hessian_max_normalized_error
+            .max(other.hessian_max_normalized_error);
+        self.gradient_resolution_max_absolute_error = self
+            .gradient_resolution_max_absolute_error
+            .max(other.gradient_resolution_max_absolute_error);
+        self.hessian_resolution_max_normalized_error = self
+            .hessian_resolution_max_normalized_error
+            .max(other.hessian_resolution_max_normalized_error);
+        self.legacy_gradient_max_absolute_error = self
+            .legacy_gradient_max_absolute_error
+            .max(other.legacy_gradient_max_absolute_error);
+        self.legacy_hessian_max_normalized_error = self
+            .legacy_hessian_max_normalized_error
+            .max(other.legacy_hessian_max_normalized_error);
+    }
+}
+fn finite(j: &FieldJet) -> bool {
+    j.value.is_finite()
+        && j.gradient
+            .iter()
+            .chain(j.hessian.iter().flatten())
+            .all(|v| v.is_finite())
+}
+pub fn neighboring_evidence(
+    query: impl Fn([f64; 2]) -> Result<FieldJet, GeometryUnavailable>,
+    point: [f64; 2],
+    delta: f64,
+) -> Result<DifferentialEvidence, VerificationError> {
+    if !point.iter().all(|v| v.is_finite())
+        || !delta.is_finite()
+        || delta <= 0.0
+        || delta / 4.0 == 0.0
+    {
+        return Err(VerificationError::InvalidNeighborhood);
+    }
+    let center = query(point).map_err(|_| VerificationError::GeometryUnavailable)?;
+    if !finite(&center) {
+        return Err(VerificationError::NonfiniteJet);
+    }
+    let mut evidence = DifferentialEvidence::default();
+    for axis in 0..2 {
+        let mut estimates = [[0.0; 3]; 3];
+        for (level, step) in [delta, delta / 2.0, delta / 4.0].into_iter().enumerate() {
+            let (mut plus, mut minus) = (point, point);
+            plus[axis] += step;
+            minus[axis] -= step;
+            if !plus[axis].is_finite()
+                || !minus[axis].is_finite()
+                || plus[axis] == point[axis]
+                || minus[axis] == point[axis]
+            {
+                return Err(VerificationError::InvalidNeighborhood);
+            }
+            let plus = query(plus).map_err(|_| VerificationError::GeometryUnavailable)?;
+            let minus = query(minus).map_err(|_| VerificationError::GeometryUnavailable)?;
+            if !finite(&plus) || !finite(&minus) {
+                return Err(VerificationError::NonfiniteJet);
+            }
+            estimates[level][0] = (plus.value - minus.value) / (2.0 * step);
+            for component in 0..2 {
+                estimates[level][component + 1] =
+                    (plus.gradient[component] - minus.gradient[component]) / (2.0 * step);
+            }
+        }
+        if !estimates.iter().flatten().all(|v| v.is_finite()) {
+            return Err(VerificationError::NonfiniteJet);
+        }
+        for component in 0..3 {
+            // Central differences have an O(h^2) truncation term. Cancel it at
+            // two successive resolutions, and require both estimates to agree
+            // with the jet and with each other. Never select a favorable step.
+            let coarse = (4.0 * estimates[1][component] - estimates[0][component]) / 3.0;
+            let fine = (4.0 * estimates[2][component] - estimates[1][component]) / 3.0;
+            let expected = if component == 0 {
+                center.gradient[axis]
+            } else {
+                center.hessian[component - 1][axis]
+            };
+            let scale = if component == 0 {
+                1.0
+            } else {
+                expected.abs().max(1.0)
+            };
+            let error = (coarse - expected).abs().max((fine - expected).abs()) / scale;
+            let agreement = (coarse - fine).abs() / scale;
+            let legacy = (estimates[0][component] - expected).abs() / scale;
+            if ![coarse, fine, error, agreement, legacy]
+                .iter()
+                .all(|v| v.is_finite())
+            {
+                return Err(VerificationError::NonfiniteJet);
+            }
+            if component == 0 {
+                evidence.gradient_max_absolute_error =
+                    evidence.gradient_max_absolute_error.max(error);
+                evidence.gradient_resolution_max_absolute_error = evidence
+                    .gradient_resolution_max_absolute_error
+                    .max(agreement);
+                evidence.legacy_gradient_max_absolute_error =
+                    evidence.legacy_gradient_max_absolute_error.max(legacy);
+            } else {
+                evidence.hessian_max_normalized_error =
+                    evidence.hessian_max_normalized_error.max(error);
+                evidence.hessian_resolution_max_normalized_error = evidence
+                    .hessian_resolution_max_normalized_error
+                    .max(agreement);
+                evidence.legacy_hessian_max_normalized_error =
+                    evidence.legacy_hessian_max_normalized_error.max(legacy);
+            }
+        }
+    }
+    Ok(evidence)
+}
+
+/// Same fixed 1,000 points, original increments and 1e-4 tolerance as the first
+/// report. Extra nested samples improve the estimator, not the acceptance limit.
+pub fn fixed_neighbor_report(
+    field: &PreparedField,
+) -> Result<serde_json::Value, VerificationError> {
+    let mut evidence = DifferentialEvidence::default();
+    for i in 0..1000 {
+        let point = [
+            0.2 + (i % 997) as f64 / 997.0 * 0.4,
+            0.025 + (i % 293) as f64 / 293.0 * 0.15,
+        ];
+        for delta in [1e-6, 1e-7] {
+            evidence.merge(neighboring_evidence(|p| field.query(p), point, delta)?);
+        }
+    }
+    Ok(
+        serde_json::json!({"verifier":"richardson-neighbor/1","points":1000,"base_increments":[1e-6,1e-7],"tolerance":1e-4,"evidence":evidence,"passed":evidence.passes(1e-4),"legacy_central_difference_passed":evidence.legacy_gradient_max_absolute_error<1e-4 && evidence.legacy_hessian_max_normalized_error<1e-4,"scope":"measured differential self-consistency only; no reference fidelity or singularity permission"}),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn coefficient_retention_requires_complete_matching_grids_and_preserved_signs() {
+        let field = |v| PreparedField::new([0.0; 2], 1.0, [6, 6], vec![v; 36]).unwrap();
+        let a = field(2.0);
+        let b = field(1.0);
+        let e = coefficient_magnitude_evidence(&a, &b, 1e-12).unwrap();
+        assert!(e.passes_sampled_magnitude_retention);
+        assert_eq!(e.magnitude_decreases_over_tolerance, 36);
+        assert!(
+            !coefficient_magnitude_evidence(&b, &a, 1e-12)
+                .unwrap()
+                .passes_sampled_magnitude_retention
+        );
+        assert_eq!(
+            coefficient_magnitude_evidence(&a, &field(-2.0), 1e-12)
+                .unwrap()
+                .sign_changes,
+            36
+        );
+        let shifted = PreparedField::new([0.1, 0.0], 1.0, [6, 6], vec![1.0; 36]).unwrap();
+        assert!(coefficient_magnitude_evidence(&a, &shifted, 1e-12).is_err());
+        let mut values = vec![Some(1.0); 36];
+        values[0] = None;
+        let sparse = PreparedField::new_sparse([0.0; 2], 1.0, [6, 6], values).unwrap();
+        assert!(coefficient_magnitude_evidence(&a, &sparse, 1e-12).is_err());
+        assert!(coefficient_magnitude_evidence(&a, &b, f64::NAN).is_err());
+    }
+    #[test]
+    fn source_refinement_counts_cross_derivatives_and_rejects_nonfinite_evidence() {
+        let zero = FieldJet {
+            value: 0.0,
+            gradient: [0.0; 2],
+            hessian: [[0.0; 2]; 2],
+        };
+        // A symmetric mixed derivative contributes twice to the Frobenius norm.
+        let mixed = FieldJet {
+            hessian: [[0.0, 3.0], [3.0, 0.0]],
+            ..zero
+        };
+        let e = source_refinement_evidence(zero, mixed, 0.5).unwrap();
+        assert!((e.maximum_difference - 0.75 * 2.0_f64.sqrt()).abs() < 1e-14);
+        let slope = FieldJet {
+            value: 1.0,
+            gradient: [3.0, 4.0],
+            ..zero
+        };
+        assert_eq!(
+            source_refinement_evidence(zero, slope, 0.5)
+                .unwrap()
+                .maximum_difference,
+            2.5
+        );
+        assert!(source_refinement_evidence(zero, slope, f64::NAN).is_err());
+        assert!(source_refinement_evidence(
+            zero,
+            FieldJet {
+                value: f64::INFINITY,
+                ..zero
+            },
+            0.5
+        )
+        .is_err());
+        assert!(source_refinement_evidence(zero, mixed, f64::MAX).is_err());
+    }
+    fn quartic(p: [f64; 2]) -> Result<FieldJet, GeometryUnavailable> {
+        let [x, y] = p;
+        let a = 1e8;
+        Ok(FieldJet {
+            value: x * x + 3.0 * x * y + 2.0 * y * y + a * (x.powi(4) + y.powi(4)),
+            gradient: [
+                2.0 * x + 3.0 * y + 4.0 * a * x.powi(3),
+                3.0 * x + 4.0 * y + 4.0 * a * y.powi(3),
+            ],
+            hessian: [[2.0 + 12.0 * a * x * x, 3.0], [3.0, 4.0 + 12.0 * a * y * y]],
+        })
+    }
+    #[test]
+    fn exact_quartic_derivatives_do_not_fail_from_central_truncation() {
+        let result = neighboring_evidence(quartic, [0.0; 2], 1e-6).unwrap();
+        assert!(result.legacy_hessian_max_normalized_error > 1e-4);
+        assert!(result.passes(1e-4), "{result:?}");
+    }
+    #[test]
+    fn corrupted_jets_and_unavailable_support_still_refuse() {
+        for hessian in [false, true] {
+            let query = |p| {
+                let mut j = quartic(p)?;
+                if hessian {
+                    j.hessian[0][1] += 0.01;
+                    j.hessian[1][0] += 0.01;
+                } else {
+                    j.gradient[0] += 0.001;
+                }
+                Ok(j)
+            };
+            assert!(!neighboring_evidence(query, [0.0; 2], 1e-6)
+                .unwrap()
+                .passes(1e-4));
+        }
+        assert_eq!(
+            neighboring_evidence(
+                |p| if p[0] > 0.0 {
+                    Err(GeometryUnavailable)
+                } else {
+                    quartic(p)
+                },
+                [0.0; 2],
+                1e-6
+            )
+            .unwrap_err(),
+            VerificationError::GeometryUnavailable
+        );
+    }
+    #[test]
+    fn invalid_neighborhoods_and_nonfinite_jets_cannot_pass() {
+        for delta in [0.0, f64::NAN, f64::INFINITY] {
+            assert!(neighboring_evidence(quartic, [0.0; 2], delta).is_err());
+        }
+        assert!(neighboring_evidence(quartic, [f64::NAN, 0.0], 1e-6).is_err());
+        assert!(neighboring_evidence(
+            |p| {
+                let mut j = quartic(p)?;
+                j.hessian[1][1] = f64::NAN;
+                Ok(j)
+            },
+            [0.0; 2],
+            1e-6
+        )
+        .is_err());
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "date": "2026-10-30",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "purpose": "Separate coverage failures from field/mechanical failures with a fresh replay; not shipping adoption",
+  "preparation": {"origin": [-1.002, -0.702], "spacing": 0.0005, "shape": [3425, 2825]},
+  "maximum_coefficient_bytes": 80000000,
+  "anchors": [[-0.5, 0.1], [-1.0, 0.1], [0.3, 0.05], [0.4, 0.05], [0.6, 0.15], [0.1042700898980602, 0.30099067225167203]],
+  "replays": ["original native controlled crossing from original starts", "all retained Python energy/crossing/continuity tests from original starts"],
+  "kernel": "same immutable C4 quintic evaluator and reconstruction rules",
+  "physics": "original test parameters, integrator and assertions unchanged",
+  "reference_scalar_fidelity": "unknown",
+  "reference_differential_fidelity": "unknown",
+  "reference_singularity_information": "unknown; no new permission for reference-cut motion",
+  "coverage_policy": "complete asset prepared once; no replacement or extension during any replay; any miss remains a failure"
+}

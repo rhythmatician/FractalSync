@@ -286,10 +286,12 @@ fn main() {
         }
     }
     let json = serde_json::to_string_pretty(&g).expect("serialize golden vectors");
-    std::fs::create_dir_all("../shared").expect("create shared dir");
-    std::fs::write("../shared/golden_vectors.json", json).expect("write golden vectors");
+    let shared = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../shared");
+    std::fs::create_dir_all(&shared).expect("create shared dir");
+    std::fs::write(shared.join("golden_vectors.json"), json).expect("write golden vectors");
     println!(
-        "Wrote ../shared/golden_vectors.json: {} carrier, {} orbit, {} player, {} proximity, {} feature cases",
+        "Wrote {}: {} carrier, {} orbit, {} player, {} proximity, {} feature cases",
+        shared.join("golden_vectors.json").display(),
         g.carrier_cases.len(),
         g.orbit_cases.len(),
         g.player_step_cases.len(),

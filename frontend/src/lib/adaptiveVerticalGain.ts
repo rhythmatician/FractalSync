@@ -80,8 +80,12 @@ export class AdaptiveVerticalGain {
    * becomes configurable, retrieve it from the wasm module's ManifoldConfig.
    */
   private computeRawGain(snap: DebugSnapshot): number {
-    const rho0 = Math.max(snap.physics.rho, this.config.epsilon);
-    const [gx, gy] = snap.physics.scaleGradient;
+    const { rho, scaleGradient } = snap.physics;
+    if (rho === null || scaleGradient === null) {
+      throw new Error('Cannot estimate vertical gain: snapshot derivatives are unavailable');
+    }
+    const rho0 = Math.max(rho, this.config.epsilon);
+    const [gx, gy] = scaleGradient;
     const gradMag = Math.hypot(gx, gy);
 
     // Lambda = 1 for now (controller-default). If lambda becomes configurable,
@@ -140,8 +144,12 @@ export class AdaptiveVerticalGain {
     rawGain: number;
     smoothedGain: number;
   } {
-    const rho0 = Math.max(snap.physics.rho, this.config.epsilon);
-    const [gx, gy] = snap.physics.scaleGradient;
+    const { rho, scaleGradient } = snap.physics;
+    if (rho === null || scaleGradient === null) {
+      throw new Error('Cannot report vertical gain: snapshot derivatives are unavailable');
+    }
+    const rho0 = Math.max(rho, this.config.epsilon);
+    const [gx, gy] = scaleGradient;
     const gradMag = Math.hypot(gx, gy);
     const lambda = 1.0;
     const localSlope = lambda * rho0 * gradMag;

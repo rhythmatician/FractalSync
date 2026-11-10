@@ -1,0 +1,27 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "One globally refined reference grid to isolate missed homogeneous-cell features; preserve contour-v1 and all failures",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "controlled_change": "Reference coarse spacing 0.002 -> 0.001; subdivision 16 -> 8 retains fine spacing 0.000125; all remaining source/evaluator/physics settings fixed",
+  "source_evidence": "measured finite-orbit contour only; no true-distance upper bound; homogeneous cells may still hide features",
+  "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+  "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+  "shipping_adoption": false,
+  "field_id": "37ec6365e602ae31",
+  "asset_sha256": "ca2b9a78c482946fe3760d8fb7919e48fc5bf4638a8c7eb47b499a8c6313d041",
+  "reference_policy_sha256": "b21837d606e90e406350d373852bf922b8415f5b44fecc554ebead00a3e6b1c9",
+  "source_experiment": "geometry-145-operational-reference-grid-experiment.json"
+}

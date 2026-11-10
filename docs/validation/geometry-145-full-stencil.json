@@ -1,0 +1,746 @@
+{
+  "date": "2026-10-26",
+  "base_commit": "146c13c",
+  "production_adoption": false,
+  "scope": "Full81-node interior fixtures and one-cell coherent reconstruction. No true-distance interpolation remainder, cut-locus classifier, canonical finite-orbit equivalence, or production adoption.",
+  "source_sha256": {
+    "docs/validation/experiments/geometry-145-point-proof/src/affine_box_proof.rs": "a2748ed4d59eacc0a5434cbb3496f386d105d1f3c9e42c1f3ecd8fc61280af4b",
+    "docs/validation/experiments/geometry-145-point-proof/src/complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "docs/validation/experiments/geometry-145-point-proof/src/component_probe.rs": "d23a5c9efce82a3d15b3812618323e917e5af0c80f83a9710d0d07e7662a67a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "docs/validation/experiments/geometry-145-point-proof/src/distance_bracket.rs": "54885dd76f5003b4464ba0ed57691777c5f06f716c28da076423405715ca5ce8",
+    "docs/validation/experiments/geometry-145-point-proof/src/main.rs": "c79460fb0a34f67364b1f45038f6e59dde794f930039d8feada03f7bafb7d27d",
+    "docs/validation/experiments/geometry-145-point-proof/src/point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "docs/validation/experiments/geometry-145-point-proof/src/proof_support.rs": "9989ace3088ad949b2e105ae7aa7ccc620b2e3af8dbfd287a58b50edc45fdbf2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quadratic_box_proof.rs": "4175843c6cabdbda182ce9a5152800f566fd93630f3d10a0ca7e1036d61260d2",
+    "docs/validation/experiments/geometry-145-point-proof/src/quintic_field.rs": "0615d5ca65d441f9b5c859f70e7bbef36a113a17a4f9766578fbeecc0e8f5de9",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs": "bec1d9c862534512563ee19bc5484c403a870c83fd35b7119800cd0d9c875487",
+    "docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs": "7bda2246c9d9017cb41bc2b93c1946262f25c595b39cf7b22c0754b8b21e2e50",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.toml": "86f58f0be099222c045aacac03c9afe023560ad96a9f2fa7156334583e5c0fcb",
+    "docs/validation/experiments/geometry-145-point-proof/Cargo.lock": "4580f255b41a71a09f215eddd7f7bca3ccbe586d520dee38be5124742bbfcba6",
+    "docs/validation/experiments/geometry-145-stencil-mutations.py": "9cc623d233c7bd5718dae778604e598d8d435cce7729bba6f1df3184ad87315d",
+    "docs/validation/experiments/geometry-145-point-proof-mutations.py": "a834cd47c459ad3245b5432a17616f801d0ff191a6df5a9ceb9a8c1a1274cfe2",
+    "docs/validation/experiments/geometry-145-component-mutations.py": "56f8005f2a926d5c0e279c3b82109d460350ea7070f9e6dba6706e38f99b1c7a",
+    "docs/validation/experiments/geometry-145-branch-mutations.py": "3445f6db7ac048587721469e490256c18543abe726a590ce14b4308d98f0fc6e",
+    "docs/validation/experiments/geometry-145-cover-mutations.py": "b03875a3db0ad39fdad0392a5db8b7092db0d03f8da2fd2c7f1ae80f0f98cbf7",
+    "docs/validation/experiments/geometry-145-bracket-mutations.py": "16917fbab6c428b20dbef542348c4f8cbfd243acc21a5c52cd37b8ba48a27afa"
+  },
+  "frozen_binaries_sha256": {
+    "geometry145_stencil_20261026a.exe": "38f1f84fa59c331a4a5e5ac91f49e9fcacad99ede10a3cf7fbba29cc3203eace",
+    "geometry145_stencil_20261026b.exe": "7f22eae36c58988c7f67e49ebfa96d3be4175c1b71ed9ae45f70fb7e8ff7f87e",
+    "geometry145_stencil_20261026c.exe": "9b435fddf17724f0cc862a471e98c7563dcd013c9a475b9721482d4561e08451",
+    "geometry145_stencil_20261026d.exe": "c83ffb037108c49f39742d03a7af035083692bba07260b6780fb61dd2f7738e7"
+  },
+  "runs": [
+    {
+      "name": "native-v1",
+      "expected_exit_code": 1,
+      "status": {
+        "exit_code": 1,
+        "elapsed_s": 66.4120183000341,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "81f5cc8ddf65742b65c6184355c01c76c978bd816d2d291fee6196d49aeac673",
+      "stdout_bytes": 3292,
+      "stderr_sha256": "14c6705691499d13db768f75b4e83b6a6a48da5b8f8a05d324302016a9f4861a",
+      "stderr_bytes": 425584,
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.99 root_width=0.05 initial_edges=128 minimum_clearance=0.000007618852001752011 elapsed_s=63.6926651 result=Ok(ClosedCover { edges: 529, winding: 1, curve_distance_lower: 7.619670911732456e-6 })",
+        "[NODE_GRID_REFUSAL145] name=native layout=Quintic node=[0.32049560546875, 0.04733085632324219] stage=witness_search",
+        "[HP_COMPONENT_STATUS145] name=native complete=false elapsed_s=66.1203929"
+      ],
+      "final_node_checks": [],
+      "target_refusals": []
+    },
+    {
+      "name": "python-v1",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 120.33576519996859,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "6bb647b1ab78fc03ded0ee0385552e2343e9261a2aabb9272ea1b6bb8399c772",
+      "stdout_bytes": 155117,
+      "stderr_sha256": "91e84c196bd282a68dc8b1f88639c0d6764f526a23641985ccde3b7ce3401b3b",
+      "stderr_bytes": 174421,
+      "results": [
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0.00000017259496124937463 elapsed_s=24.2673849 result=Ok(ClosedCover { edges: 173, winding: 1, curve_distance_lower: 1.7262428611786167e-7 })",
+        "[NODE_GRID_STATUS145] name=python layout=Quintic nodes=81 within_requested_width=9 elapsed_s=69.9692409",
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=23.75822 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267611764929584e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=24.2618663",
+        "[NODE_GRID_DYADIC_STATUS145] name=python nodes=81 certified_samples=45 quantum=0.0000000009313225746154785",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=120.0434696"
+      ],
+      "final_node_checks": [],
+      "target_refusals": []
+    },
+    {
+      "name": "native-first-node",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 0.8499281001277268,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "38fd9c2a34b42cf5f474e978b2ac8416f794e0d7e82385e45bf229b5489021bd",
+      "stdout_bytes": 1122,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "results": [
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=0.6143223"
+      ],
+      "final_node_checks": [],
+      "target_refusals": []
+    },
+    {
+      "name": "native-v2",
+      "expected_exit_code": 1,
+      "status": {
+        "exit_code": 1,
+        "elapsed_s": 131.0326773999259,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "178aa839585a3a5e95f4586bd620b58f4de3e6c3673c163545aa6aa012ef7a42",
+      "stdout_bytes": 115488,
+      "stderr_sha256": "ded9bfcf7fccf0af7c587ccec471d5079770d474b3f12702b4bab2bd21a7cc64",
+      "stderr_bytes": 590310,
+      "results": [
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.99 root_width=0.05 initial_edges=128 minimum_clearance=0.000007618852001752011 elapsed_s=59.1082315 result=Ok(ClosedCover { edges: 529, winding: 1, curve_distance_lower: 7.619670911732456e-6 })",
+        "[NODE_GRID_STATUS145] name=native layout=Quintic nodes=81 within_requested_width=16 elapsed_s=45.7382887",
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.99 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=23.9111722 result=Err(BuildFailure { reason: DepthBudget, attempted: 476, accepted: 262, depth: 24 })",
+        "[HP_COMPONENT_STATUS145] name=native complete=false elapsed_s=131.0158006"
+      ],
+      "final_node_checks": [],
+      "target_refusals": [
+        "[COVER_TARGET_REFUSAL145] query=[0.3204994201660156, 0.04733085632324219] bound=1.05209330482328233294045984529743124309e-5 minimum=1.0520933054499324016982516843932230181e-5 mu_start=[0.9949758382134442, -0.0868288660360852] mu_end=[0.9949758382141615, -0.08682886310855467]"
+      ]
+    },
+    {
+      "name": "native-v3",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 443.12769970018417,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "6b2b1ddd6123fe84cd45cd68fe7e70215cd74e468ac62ad95c8579abca095e8d",
+      "stdout_bytes": 139908,
+      "stderr_sha256": "b804dccee82780bad79728cbb40f5d7e3e1f939b432cd311a3ed27b086176d87",
+      "stderr_bytes": 2743530,
+      "results": [
+        "[NODE_GRID_STATUS145] name=native layout=Quintic nodes=81 within_requested_width=0 elapsed_s=51.7211676",
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=384.6759737 result=Ok(ClosedCover { edges: 2746, winding: 1, curve_distance_lower: 7.614225016868299e-6 })",
+        "[NODE_GRID_REFINED_STATUS145] name=native nodes=81 within_requested_width=81 elapsed_s=390.5623907",
+        "[NODE_GRID_DYADIC_STATUS145] name=native nodes=81 certified_samples=35 quantum=0.00000005960464477539063",
+        "[CERTIFIED_NODE_FIELD145] name=native jet=Jet { components: [7.642528691673288e-6, 0.6524171381689301, -0.757860258907957, -14959.345871925581, -12878.021654703249, -11086.250040662095], nodal_error: [7.142158273335039e-8, 0.0766106359318085, 0.07333644781460681, 116685.41310695169, 88993.72340790885, 111213.01570704898] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=native gradient_error=0.00000000011428791246714809 distance_scaled_hessian_error=0.00000000004955638451413875 step=0.00000000095367431640625",
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=442.8765756"
+      ],
+      "final_node_checks": [],
+      "target_refusals": []
+    },
+    {
+      "name": "python-v3",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 104.32960870000534,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "06589413a4dc75ee16c3ad47450201e1314b8b0fd40328a8bfc6fd9d85421a0f",
+      "stdout_bytes": 135499,
+      "stderr_sha256": "841e7a8a12039a67fa6cb0300c1431d7cb554d8256423e1b2b98bb327adfaae6",
+      "stderr_bytes": 90144,
+      "results": [
+        "[NODE_GRID_STATUS145] name=python layout=Quintic nodes=81 within_requested_width=0 elapsed_s=76.8815666",
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=25.8262273 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267611764929584e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=26.3157213",
+        "[NODE_GRID_DYADIC_STATUS145] name=python nodes=81 certified_samples=45 quantum=0.0000000009313225746154785",
+        "[CERTIFIED_NODE_FIELD145] name=python jet=Jet { components: [1.7286813524266808e-7, 0.44851293132532233, 0.8937763483699265, -1333774.8510945442, 669312.0157704448, -335872.6666483152], nodal_error: [5.466937262204265e-10, 0.07989701325202886, 0.08318337289020669, 19366174.16546091, 11019944.68058727, 17064727.45244847] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=python gradient_error=0.000000000027946644998166903 distance_scaled_hessian_error=0.00000000001890419019128 step=0.000000000007450580596923828",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=104.0768998"
+      ],
+      "final_node_checks": [],
+      "target_refusals": []
+    },
+    {
+      "name": "native-final",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 478.8065204999875,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "90411a0ae3452f834508557381dc549d8c4d6e0a4b7d1afd4c3d00f47e74feba",
+      "stdout_bytes": 140018,
+      "stderr_sha256": "b804dccee82780bad79728cbb40f5d7e3e1f939b432cd311a3ed27b086176d87",
+      "stderr_bytes": 2743530,
+      "results": [
+        "[NODE_GRID_STATUS145] name=native layout=Quintic nodes=81 within_requested_width=0 elapsed_s=50.0709487",
+        "[CLOSED_COVER145] period=85 radius=0.999999 root_radius=0.999 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=421.0988649 result=Ok(ClosedCover { edges: 2746, winding: 1, curve_distance_lower: 7.614225016868299e-6 })",
+        "[NODE_GRID_REFINED_STATUS145] name=native nodes=81 within_requested_width=81 elapsed_s=427.3506585",
+        "[NODE_GRID_DYADIC_STATUS145] name=native nodes=81 certified_samples=35 quantum=0.00000005960464477539063",
+        "[CERTIFIED_NODE_FIELD145] name=native jet=Jet { components: [7.642528691673288e-6, 0.6524171381689301, -0.757860258907957, -14959.345871925581, -12878.021654703249, -11086.250040662095], nodal_error: [1.5000000000000044e-7, 0.18839168866142428, 0.1824881290029433, 302324.9079629264, 229194.97855685535, 292297.4536829876] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=native gradient_error=0.00000000011428791246714809 distance_scaled_hessian_error=0.00000000004955638451413875 step=0.00000000095367431640625",
+        "[NODE_FIELD_COST145] name=native queries=1000 elapsed_s=0.7498736 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=native complete=true elapsed_s=478.7826442"
+      ],
+      "final_node_checks": [
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.04733085632324219] value=0.000007730474186899436 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.04733085632324219] value=0.000008455772982472587 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.04733085632324219] value=0.000009170649345532155 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.04733085632324219] value=0.000009874486154959306 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.04733085632324219] value=0.000010566627634881838 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.04733085632324219] value=0.000011246377665273087 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.04733085632324219] value=0.000011912998237665548 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.04733085632324219] value=0.000012565708119324675 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.04733085632324219] value=0.000013203681800988606 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.047331809997558594] value=0.0000071103095360446134 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.047331809997558594] value=0.000007823813615074989 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.047331809997558594] value=0.000008526623495010607 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.047331809997558594] value=0.000009218128054194373 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.047331809997558594] value=0.00000989768004777167 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.047331809997558594] value=0.000010564594783706432 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.047331809997558594] value=0.000011218148972238459 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.047331809997558594] value=0.000011857579808665262 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.047331809997558594] value=0.000012482084358966435 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.047332763671875] value=0.000006476850710531973 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.047332763671875] value=0.000007178702702963598 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.047332763671875] value=0.00000786961435255156 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.047332763671875] value=0.000008548982319717678 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.047332763671875] value=0.000009216169652741275 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.047332763671875] value=0.000009870504791486321 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.047332763671875] value=0.000010511280764522947 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.047332763671875] value=0.000011137754635260263 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.047332763671875] value=0.000011749147260414883 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.047333717346191406] value=0.000005830729634357698 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.047333717346191406] value=0.0000065210879774650135 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.047333717346191406] value=0.000007200284492640212 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.047333717346191406] value=0.000007867725143725056 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.047333717346191406] value=0.000008522784744232938 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.047333717346191406] value=0.000009164806251742778 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.047333717346191406] value=0.000009793100268533638 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.047333717346191406] value=0.000010406944799348435 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.047333717346191406] value=0.000011005585323183118 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.04733467102050781] value=0.0000051725501851408915 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.04733467102050781] value=0.000005851586576519141 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.04733467102050781] value=0.0000065192632416770965 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.04733467102050781] value=0.000007174996726276739 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.04733467102050781] value=0.000007818174815580632 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.04733467102050781] value=0.000008448156083949743 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.04733467102050781] value=0.000009064269657519958 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.04733467102050781] value=0.000009665815236023927 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.04733467102050781] value=0.000010252063424267174 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.04733562469482422] value=0.00000450288858003685 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.04733562469482422] value=0.000005170785669491151 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.04733562469482422] value=0.000005827147574967749 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.04733562469482422] value=0.000006471402479208838 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.04733562469482422] value=0.000007102952105351673 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.04733562469482422] value=0.000007721171488018612 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.04733562469482422] value=0.000008325408959714594 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.04733562469482422] value=0.000008914986393585308 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.04733562469482422] value=0.00000948919974689435 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.047336578369140625] value=0.000003822293929814295 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.047336578369140625] value=0.000004479243240741027 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.047336578369140625] value=0.000005124503157993079 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.047336578369140625] value=0.0000057575143539190776 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.047336578369140625] value=0.000006377693240353855 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.047336578369140625] value=0.000006984431930205206 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.047336578369140625] value=0.000007577098412648231 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.047336578369140625] value=0.000008155036978222409 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.047336578369140625] value=0.000008717568932406137 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.04733753204345703] value=0.0000031312889263519513 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.04733753204345703] value=0.0000037774889947739907 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.04733753204345703] value=0.000004411865492760872 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.04733753204345703] value=0.000005033872252408575 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.04733753204345703] value=0.000005642940934105903 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.04733753204345703] value=0.000006238481150138855 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.04733753204345703] value=0.000006819880797231134 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.04733753204345703] value=0.000007386506629813205 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.04733753204345703] value=0.000007937705107257275 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32049560546875, 0.04733848571777344] value=0.00000243037063317229 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204965591430664, 0.04733848571777344] value=0.0000030660253509905693 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204975128173828, 0.04733848571777344] value=0.0000036897411361159696 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204984664916992, 0.04733848571777344] value=0.000004300985487942926 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.3204994201660156, 0.04733848571777344] value=0.00000489920570743767 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050037384033203, 0.04733848571777344] value=0.000005483829156970724 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050132751464844, 0.04733848571777344] value=0.0000060542637221768005 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050228118896484, 0.04733848571777344] value=0.000006609898503450412 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=native node=[0.32050323486328125, 0.04733848571777344] value=0.000007150104765463756 absolute_error_upper=0.00000005 proved=true proposal_inputs=query_period_and_fixed_seed_only"
+      ],
+      "target_refusals": []
+    },
+    {
+      "name": "python-final",
+      "expected_exit_code": 0,
+      "status": {
+        "exit_code": 0,
+        "elapsed_s": 100.14222309994511,
+        "timed_out": false,
+        "timeout_s": 1200
+      },
+      "stdout_sha256": "a91b0c346f8a25b4daf391996e5dfd2666deb62a44e4edba6a01b6a146e80936",
+      "stdout_bytes": 135608,
+      "stderr_sha256": "841e7a8a12039a67fa6cb0300c1431d7cb554d8256423e1b2b98bb327adfaae6",
+      "stderr_bytes": 90144,
+      "results": [
+        "[NODE_GRID_STATUS145] name=python layout=Quintic nodes=81 within_requested_width=0 elapsed_s=69.628831",
+        "[CLOSED_COVER145] period=154 radius=0.999999 root_radius=0.9 root_width=0.05 initial_edges=128 minimum_clearance=0 elapsed_s=28.0623963 result=Ok(ClosedCover { edges: 182, winding: 1, curve_distance_lower: 1.7267611764929584e-7 })",
+        "[NODE_GRID_REFINED_STATUS145] name=python nodes=81 within_requested_width=81 elapsed_s=28.617075",
+        "[NODE_GRID_DYADIC_STATUS145] name=python nodes=81 certified_samples=45 quantum=0.0000000009313225746154785",
+        "[CERTIFIED_NODE_FIELD145] name=python jet=Jet { components: [1.7286813524266808e-7, 0.44851293132532233, 0.8937763483699265, -1333774.8510945442, 669312.0157704448, -335872.6666483152], nodal_error: [1.5000000000000045e-9, 0.19835219730814546, 0.22119586852365358, 53248036.90250805, 29249791.03810021, 47528748.527503625] } scope=ideal_nodal_reconstruction_uncertainty_only",
+        "[CERTIFIED_NODE_FIELD_DERIVATIVES145] name=python gradient_error=0.000000000027946644998166903 distance_scaled_hessian_error=0.00000000001890419019128 step=0.000000000007450580596923828",
+        "[NODE_FIELD_COST145] name=python queries=1000 elapsed_s=0.8714579 scope=polynomial_and_nodal_uncertainty_only",
+        "[HP_COMPONENT_STATUS145] name=python complete=true elapsed_s=99.9330734"
+      ],
+      "final_node_checks": [
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404653191566467] value=0.00000012729275142031932 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404653191566467] value=0.00000013071482913132614 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404653191566467] value=0.0000001340682174419486 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404653191566467] value=0.00000013735183265256247 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404653191566467] value=0.00000014056459157863972 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404653191566467] value=0.00000014370541277005752 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404653191566467] value=0.00000014677321778318864 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404653191566467] value=0.00000014976693250444294 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404653191566467] value=0.00000015268548852358952 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404653936624527] value=0.00000013388390242360022 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404653936624527] value=0.00000013734153403646081 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404653936624527] value=0.00000014073013581360837 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404653936624527] value=0.0000001440485954803334 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404653936624527] value=0.0000001472958006836317 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404653936624527] value=0.0000001504706402491212 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404653936624527] value=0.00000015357200549486488 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404653936624527] value=0.0000001565987916008302 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404653936624527] value=0.00000015954989903235274 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404654681682587] value=0.0000001404559350956421 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404654681682587] value=0.00000014394976436155176 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404654681682587] value=0.0000001473742292200251 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404654681682587] value=0.00000015072818799724234 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404654681682587] value=0.0000001540104982972399 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404654681682587] value=0.00000015722001829684144 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404654681682587] value=0.000000160355608101914 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404654681682587] value=0.00000016341613116376253 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404654681682587] value=0.00000016640045575408298 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404655426740646] value=0.00000014700824515614065 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404655426740646] value=0.00000015053892969312503 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404655426740646] value=0.00000015399992177994554 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404655426740646] value=0.0000001573900495021202 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404655426740646] value=0.000000160708139525151 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404655426740646] value=0.00000016395301842775508 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404655426740646] value=0.00000016712351410115698 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404655426740646] value=0.0000001702184572133542 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404655426740646] value=0.00000017323668273685243 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404656171798706] value=0.00000015354020447375814 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404656171798706] value=0.0000001571084159609712 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404656171798706] value=0.00000016060661419454389 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404656171798706] value=0.0000001640335961609583 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404656171798706] value=0.00000016738815667099303 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404656171798706] value=0.00000017066908973140372 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404656171798706] value=0.00000017387518998773138 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404656171798706] value=0.00000017700525423727858 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404656171798706] value=0.00000018005808301084577 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404656916856766] value=0.0000001600511599880845 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404656916856766] value=0.00000016365758434591745 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404656916856766] value=0.00000016719368264364837 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404656916856766] value=0.00000017065821989440723 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404656916856766] value=0.00000017404995811809421 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404656916856766] value=0.00000017736765775149195 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404656916856766] value=0.00000018061007913492837 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404656916856766] value=0.0000001837759840746831 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404656916856766] value=0.0000001868641374798491 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404657661914825] value=0.0000001665404325805446 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404657661914825] value=0.0000001701857701341073 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404657661914825] value=0.00000017376047762615267 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404657661914825] value=0.0000001772632872072827 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404657661914825] value=0.0000001806929271512321 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404657661914825] value=0.0000001840481233032068 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404657661914825] value=0.0000001873276006105705 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404657661914825] value=0.00000019053008473525405 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404657661914825] value=0.00000019365430374675214 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404658406972885] value=0.00000017300731589211137 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404658406972885] value=0.000000176692281515376 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404658406972885] value=0.00000018030632274193337 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404658406972885] value=0.00000018384813795712726 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404658406972885] value=0.0000001873164207151586 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404658406972885] value=0.00000019070986122522632 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404658406972885] value=0.0000001940271479262087 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404658406972885] value=0.00000019726696914947552 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404658406972885] value=0.00000020042801486888338 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937802195549, 0.06404659152030945] value=0.00000017945107508565374 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937876701355, 0.06404659152030945] value=0.0000001831763983232601 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565937951207161, 0.06404659152030945] value=0.00000018683051341251467 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938025712967, 0.06404659152030945] value=0.00000019041208405877507 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938100218773, 0.06404659152030945] value=0.0000001939197681065524 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938174724579, 0.06404659152030945] value=0.00000019735221906277851 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938249230385, 0.06404659152030945] value=0.00000020070808771522136 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938323736191, 0.06404659152030945] value=0.00000020398602384589519 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only",
+        "[NODE_GRID_CANDIDATE145] name=python node=[0.3565938398241997, 0.06404659152030945] value=0.00000020718467803874086 absolute_error_upper=0.0000000005 proved=true proposal_inputs=query_period_and_fixed_seed_only"
+      ],
+      "target_refusals": []
+    }
+  ],
+  "mutations": {
+    "stencil": [
+      {
+        "mutation": "stencil-origin",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "stencil-size",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "multistart",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "sample-query",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "sample-accuracy",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "declared-window",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "shared-value",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "shared-error",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "prefilter-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "derivative-factor",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "spatial-scaling",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "negative-interval",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nodal-propagation",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "point-proof": [
+      {
+        "mutation": "inclusive-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonstrict-trap",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "component": [
+      {
+        "mutation": "trap-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "affine-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-parameter-radius",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-multiplier-second-derivative",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-hessian-sign",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "curve-interior-orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-escape-cutoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "screen-point-binding",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "branch": [
+      {
+        "mutation": "self-inclusion",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "contraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "operation-roundoff",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "quadratic-remainder",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "remainder-transport",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-parameter-domain",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-c-identity",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "glue-cycle-phase",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-attraction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "segment-domain",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "cover": [
+      {
+        "mutation": "multi-query-refinement",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "multi-query-final-target",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "closed-parameter-path",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cycle-joins",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "reused-connector-separation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "reused-nonzero-winding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "orientation",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "region-budget",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-refinement",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-clearance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-construction",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-left",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "point-bridge-right",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-clearance",
+        "exit_code": 101,
+        "caught": true
+      }
+    ],
+    "bracket": [
+      {
+        "mutation": "candidate-lower",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "candidate-upper",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "dyadic-lower-bin",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "dyadic-upper-bin",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "outside-proof",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-distance",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "travel-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "subtraction-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "transport-interior",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "query-binding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "upper-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "mantissa-tail",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "sqrt-rounding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "cover-query-binding",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "requested-finite-width",
+        "exit_code": 101,
+        "caught": true
+      },
+      {
+        "mutation": "final-width",
+        "exit_code": 101,
+        "caught": true
+      }
+    ]
+  },
+  "test_output": "cargo test: 77 passed (2 suites, 0.77s)\n",
+  "production_crossings": "unchanged failures recorded in geometry-145-cover-reuse.json; no production source changed"
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "One fresh finite-contour preparation replacing the defective raster source; unchanged quintic evaluator and mechanical thresholds",
+  "preparation": {"origin": [-1.002, -0.702], "spacing": 0.0005, "shape": [3425, 2825]},
+  "source_preparation": {
+    "origin": [-1.002, -0.702], "spacing": 0.0005, "shape": [3425, 2825],
+    "reference_origin": [-2.1, -2.1], "reference_spacing": 0.002, "reference_shape": [2101, 2101],
+    "refinement": 16, "bisections": 8, "membership_iterations": 8192,
+    "max_membership_queries": 50000000, "max_reference_nodes": 5000000,
+    "max_segments": 500000, "maximum_coefficient_bytes": 80000000
+  },
+  "source_algorithm": "finite membership grid; refine mixed cells only; marching squares with center saddle resolution and fixed edge bisection; nearest segment BVH; signed samples as existing quintic coefficients",
+  "source_evidence": "measured approximation only; nonescape does not certify membership, homogeneous coarse cells may hide features, no true-distance upper bound or singularity certificate",
+  "coverage_policy": "prepare all coefficients before replay; new field and policy identities; fresh starts; no extensions or repairs after misses",
+  "acceptance": "same original mechanics, perturbations, parity tolerances and provisional cost targets; unchanged scalar audit sample generator and quality budget; all failures retained",
+  "shipping_adoption": false
+}

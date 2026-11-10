@@ -1,0 +1,807 @@
+{
+  "diagnostic_only": true,
+  "production_source_commit": "44015d8",
+  "energy_limit": 0.05,
+  "candidate_shipped": false,
+  "candidate_description": "Distance to uniform cubic B-spline pieces over connected contour vertices, analytic closest-point gradient/Hessian. Existing raw-field convergence and acceptance gates retained. Local derivative check passes all8; near-Shore energy still fails. Temporary implementation removed; experimental binaries held only under ignored tmp.",
+  "rows": [
+    {
+      "variant": "production",
+      "report": {
+        "controller_version": "orbit-controller/10",
+        "diagnostic_only": true,
+        "provider_version": "geometry-provider/6",
+        "rows": [
+          {
+            "case": "low_curvature",
+            "completed": 150,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.00021551608473235895,
+            "max_step_change": 1.784353842460007e-06,
+            "passed": true,
+            "steps": 150
+          },
+          {
+            "case": "low_curvature",
+            "completed": 300,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 9.905362025230957e-05,
+            "max_step_change": 4.569819529454122e-07,
+            "passed": true,
+            "steps": 300
+          },
+          {
+            "case": "low_curvature",
+            "completed": 600,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 4.1233982108979106e-05,
+            "max_step_change": 1.1978013270130816e-07,
+            "passed": true,
+            "steps": 600
+          },
+          {
+            "case": "high_curvature",
+            "completed": 150,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.00023396726068658502,
+            "max_step_change": 1.7328806651839557e-06,
+            "passed": true,
+            "steps": 150
+          },
+          {
+            "case": "high_curvature",
+            "completed": 300,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 0.00011923504213662284,
+            "max_step_change": 4.3402738181264056e-07,
+            "passed": true,
+            "steps": 300
+          },
+          {
+            "case": "high_curvature",
+            "completed": 600,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 6.18700413663742e-05,
+            "max_step_change": 1.0882690992808364e-07,
+            "passed": true,
+            "steps": 600
+          },
+          {
+            "case": "near_shore",
+            "completed": 100,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.021724498906376066,
+            "max_step_change": 0.02465116333709716,
+            "passed": true,
+            "steps": 100
+          },
+          {
+            "case": "near_shore",
+            "completed": 200,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 0.0224304214728428,
+            "max_step_change": 0.02447274849844039,
+            "passed": true,
+            "steps": 200
+          },
+          {
+            "case": "near_shore",
+            "completed": 400,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 0.02288633842000598,
+            "max_step_change": 0.02435451712070913,
+            "passed": true,
+            "steps": 400
+          },
+          {
+            "case": "inward",
+            "completed": 100,
+            "dt": 0.005,
+            "error": null,
+            "max_excursion": 0.0029482902419508683,
+            "max_step_change": 4.3381769926797986e-05,
+            "passed": true,
+            "steps": 100
+          },
+          {
+            "case": "inward",
+            "completed": 200,
+            "dt": 0.0025,
+            "error": null,
+            "max_excursion": 0.0014284124290926403,
+            "max_step_change": 1.057534006276839e-05,
+            "passed": true,
+            "steps": 200
+          },
+          {
+            "case": "inward",
+            "completed": 400,
+            "dt": 0.00125,
+            "error": null,
+            "max_excursion": 0.0006686324089018036,
+            "max_step_change": 2.505453520207368e-06,
+            "passed": true,
+            "steps": 400
+          }
+        ]
+      }
+    },
+    {
+      "variant": "rejected_fixed_curve",
+      "report": {
+        "controller_version": "orbit-controller/10",
+        "diagnostic_only": true,
+        "provider_version": "geometry-provider/6",
+        "rows": [
+          {
+            "case": "low_curvature",
+            "completed": 150,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.0007728552198795757,
+            "max_step_change": 0.0005417327798786786,
+            "passed": true,
+            "steps": 150
+          },
+          {
+            "case": "low_curvature",
+            "completed": 300,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 0.0006573422967801612,
+            "max_step_change": 0.0005413923096972972,
+            "passed": true,
+            "steps": 300
+          },
+          {
+            "case": "low_curvature",
+            "completed": 600,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 0.000599549027217039,
+            "max_step_change": 0.0005414768839071549,
+            "passed": true,
+            "steps": 600
+          },
+          {
+            "case": "high_curvature",
+            "completed": 150,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.00022957635953502198,
+            "max_step_change": 1.7308238320357106e-06,
+            "passed": true,
+            "steps": 150
+          },
+          {
+            "case": "high_curvature",
+            "completed": 300,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 0.00011478664187980492,
+            "max_step_change": 4.329278719961138e-07,
+            "passed": true,
+            "steps": 300
+          },
+          {
+            "case": "high_curvature",
+            "completed": 600,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 5.739292414674857e-05,
+            "max_step_change": 1.0825971852312932e-07,
+            "passed": true,
+            "steps": 600
+          },
+          {
+            "case": "near_shore",
+            "completed": 100,
+            "dt": 0.002,
+            "error": null,
+            "max_excursion": 0.2463685726887932,
+            "max_step_change": 0.14509968930966544,
+            "passed": false,
+            "steps": 100
+          },
+          {
+            "case": "near_shore",
+            "completed": 200,
+            "dt": 0.001,
+            "error": null,
+            "max_excursion": 0.24665181792138435,
+            "max_step_change": 0.14512849736497202,
+            "passed": false,
+            "steps": 200
+          },
+          {
+            "case": "near_shore",
+            "completed": 400,
+            "dt": 0.0005,
+            "error": null,
+            "max_excursion": 0.24679153268859144,
+            "max_step_change": 0.14514298233963174,
+            "passed": false,
+            "steps": 400
+          },
+          {
+            "case": "inward",
+            "completed": 100,
+            "dt": 0.005,
+            "error": null,
+            "max_excursion": 0.003029976973395909,
+            "max_step_change": 4.4359629704393555e-05,
+            "passed": true,
+            "steps": 100
+          },
+          {
+            "case": "inward",
+            "completed": 200,
+            "dt": 0.0025,
+            "error": null,
+            "max_excursion": 0.0015147778775259635,
+            "max_step_change": 1.109873024240926e-05,
+            "passed": true,
+            "steps": 200
+          },
+          {
+            "case": "inward",
+            "completed": 400,
+            "dt": 0.00125,
+            "error": null,
+            "max_excursion": 0.0007573361111063992,
+            "max_step_change": 2.775773431329398e-06,
+            "passed": true,
+            "steps": 400
+          }
+        ]
+      }
+    }
+  ],
+  "candidate_helper_sha256": "4cefea3dbd54b2fec3fabb9c75af9dccc56d7f100247c8de3b0c1b2b1bdfe0de",
+  "experimental_version_stamp_note": "Unshipped experimental binaries retain the baseline provider/controller stamps for comparison; this is not a release of changed geometry.",
+  "rejected_curve_peak_report": {
+    "controller_version": "orbit-controller/10",
+    "diagnostic_only": true,
+    "limit": 0.05,
+    "provider_version": "geometry-provider/6",
+    "rows": [
+      {
+        "case": "near_shore",
+        "completed": 100,
+        "dt": 0.002,
+        "error": null,
+        "max_excursion": 0.2463685726887932,
+        "max_step_change": 0.14509968930966544,
+        "passed": false,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.30013206446726565,
+              0.05326124224364175
+            ],
+            "jet": {
+              "D": -0.019373397004455645,
+              "estimated_error": 0.0001419787812834292,
+              "grad_D": [
+                0.7763841991023523,
+                -0.6302599268430438
+              ],
+              "hessian_D": [
+                [
+                  -19.47435280166237,
+                  -23.989435404355927
+                ],
+                [
+                  -23.989435404355927,
+                  -29.55132922161297
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.001937365508860553,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0019336303704269584,
+              0.023441908694468525
+            ]
+          },
+          "before": {
+            "c": [
+              0.3001281972065248,
+              0.053214358426252814
+            ],
+            "jet": {
+              "D": -0.01934356170283924,
+              "estimated_error": 5.734449627574703e-05,
+              "grad_D": [
+                0.7119637650905829,
+                -0.7022162040269658
+              ],
+              "hessian_D": [
+                [
+                  -25.02755552825768,
+                  -25.37496651704681
+                ],
+                [
+                  -25.37496651704681,
+                  -25.727199966223463
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.001934382018505003,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0019003368439426452,
+              0.023395967504483348
+            ]
+          }
+        },
+        "steps": 100
+      },
+      {
+        "case": "near_shore",
+        "completed": 200,
+        "dt": 0.001,
+        "error": null,
+        "max_excursion": 0.24665181792138435,
+        "max_step_change": 0.14512849736497202,
+        "passed": false,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3001314570404637,
+              0.05325949661920599
+            ],
+            "jet": {
+              "D": -0.01937276847795448,
+              "estimated_error": 0.00014198686872243525,
+              "grad_D": [
+                0.7764379042319024,
+                -0.6301937645454541
+              ],
+              "hessian_D": [
+                [
+                  -19.471230437881076,
+                  -23.989766647261675
+                ],
+                [
+                  -23.989766647261675,
+                  -29.556884225992313
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019373026570477488,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0019380531849159646,
+              0.023441882430420093
+            ]
+          },
+          "before": {
+            "c": [
+              0.30012951898727874,
+              0.05323605473677557
+            ],
+            "jet": {
+              "D": -0.019357862943308303,
+              "estimated_error": 5.779477065734687e-05,
+              "grad_D": [
+                0.7113803512518944,
+                -0.7028072252422648
+              ],
+              "hessian_D": [
+                [
+                  -25.048726839508877,
+                  -25.35428131285948
+                ],
+                [
+                  -25.35428131285948,
+                  -25.6635630629209
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019358121234559638,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0019213621814751424,
+              0.02341889691907807
+            ]
+          }
+        },
+        "steps": 200
+      },
+      {
+        "case": "near_shore",
+        "completed": 400,
+        "dt": 0.0005,
+        "error": null,
+        "max_excursion": 0.24679153268859144,
+        "max_step_change": 0.14514298233963174,
+        "passed": false,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.30013115073282787,
+              0.053258625399966245
+            ],
+            "jet": {
+              "D": -0.019372457288413733,
+              "estimated_error": 0.0001419908947204478,
+              "grad_D": [
+                0.7764647685953546,
+                -0.6301606645373563
+              ],
+              "hessian_D": [
+                [
+                  -19.469665134299753,
+                  -23.989928099101345
+                ],
+                [
+                  -23.989928099101345,
+                  -29.55965838293558
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019372715385082555,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.001940255458943045,
+              0.02344188181730735
+            ]
+          },
+          "before": {
+            "c": [
+              0.3001301806050984,
+              0.05324690445905759
+            ],
+            "jet": {
+              "D": -0.01936501924195233,
+              "estimated_error": 5.8014525541095346e-05,
+              "grad_D": [
+                0.7110887444151968,
+                -0.7031022667905565
+              ],
+              "hessian_D": [
+                [
+                  -25.059264059098883,
+                  -25.343910064596063
+                ],
+                [
+                  -25.343910064596063,
+                  -25.631789339364616
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019365277437753997,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0019318988577726752,
+              0.02343038533322211
+            ]
+          }
+        },
+        "steps": 400
+      }
+    ]
+  },
+  "peak_analysis": [
+    {
+      "dt": 0.002,
+      "same_level": true,
+      "same_tile_id": true,
+      "position_displacement": 4.70430445294221e-05,
+      "inferred_nearest_foot_displacement": 0.001907152625818539,
+      "gradient_angle_degrees": 5.535779829512414
+    },
+    {
+      "dt": 0.001,
+      "same_level": true,
+      "same_tile_id": true,
+      "position_displacement": 2.3521860088633443e-05,
+      "inferred_nearest_foot_displacement": 0.0019067667538989485,
+      "gradient_angle_degrees": 5.588244657500355
+    },
+    {
+      "dt": 0.0005,
+      "same_level": true,
+      "same_tile_id": true,
+      "position_displacement": 1.1761020516763191e-05,
+      "inferred_nearest_foot_displacement": 0.001906573272983099,
+      "gradient_angle_degrees": 5.61445518589544
+    }
+  ],
+  "attribution": "The rejected curve peak stays at the same resolution and tile ID. Its closest-foot branch changes, inferred from foot=c-D*gradD with the unit gradient of this experimental signed-distance model. This does not attribute every production energy defect to the same cause.",
+  "production_peak_report": {
+    "controller_version": "orbit-controller/10",
+    "diagnostic_only": true,
+    "limit": 0.05,
+    "provider_version": "geometry-provider/6",
+    "rows": [
+      {
+        "case": "near_shore",
+        "completed": 100,
+        "dt": 0.002,
+        "error": null,
+        "max_excursion": 0.021724498906376066,
+        "max_step_change": 0.02465116333709716,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3000744092720251,
+              0.053529459766253666
+            ],
+            "jet": {
+              "D": -0.019553464794702043,
+              "estimated_error": 0.00029080628651329335,
+              "grad_D": [
+                0.7355438625484225,
+                -0.6758038383232308
+              ],
+              "hessian_D": [
+                [
+                  0.5031096713805141,
+                  1.8001758996851436
+                ],
+                [
+                  1.8001758996851436,
+                  1.2884536652717884
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.00195537205021871,
+              "resolved_scale": 0.0009765625,
+              "singularity": "none",
+              "tile_id": "scale-aware:7:38:6:9.77e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0009229826111937736,
+              0.02489680109632758
+            ]
+          },
+          "before": {
+            "c": [
+              0.3000725633068027,
+              0.05347966616406101
+            ],
+            "jet": {
+              "D": -0.01951772778831844,
+              "estimated_error": 6.0933551431302524e-05,
+              "grad_D": [
+                0.7449768733041233,
+                -0.66471197804408
+              ],
+              "hessian_D": [
+                [
+                  6.099865628537145,
+                  8.38801690986918
+                ],
+                [
+                  8.38801690986918,
+                  6.546127851140909
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019517983963998377,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.000909872623913005,
+              0.024825359950873035
+            ]
+          }
+        },
+        "steps": 100
+      },
+      {
+        "case": "near_shore",
+        "completed": 200,
+        "dt": 0.001,
+        "error": null,
+        "max_excursion": 0.0224304214728428,
+        "max_step_change": 0.02447274849844039,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3000730727362055,
+              0.05350253809388096
+            ],
+            "jet": {
+              "D": -0.019536076346143225,
+              "estimated_error": 0.0002969974366274601,
+              "grad_D": [
+                0.735426080410644,
+                -0.6758469218359924
+              ],
+              "hessian_D": [
+                [
+                  0.3920135288515212,
+                  1.7449141752431103
+                ],
+                [
+                  1.7449141752431103,
+                  1.194455095458295
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019536332281222513,
+              "resolved_scale": 0.0009765625,
+              "singularity": "none",
+              "tile_id": "scale-aware:7:38:6:9.77e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0009174905131603187,
+              0.02486685905234464
+            ]
+          },
+          "before": {
+            "c": [
+              0.3000721552456923,
+              0.05347767123482862
+            ],
+            "jet": {
+              "D": -0.019516715636221885,
+              "estimated_error": 6.089960403803801e-05,
+              "grad_D": [
+                0.7449617962824999,
+                -0.6647177470152291
+              ],
+              "hessian_D": [
+                [
+                  6.106744051371379,
+                  8.415843702253937
+                ],
+                [
+                  8.415843702253937,
+                  6.556185308389104
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019516971825187118,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0009109311847220785,
+              0.02483112104607939
+            ]
+          }
+        },
+        "steps": 200
+      },
+      {
+        "case": "near_shore",
+        "completed": 400,
+        "dt": 0.0005,
+        "error": null,
+        "max_excursion": 0.02288633842000598,
+        "max_step_change": 0.02435451712070913,
+        "passed": true,
+        "peak_transition": {
+          "after": {
+            "c": [
+              0.3000728655316197,
+              0.05350153585945869
+            ],
+            "jet": {
+              "D": -0.01953554443577268,
+              "estimated_error": 0.0002972549336971858,
+              "grad_D": [
+                0.7354211435272358,
+                -0.6758486884844588
+              ],
+              "hessian_D": [
+                [
+                  0.387337796069005,
+                  1.7425994574153094
+                ],
+                [
+                  1.7425994574153094,
+                  1.1904888016936752
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.001953580037782043,
+              "resolved_scale": 0.0009765625,
+              "singularity": "none",
+              "tile_id": "scale-aware:7:38:6:9.77e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0009180349878962808,
+              0.02486977579029575
+            ]
+          },
+          "before": {
+            "c": [
+              0.30007240651412576,
+              0.05348910097156354
+            ],
+            "jet": {
+              "D": -0.0195240803174118,
+              "estimated_error": 6.106365434430105e-05,
+              "grad_D": [
+                0.7450359206266954,
+                -0.6646898823243441
+              ],
+              "hessian_D": [
+                [
+                  6.072237410479147,
+                  8.2779238698879
+                ],
+                [
+                  8.2779238698879,
+                  6.506120760797785
+                ]
+              ],
+              "is_bridge": false,
+              "provider_version": "geometry-provider/6",
+              "requested_scale": 0.0019524336409741227,
+              "resolved_scale": 0.00048828125,
+              "singularity": "none",
+              "tile_id": "scale-aware:8:76:13:4.88e-4",
+              "validity": "regular"
+            },
+            "v": [
+              0.0009147380539400617,
+              0.024851896695927085
+            ]
+          }
+        },
+        "steps": 400
+      }
+    ]
+  },
+  "unchanged_matching_public_query_jets": 52
+}

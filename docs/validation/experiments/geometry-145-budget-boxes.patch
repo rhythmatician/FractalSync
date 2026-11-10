@@ -1,0 +1,162 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -440,9 +440,9 @@
+     let core_stride = DYADIC_CORE_CELLS as f64 * h;
+     let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+     let tile_im0 = core_iy as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+-    // These boxes have no contour at any membership budget. Avoid constructing
++    // These boxes have no contour at or above the minimum budget. Avoid constructing
+     // 3,249 point orbits, and retain the LRU for tiles that carry geometry.
+-    if uniform_box::membership(tile_re0, tile_im0, DYADIC_TILE_CELLS as f64 * h).is_some() {
++    if uniform_box::membership_with_budget(tile_re0, tile_im0, DYADIC_TILE_CELLS as f64 * h, budget).is_some() {
+         return Some(ShoreTile {
+             k,
+             h,
+@@ -1856,7 +1856,7 @@
+             let im0 = origin(y0, base.1);
+             let width = (x1 - x0 + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
+             let height = (y1 - y0 + 1) as f64 * DYADIC_TILE_CELLS as f64 * h;
+-            if uniform_box::membership(re0, im0, width.max(height)).is_some() {
++            if uniform_box::membership_with_budget(re0, im0, width.max(height), dyadic_n0(k)).is_some() {
+                 continue;
+             }
+             if x0 == x1 && y0 == y1 {
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -7,13 +7,13 @@
+ /// overestimate the orbit enclosure, which costs work but cannot hide a Shore.
+ 
+ struct BoxMemo {
+- map:std::collections::HashMap<(u64,u64,u64),Option<bool>>,
+- order:std::collections::VecDeque<(u64,u64,u64)>,capacity:usize,
++ map:std::collections::HashMap<(u64,u64,u64,usize),Option<bool>>,
++ order:std::collections::VecDeque<(u64,u64,u64,usize)>,capacity:usize,
+ }
+ impl BoxMemo {
+  fn new(capacity:usize)->Self {assert!(capacity>0);Self{map:std::collections::HashMap::new(),order:std::collections::VecDeque::new(),capacity}}
+- fn get(&self,key:&(u64,u64,u64))->Option<Option<bool>> {self.map.get(key).copied()}
+- fn insert(&mut self,key:(u64,u64,u64),value:Option<bool>) {
++ fn get(&self,key:&(u64,u64,u64,usize))->Option<Option<bool>> {self.map.get(key).copied()}
++ fn insert(&mut self,key:(u64,u64,u64,usize),value:Option<bool>) {
+   if let Some(entry)=self.map.get_mut(&key) {*entry=value;return;}
+   if self.map.len()>=self.capacity {if let Some(old)=self.order.pop_front(){self.map.remove(&old);}}
+   self.order.push_back(key);self.map.insert(key,value);
+@@ -25,15 +25,23 @@
+ pub(super) fn membership(re0:f64,im0:f64,width:f64)->Option<bool> {
+     membership_using(re0,im0,width,Some(&*BOX_CACHE))
+ }
++pub(super) fn membership_with_budget(re0:f64,im0:f64,width:f64,minimum_budget:usize)->Option<bool> {
++ membership_using_budget(re0,im0,width,minimum_budget,Some(&*BOX_CACHE))
++}
+ fn membership_using(re0:f64,im0:f64,width:f64,cache:Option<&BoxCache>)->Option<bool> {
++ membership_using_budget(re0,im0,width,512,cache)
++}
++fn membership_using_budget(re0:f64,im0:f64,width:f64,minimum_budget:usize,cache:Option<&BoxCache>)->Option<bool> {
++ if !(512..=32768).contains(&minimum_budget) {return None;}
++
+     if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width<0. {return None;}
+-    let key=(re0.to_bits(),im0.to_bits(),width.to_bits());
++    let key=(re0.to_bits(),im0.to_bits(),width.to_bits(),minimum_budget);
+     if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {if let Some(result)=guard.get(&key) {return result;}}}
+-    let result=membership_uncached(re0,im0,width);
++    let result=membership_uncached_at_budget(re0,im0,width,minimum_budget);
+     if let Some(cache)=cache {if let Ok(mut guard)=cache.write() {guard.insert(key,result);}}
+     result
+ }
+-fn membership_uncached(re0: f64, im0: f64, width: f64) -> Option<bool> {
++fn membership_uncached_at_budget(re0: f64, im0: f64, width: f64, minimum_budget:usize) -> Option<bool> {
+     if !re0.is_finite() || !im0.is_finite() || !width.is_finite() || width < 0.0 {
+         return None;
+     }
+@@ -65,13 +73,13 @@
+         zr = next_re;
+         zi = next_im;
+         if !zr.finite() || !zi.finite() {
+-            return disk_membership(re, im).or_else(||affine_membership(re,im));
++            return disk_membership(re, im).or_else(||affine_membership_at_budget(re,im,minimum_budget));
+         }
+         if zr.square().add(zi.square()).lo > 4.0 {
+             return Some(false);
+         }
+     }
+-    disk_membership(re, im).or_else(||affine_membership(re,im))
++    disk_membership(re, im).or_else(||affine_membership_at_budget(re,im,minimum_budget))
+ }
+ 
+ fn upper_add(a: f64, b: f64) -> f64 {
+@@ -272,6 +280,9 @@
+ }
+ 
+ fn affine_membership(re:Interval, im:Interval)->Option<bool> {
++ affine_membership_at_budget(re,im,512)
++}
++fn affine_membership_at_budget(re:Interval,im:Interval,minimum_budget:usize)->Option<bool> {
+  let c=[re.lo+(re.hi-re.lo)*0.5,im.lo+(im.hi-im.lo)*0.5];
+  if !c.iter().all(|x|x.is_finite()) {return None;}
+  let cr=norm_upper([(re.lo-c[0]).abs().max((re.hi-c[0]).abs()).next_up(),
+@@ -299,16 +310,16 @@
+   radius=upper_add(upper_mul(norm_upper(d),cr),remainder);
+   if !radius.is_finite() || radius>4. || !z.iter().all(|x|x.is_finite()) {return None;}
+   let low=p(z[0]).square().add(p(z[1]).square()).lo.max(0.).sqrt().next_down();
+-  // The ordinary 512-update query checks escape before each update.
+-  if n<512 && (low-radius).next_down()>2. {return Some(false);}
++  // Ordinary queries check escape before each update; the tile supplies its minimum budget.
++  if n<minimum_budget && (low-radius).next_down()>2. {return Some(false);}
+   all_bounded &= Ball{z,radius}.bounded();
+   centers.push(z);
+   if n>=512 {
+-   // Exterior semantics remain limited to the minimum ordinary budget.
+-   // Additional prefix work may prove interior only, with every earlier
++   // Exterior certificates apply only below this tile's minimum ordinary budget.
++   // Beyond that minimum, additional work proves interior only, with every earlier
+    // enclosure bounded and the same strict periodic-return certificate.
+-   if !all_bounded {return None;}
+-   if n.is_power_of_two() {
++   if !all_bounded && n>=minimum_budget {return None;}
++   if all_bounded && n.is_power_of_two() {
+     if let Some(result)=periodic_trap(z,radius,&centers,c,cr) {return Some(result);}
+    }
+   }
+@@ -413,6 +424,39 @@
+  #[test] fn uncertain_boxes_are_retained_as_uncertain_cache_entries() {
+   let cache=super::super::RwLock::new(BoxMemo::new(1));
+   assert_eq!(membership_using(0.25,0.,0.,Some(&cache)),None);
+-  assert_eq!(cache.write().unwrap().get(&(0.25f64.to_bits(),0f64.to_bits(),0f64.to_bits())),Some(None));
+- }
+-}
++  assert_eq!(cache.write().unwrap().get(&(0.25f64.to_bits(),0f64.to_bits(),0f64.to_bits(),512)),Some(None));
++ }
++}
++
++#[cfg(test)] mod budget_tests {
++ use super::*;
++ #[test] fn minimum_budget_preserves_the_preupdate_escape_cutoff_and_cache_partition() {
++  let cache=super::super::RwLock::new(BoxMemo::new(8));
++  for (escape,c) in [(512usize,0.25003736342837773),(513,0.2500372184543587)] {
++   let point=num_complex::Complex64::new(c,0.);
++   assert!(crate::visual_metrics::mandelbrot_membership(point,escape));
++   assert!(!crate::visual_metrics::mandelbrot_membership(point,escape+1));
++   for _ in 0..2 {
++    assert_eq!(membership_using_budget(c,0.,0.,escape+1,Some(&cache)),Some(false));
++    assert_eq!(membership_using_budget(c,0.,0.,escape,Some(&cache)),None);
++   }
++  }
++ }
++ #[test] fn invalid_minimum_budgets_cannot_supply_certificates() {
++  for budget in [0,1,511,32769,usize::MAX] {assert_eq!(membership_with_budget(0.,0.,0.,budget),None);}
++ }
++ #[test] fn accepted_fine_budget_boxes_match_independent_ordinary_nodes() {
++  for budget in [512,1024,2240,32768] {
++   let mut accepted=0;
++   for y in -4..=4 {for x in -8..=4 {
++    let re=x as f64/4.;let im=y as f64/4.;let width=1./128.;
++    let Some(expected)=membership_with_budget(re,im,width,budget) else {continue;};accepted+=1;
++    for (dx,dy) in [(0.,0.),(1.,0.),(0.,1.),(1.,1.),(0.5,0.5)] {
++     let point=num_complex::Complex64::new(re+dx*width,im+dy*width);
++     for n in [budget,32768] {assert_eq!(crate::visual_metrics::mandelbrot_membership(point,n),expected);}
++    }
++   }}
++   assert!(accepted>50);
++  }
++ }
++}

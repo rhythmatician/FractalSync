@@ -1,0 +1,102 @@
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -284,9 +284,99 @@
+     best
+ }
+
++/// Numerical witness candidates only. None is exterior until a separate
++/// outward critical-orbit proof succeeds at its exact represented parameter.
++fn endpoint_distance_upper(query: C, point: C) -> Option<f64> {
++    if !finite(query) || !finite(point) {
++        return None;
++    }
++    let re =
++        super::interval::Interval::point(point.re).sub(super::interval::Interval::point(query.re));
++    let im =
++        super::interval::Interval::point(point.im).sub(super::interval::Interval::point(query.im));
++    let upper = re.square().add(im.square()).hi.sqrt().next_up();
++    (upper.is_finite() && upper > 0.).then_some(upper)
++}
++pub(super) fn witness_candidates(query: C, error: f64) -> Option<Vec<(C, f64, usize)>> {
++    if !finite(query) || !error.is_finite() || error <= 0. {
++        return None;
++    }
++    let p = propose(query)?;
++    let direction = (p.boundary - query) / p.distance;
++    let mut candidates = Vec::new();
++    let mut seen = std::collections::BTreeSet::new();
++    for fraction in [0.25, 0.5, 0.75, 0.95] {
++        for k in -40..=40 {
++            let point =
++                query + direction * C::from_polar(p.distance + error * fraction, k as f64 * 0.005);
++            if !seen.insert((point.re.to_bits(), point.im.to_bits())) {
++                continue;
++            }
++            let Some(upper) = endpoint_distance_upper(query, point) else {
++                continue;
++            };
++            if !(finite(point)
++                && upper.is_finite()
++                && upper > 0.
++                && upper <= (p.distance + error).next_down())
++            {
++                continue;
++            }
++            let mut orbit = crate::visual_metrics::MembershipOrbit::new(point);
++            if orbit.inside_at(32768) {
++                continue;
++            }
++            // Rank only. A floating escape cannot issue an exterior certificate.
++            let (mut lo, mut hi) = (0usize, 32768usize);
++            while hi - lo > 1 {
++                let middle = lo + (hi - lo) / 2;
++                if orbit.inside_at(middle) {
++                    lo = middle;
++                } else {
++                    hi = middle;
++                }
++            }
++            candidates.push((point, upper, hi - 1));
++        }
++    }
++    candidates.sort_by(|a, b| {
++        a.2.cmp(&b.2)
++            .then_with(|| a.1.total_cmp(&b.1))
++            .then_with(|| a.0.re.total_cmp(&b.0.re))
++            .then_with(|| a.0.im.total_cmp(&b.0.im))
++    });
++    candidates.truncate(32);
++    (!candidates.is_empty()).then_some(candidates)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn witness_candidates_preserve_upper_windows_and_shared_escape_budgets() {
++        for (query, error) in [
++            (C::new(0.32049988639807619, 0.04733531447355364), 5e-8),
++            (C::new(0.35659381055433242, 0.06404656757776669), 5e-10),
++        ] {
++            let distance = propose(query).unwrap().distance;
++            let candidates = witness_candidates(query, error).unwrap();
++            assert!(!candidates.is_empty() && candidates.len() <= 32);
++            let mut previous = 0;
++            for (point, upper, update) in candidates {
++                assert!(upper <= (distance + error).next_down());
++                assert!(update >= previous && update < 32768);
++                previous = update;
++                assert!(crate::visual_metrics::mandelbrot_membership(point, update));
++                assert!(!crate::visual_metrics::mandelbrot_membership(
++                    point,
++                    update + 1
++                ));
++            }
++        }
++        for error in [0., -1., f64::NAN, f64::INFINITY] {
++            assert!(witness_candidates(C::new(0.3, 0.), error).is_none());
++        }
++    }
+     #[test]
+     fn shared_closed_curves_meet_all_original_node_lower_windows() {
+         for (index, group) in cases::CERTIFIED_NODES.chunks_exact(81).enumerate() {

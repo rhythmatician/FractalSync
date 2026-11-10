@@ -1,0 +1,496 @@
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1777,7 +1777,16 @@
+ fn component_level(c:Complex64,epsilon:f64,k:u32,h:f64)->Option<FittedJet> {
+  let d0=bounded_component_distance(c)?;
+  let samples:Option<Vec<_>>=distance_stencil(c,h).map(bounded_component_sample).collect();
+- let samples=samples?;
++ fit_enclosed_level(c,epsilon,k,h,d0,samples?,"component")
++}
++
++fn covered_level(c:Complex64,epsilon:f64,k:u32,error:f64)->Option<(FittedJet,bool)> {
++ let samples=periodic_boundary::sample_field(c,k,error)?;
++ let fitted=fit_enclosed_level(c,epsilon,k,dyadic_h(k),samples.reference,samples.nodes,"covered")?;
++ Some((fitted,samples.direction_agrees))
++}
++
++fn fit_enclosed_level(c:Complex64,epsilon:f64,k:u32,h:f64,d0:f64,samples:Vec<NodalSample>,kind:&str)->Option<FittedJet> {
+  let range=field_enclosure(c,h,&samples)?;
+  let stencil:Vec<_>=distance_stencil(c,h).zip(&samples).map(|(p,s)|(p.re-c.re,p.im-c.im,s.value)).collect();
+  let center:Vec<_>=(1..8).flat_map(|y|(1..8).map(move|x|(y,x))).map(|(y,x)|stencil[y*9+x]).collect();
+@@ -1787,7 +1796,7 @@
+  let mut jet=failure_jet(field.d,h,GeometryValidity::Regular,SingularityKind::None);
+  jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms.max(1e-13);
+  jet.requested_scale=GEOMETRY_SCALE_ALPHA*(field.d*field.d+epsilon*epsilon).sqrt();
+- jet.tile_id=format!("component:{k}");jet.is_bridge=false;
++ jet.tile_id=format!("{kind}:{k}");jet.is_bridge=false;
+  Some(FittedJet{range,size_bound:f64::INFINITY,nodes_certified:true,detail,jet,fit_rms:rms,stencil})
+ }
+
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary.rs b/runtime-core/src/geometry_provider/periodic_boundary.rs
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -5,6 +5,8 @@
+ mod complex_ball;
+ mod point_proof;
+ mod certified;
++mod tiles;
++pub(super) use tiles::sample_field;
+ #[path = "periodic_boundary_cases.rs"]
+ #[cfg(test)]
+ mod cases;
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+--- a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+@@ -5,6 +5,7 @@
+ use super::{
+     branch::cover, endpoint_distance_upper, finite, point_proof, propose, witness_candidates, C,
+ };
++use std::sync::Arc;
+
+ const MAX_TARGETS: usize = 17 * 17;
+
+@@ -16,6 +17,12 @@
+     sample: NodalSample,
+     upper: f64,
+     axis: C,
++    witness: Arc<ExteriorWitness>,
++}
++
++struct ExteriorWitness {
++    point: C,
++    _proof: point_proof::EscapeProof,
+ }
+
+ impl DistanceCover {
+@@ -60,21 +67,52 @@
+         }
+         // Floating membership only ranks candidates. A fresh directed proof at
+         // the exact represented endpoint is the sole exterior authority.
+-        let mut upper = None;
++        let mut witness = None;
+         'search: for window in [error * 0.25, error] {
+             let Some(candidates) = witness_candidates(query, window) else {
+                 continue;
+             };
+             for (point, _, _) in candidates {
+                 for precision in [128, 256] {
+-                    if point_proof::escape([point.re, point.im], precision, 32768).is_some() {
+-                        upper = endpoint_distance_upper(query, point);
++                    if let Some(proof) = point_proof::escape([point.re, point.im], precision, 32768)
++                    {
++                        witness = Some(Arc::new(ExteriorWitness {
++                            point,
++                            _proof: proof,
++                        }));
+                         break 'search;
+                     }
+                 }
+             }
+         }
+-        let upper = upper?;
++        Self::finish(query, error, proposal, lower, witness?)
++    }
++
++    pub(super) fn sample_reusing(
++        &self,
++        query: C,
++        error: f64,
++        donor: &CertifiedNode,
++    ) -> Option<CertifiedNode> {
++        if !finite(query) || !error.is_finite() || error <= 0. {
++            return None;
++        }
++        let proposal = propose(query)?;
++        let lower = self.curve.clearance(query).ok()?.lower();
++        Self::finish(query, error, proposal, lower, donor.witness.clone())
++    }
++
++    fn finish(
++        query: C,
++        error: f64,
++        proposal: super::Proposal,
++        lower: f64,
++        witness: Arc<ExteriorWitness>,
++    ) -> Option<CertifiedNode> {
++        let upper = endpoint_distance_upper(query, witness.point)?;
++        if lower < (proposal.distance - error).next_up() {
++            return None;
++        }
+         if lower > upper || upper > (proposal.distance + error).next_down() {
+             return None;
+         }
+@@ -91,6 +129,7 @@
+             sample,
+             upper,
+             axis: proposal.boundary - query,
++            witness,
+         })
+     }
+
+@@ -150,8 +189,8 @@
+             let targets: Vec<_> = super::super::super::distance_stencil(query, h)
+                 .map(|point| (point, error))
+                 .collect();
+-            let cover = DistanceCover::build(targets[40].0, &targets)
+-                .expect("closed attracting cover");
++            let cover =
++                DistanceCover::build(targets[40].0, &targets).expect("closed attracting cover");
+             let node = cover
+                 .sample(query, error)
+                 .expect("two-sided runtime-owned proof");
+@@ -160,12 +199,22 @@
+                 (-propose(query).unwrap().distance).to_bits()
+             );
+             assert_eq!(node.sample().query, query);
++            let reused = cover.sample_reusing(query, error, &node).unwrap();
++            assert!(Arc::ptr_eq(&reused.witness, &node.witness));
++            assert_eq!(
++                reused.sample().value.to_bits(),
++                node.sample().value.to_bits()
++            );
++            assert_eq!(reused.upper.to_bits(), node.upper.to_bits());
++            assert!(cover.sample_reusing(query, error * 1e-6, &node).is_none());
++            assert!(cover.sample_reusing(C::new(2., 0.), error, &node).is_none());
+             let refinement = (0..=4)
+                 .find(|&level| cover.direction_agrees(&node, h * 2f64.powi(-level)))
+                 .expect("bounded spatial refinement resolves direction coverage");
+             assert!(cover.sample(C::new(2., 0.), error).is_none());
+             for invalid in [0., -1., f64::NAN, f64::INFINITY] {
+                 assert!(cover.sample(query, invalid).is_none());
++                assert!(cover.sample_reusing(query, invalid, &node).is_none());
+                 assert!(!cover.direction_agrees(&node, invalid));
+             }
+             eprintln!(
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+new file mode 100644
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+@@ -0,0 +1,326 @@
++//! Bounded reuse of covers and their coordinate-owned nodal certificates.
++use super::super::{distance_stencil, dyadic_h, LruCache, NodalSample, DYADIC_CORE_CELLS};
++use super::{
++    certified::{CertifiedNode, DistanceCover},
++    C,
++};
++use once_cell::sync::Lazy;
++use std::collections::HashMap;
++use std::sync::{Arc, Mutex, RwLock};
++
++const TILE_CAPACITY: usize = 64;
++const NODE_SIDE: usize = DYADIC_CORE_CELLS + 8;
++const NODE_CAPACITY: usize = NODE_SIDE * NODE_SIDE;
++type Key = (u32, i64, i64, u64);
++type TileCache = RwLock<LruCache<Key, Arc<Mutex<Tile>>>>;
++static TILES: Lazy<TileCache> = Lazy::new(|| RwLock::new(LruCache::new(TILE_CAPACITY)));
++
++struct Tile {
++    cover: DistanceCover,
++    targets: Vec<C>,
++    nodes: HashMap<(u64, u64), CertifiedNode>,
++}
++
++pub(in super::super) struct CertifiedField {
++    pub(in super::super) nodes: Vec<NodalSample>,
++    pub(in super::super) reference: f64,
++    pub(in super::super) direction_agrees: bool,
++}
++
++fn key(query: C, k: u32, error: f64) -> Option<Key> {
++    if k > 32
++        || !query.re.is_finite()
++        || !query.im.is_finite()
++        || query.re.abs() >= 2.
++        || query.im.abs() >= 2.
++        || !error.is_finite()
++        || error <= 0.
++    {
++        return None;
++    }
++    let stride = DYADIC_CORE_CELLS as f64 * dyadic_h(k);
++    Some((
++        k,
++        (query.re / stride).floor() as i64,
++        (query.im / stride).floor() as i64,
++        error.to_bits(),
++    ))
++}
++
++impl Tile {
++    fn new(key: Key) -> Option<Self> {
++        let (k, ix, iy, error) = key;
++        let h = dyadic_h(k);
++        let error = f64::from_bits(error);
++        let origin = C::new(
++            ix as f64 * DYADIC_CORE_CELLS as f64 * h,
++            iy as f64 * DYADIC_CORE_CELLS as f64 * h,
++        );
++        let targets: Vec<_> = (0..NODE_SIDE)
++            .flat_map(|y| {
++                (0..NODE_SIDE)
++                    .map(move |x| origin + C::new((x as f64 - 4.) * h, (y as f64 - 4.) * h))
++            })
++            .collect();
++        // Every construction from this key uses the same lattice and seed.
++        // Nodes with no numerical proposal remain unavailable, never proved.
++        let usable: Vec<_> = targets
++            .iter()
++            .copied()
++            .filter(|&q| super::propose(q).is_some())
++            .collect();
++        let midpoint = origin + C::new(4. * h, 4. * h);
++        let center = *usable.iter().min_by(|a, b| {
++            (**a - midpoint)
++                .norm_sqr()
++                .total_cmp(&(**b - midpoint).norm_sqr())
++                .then_with(|| a.re.total_cmp(&b.re))
++                .then_with(|| a.im.total_cmp(&b.im))
++        })?;
++        let cover = DistanceCover::build(
++            center,
++            &usable.iter().map(|&q| (q, error)).collect::<Vec<_>>(),
++        )?;
++        Some(Self {
++            cover,
++            targets,
++            nodes: HashMap::new(),
++        })
++    }
++
++    fn field(&mut self, query: C, h: f64, error: f64, targets: &[C]) -> Option<CertifiedField> {
++        if targets.iter().any(|q| !self.targets.contains(q)) {
++            return None;
++        }
++        let mut nodes = Vec::with_capacity(81);
++        for &point in targets {
++            let key = (point.re.to_bits(), point.im.to_bits());
++            let sample = if let Some(node) = self.nodes.get(&key) {
++                node.sample()
++            } else {
++                if self.nodes.len() >= NODE_CAPACITY {
++                    return None;
++                }
++                let node = self.cover.sample(point, error)?;
++                let sample = node.sample();
++                self.nodes.insert(key, node);
++                sample
++            };
++            nodes.push(sample);
++        }
++        // Non-grid query points do not grow the retained node cache.
++        let donor = targets
++            .iter()
++            .filter_map(|point| self.nodes.get(&(point.re.to_bits(), point.im.to_bits())))
++            .min_by(|a, b| {
++                (a.sample().query - query)
++                    .norm_sqr()
++                    .total_cmp(&(b.sample().query - query).norm_sqr())
++                    .then_with(|| a.sample().query.re.total_cmp(&b.sample().query.re))
++                    .then_with(|| a.sample().query.im.total_cmp(&b.sample().query.im))
++            });
++        let center = donor
++            .and_then(|node| self.cover.sample_reusing(query, error, node))
++            .or_else(|| self.cover.sample(query, error))?;
++        Some(CertifiedField {
++            nodes,
++            reference: center.sample().value,
++            direction_agrees: self.cover.direction_agrees(&center, h),
++        })
++    }
++}
++
++pub(in super::super) fn sample_field(query: C, k: u32, error: f64) -> Option<CertifiedField> {
++    sample_field_using(&TILES, query, k, error)
++}
++
++fn sample_field_using(cache: &TileCache, query: C, k: u32, error: f64) -> Option<CertifiedField> {
++    let key = key(query, k, error)?;
++    let h = dyadic_h(k);
++    let targets: Vec<_> = distance_stencil(query, h).collect();
++    let cached = cache.write().ok()?.get(&key);
++    let tile = if let Some(tile) = cached {
++        tile
++    } else {
++        // Never hold the global LRU lock during proof construction.
++        let candidate = Arc::new(Mutex::new(Tile::new(key)?));
++        let mut cache = cache.write().ok()?;
++        if let Some(tile) = cache.get(&key) {
++            tile
++        } else {
++            cache.insert(key, candidate.clone());
++            candidate
++        }
++    };
++    let result = tile.lock().ok()?.field(query, h, error, &targets);
++    result
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn same_field(a: &CertifiedField, b: &CertifiedField, query: C, k: u32) {
++        assert_eq!(a.reference.to_bits(), b.reference.to_bits());
++        assert_eq!(a.direction_agrees, b.direction_agrees);
++        assert_eq!(a.nodes.len(), b.nodes.len());
++        for (a, b) in a.nodes.iter().zip(&b.nodes) {
++            assert_eq!(a.query, b.query);
++            assert_eq!(a.value.to_bits(), b.value.to_bits());
++            assert_eq!(
++                a.enclosure.unwrap().lo.to_bits(),
++                b.enclosure.unwrap().lo.to_bits()
++            );
++            assert_eq!(
++                a.enclosure.unwrap().hi.to_bits(),
++                b.enclosure.unwrap().hi.to_bits()
++            );
++        }
++        let fit = |field: &CertifiedField| {
++            let fitted = super::super::super::fit_enclosed_level(
++                query,
++                1e-4,
++                k,
++                dyadic_h(k),
++                field.reference,
++                field.nodes.clone(),
++                "cache-equivalence",
++            )
++            .unwrap();
++            let error = fitted.range.error(
++                fitted.jet.d,
++                fitted.jet.grad_d,
++                fitted.jet.hessian_d,
++                2. * dyadic_h(k),
++            );
++            (serde_json::to_string(&fitted.jet).unwrap(), error.to_bits())
++        };
++        assert_eq!(fit(a), fit(b));
++    }
++
++    #[test]
++    fn bounded_tile_keys_reject_invalid_requests_and_share_core() {
++        let h = dyadic_h(20);
++        let q = C::new(10.25 * h, -3.25 * h);
++        assert_eq!(key(q, 20, 1e-8), key(q + C::new(h, h), 20, 1e-8));
++        assert_ne!(key(q, 20, 1e-8), key(q, 20, 2e-8));
++        assert!(key(q, 33, 1e-8).is_none());
++        for error in [0., -1., f64::NAN, f64::INFINITY] {
++            assert!(key(q, 20, error).is_none());
++        }
++        assert!(key(C::new(f64::NAN, 0.), 20, 1e-8).is_none());
++        assert!(key(C::new(2., 0.), 20, 1e-8).is_none());
++        let mut cache = LruCache::new(TILE_CAPACITY);
++        for i in 0..100 {
++            cache.insert(i, i);
++        }
++        assert_eq!(cache.map.len(), TILE_CAPACITY);
++        assert_eq!(cache.order.len(), TILE_CAPACITY);
++    }
++
++    #[test]
++    fn runtime_tiles_supply_and_reuse_all_original_stencil_nodes() {
++        for (query, error, k) in [
++            (C::new(0.32049988639807619, 0.04733531447355364), 5e-8, 17),
++            (C::new(0.35659381055433242, 0.06404656757776669), 5e-10, 24),
++        ] {
++            let cache = RwLock::new(LruCache::new(TILE_CAPACITY));
++            let start = std::time::Instant::now();
++            let first = sample_field_using(&cache, query, k, error).expect("certified stencil");
++            let cold_s = start.elapsed().as_secs_f64();
++            let start = std::time::Instant::now();
++            let second = sample_field_using(&cache, query, k, error).expect("reused stencil");
++            let warm_s = start.elapsed().as_secs_f64();
++            assert_eq!(first.nodes.len(), 81);
++            assert_eq!(first.reference.to_bits(), second.reference.to_bits());
++            assert_eq!(first.direction_agrees, second.direction_agrees);
++            for (a, b) in first.nodes.iter().zip(&second.nodes) {
++                assert_eq!(a.query, b.query);
++                assert_eq!(a.value.to_bits(), b.value.to_bits());
++                assert_eq!(
++                    a.value.to_bits(),
++                    (-super::super::propose(a.query).unwrap().distance).to_bits()
++                );
++                assert_eq!(
++                    a.enclosure.unwrap().lo.to_bits(),
++                    b.enclosure.unwrap().lo.to_bits()
++                );
++                assert_eq!(
++                    a.enclosure.unwrap().hi.to_bits(),
++                    b.enclosure.unwrap().hi.to_bits()
++                );
++            }
++            let h = dyadic_h(k);
++            let fitted = super::super::super::fit_enclosed_level(
++                query,
++                1e-4,
++                k,
++                h,
++                first.reference,
++                first.nodes.clone(),
++                "covered-test",
++            )
++            .expect("shared coherent fitter");
++            let budget = super::super::super::DYADIC_FIT_ERROR_FACTOR * fitted.jet.requested_scale;
++            let nodal_error = fitted.range.error(
++                fitted.jet.d,
++                fitted.jet.grad_d,
++                fitted.jet.hessian_d,
++                2. * h,
++            );
++            assert!(nodal_error.is_finite() && nodal_error <= budget);
++            let key = key(query, k, error).unwrap();
++            let tile = cache.write().unwrap().get(&key).unwrap();
++            let tile = tile.lock().unwrap();
++            assert_eq!(tile.nodes.len(), 81);
++            assert_eq!(tile.targets.len(), NODE_CAPACITY);
++            assert_eq!(cache.read().unwrap().map.len(), 1);
++            eprintln!(
++                "[RUNTIME_TILE145] query={query:?} cold_s={cold_s} warm_s={warm_s} nodes={}",
++                tile.nodes.len()
++            );
++            drop(tile);
++            let cell_x = (query.re / h).floor() as i64;
++            let delta =
++                if cell_x.rem_euclid(DYADIC_CORE_CELLS as i64) < DYADIC_CORE_CELLS as i64 - 1 {
++                    h
++                } else {
++                    -h
++                };
++            let neighbor = query + C::new(delta, 0.);
++            assert_ne!(query, neighbor);
++            assert_eq!(Some(key), super::key(neighbor, k, error));
++            assert_ne!(
++                distance_stencil(query, h).collect::<Vec<_>>(),
++                distance_stencil(neighbor, h).collect::<Vec<_>>()
++            );
++            let neighbor_first = sample_field_using(&cache, neighbor, k, error).unwrap();
++            same_field(
++                &first,
++                &sample_field_using(&cache, query, k, error).unwrap(),
++                query,
++                k,
++            );
++            let reversed = RwLock::new(LruCache::new(TILE_CAPACITY));
++            let neighbor_cold = sample_field_using(&reversed, neighbor, k, error).unwrap();
++            let after_neighbor = sample_field_using(&reversed, query, k, error).unwrap();
++            same_field(&first, &after_neighbor, query, k);
++            same_field(&neighbor_first, &neighbor_cold, neighbor, k);
++            let old = cache.write().unwrap().get(&key).unwrap();
++            {
++                let mut entries = cache.write().unwrap();
++                for i in 0..TILE_CAPACITY {
++                    // Fill retention slots without constructing unrelated expensive
++                    // proofs. None of these unrelated keys is ever queried.
++                    entries.insert((k, 100000 + i as i64, 100000, error.to_bits()), old.clone());
++                }
++                assert!(!entries.map.contains_key(&key));
++                assert_eq!(entries.map.len(), TILE_CAPACITY);
++            }
++            let rebuilt = sample_field_using(&cache, query, k, error).unwrap();
++            let replacement = cache.write().unwrap().get(&key).unwrap();
++            assert!(!Arc::ptr_eq(&old, &replacement));
++            same_field(&first, &rebuilt, query, k);
++        }
++    }
++}

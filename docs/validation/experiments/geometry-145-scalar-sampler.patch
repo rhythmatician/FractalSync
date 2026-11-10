@@ -1,0 +1,41 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1665,6 +1665,19 @@
+     h: f64,
+     tile: &ShoreTile,
+ ) -> Option<FittedJet> {
++    compute_jet_at_level_using(c, epsilon, k, h, tile, |sample| field_node(sample, k, tile))
++}
++
++// Keep scalar sampling explicit: runtime nodes use their canonical Mandelbrot
++// definition; synthetic contour checks supply their own fixed distance field.
++fn compute_jet_at_level_using(
++    c: Complex64,
++    epsilon: f64,
++    k: u32,
++    h: f64,
++    tile: &ShoreTile,
++    mut sample_node: impl FnMut(Complex64) -> Option<f64>,
++) -> Option<FittedJet> {
+     if tile.segments.is_empty() {
+         return None;
+     }
+@@ -1672,7 +1685,7 @@
+     let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
+     let mut nodes_certified=true;
+     for (index,sample) in distance_stencil(c, h).enumerate() {
+-        let value=if index<9 || index%9==0 {signed_shore_distance(sample,h,&tile.segments)?} else if let Some(value)=field_node(sample,k,tile) {value} else {nodes_certified=false;signed_shore_distance(sample,h,&tile.segments)?};
++        let value=if index<9 || index%9==0 {signed_shore_distance(sample,h,&tile.segments)?} else if let Some(value)=sample_node(sample) {value} else {nodes_certified=false;signed_shore_distance(sample,h,&tile.segments)?};
+         let upper=distance_upper([sample.re,sample.im]);
+         let value=value.clamp(-upper,upper);
+         stencil.push((sample.re-c.re,sample.im-c.im,value));
+@@ -2943,7 +2956,8 @@
+             }],
+             unstable_nodes: Vec::new(),
+         };
+-        let jet = compute_jet_at_level(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile)
++        let jet = compute_jet_at_level_using(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile,
++            |sample| signed_shore_distance(sample, h, &tile.segments))
+             .unwrap()
+             .jet;
+         assert!(

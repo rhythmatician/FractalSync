@@ -1,0 +1,613 @@
+{
+  "date": "2026-10-30",
+  "scope": "separate frozen native coverage and reference-policy experiment; not shipping adoption",
+  "manifest": {
+    "schema": "operational-coverage-experiment/1",
+    "date": "2026-10-30",
+    "parent_experiment": "geometry-145-operational-experiment.json",
+    "purpose": "Separate coverage failures from field/mechanical failures with a fresh replay; not shipping adoption",
+    "preparation": {
+      "origin": [
+        -1.002,
+        -0.702
+      ],
+      "spacing": 0.0005,
+      "shape": [
+        3425,
+        2825
+      ]
+    },
+    "maximum_coefficient_bytes": 80000000,
+    "anchors": [
+      [
+        -0.5,
+        0.1
+      ],
+      [
+        -1.0,
+        0.1
+      ],
+      [
+        0.3,
+        0.05
+      ],
+      [
+        0.4,
+        0.05
+      ],
+      [
+        0.6,
+        0.15
+      ],
+      [
+        0.1042700898980602,
+        0.30099067225167203
+      ]
+    ],
+    "replays": [
+      "original native controlled crossing from original starts",
+      "all retained Python energy/crossing/continuity tests from original starts"
+    ],
+    "kernel": "same immutable C4 quintic evaluator and reconstruction rules",
+    "physics": "original test parameters, integrator and assertions unchanged",
+    "reference_scalar_fidelity": "unknown",
+    "reference_differential_fidelity": "unknown",
+    "reference_singularity_information": "unknown; no new permission for reference-cut motion",
+    "coverage_policy": "complete asset prepared once; no replacement or extension during any replay; any miss remains a failure"
+  },
+  "preparation": {
+    "anchors_available": 6,
+    "asset_bytes": 77405056,
+    "coefficient_bytes": 77405000,
+    "field_id": "068e8e016b4ad6b7",
+    "manifest": {
+      "anchors": [
+        [
+          -0.5,
+          0.1
+        ],
+        [
+          -1.0,
+          0.1
+        ],
+        [
+          0.3,
+          0.05
+        ],
+        [
+          0.4,
+          0.05
+        ],
+        [
+          0.6,
+          0.15
+        ],
+        [
+          0.1042700898980602,
+          0.30099067225167203
+        ]
+      ],
+      "coverage_policy": "complete asset prepared once; no replacement or extension during any replay; any miss remains a failure",
+      "date": "2026-10-30",
+      "kernel": "same immutable C4 quintic evaluator and reconstruction rules",
+      "maximum_coefficient_bytes": 80000000,
+      "parent_experiment": "geometry-145-operational-experiment.json",
+      "physics": "original test parameters, integrator and assertions unchanged",
+      "preparation": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "purpose": "Separate coverage failures from field/mechanical failures with a fresh replay; not shipping adoption",
+      "reference_differential_fidelity": "unknown",
+      "reference_scalar_fidelity": "unknown",
+      "reference_singularity_information": "unknown; no new permission for reference-cut motion",
+      "replays": [
+        "original native controlled crossing from original starts",
+        "all retained Python energy/crossing/continuity tests from original starts"
+      ],
+      "schema": "operational-coverage-experiment/1"
+    },
+    "preparation_compute_seconds": 0.4610591,
+    "preparation_total_seconds": 0.5622437,
+    "reference_fidelity": "unknown"
+  },
+  "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+  "asset_location": "${REPO}/tmp/geometry145-coverage-v1.bin; reproducible, untracked diagnostic asset",
+  "policy": {
+    "distance_fidelity": "unknown",
+    "field_id": "068e8e016b4ad6b7",
+    "refusals": [
+      {
+        "authority": "current canonical geometry-provider/6 scale-aware:6:-64:0:1.95e-3 CutLocus; exact point only",
+        "bounds": [
+          -1.0,
+          0.0,
+          -1.0,
+          0.0
+        ]
+      }
+    ],
+    "source": "existing canonical provider, offline snapshot before rollout",
+    "unknown_elsewhere": true
+  },
+  "policy_sha256": "029024d540c8f63397f70b87d7097456ab4165ea5ac6819c4764d734d1429101",
+  "native_without_policy": {
+    "error": null,
+    "field_id": "068e8e016b4ad6b7",
+    "passed": true,
+    "physics_profile": {
+      "beta": 0.05,
+      "d_ref": 0.1,
+      "dt": 0.02,
+      "epsilon": 0.0001,
+      "integrator": "Euler",
+      "kappa": 0.5,
+      "lambda_sq": 1.0,
+      "mu": 0.3183098861837907,
+      "physics_profile_id": "0790a66e7df83330",
+      "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+      "work_rule": "left-endpoint control-plus-drag power"
+    },
+    "reference_crossing": "unverified",
+    "work": {
+      "coefficient_reads_upper_bound": 495000,
+      "geometry_evaluations": 13750
+    },
+    "test": "manifold::tests::controls_drive_can_cross_shore_without_wall",
+    "test_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895",
+    "source_unchanged": true,
+    "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+    "exit_code": 0,
+    "setup": "verbatim original body in generated example; field/profile pinned around entire test; no assertion changes"
+  },
+  "python_without_policy": {
+    "profile": "experimental-operational-field/1",
+    "field_identity": "operational:068e8e016b4ad6b7",
+    "wheel_sha256": "40c31ffd04a9674d074259b93f42229149de72a6aa95d5afcfdd2a80c938eaeb",
+    "extension_sha256": "daedaa9fa29a7373505efbc687e88871e3b36846347f1e226d2123497230f6d1",
+    "test_source_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "test_source_unchanged": true,
+    "rust_source_sha256": {
+      "runtime-core/src/operational_field.rs": "f08e3962e649b042c87087484311a27f43f4a88d0505193b35f82300953979c9",
+      "runtime-core/src/geometry_provider.rs": "16bbae3b665b0544cfa87692e4b4f9ba0f80c3adb1736a0c98d8cfda3a7fa107",
+      "runtime-core/src/pybindings.rs": "46651c8b02853f9af8792f89bf7afa0df1ea8271b95e365c8a402bb517edec6b",
+      "runtime-core/src/manifold.rs": "2ccd0d020484a5c4c12fca79e2ee38719015fec174eeeb5f4043d50dd4ecc00d"
+    },
+    "asset_loading_seconds": 0.10475929989479482,
+    "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+    "pytest_seconds": 6.26724429987371,
+    "pytest_args": [
+      "-q",
+      "backend/tests/test_manifold_physics.py",
+      "-q"
+    ],
+    "pytest_exit_code": 1,
+    "tests": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_symmetric_positive_definite",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0004937001504004002
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_inverse_bounded",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00023410003632307053
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_christoffel_finite_on_regular_geometry",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0001851001288741827
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_cut_locus_is_explicit_and_physics_fails_closed",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.0004960000514984131,
+        "failure": "self = <test_manifold_physics.TestConnectionValidity object at 0x000001EAA192EFD0>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_cut_locus_is_explicit_and_physics_fails_closed(self, rc):\n        config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 1.0)\n        jet = _geometry_jet(rc, (-1.0, 0.0), config.epsilon)\n>       assert jet[\"validity\"] == \"singular\"\nE       AssertionError: assert 'regular' == 'singular'\nE         \nE         - singular\nE         + regular\n\nbackend\\tests\\test_manifold_physics.py:156: AssertionError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_connection_matches_metric_derivative_definition",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 3.1107723000459373
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_scale_relative_metric_is_d_ref_gauge_invariant",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.006932699820026755
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_mirror_matches_rust_field",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0015865000896155834
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_power_nonpositive",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00013040006160736084
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_reduces_kinetic_energy",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0007083001546561718
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_no_forces",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0003332998603582382
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_near_shore",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0006472000386565924
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_low_curvature_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0010701999999582767
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_high_curvature_deep_scale_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0010329000651836395
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_near_shore_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0007099001668393612
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_potential_force_points_downhill_from_ridge",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00011859997175633907
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_h_signal_irrelevant_to_manifold_path",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0003915999550372362
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_ridge_is_barrier_without_h_gate",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0024924001190811396
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.16697250003926456
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_signed_distance_authority_sign_and_continuity",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0005073999054729939
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.00018259999342262745,
+        "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x000001EAA1D41D10>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.0017752164186247673)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_scale_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00010269996710121632
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_metric_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 9.460002183914185e-05
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_matches_rust_single_step",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00036150007508695126
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_ste_smoke_gradients_flow",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0003516001161187887
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_matches_rust_controller",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.018804199993610382
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_energy_infos_populated",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0021563998889178038
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_ste_smoke_gradients_flow_to_targets",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.005144499940797687
+      }
+    ]
+  },
+  "native_with_policy": {
+    "error": null,
+    "field_id": "068e8e016b4ad6b7",
+    "passed": true,
+    "physics_profile": {
+      "beta": 0.05,
+      "d_ref": 0.1,
+      "dt": 0.02,
+      "epsilon": 0.0001,
+      "integrator": "Euler",
+      "kappa": 0.5,
+      "lambda_sq": 1.0,
+      "mu": 0.3183098861837907,
+      "physics_profile_id": "b61c1e0bbba796e4",
+      "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+      "work_rule": "left-endpoint control-plus-drag power"
+    },
+    "reference_crossing": "unverified",
+    "work": {
+      "coefficient_reads_upper_bound": 495000,
+      "geometry_evaluations": 13750
+    },
+    "test": "manifold::tests::controls_drive_can_cross_shore_without_wall",
+    "test_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895",
+    "source_unchanged": true,
+    "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+    "exit_code": 0,
+    "setup": "verbatim original body in generated example; field/profile pinned around entire test; no assertion changes",
+    "reference_policy_sha256": "029024d540c8f63397f70b87d7097456ab4165ea5ac6819c4764d734d1429101"
+  },
+  "python_with_policy": {
+    "profile": "experimental-operational-field/1",
+    "field_identity": "operational:068e8e016b4ad6b7",
+    "wheel_sha256": "6316da206bfcd2a7d65f1e0b8a2e91ec6bac248b2f558952a3098a733cb14cd7",
+    "extension_sha256": "1d90a56418913f164fe1be434ebc355174ee75aa9a162c66750938d25ee8730d",
+    "test_source_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "test_source_unchanged": true,
+    "rust_source_sha256": {
+      "runtime-core/src/operational_field.rs": "cc81c0ff412974b47651fbd62724b47c9cc95de76e2dcc3da8c9743bd455e665",
+      "runtime-core/src/geometry_provider.rs": "16bbae3b665b0544cfa87692e4b4f9ba0f80c3adb1736a0c98d8cfda3a7fa107",
+      "runtime-core/src/pybindings.rs": "aec7dd5879eb3c85a83e9cf64275ca7c25497d18c17416c6f88ce9b186192307",
+      "runtime-core/src/manifold.rs": "2ccd0d020484a5c4c12fca79e2ee38719015fec174eeeb5f4043d50dd4ecc00d"
+    },
+    "asset_loading_seconds": 0.11932249995879829,
+    "asset_sha256": "d77495871dd3fd9d0b66876ffe9148bade43234227ca4eb918a56d234069925e",
+    "reference_policy_sha256": "029024d540c8f63397f70b87d7097456ab4165ea5ac6819c4764d734d1429101",
+    "pytest_seconds": 7.436924200039357,
+    "pytest_args": [
+      "-q",
+      "backend/tests/test_manifold_physics.py",
+      "-q"
+    ],
+    "pytest_exit_code": 1,
+    "tests": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_symmetric_positive_definite",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0004298000130802393
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_metric_inverse_bounded",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0001583998091518879
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_christoffel_finite_on_regular_geometry",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00016389996744692326
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_cut_locus_is_explicit_and_physics_fails_closed",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00027439999394118786
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_connection_matches_metric_derivative_definition",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 2.480830099899322
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_scale_relative_metric_is_d_ref_gauge_invariant",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0012370999902486801
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestConnectionValidity::test_differentiable_mirror_matches_rust_field",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0018645001109689474
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_power_nonpositive",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00013569998554885387
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestFrictionNonEnergyInjecting::test_drag_reduces_kinetic_energy",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00031049991957843304
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_no_forces",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00039190007373690605
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_drift_bounded_near_shore",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0006755997892469168
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_low_curvature_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0010858001187443733
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_high_curvature_deep_scale_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0010490999557077885
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestEnergyDrift::test_energy_conserved_near_shore_rollout",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.000795300118625164
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_potential_force_points_downhill_from_ridge",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 8.279993198812008e-05
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_h_signal_irrelevant_to_manifold_path",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00032350001856684685
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_ridge_is_barrier_without_h_gate",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.002173899905756116
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.18133309995755553
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_signed_distance_authority_sign_and_continuity",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.000512600177899003
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.0002158998977392912,
+        "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x0000016629041D10>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.0017752164186247673)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_scale_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00011300016194581985
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_metric_continuous_inside_regular_patch",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00010140007361769676
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_matches_rust_single_step",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0003378998953849077
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestMirrorParity::test_mirror_ste_smoke_gradients_flow",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.00034740008413791656
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_matches_rust_controller",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.007006899919360876
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_energy_infos_populated",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.001621900126338005
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestManifoldSequence::test_sequence_ste_smoke_gradients_flow_to_targets",
+        "outcome": "passed",
+        "phase": "call",
+        "seconds": 0.0019867001101374626
+      }
+    ]
+  },
+  "contract_tests": {
+    "passed": 16,
+    "summary": "cargo test: 16 passed, 263 filtered out (23 suites, 2.70s)"
+  },
+  "default_native_compilation": "passed",
+  "wasm_feature_compilation": "passed; no new browser parity or timing claim",
+  "baseline_byte_identity_preserved": true,
+  "source_sha256": {
+    "runtime-core/src/operational_field.rs": "cc81c0ff412974b47651fbd62724b47c9cc95de76e2dcc3da8c9743bd455e665",
+    "runtime-core/src/operational_field/acceptance.rs": "552b67f9fab383a5044c77f6076fa2c0d0318fcccf7cba30d8b121b58c5b470a",
+    "runtime-core/src/pybindings.rs": "aec7dd5879eb3c85a83e9cf64275ca7c25497d18c17416c6f88ce9b186192307",
+    "runtime-core/src/manifold.rs": "2ccd0d020484a5c4c12fca79e2ee38719015fec174eeeb5f4043d50dd4ecc00d",
+    "runtime-core/examples/operational_coverage_prepare.rs": "08ede1a534978ba99d89a624f7723437adf73860c4d8468fc9615a70d9bde1b2",
+    "runtime-core/Cargo.toml": "510b7fe497eb68bbedbec9e8d2df487c85d89152f75fa694110928958323ac19",
+    "scripts/validate_operational_field.py": "0f50a60081869cf0c353ba9db50fdb12a50f6c5fae915a3facb6e3603557bdf8",
+    "scripts/validate_operational_native_crossing.py": "b768fcf5929d95c2ef0e41e3477f82f9f771431b7d7ae58fb89be6881fc1331a",
+    "scripts/collect_operational_acceptance.mjs": "01ad62012ab34fc50602439d8d3b6be30e70cc4aff3dd1cf97bf0ca414cab8be",
+    "docs/validation/geometry-145-operational-coverage-experiment.json": "3f899ba4259276c60a811697f498ade958a6c386c09fa8eeb5843f37054c8cfc",
+    "docs/validation/geometry-145-operational-reference-policy-experiment.json": "92c4b89fd450d0e44f5ae6042447b57939521f57152ec9e0fb9407c49d6f2144",
+    "backend/tests/test_manifold_physics.py": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536"
+  },
+  "outcomes": {
+    "original_native_controlled_crossing": "passed operationally; reference crossing unverified",
+    "full_python_physics_suite": {
+      "passed": 26,
+      "failed": 1
+    },
+    "known_reference_cut_refusal": "passed at exact supplied point; unknown elsewhere",
+    "scalar_fidelity": "unknown; unchanged quality gate fails",
+    "differential_reference_fidelity": "unknown",
+    "browser_for_larger_asset": "not measured",
+    "new_dense_asset_memory": "77405000 coefficient bytes; approximately six times the first asset",
+    "shipping_adoption": "pending",
+    "merge_ready": false
+  }
+}

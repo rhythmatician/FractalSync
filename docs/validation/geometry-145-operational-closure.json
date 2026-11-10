@@ -1,0 +1,1263 @@
+{
+  "schema": "operational-contour-cell-closure/1",
+  "date": "2026-10-30",
+  "merge_ready": false,
+  "selected_source": "fine, fixed before acceptance replay",
+  "runtime_quality_metadata_changed": false,
+  "preparations": {
+    "coarse": {
+      "preparation": {
+        "asset_bytes": 77405056,
+        "field_id": "71eaa19d09e17bac",
+        "manifest": {
+          "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+          "controlled_change": "Enable finite internal-cell closure; keep coefficient seeding and all previous source/evaluator/physics parameters",
+          "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+          "date": "2026-10-30",
+          "parent_experiment": "geometry-145-operational-experiment.json",
+          "preparation": {
+            "origin": [
+              -1.002,
+              -0.702
+            ],
+            "shape": [
+              3425,
+              2825
+            ],
+            "spacing": 0.0005
+          },
+          "purpose": "Close observed internal contour-cell edge crossings on a canonical shared fine lattice",
+          "schema": "operational-coverage-experiment/1",
+          "selected_integrator": "Rk4FourSubsteps",
+          "shipping_adoption": false,
+          "source_evidence": "measured finite-orbit contour; closure of observed internal sampled edges is not completeness or true-distance certification",
+          "source_preparation": {
+            "bisections": 8,
+            "coefficient_witness_seeding": true,
+            "contour_cell_closure": true,
+            "max_membership_queries": 50000000,
+            "max_reference_nodes": 5000000,
+            "max_segments": 500000,
+            "maximum_coefficient_bytes": 80000000,
+            "membership_iterations": 8192,
+            "origin": [
+              -1.002,
+              -0.702
+            ],
+            "reference_origin": [
+              -2.1,
+              -2.1
+            ],
+            "reference_shape": [
+              2101,
+              2101
+            ],
+            "reference_spacing": 0.002,
+            "refinement": 16,
+            "shape": [
+              3425,
+              2825
+            ],
+            "spacing": 0.0005
+          }
+        },
+        "preparation_compute_seconds": 161.3898467,
+        "preparation_total_seconds": 161.5569065,
+        "reference_fidelity": "unknown; finite-mask contour is measured data only",
+        "statistics": {
+          "coefficient_count": 9675625,
+          "coefficient_seeded_cells": 1666,
+          "contour_closure_cells": 1322,
+          "membership_queries": 23972542,
+          "reference_nodes": 4414201,
+          "refined_cells": 14275,
+          "segments": 359548
+        }
+      },
+      "process": {
+        "exit_code": 0,
+        "process_seconds": 161.6539231,
+        "sampled_os_peak_working_set_bytes": 216367104,
+        "asset_sha256": "3bb6bbaca940bc98bbd4d735702d79209cda7bc862559a321491dbb990a62a63",
+        "executable_sha256": "768b1bb521ccb316c5bdf8cff4ef79eae06a73bf0192489014e505a8867a58f6",
+        "manifest_sha256": "84dae934bfe11819ec1e7a646d4dd5456e5a150bba04bea63931da7e11d55c66",
+        "device": "Intel(R) Core(TM) i9-14900"
+      }
+    },
+    "fine": {
+      "preparation": {
+        "asset_bytes": 77405056,
+        "field_id": "cc35adf2aad104b1",
+        "manifest": {
+          "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+          "controlled_change": "Enable finite internal-cell closure; keep coefficient seeding and all previous source/evaluator/physics parameters",
+          "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+          "date": "2026-10-30",
+          "parent_experiment": "geometry-145-operational-experiment.json",
+          "preparation": {
+            "origin": [
+              -1.002,
+              -0.702
+            ],
+            "shape": [
+              3425,
+              2825
+            ],
+            "spacing": 0.0005
+          },
+          "purpose": "Close observed internal contour-cell edge crossings on a canonical shared fine lattice",
+          "schema": "operational-coverage-experiment/1",
+          "selected_integrator": "Rk4FourSubsteps",
+          "shipping_adoption": false,
+          "source_evidence": "measured finite-orbit contour; closure of observed internal sampled edges is not completeness or true-distance certification",
+          "source_preparation": {
+            "bisections": 8,
+            "coefficient_witness_seeding": true,
+            "contour_cell_closure": true,
+            "max_membership_queries": 50000000,
+            "max_reference_nodes": 20000000,
+            "max_segments": 500000,
+            "maximum_coefficient_bytes": 80000000,
+            "membership_iterations": 8192,
+            "origin": [
+              -1.002,
+              -0.702
+            ],
+            "reference_origin": [
+              -2.1,
+              -2.1
+            ],
+            "reference_shape": [
+              4201,
+              4201
+            ],
+            "reference_spacing": 0.001,
+            "refinement": 8,
+            "shape": [
+              3425,
+              2825
+            ],
+            "spacing": 0.0005
+          }
+        },
+        "preparation_compute_seconds": 154.1051967,
+        "preparation_total_seconds": 154.2396882,
+        "reference_fidelity": "unknown; finite-mask contour is measured data only",
+        "statistics": {
+          "coefficient_count": 9675625,
+          "coefficient_seeded_cells": 1996,
+          "contour_closure_cells": 3583,
+          "membership_queries": 35669103,
+          "reference_nodes": 17648401,
+          "refined_cells": 32378,
+          "segments": 357374
+        }
+      },
+      "process": {
+        "exit_code": 0,
+        "process_seconds": 154.4442147,
+        "sampled_os_peak_working_set_bytes": 216371200,
+        "asset_sha256": "e2b8ae78a38a950721598afb23972f80776b72dac9f8632d82b12c9a34d11847",
+        "executable_sha256": "768b1bb521ccb316c5bdf8cff4ef79eae06a73bf0192489014e505a8867a58f6",
+        "manifest_sha256": "7b019a8a7ff13dcfa3b8bc0811eb0808037bc627fd1b5ce4c0f69d89a8e51ed4",
+        "device": "Intel(R) Core(TM) i9-14900"
+      }
+    }
+  },
+  "source_comparison": {
+    "plan": {
+      "angle_divisions": 256,
+      "coarse_field_id": "71eaa19d09e17bac",
+      "coarse_source_spacing": 0.002,
+      "date": "2026-10-30",
+      "fine_field_id": "cc35adf2aad104b1",
+      "fine_source_spacing": 0.001,
+      "fixed_controls": [
+        [
+          0.3,
+          0.05
+        ],
+        [
+          0.4,
+          0.05
+        ],
+        [
+          0.6,
+          0.15
+        ]
+      ],
+      "multiplier_insets": [
+        1e-06,
+        1e-05,
+        0.0001
+      ],
+      "neighbor_points": "original 1000-point neighboring derivative grid",
+      "purpose": "measure source sensitivity independently of self-consistency; never assign a regional distance certificate from point comparisons",
+      "schema": "operational-source-refinement-plan/1",
+      "source_experiment": "geometry-145-operational-closure-fine-experiment.json"
+    },
+    "claim": "measured pointwise sensitivity to source coarse-grid refinement; not a distance bound, fit residual, consecutive coefficient-resolution convergence or regional certificate",
+    "formula": "max(abs(F_f-F_c), h_source*norm(grad_f-grad_c), h_source^2*Frobenius(H_f-H_c))",
+    "samples": 1768,
+    "failures": 52,
+    "prior_failures": 720,
+    "unavailable": 0,
+    "failures_by_group": {
+      "neighbor_grid": 27,
+      "scalar_audit": 25
+    },
+    "component_failures": {
+      "scalar_difference": 21,
+      "scaled_gradient_difference": 35,
+      "scaled_hessian_difference": 50
+    },
+    "controls": [
+      {
+        "available": true,
+        "coarse_scalar": -0.01723289185761141,
+        "fine_scalar": -0.01723289185761141,
+        "group": "quality_probe",
+        "point": [
+          0.3,
+          0.05
+        ],
+        "requested_scale": 0.001723318199799821,
+        "source_refinement": {
+          "maximum_difference": 0.0,
+          "scalar_difference": 0.0,
+          "scaled_gradient_difference": 0.0,
+          "scaled_hessian_difference": 0.0
+        },
+        "unchanged_quality_budget": 0.00043082954994995524,
+        "within_pointwise_comparison_budget": true
+      },
+      {
+        "available": true,
+        "coarse_scalar": 0.046029370104198865,
+        "fine_scalar": 0.046029370104198865,
+        "group": "high_curvature_and_crossing_start",
+        "point": [
+          0.4,
+          0.05
+        ],
+        "requested_scale": 0.004602947873036709,
+        "source_refinement": {
+          "maximum_difference": 0.0,
+          "scalar_difference": 0.0,
+          "scaled_gradient_difference": 0.0,
+          "scaled_hessian_difference": 0.0
+        },
+        "unchanged_quality_budget": 0.0011507369682591773,
+        "within_pointwise_comparison_budget": true
+      },
+      {
+        "available": true,
+        "coarse_scalar": 0.17305502345571835,
+        "fine_scalar": 0.17305502345571835,
+        "group": "ridge_start",
+        "point": [
+          0.6,
+          0.15
+        ],
+        "requested_scale": 0.017305505234826064,
+        "source_refinement": {
+          "maximum_difference": 0.0,
+          "scalar_difference": 0.0,
+          "scaled_gradient_difference": 0.0,
+          "scaled_hessian_difference": 0.0
+        },
+        "unchanged_quality_budget": 0.004326376308706516,
+        "within_pointwise_comparison_budget": true
+      }
+    ],
+    "maximum_sensitivity": {
+      "available": true,
+      "coarse_scalar": 0.019349192482938957,
+      "fine_scalar": 0.02012999200969848,
+      "group": "neighbor_grid",
+      "point": [
+        0.38976930792377135,
+        0.11715017064846417
+      ],
+      "requested_scale": 0.0020130240393758957,
+      "source_refinement": {
+        "maximum_difference": 0.005400851888503386,
+        "scalar_difference": 0.0007807995267595236,
+        "scaled_gradient_difference": 0.0016172079525658967,
+        "scaled_hessian_difference": 0.005400851888503386
+      },
+      "unchanged_quality_budget": 0.0005032560098439739,
+      "within_pointwise_comparison_budget": false
+    }
+  },
+  "scalar_audit": {
+    "certified_sign_mismatches": 0,
+    "claim": "pointwise error floor of returned scalar versus true signed distance, using conclusive reference realm; no distance upper bound or derivative-fidelity claim",
+    "conclusive_reference_realms": 765,
+    "field_id": "cc35adf2aad104b1",
+    "plan": {
+      "angle_divisions": 256,
+      "date": "2026-10-30",
+      "epsilon": 0.0001,
+      "field_id": "cc35adf2aad104b1",
+      "generator": "canonical geometry::lobe_point_at_angle(1, 0, theta, 1-inset)",
+      "multiplier_insets": [
+        1e-06,
+        1e-05,
+        0.0001
+      ],
+      "quality_fraction": 0.25,
+      "reference": "existing conservative operational_reference_membership; no escalation",
+      "schema": "operational-fidelity-audit/1",
+      "scope": "pointwise returned-scalar error lower bounds only; no regional distance or derivative certificate"
+    },
+    "quality_violations": [],
+    "unavailable": 0
+  },
+  "mechanics": {
+    "per_run_expectations": {
+      "passed": 35
+    },
+    "operational_crossings": {
+      "passed": 21,
+      "not_observed": 14
+    },
+    "reference_crossings": {
+      "passed": 21
+    },
+    "neighbor": {
+      "base_increments": [
+        1e-06,
+        1e-07
+      ],
+      "evidence": {
+        "gradient_max_absolute_error": 1.1841220559638543e-08,
+        "gradient_resolution_max_absolute_error": 1.817990202823694e-08,
+        "hessian_max_normalized_error": 3.0019812418125014e-06,
+        "hessian_resolution_max_normalized_error": 4.190166732032097e-06,
+        "legacy_gradient_max_absolute_error": 6.551435665635985e-07,
+        "legacy_hessian_max_normalized_error": 0.0001852799993101518
+      },
+      "legacy_central_difference_passed": false,
+      "passed": true,
+      "points": 1000,
+      "scope": "measured differential self-consistency only; no reference fidelity or singularity permission",
+      "tolerance": 0.0001,
+      "verifier": "richardson-neighbor/1"
+    },
+    "join": {
+      "gradient_absolute_error": 1.8163131976223212e-07,
+      "hessian_normalized_error": 4.802137132721352e-06,
+      "passed": true,
+      "tolerance": 0.0001
+    },
+    "energy_runs": [
+      {
+        "absolute_drift": 1.176836406102666e-14,
+        "field_id": "cc35adf2aad104b1",
+        "final": {
+          "energy": 1.3693151821737652,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.3000000000000002,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.40027859132730814,
+            0.05491011859589031
+          ],
+          "velocity": [
+            0.0019081618968619053,
+            0.013092750179708722
+          ]
+        },
+        "initial": {
+          "energy": 1.369315182173777,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 2.2870594307278225e-14,
+        "name": "high_curvature",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 1.0,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        },
+        "unchanged_limit": 0.05
+      },
+      {
+        "absolute_drift": 2.2891910589351028e-11,
+        "field_id": "cc35adf2aad104b1",
+        "final": {
+          "energy": 3.8811684948548617,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.20000000000000015,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.30008894762264426,
+            0.054644245544272385
+          ],
+          "velocity": [
+            0.0012622637053391846,
+            0.026575664225800943
+          ]
+        },
+        "initial": {
+          "energy": 3.8811684948777536,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "position": [
+            0.3,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ]
+        },
+        "maximum_excursion": 2.4278357102502923e-11,
+        "name": "near_shore",
+        "passed": true,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 1.0,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "2c83f9859cc35bae",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        },
+        "unchanged_limit": 0.05
+      }
+    ],
+    "original_crossing_times": [
+      3.863999999999796,
+      3.8639999999996855,
+      3.8635000000004576
+    ],
+    "python_counts": {
+      "passed": 25,
+      "failed": 2
+    },
+    "python_failures": [
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 1.6804154000710696,
+        "failure": "             rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n        attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n        crossed_high, min_d_high, _, energy_log, guard_fired_high, _ = attempts[1]\n    \n        # More mechanical energy must buy real progress up the same ridge.\n        assert min_d_high < min_d_under, (\n            f\"higher-energy launch did not penetrate farther: \"\n            f\"low={min_d_under}, high={min_d_high}\"\n        )\n    \n        assert crossed_high, (\n            f\"above-barrier launch did not cross: min D={min_d_high}, \"\n            f\"hard_guard_fired={guard_fired_high}\"\n        )\n        assert energy_log\n        k, u, e = energy_log[0]\n        assert math.isfinite(k) and math.isfinite(u) and math.isfinite(e)\n    \n        crossing_times = [attempt[5] for attempt in attempts]\n        assert all(attempt[0] for attempt in attempts), (\n            f\"crossing did not survive timestep refinement: {attempts}\"\n        )\n        assert all(time is not None for time in crossing_times)\n        coarse_time, middle_time, fine_time = crossing_times\n        assert coarse_time is not None\n        assert middle_time is not None\n        assert fine_time is not None\n        coarse_gap = abs(coarse_time - middle_time)\n        fine_gap = abs(middle_time - fine_time)\n>       assert fine_gap < coarse_gap\nE       assert 0.0004999999999997229 < 0.0\n\nbackend\\tests\\test_manifold_physics.py:559: AssertionError"
+      },
+      {
+        "nodeid": "backend/tests/test_manifold_physics.py::TestSignedSdfContinuity::test_jet_exposes_scale_and_convergence_quality",
+        "outcome": "failed",
+        "phase": "call",
+        "seconds": 0.00041319988667964935,
+        "failure": "self = <test_manifold_physics.TestSignedSdfContinuity object at 0x000002082D641D10>\nrc = <module 'runtime_core' from '${WHEEL}\\\\runtime_core\\\\__init__.py'>\n\n    def test_jet_exposes_scale_and_convergence_quality(self, rc):\n        jet = _geometry_jet(rc, (0.3, 0.05))\n        assert jet[\"validity\"] == \"regular\"\n        assert jet[\"is_bridge\"] is False\n        assert jet[\"provider_version\"] == rc.geometry_provider_version()\n        assert jet[\"resolved_scale\"] > 0.0\n        assert jet[\"requested_scale\"] > 0.0\n        assert math.isfinite(jet[\"estimated_error\"])\n>       assert jet[\"estimated_error\"] <= 0.25 * jet[\"requested_scale\"]\nE       assert 1.7976931348623157e+308 <= (0.25 * 0.001723318199799821)\n\nbackend\\tests\\test_manifold_physics.py:595: AssertionError"
+      }
+    ],
+    "python_test_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536",
+    "native_original_passed": true,
+    "native_reference_crossing": "passed",
+    "native_original_body_sha256": "e1afb878f44a2644f1efbcf97a7b94a6e7b8f56c798dd59e41f0dfb6af340895"
+  },
+  "native_metadata": {
+    "integrator": "Rk4FourSubsteps",
+    "device": "Intel(R) Core(TM) i9-14900",
+    "os": "Microsoft Windows NT 10.0.26100.0",
+    "asset_sha256": "e2b8ae78a38a950721598afb23972f80776b72dac9f8632d82b12c9a34d11847",
+    "executable_sha256": "dabeb41ee02c1c0a2b70e98651dca9d40d39965dd88eb0e6ba358a2ed51f9e48",
+    "manifest_sha256": "7329c7d611945b52fb84a92c1fc2a65fd760c9b68c4d0a805c5d5493d632c4d6",
+    "reference_policy_sha256": "3d8effad5900461f0a02490e9cd573dc84a33eeb26196bd9164c738f5b1493bd",
+    "memory_note": "OS peak working set sampled every 20 ms; includes asset/input copies, reference diagnostics, cache-stress scratch and serialization, not only coefficients",
+    "runs": [
+      {
+        "run": 0,
+        "exit_code": 0,
+        "process_seconds": 12.1796551,
+        "sampled_os_peak_working_set_bytes": 248217600,
+        "stdout_file": "run-0.json"
+      },
+      {
+        "run": 1,
+        "exit_code": 0,
+        "process_seconds": 10.8213373,
+        "sampled_os_peak_working_set_bytes": 250904576,
+        "stdout_file": "run-1.json"
+      },
+      {
+        "run": 2,
+        "exit_code": 0,
+        "process_seconds": 14.1021639,
+        "sampled_os_peak_working_set_bytes": 250912768,
+        "stdout_file": "run-2.json"
+      }
+    ]
+  },
+  "native_timings": [
+    {
+      "asset_loading_seconds": 0.1601607,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 2.3,
+        "max_us": 52.599999999999994,
+        "p50_us": 1.9,
+        "p99_us": 4.0,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 1.1,
+        "max_us": 15.8,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.39999999999999997,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 5.2,
+      "identity": "cc35adf2aad104b1",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 6.551435665635985e-07,
+        "hessian_max_normalized_error": 0.0001852799993101518,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.060750147412259314,
+      "neighbor_gradient_max_absolute_error": 1.1841220559638543e-08,
+      "neighbor_hessian_max_relative_error": 3.0019812418125014e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0162495,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 57.3,
+        "max_us": 544.4,
+        "p50_us": 51.8,
+        "p99_us": 159.1,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.0,
+        "max_us": 0.5,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    },
+    {
+      "asset_loading_seconds": 0.1376389,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 1.5,
+        "max_us": 8.1,
+        "p50_us": 1.4,
+        "p99_us": 3.0,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 0.8999999999999999,
+        "max_us": 5.1000000000000005,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.3,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 4.5,
+      "identity": "cc35adf2aad104b1",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 6.551435665635985e-07,
+        "hessian_max_normalized_error": 0.0001852799993101518,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.060750147412259314,
+      "neighbor_gradient_max_absolute_error": 1.1841220559638543e-08,
+      "neighbor_hessian_max_relative_error": 3.0019812418125014e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0004207,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 54.3,
+        "max_us": 428.5,
+        "p50_us": 50.5,
+        "p99_us": 150.8,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.09999999999999999,
+        "max_us": 0.09999999999999999,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    },
+    {
+      "asset_loading_seconds": 0.1279534,
+      "cache_stress_eviction_bytes": 67108864,
+      "cache_stress_queries": {
+        "first_us": 1.7999999999999998,
+        "max_us": 8.5,
+        "p50_us": 2.0,
+        "p99_us": 4.199999999999999,
+        "samples": 1000
+      },
+      "coefficient_bytes": 77405000,
+      "coverage": {
+        "origin": [
+          -1.002,
+          -0.702
+        ],
+        "shape": [
+          3425,
+          2825
+        ],
+        "spacing": 0.0005
+      },
+      "derivative_checks_pass": true,
+      "derivative_tolerance_unchanged": 0.0001,
+      "derivative_verifier": "richardson-neighbor/1",
+      "distinct_queries": {
+        "first_us": 0.8999999999999999,
+        "max_us": 27.900000000000002,
+        "p50_us": 0.19999999999999998,
+        "p99_us": 0.3,
+        "samples": 20000
+      },
+      "first_prepared_query_us": 4.5,
+      "identity": "cc35adf2aad104b1",
+      "legacy_central_differences": {
+        "gradient_max_absolute_error": 6.551435665635985e-07,
+        "hessian_max_normalized_error": 0.0001852799993101518,
+        "passed": false,
+        "role": "preserved finite-increment diagnostic; not a truncation-corrected derivative estimate",
+        "tolerance": 0.0001
+      },
+      "measured_raster_max_scalar_difference": 0.060750147412259314,
+      "neighbor_gradient_max_absolute_error": 1.1841220559638543e-08,
+      "neighbor_hessian_max_relative_error": 3.0019812418125014e-06,
+      "notes": "No canonical provider change. Adapter allocates legacy GeometryJet strings; direct field query does not allocate. Timing excludes preparation/loading.",
+      "policy_loading_seconds": 0.0004073,
+      "profile": "experimental-operational-field/1",
+      "reference": "existing 1024 raster; measured comparison only; true-Shore fidelity and cut information unknown",
+      "transactional_step": {
+        "first_us": 58.1,
+        "max_us": 528.8,
+        "p50_us": 51.1,
+        "p99_us": 65.4,
+        "samples": 1000
+      },
+      "transactional_step_profile": {
+        "beta": 0.0,
+        "d_ref": 0.1,
+        "dt": 0.001,
+        "epsilon": 0.0001,
+        "integrator": "Rk4FourSubsteps",
+        "kappa": 1.0,
+        "lambda_sq": 1.0,
+        "mu": 0.3183098861837907,
+        "physics_profile_id": "54b525d2266d27eb",
+        "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+        "substeps": 4,
+        "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+      },
+      "transactional_step_work": {
+        "coefficient_reads_upper_bound": 5760,
+        "geometry_evaluations": 160
+      },
+      "unavailable_queries": {
+        "first_us": 0.09999999999999999,
+        "max_us": 0.19999999999999998,
+        "p50_us": 0.0,
+        "p99_us": 0.09999999999999999,
+        "samples": 20000
+      }
+    }
+  ],
+  "browser": {
+    "device": "Intel(R) Core(TM) i9-14900",
+    "browser": "153.0.8010.12",
+    "date": "2026-10-30",
+    "integrator": "Rk4FourSubsteps",
+    "asset_sha256": "e2b8ae78a38a950721598afb23972f80776b72dac9f8632d82b12c9a34d11847",
+    "wasm_sha256": "102a8b6cfc076072b70e5da792cd8b04bbe1f1bd22a7d72fd5d4206b4320f58d",
+    "wasm_file_bytes": 5035406,
+    "reference_policy_sha256": "3d8effad5900461f0a02490e9cd573dc84a33eeb26196bd9164c738f5b1493bd",
+    "coverage_manifest_sha256": "7329c7d611945b52fb84a92c1fc2a65fd760c9b68c4d0a805c5d5493d632c4d6",
+    "parity": {
+      "passed": true,
+      "differences": [],
+      "state_and_ledger_relative_tolerance": 1e-06,
+      "scalar_abs_tolerance": 1e-06,
+      "gradient_abs_tolerance": 0.0001,
+      "hessian_relative_tolerance": 0.0001
+    },
+    "provisional_targets": {
+      "query_p99_us": 100,
+      "step_p99_us": 2000,
+      "query_passed": true,
+      "step_passed": true,
+      "shipping_ratified": false
+    }
+  },
+  "browser_timings": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+    "cross_origin_isolated": true,
+    "wasm_initialization_ms": 20.87999987602234,
+    "asset_fetch_ms": 89.39999985694885,
+    "asset_decode_ms": 132.7699999809265,
+    "policy_manifest_fetch_ms": 3.7250001430511475,
+    "asset_bytes": 77405056,
+    "first_prepared_query_us": 154.9999713897705,
+    "distinct_queries": {
+      "samples": 20000,
+      "first_us": 5.000114440917969,
+      "p50_us": 0,
+      "p99_us": 5.000114440917969,
+      "max_us": 629.9998760223389
+    },
+    "unavailable_queries": {
+      "samples": 20000,
+      "first_us": 0,
+      "p50_us": 0,
+      "p99_us": 5.000114440917969,
+      "max_us": 280.0002098083496
+    },
+    "cache_stress_queries": {
+      "samples": 1000,
+      "first_us": 45.00007629394531,
+      "p50_us": 9.999990463256836,
+      "p99_us": 25.00009536743164,
+      "max_us": 1069.9999332427979
+    },
+    "cache_stress_eviction_bytes": 67108864,
+    "transactional_step": {
+      "samples": 1000,
+      "first_us": 1375,
+      "p50_us": 85.00003814697266,
+      "p99_us": 164.99996185302734,
+      "max_us": 1375
+    },
+    "transactional_step_work": {
+      "coefficient_reads_upper_bound": 5760,
+      "geometry_evaluations": 160
+    },
+    "transactional_step_profile_id": "54b525d2266d27eb",
+    "field_id": "cc35adf2aad104b1",
+    "identity_fixed": true,
+    "jet_invariance": true,
+    "wasm_linear_memory_bytes": 160301056,
+    "known_refusal_probe": {
+      "point": [
+        -1,
+        0
+      ],
+      "field_query_available": true,
+      "physics_initialization_refused": true,
+      "state_preserved": true,
+      "error": "ReferenceSingularity: current canonical geometry-provider/6 scale-aware:6:-64:0:1.95e-3 CutLocus; exact point only"
+    },
+    "timing_note": "Browser bridge and return-value allocation/serialization included. Asset fetch/decoding and WASM initialization excluded from queries. Single-call timing is quantized by the browser timer."
+  },
+  "event_diagnostic": {
+    "barrier": 0.8846414294353195,
+    "claim": "same operational scalar field; distinct immutable integrator profiles; original crossing-time and threshold tests unchanged; interpolated segment root is not an exact ODE event or reference crossing",
+    "field_id": "cc35adf2aad104b1",
+    "launch_speed": 0.2557006102510824,
+    "plan": {
+      "adoption": false,
+      "date": "2026-10-30",
+      "drag": 0.0,
+      "drag_controls": {
+        "beta": 0.5,
+        "claim": "separate potential conversion from dissipative drag work; retain the kinetic threshold on the actual force-disabled control",
+        "dt": 0.01,
+        "method": "Rk4",
+        "position_float32": [
+          -0.5,
+          0.1
+        ],
+        "profiles": [
+          "default potential and wall",
+          "kappa=0 and mu=0"
+        ],
+        "substep_sweep": [
+          1,
+          2,
+          4,
+          8,
+          16,
+          32,
+          64
+        ],
+        "velocity_float32": [
+          0.2,
+          0.2
+        ]
+      },
+      "epsilon": 0.0001,
+      "event_diagnostics": "retain original first-negative-sample time; separately bisect F along the final accepted segment; no replacement crossing definition or acceptance threshold",
+      "field_id": "cc35adf2aad104b1",
+      "horizon_seconds": 5.0,
+      "kappa": 0.1,
+      "launch_energy_factor": 25.0,
+      "methods": [
+        "Rk4FourSubsteps"
+      ],
+      "purpose": "Separate integration error from sampled crossing-event timing on identical frozen coefficients; original Euler test and its refinement assertion remain authoritative",
+      "schema": "operational-integration-diagnostic/1",
+      "source_experiment": "geometry-145-operational-closure-fine-experiment.json",
+      "start": [
+        0.4,
+        0.05
+      ],
+      "timesteps": [
+        0.002,
+        0.001,
+        0.0005,
+        0.00025,
+        0.000125
+      ]
+    },
+    "runs": [
+      {
+        "additional_prepared_monitor_queries": 1992,
+        "bracketed_segment_zero_time": 3.863232257412131,
+        "committed_steps": 1932,
+        "failure": null,
+        "final": {
+          "energy": 22.227950115518805,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 3.863999999999796,
+          "physics_profile_id": "bfdbe6e58e776825",
+          "position": [
+            0.3437451130553353,
+            0.06863603526429841
+          ],
+          "velocity": [
+            -4.4512143003709145e-05,
+            0.0006501095127744423
+          ]
+        },
+        "first_negative_sample_time": 3.864,
+        "geometry_evaluations_in_steps": 309120,
+        "initial": {
+          "energy": 22.227972734916786,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "bfdbe6e58e776825",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            -0.2557006102510824,
+            0.0
+          ]
+        },
+        "maximum_energy_excursion": 2.412076679547681e-05,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.002,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 0.1,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "bfdbe6e58e776825",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        }
+      },
+      {
+        "additional_prepared_monitor_queries": 3924,
+        "bracketed_segment_zero_time": 3.8632678398185614,
+        "committed_steps": 3864,
+        "failure": null,
+        "final": {
+          "energy": 22.227971088112813,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 3.8639999999996855,
+          "physics_profile_id": "8206a04ce8a77566",
+          "position": [
+            0.3437435979809586,
+            0.0686359331092158
+          ],
+          "velocity": [
+            -4.4886611089422435e-05,
+            0.0006500843455815351
+          ]
+        },
+        "first_negative_sample_time": 3.864,
+        "geometry_evaluations_in_steps": 618240,
+        "initial": {
+          "energy": 22.227972734916786,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "8206a04ce8a77566",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            -0.2557006102510824,
+            0.0
+          ]
+        },
+        "maximum_energy_excursion": 2.23441734092944e-06,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.001,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 0.1,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "8206a04ce8a77566",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        }
+      },
+      {
+        "additional_prepared_monitor_queries": 7787,
+        "bracketed_segment_zero_time": 3.8632706905234104,
+        "committed_steps": 7727,
+        "failure": null,
+        "final": {
+          "energy": 22.227972783837604,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 3.8635000000004576,
+          "physics_profile_id": "48d9f0c501a46b66",
+          "position": [
+            0.34374349993994713,
+            0.06863559990646029
+          ],
+          "velocity": [
+            -4.491640514640254e-05,
+            0.0006500846648361831
+          ]
+        },
+        "first_negative_sample_time": 3.8635,
+        "geometry_evaluations_in_steps": 1236320,
+        "initial": {
+          "energy": 22.227972734916786,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "48d9f0c501a46b66",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            -0.2557006102510824,
+            0.0
+          ]
+        },
+        "maximum_energy_excursion": 7.629464349179216e-08,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.0005,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 0.1,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "48d9f0c501a46b66",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        }
+      },
+      {
+        "additional_prepared_monitor_queries": 15514,
+        "bracketed_segment_zero_time": 3.8632705546150587,
+        "committed_steps": 15454,
+        "failure": null,
+        "final": {
+          "energy": 22.2279727299304,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 3.8634999999992186,
+          "physics_profile_id": "fdefe1896dbc25ff",
+          "position": [
+            0.3437435055846359,
+            0.06863560029035821
+          ],
+          "velocity": [
+            -4.4915007397196306e-05,
+            0.0006500847602778924
+          ]
+        },
+        "first_negative_sample_time": 3.8635,
+        "geometry_evaluations_in_steps": 2472640,
+        "initial": {
+          "energy": 22.227972734916786,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "fdefe1896dbc25ff",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            -0.2557006102510824,
+            0.0
+          ]
+        },
+        "maximum_energy_excursion": 6.324505363863864e-09,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.00025,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 0.1,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "fdefe1896dbc25ff",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        }
+      },
+      {
+        "additional_prepared_monitor_queries": 30967,
+        "bracketed_segment_zero_time": 3.8632705647181758,
+        "committed_steps": 30907,
+        "failure": null,
+        "final": {
+          "energy": 22.227972734401707,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 3.8633750000018487,
+          "physics_profile_id": "f15f07f91fd11acd",
+          "position": [
+            0.3437435107773666,
+            0.06863551900110575
+          ],
+          "velocity": [
+            -4.491510856537714e-05,
+            0.0006500849561785235
+          ]
+        },
+        "first_negative_sample_time": 3.863375,
+        "geometry_evaluations_in_steps": 4945120,
+        "initial": {
+          "energy": 22.227972734916786,
+          "field_id": "cc35adf2aad104b1",
+          "integrated_work": 0.0,
+          "mechanical_time": 0.0,
+          "physics_profile_id": "f15f07f91fd11acd",
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            -0.2557006102510824,
+            0.0
+          ]
+        },
+        "maximum_energy_excursion": 6.516707173886971e-10,
+        "physics_profile": {
+          "beta": 0.0,
+          "d_ref": 0.1,
+          "dt": 0.000125,
+          "epsilon": 0.0001,
+          "integrator": "Rk4FourSubsteps",
+          "kappa": 0.1,
+          "lambda_sq": 1.0,
+          "mu": 0.3183098861837907,
+          "physics_profile_id": "f15f07f91fd11acd",
+          "semantics": "operational-mechanics/1;current-reference-refusal-policy;explicit-control-covector;fixed-dt-beta",
+          "substeps": 4,
+          "work_rule": "four fixed RK4 substeps; held control covector; summed RK4 work quadrature; one outer commit"
+        }
+      }
+    ]
+  },
+  "rust_controls": {
+    "passed": 30,
+    "release_passed": 30,
+    "release_command": "cargo test --manifest-path runtime-core/Cargo.toml --release --features experimental-operational-field operational_field --lib",
+    "failed": 0,
+    "command": "cargo test -p runtime_core --features experimental-operational-field operational_field --lib"
+  },
+  "shipping_ci_baseline": {
+    "commit": "2db0b809d6c571665d515b5047aeba63d3093121",
+    "workflow_run": 41148404070,
+    "url": "https://github.com/rhythmatician/FractalSync/actions/runs/41148404070",
+    "jobs": [
+      {
+        "id": 124378828966,
+        "name": "WASM-Orbit Build (wasm-pack)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 124378829224,
+        "name": "Build Artifacts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 124378829282,
+        "name": "Runtime-Core Build (maturin)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 124378829294,
+        "name": "Runtime-Core Tests (Rust)",
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      {
+        "id": 124379006381,
+        "name": "Backend Tests (Python)",
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      {
+        "id": 124379044671,
+        "name": "Frontend Tests (TypeScript)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "default_rust_failure_excerpt": "2026-10-31T00:08:03.5160737Z ---- manifold::tests::controls_drive_can_cross_shore_without_wall stdout ----\n2026-10-31T00:08:03.5161223Z \n2026-10-31T00:08:03.5161815Z thread 'manifold::tests::controls_drive_can_cross_shore_without_wall' (3113) panicked at runtime-core/src/manifold.rs:1010:41:\n2026-10-31T00:08:03.5164398Z undriven rollout failed at c=Complex { re: 0.21656074663216787, im: 0.1261080346748591 }, v=(-0.08736181013112647, 0.07818189766014527): geometry not regular: Singular (singularity=CutLocus) at c=(0.21474166530729011, 0.12774018997553147); provider=geometry-provider/6, tile=scale-aware:8:54:32:4.88e-4, requested=0.013245543370785455, resolved=0.00048828125, error=0.00012546345913724634\n2026-10-31T00:08:03.5166570Z stack backtrace:\n2026-10-31T00:08:03.5166914Z    0: __rustc::rust_begin_unwind\n2026-10-31T00:08:03.5167679Z    1: core::panicking::panic_fmt\n2026-10-31T00:08:03.5168334Z    2: runtime_core::manifold::tests::controls_drive_can_cross_shore_without_wall::{closure#1}\n2026-10-31T00:08:03.5169084Z    3: runtime_core::manifold::tests::controls_drive_can_cross_shore_without_wall\n2026-10-31T00:08:03.5170062Z    4: <runtime_core::manifold::tests::controls_drive_can_cross_shore_without_wall::{closure#0} as core::ops::function::FnOnce<()>>::call_once\n2026-10-31T00:08:03.5171029Z note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.\n2026-10-31T00:08:03.5171820Z \n2026-10-31T00:08:03.5171825Z \n2026-10-31T00:08:03.5171937Z failures:\n2026-10-31T00:08:03.5172292Z     manifold::tests::controls_drive_can_cross_shore_without_wall\n2026-10-31T00:08:03.5172633Z \n2026-10-31T00:08:03.5172983Z test result: FAILED. 98 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.93s",
+    "backend_failure_excerpt": "2026-10-31T00:19:08.4924560Z FAILED tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it - RuntimeError: geometry not regular: Unresolved (singularity=None) at c=(0.35659381055433242, 0.06404656757776669); provider=geometry-provider/6, tile=scale-aware:23:2991325:537261:1.49e-8, requested=0.000010000015272244462, resolved=0.000000014901161193847656, error=inf\n2026-10-31T00:19:08.4925797Z ============ 1 failed, 187 passed, 9 warnings in 540.84s (0:09:00) =============",
+    "scope": "prior committed shipping profile; experimental prepared-field replay is separate",
+    "observed_at": "2026-10-31 00:23:43 UTC"
+  },
+  "builder_source_sha256": "81a036d74c8299e1e51d03e4fdd52cc4eb7fa6fc43dc880378001ed41453a228",
+  "evidence_files": {
+    "tmp/geometry145-closure-fine-preparation.json": "697e12f193de2f90faaa8079a637584a1ca2c59870240c076f6486ca5fa460b8",
+    "tmp/geometry145-closure-fine-preparation-memory.json": "4d094bc2858c85eec7a7c83efc256ccc943de9e45b3179304f85647a34d2f82c",
+    "tmp/geometry145-closure-coarse-preparation.json": "21d444f249beee41053bc8381894fc3d5cdb1686f6ef931bb590d1565dbf9e77",
+    "tmp/geometry145-closure-coarse-preparation-memory.json": "89120b1a288eb9965260cbb3cebdc44244d364424a7aff76466d5934894be34b",
+    "tmp/geometry145-closure-comparison-plan.json": "b7815b8ab7c2769c7a8fec8312149f261218f0e576ac0f4411bbc380068fb509",
+    "tmp/geometry145-closure-comparison.json": "59a3350f755817b1055145829cc8306ad5c4c5607e7e9c5c92bf5d1d8f4d5147",
+    "tmp/geometry145-closure-fidelity-plan.json": "90d598c8664570aa6b445ae8ccce113ce91842ec3eb3b9c84dd2778234bb46a7",
+    "tmp/geometry145-closure-fidelity.json": "4f352e8ff07ac600f2763def54e86fcc75a7164ab54a095a18e381a467940179",
+    "tmp/geometry145-closure-policy-plan.json": "cb346e0c95a586122ea1f18fe92ac3e1770121feeab49f452db1aad545fa77ba",
+    "tmp/geometry145-closure-policy.json": "3d8effad5900461f0a02490e9cd573dc84a33eeb26196bd9164c738f5b1493bd",
+    "tmp/geometry145-closure-python.json": "1f7f7074f9c743d6af8a1337d27dc01d1931700342a34758760dbbb298e4930b",
+    "tmp/geometry145-closure-native-crossing.json": "218a52951653cec8bd40d720fc8f94c779b4d196e84ba50d780371d66b8d2bd1",
+    "tmp/geometry145-closure-browser.json": "fc19d0ab876def3c0bca87d4290991fd6ca6ef259ea33b55c812dd0059e08057",
+    "tmp/geometry145-closure-event-plan.json": "b11d29e1a15ee9dc8c97eab8b641dd7e11f513ce4db5a4a8259badfeffabb376",
+    "tmp/geometry145-closure-event.json": "24aadece6e26b61989eda41f74a0045e9bba94d936622df68fa3714655f01133",
+    "tmp/geometry145-closure-native/metadata.json": "e30892831f9730b30def50a550ca12e78d05249d9485b7dc71b91fa792544d96",
+    "tmp/geometry145-closure-native/run-0.json": "4dfa393eff1e315e6c3fa3e62927980f527afd8c25a286b7263997ba0b77ce95",
+    "tmp/geometry145-closure-native/run-1.json": "1c8fe08a5c9d2e09f6369e1e65fb10d7c3842c69deb5d381e3d8297408e5e992",
+    "tmp/geometry145-closure-native/run-2.json": "a2bcf6b6bc819a3a9c52511d42b9e54c6039a5c5b216566025342598e22f24e5",
+    "tmp/geometry145-closure-regression-red.txt": "80278a8a4f6a935841b4ff97ac881e26d01a55118cf890f25edd321009ec48e9",
+    "docs/validation/geometry-145-operational-closure-fine-experiment.json": "7b019a8a7ff13dcfa3b8bc0811eb0808037bc627fd1b5ce4c0f69d89a8e51ed4",
+    "docs/validation/geometry-145-operational-closure-coarse-experiment.json": "84dae934bfe11819ec1e7a646d4dd5456e5a150bba04bea63931da7e11d55c66",
+    "docs/validation/geometry-145-operational-closure-replay.json": "7329c7d611945b52fb84a92c1fc2a65fd760c9b68c4d0a805c5d5493d632c4d6",
+    "tmp/geometry145-closure-ci-baseline.json": "1b1f088369f7ba255aa842470d5a551ffd107f5c4d3695222d389a49478be3ca"
+  },
+  "archive_sha256": "1088f577950fcb7e5ece0c27a361f1e9ed46fe4f18ceb6d552b240fc3b4bdbfb"
+}

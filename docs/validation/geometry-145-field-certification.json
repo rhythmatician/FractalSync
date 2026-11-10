@@ -1,0 +1,1279 @@
+{
+  "diagnostic_only": true,
+  "production_commit": "fb33fd25294583a535d2751677f7feca6dbd8f81",
+  "production_versions": {
+    "provider": "geometry-provider/6",
+    "controller": "orbit-controller/10",
+    "snapshot": "debug-snapshot/5"
+  },
+  "thresholds_and_crossing_tests_changed": false,
+  "production": {
+    "rust_library": {
+      "passed": 87,
+      "failed": 1,
+      "seconds": 17.78
+    },
+    "rust_integration": {
+      "passed": 163,
+      "failed": 0,
+      "ignored": 1,
+      "seconds": 414.34
+    },
+    "python_physics": {
+      "passed": 26,
+      "failed": 1
+    },
+    "provider_tests": 30,
+    "parity": "all mandatory checks pass; manifold max abs error 1.490e-8",
+    "architecture": "pass, 97 files, 9 manifested mirrors",
+    "canonical_surfaces": "pass",
+    "derivatives": [
+      {
+        "case": "inward_before",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00017456386035963334,
+        "max_hessian_relative_error": 0.0006503028226249239,
+        "passes": false,
+        "center": {
+          "D": 0.042303777360476635,
+          "grad_D": [
+            0.888880972933999,
+            -0.45779731482133346
+          ],
+          "hessian_D": [
+            [
+              4.955773365555615,
+              9.61660847423309
+            ],
+            [
+              9.61660847423309,
+              18.68162377452518
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.004230389555306669,
+          "estimated_error": 2.7742650634397792e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:101:12:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_before",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00017456403383198094,
+        "max_hessian_relative_error": 0.0006503023781481984,
+        "passes": false,
+        "center": {
+          "D": 0.042303777360476635,
+          "grad_D": [
+            0.888880972933999,
+            -0.45779731482133346
+          ],
+          "hessian_D": [
+            [
+              4.955773365555615,
+              9.61660847423309
+            ],
+            [
+              9.61660847423309,
+              18.68162377452518
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.004230389555306669,
+          "estimated_error": 2.7742650634397792e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:101:12:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00017498204396526607,
+        "max_hessian_relative_error": 0.0006517076387241022,
+        "passes": false,
+        "center": {
+          "D": 0.04220003982054825,
+          "grad_D": [
+            0.8882772279660281,
+            -0.45896691287408675
+          ],
+          "hessian_D": [
+            [
+              4.9933326405757725,
+              9.658300397143648
+            ],
+            [
+              9.658300397143648,
+              18.702093988318666
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0042200158303682435,
+          "estimated_error": 2.7727579747532927e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:101:12:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00017498213417088682,
+        "max_hessian_relative_error": 0.0006517073628437558,
+        "passes": false,
+        "center": {
+          "D": 0.04220003982054825,
+          "grad_D": [
+            0.8882772279660281,
+            -0.45896691287408675
+          ],
+          "hessian_D": [
+            [
+              4.9933326405757725,
+              9.658300397143648
+            ],
+            [
+              9.658300397143648,
+              18.702093988318666
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0042200158303682435,
+          "estimated_error": 2.7727579747532927e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:101:12:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.004265530625695013,
+        "max_hessian_relative_error": 0.6959740813495469,
+        "passes": false,
+        "center": {
+          "D": -0.0195240803174118,
+          "grad_D": [
+            0.7450359206266954,
+            -0.6646898823243441
+          ],
+          "hessian_D": [
+            [
+              6.072237410479147,
+              8.2779238698879
+            ],
+            [
+              8.2779238698879,
+              6.506120760797785
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0019524336409741227,
+          "estimated_error": 6.106365434430105e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:76:13:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.004265531092335628,
+        "max_hessian_relative_error": 0.6959740865198164,
+        "passes": false,
+        "center": {
+          "D": -0.0195240803174118,
+          "grad_D": [
+            0.7450359206266954,
+            -0.6646898823243441
+          ],
+          "hessian_D": [
+            [
+              6.072237410479147,
+              8.2779238698879
+            ],
+            [
+              8.2779238698879,
+              6.506120760797785
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0019524336409741227,
+          "estimated_error": 6.106365434430105e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:76:13:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.0059172412403392105,
+        "max_hessian_relative_error": 3.0335338724778715,
+        "passes": false,
+        "center": {
+          "D": -0.01953554443577268,
+          "grad_D": [
+            0.7354211435272358,
+            -0.6758486884844588
+          ],
+          "hessian_D": [
+            [
+              0.387337796069005,
+              1.7425994574153094
+            ],
+            [
+              1.7425994574153094,
+              1.1904888016936752
+            ]
+          ],
+          "resolved_scale": 0.0009765625,
+          "requested_scale": 0.001953580037782043,
+          "estimated_error": 0.0002972549336971858,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:7:38:6:9.77e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00591724168442842,
+        "max_hessian_relative_error": 3.0335338959590885,
+        "passes": false,
+        "center": {
+          "D": -0.01953554443577268,
+          "grad_D": [
+            0.7354211435272358,
+            -0.6758486884844588
+          ],
+          "hessian_D": [
+            [
+              0.387337796069005,
+              1.7425994574153094
+            ],
+            [
+              1.7425994574153094,
+              1.1904888016936752
+            ]
+          ],
+          "resolved_scale": 0.0009765625,
+          "requested_scale": 0.001953580037782043,
+          "estimated_error": 0.0002972549336971858,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:7:38:6:9.77e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.045079131664133465,
+        "max_hessian_relative_error": 2.8154051928143495,
+        "passes": false,
+        "center": {
+          "D": -0.2381859342979673,
+          "grad_D": [
+            -0.9713310905328847,
+            0.23444875100593565
+          ],
+          "hessian_D": [
+            [
+              0.07174505919186913,
+              0.5738151879221363
+            ],
+            [
+              0.5738151879221363,
+              2.676774127540824
+            ]
+          ],
+          "resolved_scale": 0.0078125,
+          "requested_scale": 0.023818595528997004,
+          "estimated_error": 0.0011156222577739516,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:4:-8:1:7.81e-3",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.44125294207437205,
+        "max_hessian_relative_error": 28.17052908421617,
+        "passes": false,
+        "center": {
+          "D": -0.2381859342979673,
+          "grad_D": [
+            -0.9713310905328847,
+            0.23444875100593565
+          ],
+          "hessian_D": [
+            [
+              0.07174505919186913,
+              0.5738151879221363
+            ],
+            [
+              0.5738151879221363,
+              2.676774127540824
+            ]
+          ],
+          "resolved_scale": 0.0078125,
+          "requested_scale": 0.023818595528997004,
+          "estimated_error": 0.0011156222577739516,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:4:-8:1:7.81e-3",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00019000326685381097,
+        "max_hessian_relative_error": 0.0006992719483769469,
+        "passes": false,
+        "center": {
+          "D": 0.03850213255268559,
+          "grad_D": [
+            0.8645585612071678,
+            -0.502193640881367
+          ],
+          "hessian_D": [
+            [
+              6.550508147279288,
+              11.273042454509095
+            ],
+            [
+              11.273042454509095,
+              19.417097211047803
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0038502262415403225,
+          "estimated_error": 2.7138078525903997e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:100:12:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 0.00019000345767339333,
+        "max_hessian_relative_error": 0.0006992709881504123,
+        "passes": false,
+        "center": {
+          "D": 0.03850213255268559,
+          "grad_D": [
+            0.8645585612071678,
+            -0.502193640881367
+          ],
+          "hessian_D": [
+            [
+              6.550508147279288,
+              11.273042454509095
+            ],
+            [
+              11.273042454509095,
+              19.417097211047803
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.0038502262415403225,
+          "estimated_error": 2.7138078525903997e-05,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:100:12:4.88e-4",
+          "is_bridge": false
+        }
+      }
+    ],
+    "energy": [
+      {
+        "case": "low_curvature",
+        "dt": 0.002,
+        "steps": 150,
+        "completed": 150,
+        "max_excursion": 0.00021551608473235895,
+        "max_step_change": 1.784353842460007e-06,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "low_curvature",
+        "dt": 0.001,
+        "steps": 300,
+        "completed": 300,
+        "max_excursion": 9.905362025230957e-05,
+        "max_step_change": 4.569819529454122e-07,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "low_curvature",
+        "dt": 0.0005,
+        "steps": 600,
+        "completed": 600,
+        "max_excursion": 4.1233982108979106e-05,
+        "max_step_change": 1.1978013270130816e-07,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.002,
+        "steps": 150,
+        "completed": 150,
+        "max_excursion": 0.00023396726068658502,
+        "max_step_change": 1.7328806651839557e-06,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.001,
+        "steps": 300,
+        "completed": 300,
+        "max_excursion": 0.00011923504213662284,
+        "max_step_change": 4.3402738181264056e-07,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.0005,
+        "steps": 600,
+        "completed": 600,
+        "max_excursion": 6.18700413663742e-05,
+        "max_step_change": 1.0882690992808364e-07,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "near_shore",
+        "dt": 0.002,
+        "steps": 100,
+        "completed": 100,
+        "max_excursion": 0.021724498906376066,
+        "max_step_change": 0.02465116333709716,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "near_shore",
+        "dt": 0.001,
+        "steps": 200,
+        "completed": 200,
+        "max_excursion": 0.0224304214728428,
+        "max_step_change": 0.02447274849844039,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "near_shore",
+        "dt": 0.0005,
+        "steps": 400,
+        "completed": 400,
+        "max_excursion": 0.02288633842000598,
+        "max_step_change": 0.02435451712070913,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.005,
+        "steps": 100,
+        "completed": 100,
+        "max_excursion": 0.0029482902419508683,
+        "max_step_change": 4.3381769926797986e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.0025,
+        "steps": 200,
+        "completed": 200,
+        "max_excursion": 0.0014284124290926403,
+        "max_step_change": 1.057534006276839e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.00125,
+        "steps": 400,
+        "completed": 400,
+        "max_excursion": 0.0006686324089018036,
+        "max_step_change": 2.505453520207368e-06,
+        "passed": true,
+        "error": null
+      }
+    ]
+  },
+  "ci": {
+    "commit": "fb33fd2",
+    "workflow_run_id": 40060148221,
+    "rust_library": {
+      "passed": 87,
+      "failed": 1,
+      "seconds": 15.27
+    },
+    "backend": {
+      "passed": 187,
+      "failed": 1,
+      "seconds": 1158.24
+    },
+    "failure_coordinates": {
+      "rust": [
+        0.2147416653072901,
+        0.12774018997553147
+      ],
+      "python": [
+        0.3565938105543324,
+        0.0640465675777667
+      ]
+    },
+    "green": [
+      "Python build",
+      "WASM build",
+      "artifacts",
+      "frontend tests",
+      "real WASM startup/snapshot",
+      "GPU acceptance",
+      "types",
+      "stubs",
+      "frontend directory guard"
+    ],
+    "skipped_after_backend_failure": [
+      "architecture guardrail",
+      "canonical surfaces, both verified locally"
+    ]
+  },
+  "predecessor_with_unsound_plateau_certification": {
+    "status": "rejected; numerical passes are not acceptance evidence because unresolved inputs could select saturated weights",
+    "derivative_passes": 12,
+    "rectangular_guard_inward": [
+      {
+        "case": "inward",
+        "dt": 0.005,
+        "steps": 100,
+        "completed": 100,
+        "max_excursion": 0.0034742619596361823,
+        "max_step_change": 5.055489050209694e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.0025,
+        "steps": 200,
+        "completed": 200,
+        "max_excursion": 0.0017367756704411708,
+        "max_step_change": 1.264912477383362e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.00125,
+        "steps": 400,
+        "completed": 400,
+        "max_excursion": 0.0008682986369645818,
+        "max_step_change": 3.1635677673058638e-06,
+        "passed": true,
+        "error": null
+      }
+    ],
+    "rectangular_guard_high_curvature": [
+      {
+        "case": "high_curvature",
+        "dt": 0.002,
+        "steps": 150,
+        "completed": 85,
+        "max_excursion": 0.00014737251864782586,
+        "max_step_change": 1.9030545002074462e-06,
+        "passed": false,
+        "error": "geometry not regular: Unresolved (singularity=None) at c=(0.40013498230726419, 0.05325731773475294); provider=geometry-provider/6, tile=scale-aware:14:6555:872:7.63e-6, requested=0.004018039598645104, resolved=0.00000762939453125, error=0.0000033450830167619516"
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.001,
+        "steps": 300,
+        "completed": 140,
+        "max_excursion": 6.160742489846882e-05,
+        "max_step_change": 4.760515406321275e-07,
+        "passed": false,
+        "error": "geometry not regular: Singular (singularity=CutLocus) at c=(0.40008990277639855, 0.05269539634506685); provider=geometry-provider/6, tile=scale-aware:14:6555:863:7.63e-6, requested=0.004062449517832872, resolved=0.00000762939453125, error=0.00000788904354110621"
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.0005,
+        "steps": 600,
+        "completed": 281,
+        "max_excursion": 3.0905693802152356e-05,
+        "max_step_change": 1.1904888252978196e-07,
+        "passed": false,
+        "error": "geometry not regular: Singular (singularity=CutLocus) at c=(0.40008958915733528, 0.05269587619629543); provider=geometry-provider/6, tile=scale-aware:14:6555:863:7.63e-6, requested=0.004062397685127334, resolved=0.00000762939453125, error=0.000007948391223283864"
+      }
+    ],
+    "hierarchical_inward": [
+      {
+        "case": "inward",
+        "dt": 0.005,
+        "steps": 100,
+        "completed": 100,
+        "max_excursion": 0.0034742619596361823,
+        "max_step_change": 5.055489050209694e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.0025,
+        "steps": 200,
+        "completed": 200,
+        "max_excursion": 0.0017367756704411708,
+        "max_step_change": 1.264912477383362e-05,
+        "passed": true,
+        "error": null
+      },
+      {
+        "case": "inward",
+        "dt": 0.00125,
+        "steps": 400,
+        "completed": 400,
+        "max_excursion": 0.0008682986369645818,
+        "max_step_change": 3.1635677673058638e-06,
+        "passed": true,
+        "error": null
+      }
+    ],
+    "hierarchical_high_curvature": [
+      {
+        "case": "high_curvature",
+        "dt": 0.002,
+        "steps": 150,
+        "completed": 150,
+        "max_excursion": 0.3198564526171932,
+        "max_step_change": 0.4293170561804507,
+        "passed": false,
+        "error": null
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.001,
+        "steps": 300,
+        "completed": 300,
+        "max_excursion": 0.10275740758122498,
+        "max_step_change": 0.13233459071933074,
+        "passed": false,
+        "error": null
+      },
+      {
+        "case": "high_curvature",
+        "dt": 0.0005,
+        "steps": 600,
+        "completed": 600,
+        "max_excursion": 0.0638536881574876,
+        "max_step_change": 0.022821698697512494,
+        "passed": false,
+        "error": null
+      }
+    ],
+    "native_crossing": "failed unchanged original test at new candidate (0.22024251973434336,0.12264820255135506); Unresolved, infinite error, level14; 79.44 seconds",
+    "high_peak_hessian_order": 40000,
+    "cold_cost_observations": {
+      "high_curvature_point_seconds": 1.208623,
+      "native_point_seconds": 360.647727,
+      "native_point_result": "Unresolved at level17; widening coverage did not certify it"
+    }
+  },
+  "corrected_candidate": {
+    "status": "unshipped, fails acceptance",
+    "patch": "experiments/geometry-145-field-certification.patch",
+    "patch_base_commit": "fb33fd25294583a535d2751677f7feca6dbd8f81",
+    "baseline_version_stamps_are_not_released_semantics": true,
+    "certificate_regression": "observed red before correction; zero plateau cannot certify unresolved selector inputs",
+    "actual_source_tests": {
+      "passed": 11,
+      "failed": 0,
+      "filter": "geometry_provider::coherent_field_tests"
+    },
+    "derivatives": [
+      {
+        "case": "inward_before",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.365649815454617e-10,
+        "max_hessian_relative_error": 9.150689612660105e-10,
+        "passes": true,
+        "center": {
+          "D": 0.03734740857983107,
+          "grad_D": [
+            0.8525541182408631,
+            -0.5226389532658824
+          ],
+          "hessian_D": [
+            [
+              7.313799966237393,
+              11.930626753543672
+            ],
+            [
+              11.930626753543672,
+              19.46181949943086
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0037347542457688426,
+          "estimated_error": 8.139547755525722e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3235:409:1.53e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_before",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 3.381006585811974e-11,
+        "max_hessian_relative_error": 7.258792334947258e-11,
+        "passes": true,
+        "center": {
+          "D": 0.03734740857983107,
+          "grad_D": [
+            0.8525541182408631,
+            -0.5226389532658824
+          ],
+          "hessian_D": [
+            [
+              7.313799966237393,
+              11.930626753543672
+            ],
+            [
+              11.930626753543672,
+              19.46181949943086
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0037347542457688426,
+          "estimated_error": 8.139547755525722e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3235:409:1.53e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.3471401771880664e-10,
+        "max_hessian_relative_error": 9.242343495291467e-10,
+        "passes": true,
+        "center": {
+          "D": 0.037248105233161924,
+          "grad_D": [
+            0.8516674353042832,
+            -0.5240826076510381
+          ],
+          "hessian_D": [
+            [
+              7.373867149231195,
+              11.983001220556687
+            ],
+            [
+              11.983001220556687,
+              19.473136036995605
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.003724823946793599,
+          "estimated_error": 8.132117378309434e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3234:409:1.53e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 2.1104007430494676e-11,
+        "max_hessian_relative_error": 5.850375493059503e-11,
+        "passes": true,
+        "center": {
+          "D": 0.037248105233161924,
+          "grad_D": [
+            0.8516674353042832,
+            -0.5240826076510381
+          ],
+          "hessian_D": [
+            [
+              7.373867149231195,
+              11.983001220556687
+            ],
+            [
+              11.983001220556687,
+              19.473136036995605
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.003724823946793599,
+          "estimated_error": 8.132117378309434e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3234:409:1.53e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-06,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 6.12507483954694e-07,
+        "max_hessian_relative_error": 0.0029917053043615302,
+        "passes": false,
+        "center": {
+          "D": -0.019522978819375043,
+          "grad_D": [
+            0.7358616880162144,
+            -0.6771697215998077
+          ],
+          "hessian_D": [
+            [
+              -15.3248423768208,
+              -12.385737545588166
+            ],
+            [
+              -12.385737545588166,
+              -24.551017487292388
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.001952323492615316,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:12:1229:219:3.05e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-07,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 6.107137351385461e-09,
+        "max_hessian_relative_error": 2.991946866667511e-05,
+        "passes": false,
+        "center": {
+          "D": -0.019522978819375043,
+          "grad_D": [
+            0.7358616880162144,
+            -0.6771697215998077
+          ],
+          "hessian_D": [
+            [
+              -15.3248423768208,
+              -12.385737545588166
+            ],
+            [
+              -12.385737545588166,
+              -24.551017487292388
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.001952323492615316,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:12:1229:219:3.05e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-06,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.4261399927661955e-06,
+        "max_hessian_relative_error": 0.0009655028675976592,
+        "passes": false,
+        "center": {
+          "D": -0.019531061828964406,
+          "grad_D": [
+            0.7361015717999589,
+            -0.6770468494623572
+          ],
+          "hessian_D": [
+            [
+              56.251413985585636,
+              55.96855415204448
+            ],
+            [
+              55.96855415204448,
+              53.65186169862456
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0019531317829753077,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:12:1229:219:3.05e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-07,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.423467788086441e-08,
+        "max_hessian_relative_error": 9.655061837261863e-06,
+        "passes": false,
+        "center": {
+          "D": -0.019531061828964406,
+          "grad_D": [
+            0.7361015717999589,
+            -0.6770468494623572
+          ],
+          "hessian_D": [
+            [
+              56.251413985585636,
+              55.96855415204448
+            ],
+            [
+              55.96855415204448,
+              53.65186169862456
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.0019531317829753077,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:12:1229:219:3.05e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-06,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 3.814599996987411e-09,
+        "max_hessian_relative_error": 3.7727171414962035e-06,
+        "passes": false,
+        "center": {
+          "D": -0.2381485554097591,
+          "grad_D": [
+            -0.9695494582632744,
+            0.24461636158144698
+          ],
+          "hessian_D": [
+            [
+              -0.22046286567619952,
+              -1.0968121796712786
+            ],
+            [
+              -1.0968121796712786,
+              -1.688949218963915
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.023814857640505664,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:-128:25:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-07,
+        "center_validity": "unresolved",
+        "all_samples_regular": false,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.835751550771647e-10,
+        "max_hessian_relative_error": 3.772157966938116e-08,
+        "passes": false,
+        "center": {
+          "D": -0.2381485554097591,
+          "grad_D": [
+            -0.9695494582632744,
+            0.24461636158144698
+          ],
+          "hessian_D": [
+            [
+              -0.22046286567619952,
+              -1.0968121796712786
+            ],
+            [
+              -1.0968121796712786,
+              -1.688949218963915
+            ]
+          ],
+          "resolved_scale": 0.00048828125,
+          "requested_scale": 0.023814857640505664,
+          "estimated_error": null,
+          "validity": "unresolved",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:8:-128:25:4.88e-4",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-06,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 1.7247558936617224e-10,
+        "max_hessian_relative_error": 9.936045763022728e-10,
+        "passes": true,
+        "center": {
+          "D": 0.033725737811291866,
+          "grad_D": [
+            0.8161407253456266,
+            -0.5778531962642466
+          ],
+          "hessian_D": [
+            [
+              9.900875061795842,
+              13.98366818364602
+            ],
+            [
+              13.98366818364602,
+              19.75007003601525
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.003372588606569147,
+          "estimated_error": 7.79561674671414e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3200:409:1.53e-5",
+          "is_bridge": false
+        }
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-07,
+        "center_validity": "regular",
+        "all_samples_regular": true,
+        "all_scales_match": true,
+        "max_distance_gradient_abs_error": 3.781408519643037e-11,
+        "max_hessian_relative_error": 7.971387530661529e-11,
+        "passes": true,
+        "center": {
+          "D": 0.033725737811291866,
+          "grad_D": [
+            0.8161407253456266,
+            -0.5778531962642466
+          ],
+          "hessian_D": [
+            [
+              9.900875061795842,
+              13.98366818364602
+            ],
+            [
+              13.98366818364602,
+              19.75007003601525
+            ]
+          ],
+          "resolved_scale": 3.0517578125e-05,
+          "requested_scale": 0.003372588606569147,
+          "estimated_error": 7.79561674671414e-07,
+          "validity": "regular",
+          "singularity": "none",
+          "provider_version": "geometry-provider/6",
+          "tile_id": "scale-aware:13:3200:409:1.53e-5",
+          "is_bridge": false
+        }
+      }
+    ],
+    "training_point": {
+      "c": [
+        0.3075204398270623,
+        0.02876420131721053
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "live_training_refusal",
+      "cold_us": 10674677,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.000269721990422885,
+        "estimated_error": 5.7421165107427396e-05,
+        "grad_D": [
+          -0.7984551637895295,
+          -0.6020542761392688
+        ],
+        "hessian_D": [
+          [
+            1343.862808105056,
+            -1782.2549232027932
+          ],
+          [
+            -1782.2549232027932,
+            2363.6584012127914
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 2.876629140464284e-05,
+        "resolved_scale": 1.1920928955078125e-07,
+        "singularity": "none",
+        "tile_id": "scale-aware:20:322458:30161:1.19e-7",
+        "validity": "unresolved"
+      },
+      "warm_us": 0
+    },
+    "python_crossing_point": {
+      "c": [
+        0.3565938105543324,
+        0.0640465675777667
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "new_kinetic_crossing_refusal",
+      "cold_us": 5587099,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -1.7492156673548027e-07,
+        "estimated_error": null,
+        "grad_D": [
+          -0.43066259451353595,
+          -0.8907719170239458
+        ],
+        "hessian_D": [
+          [
+            3280900.4390092012,
+            -2211618.694102246
+          ],
+          [
+            -2211618.694102246,
+            1221725.9479455398
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 1.0000015298765553e-05,
+        "resolved_scale": 1.4901161193847656e-08,
+        "singularity": "none",
+        "tile_id": "scale-aware:23:2991325:537261:1.49e-8",
+        "validity": "unresolved"
+      },
+      "warm_us": 0
+    },
+    "compute_bounds": {
+      "generated_leaf_tiles": 16384,
+      "region_visits": 131072,
+      "tile_radius": 4096,
+      "production_generated_tile_ceiling": 121
+    },
+    "certificate_rule": "certify all gate inputs, except independently certified OR operands forcing one; zero numerical coefficients do not certify selection",
+    "early_failure": "closed uncertified fixed-lookahead prefix cannot be repaired by appending finer models; return explicit Unresolved when there are no current ties",
+    "membership_cap": 32768,
+    "strict_slow_derivative_run": "superseded and interrupted; only the complete strict-fast run is acceptance evidence",
+    "adoption_requirements": [
+      "certified shared nodal geometry and refinement selectors",
+      "shared-node and weight-transition coherence checks",
+      "high-curvature energy acceptance",
+      "both original crossing tests",
+      "live query cost and memory",
+      "version/golden/binding updates"
+    ]
+  },
+  "production_source_restored": true,
+  "nonfinite_json": "null estimated_error represents nonfinite error, not zero; provider failure logs retain infinity explicitly"
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "operational-source-refinement-plan/1",
+  "date": "2026-10-30",
+  "coarse_field_id": "b45293bd1d6a1bd6",
+  "fine_field_id": "37ec6365e602ae31",
+  "coarse_source_spacing": 0.002,
+  "fine_source_spacing": 0.001,
+  "angle_divisions": 256,
+  "multiplier_insets": [0.000001, 0.00001, 0.0001],
+  "fixed_controls": [[0.3, 0.05], [0.4, 0.05], [0.6, 0.15]],
+  "neighbor_points": "original 1000-point neighboring derivative grid",
+  "purpose": "measure source sensitivity independently of self-consistency; never assign a regional distance certificate from point comparisons"
+}

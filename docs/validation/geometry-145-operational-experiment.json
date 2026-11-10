@@ -1,0 +1,27 @@
+{
+  "schema": "operational-experiment/2",
+  "preparation": {"origin": [-0.1, -0.2], "spacing": 0.0005, "shape": [1605, 1005], "reference": "builtin-default-raster; measured only"},
+  "perturbations": [
+    {"name": "original", "offset": [0.0, 0.0], "speed_scale": 1.0},
+    {"name": "x_plus", "offset": [0.00001, 0.0], "speed_scale": 1.0},
+    {"name": "x_minus", "offset": [-0.00001, 0.0], "speed_scale": 1.0},
+    {"name": "y_plus", "offset": [0.0, 0.00001], "speed_scale": 1.0},
+    {"name": "y_minus", "offset": [0.0, -0.00001], "speed_scale": 1.0},
+    {"name": "speed_plus", "offset": [0.0, 0.0], "speed_scale": 1.01},
+    {"name": "speed_minus", "offset": [0.0, 0.0], "speed_scale": 0.99}
+  ],
+  "crossing_start": [0.4, 0.05],
+  "ridge_start": [0.6, 0.15],
+  "crossing_timesteps": [0.002, 0.001, 0.0005],
+  "crossing_horizon_seconds": 5.0,
+  "launch_energy_factors": [0.5, 25.0],
+  "ridge_dt": 0.005,
+  "ridge_steps": 200,
+  "query_p99_target_us": 100.0,
+  "step_p99_target_us": 2000.0,
+  "parity_scalar_abs_tolerance": 0.000001,
+  "parity_gradient_abs_tolerance": 0.0001,
+  "parity_hessian_relative_tolerance": 0.0001,
+  "reference_policy": "current-authoritative-singularity-refusal; no smoothing permission",
+  "coverage_policy": "load complete asset before replay; never extend or replace; miss is failure"
+}

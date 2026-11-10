@@ -1,0 +1,796 @@
+{
+  "date": "2026-10-27",
+  "production_adoption": false,
+  "base_candidate_checkpoint": "79c83a5",
+  "scope": "Actual public-query hookup in an isolated coherent-field candidate; not production adoption.",
+  "changed_files": [
+    "runtime-core/src/geometry_provider/periodic_boundary/certified.rs",
+    "runtime-core/src/geometry_provider/periodic_boundary/fast_escape.rs",
+    "runtime-core/src/geometry_provider/periodic_boundary/tiles.rs",
+    "runtime-core/src/geometry_provider/periodic_boundary.rs",
+    "runtime-core/src/geometry_provider.rs"
+  ],
+  "patch_sha256": "0449c2d9033d9815fb299ce1cd707b7d3e90ede0aa7b2ee4e7c4622ba584e8b5",
+  "source_sha256": {
+    "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+    "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+    "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+    "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+    "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+    "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+    "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+    "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+    "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+    "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+    "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+    "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+    "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+    "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+    "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+    "runtime-core\\src\\geometry_provider\\uniform_box.rs": "6baef913e930bf6174bbaab3ffa674d34dc1c9ee06eaf7980f1f5523d06850f8",
+    "runtime-core\\src\\geometry_provider.rs": "bd0dc9222922ad79cdfbec114cdeef2e5bea71f8de7e340674db38ea907f3cf3",
+    "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+    "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+    "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+    "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+    "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+    "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+    "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+    "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+    "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+    "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+    "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+  },
+  "manifest_sha256": {
+    "Cargo.toml": "0bdbcedfb556ee4d3b571297b7998f99e34c1e1557d69f8c2497e16e9099c163",
+    "Cargo.lock": "97a95a6d0d6a68306319aff00f27b44e2301070108e8e5b3e9ba3bafa0c9cf5b",
+    "runtime-core/Cargo.toml": "2bab1d9e8c389486282b2b47e0635e0ef0acadc93f4a3f1b6440396e697599e6",
+    "wasm-orbit/Cargo.toml": "4b0c5589aaba1a1c88fcd554377b67833851f92b8e061b43ee1f913f715ff53c"
+  },
+  "wasm_source_sha256": {
+    "wasm-orbit/src/lib.rs": "8a9afb30f0ea31d6e7e035d5dc8f0d0194576c0ea1b2f256de9a48d5a1273d64"
+  },
+  "unchanged_public_thresholds": {
+    "GEOMETRY_SCALE_ALPHA": "0.1",
+    "DYADIC_FIT_ERROR_FACTOR": "0.25",
+    "DYADIC_CUT_TIE_FACTOR": "0.5",
+    "DYADIC_CUT_NORMAL_DEGREES": "30.0",
+    "DYADIC_MAX_K": "24",
+    "DYADIC_BISECTIONS": "3",
+    "EIKONAL_TOL": "0.5",
+    "HESSIAN_NORM_SINGULAR": "5e4"
+  },
+  "provider": {
+    "filter": "geometry_provider",
+    "exit_code": 0,
+    "timed_out": false,
+    "elapsed_s": 314.1039294002112,
+    "limit_s": 600,
+    "exe_sha256": "0fc8999371650fdf2c0fd14beec37e812d9d4cdb8fa307395ef5c17028f2e32b",
+    "selected_tests": 139
+  },
+  "native_energy": {
+    "filter": "energy",
+    "exit_code": 0,
+    "timed_out": false,
+    "elapsed_s": 0.7712437000591308,
+    "limit_s": 180,
+    "exe_sha256": "0fc8999371650fdf2c0fd14beec37e812d9d4cdb8fa307395ef5c17028f2e32b",
+    "selected_tests": 4
+  },
+  "recorded_query_points": [
+    {
+      "name": "native",
+      "jet": {
+        "D": -7.642526802709497e-06,
+        "grad_D": [
+          -0.652417073589407,
+          0.7578601204700333
+        ],
+        "hessian_D": [
+          [
+            14959.34115585993,
+            12878.00705993802
+          ],
+          [
+            12878.007059938018,
+            11086.251382760625
+          ]
+        ],
+        "resolved_scale": 1.1920928955078125e-07,
+        "requested_scale": 1.0029161588054176e-05,
+        "estimated_error": 7.265650108953868e-07,
+        "validity": "regular",
+        "singularity": "none",
+        "provider_version": "geometry-provider/6",
+        "tile_id": "covered:21",
+        "is_bridge": false
+      }
+    },
+    {
+      "name": "python",
+      "jet": {
+        "D": -1.7943838602655178e-07,
+        "grad_D": [
+          -0.5295813851655663,
+          -0.8612828248556371
+        ],
+        "hessian_D": [
+          [
+            229470.6169056027,
+            -238992.4221084252
+          ],
+          [
+            -238992.4221084252,
+            299091.4788077092
+          ]
+        ],
+        "resolved_scale": 1.1920928955078125e-07,
+        "requested_scale": 1.0000016099054231e-05,
+        "estimated_error": 1.7925920093150634e-08,
+        "validity": "regular",
+        "singularity": "none",
+        "provider_version": "geometry-provider/6",
+        "tile_id": "covered:24",
+        "is_bridge": false
+      }
+    }
+  ],
+  "derivatives": {
+    "cases": 6,
+    "probes": 12,
+    "unchanged_gradient_tolerance": 0.0001,
+    "unchanged_relative_hessian_tolerance": 0.0001,
+    "rows": [
+      {
+        "case": "inward_before",
+        "step": 1e-06,
+        "gradient_error": 9.356873054144899e-10,
+        "relative_hessian_error": 6.083975148320399e-08
+      },
+      {
+        "case": "inward_before",
+        "step": 1e-07,
+        "gradient_error": 7.873390828194715e-11,
+        "relative_hessian_error": 5.879099668428889e-10
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-06,
+        "gradient_error": 1.0113427872937564e-09,
+        "relative_hessian_error": 5.90671109706434e-08
+      },
+      {
+        "case": "inward_after",
+        "step": 1e-07,
+        "gradient_error": 3.6428193794790786e-11,
+        "relative_hessian_error": 5.629419135339036e-10
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-06,
+        "gradient_error": 2.7434721161512243e-11,
+        "relative_hessian_error": 1.3899981802993897e-10
+      },
+      {
+        "case": "near_shore_before",
+        "step": 1e-07,
+        "gradient_error": 2.228028872508503e-11,
+        "relative_hessian_error": 2.284380056724724e-10
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-06,
+        "gradient_error": 2.395961207213304e-11,
+        "relative_hessian_error": 1.219292282218859e-10
+      },
+      {
+        "case": "near_shore_after",
+        "step": 1e-07,
+        "gradient_error": 1.9408474827287137e-11,
+        "relative_hessian_error": 2.2555209117680702e-10
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-06,
+        "gradient_error": 1.26775256958922e-11,
+        "relative_hessian_error": 2.788596020764089e-10
+      },
+      {
+        "case": "regular_tile_boundary",
+        "step": 1e-07,
+        "gradient_error": 3.615792110167604e-10,
+        "relative_hessian_error": 8.089964254054394e-10
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-06,
+        "gradient_error": 1.7163226395666697e-10,
+        "relative_hessian_error": 9.917620173145143e-10
+      },
+      {
+        "case": "near_shore_tile_boundary",
+        "step": 1e-07,
+        "gradient_error": 7.311040661761581e-12,
+        "relative_hessian_error": 1.398424992195497e-10
+      }
+    ]
+  },
+  "python_physics": {
+    "selected": 25,
+    "deselected": 2,
+    "record": {
+      "args": [
+        "backend/tests/test_manifold_physics.py",
+        "-q",
+        "-k",
+        "not shore_ridge_reflects_below_barrier_and_crosses_above_it and not signed_distance_authority_sign_and_continuity"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_s": 80.1121112999972,
+      "wheel_sha256": "4e61c943c9fa57eeccd6cd3cedefb03ef9c1734661a47be57fc5bfb963b866c5",
+      "pyd_sha256": "ef097dad38a39684f2e321b8fd9bdb93f3b2c108933e1a07aea9b43cd1aa48eb"
+    },
+    "excluded": "The original crossing and signed-distance continuity tests remain unpassed; no test or threshold was edited."
+  },
+  "python_crossing": {
+    "args": [
+      "backend/tests/test_manifold_physics.py",
+      "-q",
+      "-k",
+      "shore_ridge_reflects_below_barrier_and_crosses_above_it",
+      "-s"
+    ],
+    "exit_code": 1,
+    "timed_out": true,
+    "elapsed_s": 120.01470970013179,
+    "wheel_sha256": "4e61c943c9fa57eeccd6cd3cedefb03ef9c1734661a47be57fc5bfb963b866c5",
+    "pyd_sha256": "ef097dad38a39684f2e321b8fd9bdb93f3b2c108933e1a07aea9b43cd1aa48eb"
+  },
+  "native_crossing_precursor": {
+    "filter": "controls_drive_can_cross_shore_without_wall",
+    "exit_code": 1,
+    "timed_out": true,
+    "elapsed_s": 600.0276379000861,
+    "limit_s": 600,
+    "exe_sha256": "06e130c58f0746741c3665fbb2caf0a62882a4b49056cffbc3fce6c54aeb67f4",
+    "selected_tests": 1
+  },
+  "native_crossing_note": "The 600-second native run precedes the fitted-range ordering/source-enum cleanup; it is a cost refusal, not a successful crossing.",
+  "wasm": {
+    "result": "passed",
+    "errors": 0,
+    "warnings": 18,
+    "route": "wasm-orbit, wasm32-unknown-unknown"
+  },
+  "fast_escape_controls": {
+    "source_sha256": {
+      "tmp\\geometry145-runtime-streaming\\runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+      "tmp\\geometry145-runtime-streaming\\runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+      "tmp\\geometry145-runtime-streaming\\runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+      "tmp\\geometry145-runtime-streaming\\runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+      "tmp\\geometry145-runtime-streaming\\runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2"
+    },
+    "results": [
+      {
+        "variant": "baseline",
+        "exit_code": 0,
+        "log": "C:\\Users\\JeffHall\\git\\FractalSync\\tmp\\geometry145-fast-controls\\baseline.log"
+      },
+      {
+        "variant": "no_roundoff",
+        "exit_code": 101,
+        "log": "C:\\Users\\JeffHall\\git\\FractalSync\\tmp\\geometry145-fast-controls\\no_roundoff.log"
+      },
+      {
+        "variant": "no_quadratic",
+        "exit_code": 101,
+        "log": "C:\\Users\\JeffHall\\git\\FractalSync\\tmp\\geometry145-fast-controls\\no_quadratic.log"
+      },
+      {
+        "variant": "no_linear",
+        "exit_code": 101,
+        "log": "C:\\Users\\JeffHall\\git\\FractalSync\\tmp\\geometry145-fast-controls\\no_linear.log"
+      }
+    ]
+  },
+  "independent_fast_replay": {
+    "record": {
+      "filter": "periodic_boundary::tiles::tests::cold_profile",
+      "exit_code": 0,
+      "timed_out": false,
+      "environment": {
+        "GEOMETRY145_REPLAY_FAST": "1"
+      },
+      "elapsed_s": 77.20150800002739,
+      "limit_s": 180,
+      "exe_sha256": "0fc8999371650fdf2c0fd14beec37e812d9d4cdb8fa307395ef5c17028f2e32b",
+      "selected_tests": 1
+    },
+    "fresh_512_bit_positive_replays": 59
+  },
+  "unchanged_original_tests": {
+    "native_sha256": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+    "python_sha256": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536"
+  },
+  "installed_extension_incident": {
+    "installed_sha256": "0e26f43b33b499a5da5346b412bea57605a64cb9dc8886976f585ea0ec99cac6",
+    "original_sha256": "ea87ed5c65cf49af650d0afeea287320e0a7912312804eb09ff874e8017d5e5c",
+    "binary_restored_byte_for_byte": false,
+    "reason": "Pytest fixture rebuilt unchanged production source; original binary was removed by installation.",
+    "report_mode": "Direct child JSON compared with direct binding JSON; no extra Rust JSON parse boundary.",
+    "coordinate_policy": "Use exact coordinates from the direct child output, not coordinates reparsed by the historical Rust parent report.",
+    "cases": 64,
+    "mismatches": 0,
+    "rows": [
+      {
+        "case": "regular_interior",
+        "epsilon": 0.01,
+        "expected": "0385b21858169cc4d8fada7942ebefddb4574075851c167e51cbdd5a995217e5",
+        "actual": "0385b21858169cc4d8fada7942ebefddb4574075851c167e51cbdd5a995217e5",
+        "equal": true
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 0.0001,
+        "expected": "3a80656da8207ed2a20e80fd0a48ae29999816c23060b2172012aa9102c83766",
+        "actual": "3a80656da8207ed2a20e80fd0a48ae29999816c23060b2172012aa9102c83766",
+        "equal": true
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 1e-06,
+        "expected": "ab75eb7e9ee6cc4dfe9931ddd4c68295323fee2e7a262a1d4d1f01919694df0a",
+        "actual": "ab75eb7e9ee6cc4dfe9931ddd4c68295323fee2e7a262a1d4d1f01919694df0a",
+        "equal": true
+      },
+      {
+        "case": "regular_interior",
+        "epsilon": 1e-08,
+        "expected": "3bea6f6eb1f25c086ba4f1631996115e8744e929b7fae7537148046f72c9b66e",
+        "actual": "3bea6f6eb1f25c086ba4f1631996115e8744e929b7fae7537148046f72c9b66e",
+        "equal": true
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 0.01,
+        "expected": "3f820398d7f3d7bd0f46ae9f9cec2e8e5a2397c0da871d242cad7dd9628b33be",
+        "actual": "3f820398d7f3d7bd0f46ae9f9cec2e8e5a2397c0da871d242cad7dd9628b33be",
+        "equal": true
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 0.0001,
+        "expected": "126468a6d9ea78e4bbf7959e483b26fa963d75423843c0364ef1b48b6996f060",
+        "actual": "126468a6d9ea78e4bbf7959e483b26fa963d75423843c0364ef1b48b6996f060",
+        "equal": true
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 1e-06,
+        "expected": "643e3be4e193476d7e17171a3567a8ad66489e46287afa66372b8cc792f59c71",
+        "actual": "643e3be4e193476d7e17171a3567a8ad66489e46287afa66372b8cc792f59c71",
+        "equal": true
+      },
+      {
+        "case": "regular_shore_approach",
+        "epsilon": 1e-08,
+        "expected": "610095e5eee22c0d7e3e3374332fb86828dc028ed48f9d838fea41f791e63c16",
+        "actual": "610095e5eee22c0d7e3e3374332fb86828dc028ed48f9d838fea41f791e63c16",
+        "equal": true
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 0.01,
+        "expected": "e3375f6a250707dcf2ddf34cddf676b36c42518865340396a9868ce675d9819b",
+        "actual": "e3375f6a250707dcf2ddf34cddf676b36c42518865340396a9868ce675d9819b",
+        "equal": true
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 0.0001,
+        "expected": "657784df98b6831d9b3cbcf198c238feed140d393a732b039b5d5957ca80b2f7",
+        "actual": "657784df98b6831d9b3cbcf198c238feed140d393a732b039b5d5957ca80b2f7",
+        "equal": true
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 1e-06,
+        "expected": "db4d8e490f8a0b33e2c11c3f010646c79da6b49f51009c458630bc1a3d091f7c",
+        "actual": "db4d8e490f8a0b33e2c11c3f010646c79da6b49f51009c458630bc1a3d091f7c",
+        "equal": true
+      },
+      {
+        "case": "crossing_corridor",
+        "epsilon": 1e-08,
+        "expected": "2629de7416c93384b7b9bbf3491b78b813022f18452de78b6bd31c3a7ca95258",
+        "actual": "2629de7416c93384b7b9bbf3491b78b813022f18452de78b6bd31c3a7ca95258",
+        "equal": true
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 0.01,
+        "expected": "96cf687c12b44e1ede214abcf96f8844b802347ffb8a342b3b3a732643867bd4",
+        "actual": "96cf687c12b44e1ede214abcf96f8844b802347ffb8a342b3b3a732643867bd4",
+        "equal": true
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 0.0001,
+        "expected": "07e215b52888fd0a7d8578b06d236bade0c1ff3e7bfd528465316709a56bb83b",
+        "actual": "07e215b52888fd0a7d8578b06d236bade0c1ff3e7bfd528465316709a56bb83b",
+        "equal": true
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 1e-06,
+        "expected": "75be0aa0b337a1b624eb737d527c1304d85015b9875219c0623c9854d118f7df",
+        "actual": "75be0aa0b337a1b624eb737d527c1304d85015b9875219c0623c9854d118f7df",
+        "equal": true
+      },
+      {
+        "case": "unique_cusp_projection",
+        "epsilon": 1e-08,
+        "expected": "ecc262286a749e1f3208f96ef5f35b06c2a4cd5d94f45486c5f4d6513440c257",
+        "actual": "ecc262286a749e1f3208f96ef5f35b06c2a4cd5d94f45486c5f4d6513440c257",
+        "equal": true
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 0.01,
+        "expected": "4daaf95739e3dd0220b408a89cdb6ae426488345667c7e60d795ae37d82bd1d9",
+        "actual": "4daaf95739e3dd0220b408a89cdb6ae426488345667c7e60d795ae37d82bd1d9",
+        "equal": true
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 0.0001,
+        "expected": "6ae51ce44ff72adf53330d90cc1e5ac76ba5a1eb728b3db1bbfc0f9116ace360",
+        "actual": "6ae51ce44ff72adf53330d90cc1e5ac76ba5a1eb728b3db1bbfc0f9116ace360",
+        "equal": true
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 1e-06,
+        "expected": "19f45e084f394269a4986971bb50bec68ca660b6dd977ae21a1e7482c16c60eb",
+        "actual": "19f45e084f394269a4986971bb50bec68ca660b6dd977ae21a1e7482c16c60eb",
+        "equal": true
+      },
+      {
+        "case": "cut_locus",
+        "epsilon": 1e-08,
+        "expected": "08c03f5621f01095fa03c6b6fefcb3a9858ebc60e25185c41d2a72b88f6cc337",
+        "actual": "08c03f5621f01095fa03c6b6fefcb3a9858ebc60e25185c41d2a72b88f6cc337",
+        "equal": true
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 0.01,
+        "expected": "8fe4b277eda94bc095cec2195eb9d61eab79a596db01a480c3998df184a9ccdf",
+        "actual": "8fe4b277eda94bc095cec2195eb9d61eab79a596db01a480c3998df184a9ccdf",
+        "equal": true
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 0.0001,
+        "expected": "4d1695d80756af0abb02e7cf787601907f3fdc001e8a6b92f65e231b24334961",
+        "actual": "4d1695d80756af0abb02e7cf787601907f3fdc001e8a6b92f65e231b24334961",
+        "equal": true
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 1e-06,
+        "expected": "1d6d986a137e5aefb566e2458b9a12b64b1b12fa64afa7e9326ea847d6bb2fec",
+        "actual": "1d6d986a137e5aefb566e2458b9a12b64b1b12fa64afa7e9326ea847d6bb2fec",
+        "equal": true
+      },
+      {
+        "case": "cardioid_cusp",
+        "epsilon": 1e-08,
+        "expected": "9c0fc3c512f8bc452f680a2224bf13067e55c8f7adc6ca6cfeb21438233221a1",
+        "actual": "9c0fc3c512f8bc452f680a2224bf13067e55c8f7adc6ca6cfeb21438233221a1",
+        "equal": true
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 0.01,
+        "expected": "6b3d8ea86504a08236f49f9d41f3bdaedd40e692c530ff282fa1fd52173fdd46",
+        "actual": "6b3d8ea86504a08236f49f9d41f3bdaedd40e692c530ff282fa1fd52173fdd46",
+        "equal": true
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 0.0001,
+        "expected": "cc7ef42dbdcb2ea962d661d7ec9929dda32ccc998893fee730bb58cb97f0c5ac",
+        "actual": "cc7ef42dbdcb2ea962d661d7ec9929dda32ccc998893fee730bb58cb97f0c5ac",
+        "equal": true
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 1e-06,
+        "expected": "d2ce802a1a28244e2420cd850d40ba054dc3baf865245a8405e3cc028d9642e4",
+        "actual": "d2ce802a1a28244e2420cd850d40ba054dc3baf865245a8405e3cc028d9642e4",
+        "equal": true
+      },
+      {
+        "case": "rejected_rollout_endpoint",
+        "epsilon": 1e-08,
+        "expected": "aa6c71d57d718a6914aa3fc9db1256efa6ca49033880c567502359f92ccfd803",
+        "actual": "aa6c71d57d718a6914aa3fc9db1256efa6ca49033880c567502359f92ccfd803",
+        "equal": true
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 0.01,
+        "expected": "d0c6930b3e05178b263c1bf5ab0fcccb54cbc1f5a1c112162066659a13f8066e",
+        "actual": "d0c6930b3e05178b263c1bf5ab0fcccb54cbc1f5a1c112162066659a13f8066e",
+        "equal": true
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 0.0001,
+        "expected": "116c1395eb460d0b0b2ed5a3391b4521f75af9cc9a2ce596902591540ce60ff1",
+        "actual": "116c1395eb460d0b0b2ed5a3391b4521f75af9cc9a2ce596902591540ce60ff1",
+        "equal": true
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 1e-06,
+        "expected": "9d1ad8519c46883e20003ccb47d71d637069437acde0f424d9ca0cec573dc169",
+        "actual": "9d1ad8519c46883e20003ccb47d71d637069437acde0f424d9ca0cec573dc169",
+        "equal": true
+      },
+      {
+        "case": "high_curvature_rollout",
+        "epsilon": 1e-08,
+        "expected": "918df0c42ddeb6c2bff6c2297d1f8333b512fb944da8ea1783f431cc465e806d",
+        "actual": "918df0c42ddeb6c2bff6c2297d1f8333b512fb944da8ea1783f431cc465e806d",
+        "equal": true
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 0.01,
+        "expected": "c126b8ae79ce3a99d8f89f86779708e4ceb1b1fb5f823716b83501dc7b8861c6",
+        "actual": "c126b8ae79ce3a99d8f89f86779708e4ceb1b1fb5f823716b83501dc7b8861c6",
+        "equal": true
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 0.0001,
+        "expected": "82034fb8ff2f903538a1bf6860dc2f259382590facbe368194ce172d64cfac6a",
+        "actual": "82034fb8ff2f903538a1bf6860dc2f259382590facbe368194ce172d64cfac6a",
+        "equal": true
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 1e-06,
+        "expected": "353df3e31de4b61b82122578d6b7e4a84f4c976595e596f5af0b5477810815a2",
+        "actual": "353df3e31de4b61b82122578d6b7e4a84f4c976595e596f5af0b5477810815a2",
+        "equal": true
+      },
+      {
+        "case": "remaining_crossing_refusal",
+        "epsilon": 1e-08,
+        "expected": "ebc7b045efae15a33a23abfb2171a198c8acc52d91b951468b74101fa3c9b619",
+        "actual": "ebc7b045efae15a33a23abfb2171a198c8acc52d91b951468b74101fa3c9b619",
+        "equal": true
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 0.01,
+        "expected": "10c1888ee78b28e33d56deafb188e5fefdad0aedf22d0c065e8b328f1ab90861",
+        "actual": "10c1888ee78b28e33d56deafb188e5fefdad0aedf22d0c065e8b328f1ab90861",
+        "equal": true
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 0.0001,
+        "expected": "ce98b9341d9dddb35ee33576bb8e60287ade889a70f5ddbeb6ca552f4c6f4335",
+        "actual": "ce98b9341d9dddb35ee33576bb8e60287ade889a70f5ddbeb6ca552f4c6f4335",
+        "equal": true
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 1e-06,
+        "expected": "2dc7ca1e441aa4b32f00ecbdc17d1ec34e5e4950e49d283edf424ab396ff9f90",
+        "actual": "2dc7ca1e441aa4b32f00ecbdc17d1ec34e5e4950e49d283edf424ab396ff9f90",
+        "equal": true
+      },
+      {
+        "case": "inward_before_jump",
+        "epsilon": 1e-08,
+        "expected": "49a0d18185805c2693faae8471ea5b855fe01c90d08e3aa97a3e94d912c9870e",
+        "actual": "49a0d18185805c2693faae8471ea5b855fe01c90d08e3aa97a3e94d912c9870e",
+        "equal": true
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 0.01,
+        "expected": "9265c8d9891058f94be85177caf99ef8a6111e97022a1d54310fee7c19516dd9",
+        "actual": "9265c8d9891058f94be85177caf99ef8a6111e97022a1d54310fee7c19516dd9",
+        "equal": true
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 0.0001,
+        "expected": "6558e4e0c986b3a90261577405197a425c2ef3476f22341c75b8ff445c0f237e",
+        "actual": "6558e4e0c986b3a90261577405197a425c2ef3476f22341c75b8ff445c0f237e",
+        "equal": true
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 1e-06,
+        "expected": "dee39b564211ce04d6e3093f7a728240ccec909fb2b6365cc9be9e265c7c5780",
+        "actual": "dee39b564211ce04d6e3093f7a728240ccec909fb2b6365cc9be9e265c7c5780",
+        "equal": true
+      },
+      {
+        "case": "inward_after_jump",
+        "epsilon": 1e-08,
+        "expected": "490e8144f76e5418b8c8603e2e359834576aa69376494487281ed0a98674cff3",
+        "actual": "490e8144f76e5418b8c8603e2e359834576aa69376494487281ed0a98674cff3",
+        "equal": true
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 0.01,
+        "expected": "322a3618106c262bf22eea3057af2a7fd40c46d2bab0a113aac05e3a1dc9adbd",
+        "actual": "322a3618106c262bf22eea3057af2a7fd40c46d2bab0a113aac05e3a1dc9adbd",
+        "equal": true
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 0.0001,
+        "expected": "d21b3a80dc888f5e1380581468d0aff28f9eab5e31468e3cf945dda818bf9db6",
+        "actual": "d21b3a80dc888f5e1380581468d0aff28f9eab5e31468e3cf945dda818bf9db6",
+        "equal": true
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 1e-06,
+        "expected": "13bfaf627ad39dda3c5ad23d0fe1e3ffb5fdc1644b89cc3382ec08ff811ef72d",
+        "actual": "13bfaf627ad39dda3c5ad23d0fe1e3ffb5fdc1644b89cc3382ec08ff811ef72d",
+        "equal": true
+      },
+      {
+        "case": "coherent_field_inward_refusal",
+        "epsilon": 1e-08,
+        "expected": "419d040e11912c98607b884f550d74f6b5688b4a92d43c2d1c52a640526b9193",
+        "actual": "419d040e11912c98607b884f550d74f6b5688b4a92d43c2d1c52a640526b9193",
+        "equal": true
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 0.01,
+        "expected": "22201021919bff338d3ce5ad59b83f0d0586867c3d7f22607d9c3e74c00a98a6",
+        "actual": "22201021919bff338d3ce5ad59b83f0d0586867c3d7f22607d9c3e74c00a98a6",
+        "equal": true
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 0.0001,
+        "expected": "d52c6c355084da6e65297f60c20f113748db949b0ca003bbf58803d830909481",
+        "actual": "d52c6c355084da6e65297f60c20f113748db949b0ca003bbf58803d830909481",
+        "equal": true
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 1e-06,
+        "expected": "9cc2d0811f241bf1da3c3fc955bc7e4024b6c3702a0961de863836bd38ecd569",
+        "actual": "9cc2d0811f241bf1da3c3fc955bc7e4024b6c3702a0961de863836bd38ecd569",
+        "equal": true
+      },
+      {
+        "case": "live_training_refusal",
+        "epsilon": 1e-08,
+        "expected": "de29b1a2dbd109497421adf14b1746f2beda5cd8264c5a17899581be1c636654",
+        "actual": "de29b1a2dbd109497421adf14b1746f2beda5cd8264c5a17899581be1c636654",
+        "equal": true
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 0.01,
+        "expected": "567dab6b2b1ebf8cc1db75dc1f3cdaa19532028263bde95071f0591f59b5fc69",
+        "actual": "567dab6b2b1ebf8cc1db75dc1f3cdaa19532028263bde95071f0591f59b5fc69",
+        "equal": true
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 0.0001,
+        "expected": "295db7f6485c19e4be2c401f142606faaf12a46a3900643e207eae1b417691ec",
+        "actual": "295db7f6485c19e4be2c401f142606faaf12a46a3900643e207eae1b417691ec",
+        "equal": true
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 1e-06,
+        "expected": "79b6082f73ab4109c7819c300732180f747f987a2b16684cc6078619a36d9ee2",
+        "actual": "79b6082f73ab4109c7819c300732180f747f987a2b16684cc6078619a36d9ee2",
+        "equal": true
+      },
+      {
+        "case": "kinetic_crossing_refusal",
+        "epsilon": 1e-08,
+        "expected": "586ab15d032f24797e9568e4a32abd845008dd29bb50e7071e9c3c9196e5e159",
+        "actual": "586ab15d032f24797e9568e4a32abd845008dd29bb50e7071e9c3c9196e5e159",
+        "equal": true
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 0.01,
+        "expected": "fda69346124a64d7c88f418e729d867e0c947e98fde44e2419d091b0f7b2868f",
+        "actual": "fda69346124a64d7c88f418e729d867e0c947e98fde44e2419d091b0f7b2868f",
+        "equal": true
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 0.0001,
+        "expected": "44d07a8781e692f5a67ce96dd7b08789b2d2030ff782e8758734bcee729e5e96",
+        "actual": "44d07a8781e692f5a67ce96dd7b08789b2d2030ff782e8758734bcee729e5e96",
+        "equal": true
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 1e-06,
+        "expected": "f5e645012a61ca357cd3441e5e3c5d53504acb69aa7dc2afe2ccece5d46bc8b8",
+        "actual": "f5e645012a61ca357cd3441e5e3c5d53504acb69aa7dc2afe2ccece5d46bc8b8",
+        "equal": true
+      },
+      {
+        "case": "new_native_crossing_refusal",
+        "epsilon": 1e-08,
+        "expected": "e81fa0c3b5469685995ff84b34efe4075e2d6c754ead30c5f48468cdc8dd9a73",
+        "actual": "e81fa0c3b5469685995ff84b34efe4075e2d6c754ead30c5f48468cdc8dd9a73",
+        "equal": true
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 0.01,
+        "expected": "007a57e584980ff9cd66526a27042de65bfbee9ef3f774a4b9a4f963daf9cbaf",
+        "actual": "007a57e584980ff9cd66526a27042de65bfbee9ef3f774a4b9a4f963daf9cbaf",
+        "equal": true
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 0.0001,
+        "expected": "40d2a9ade5bd4440a6782f67bb84bd709f7770ddb7c1ff556cb4f0c10055f748",
+        "actual": "40d2a9ade5bd4440a6782f67bb84bd709f7770ddb7c1ff556cb4f0c10055f748",
+        "equal": true
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 1e-06,
+        "expected": "83f591dccab2e002933de239a487f43d8b82f30aa924de15975299da86cfd3a6",
+        "actual": "83f591dccab2e002933de239a487f43d8b82f30aa924de15975299da86cfd3a6",
+        "equal": true
+      },
+      {
+        "case": "new_kinetic_crossing_refusal",
+        "epsilon": 1e-08,
+        "expected": "7e1e19cef7096e4ae3b97aebc34a3479fcad29b0decf16dbbe9e6ca09a800ce5",
+        "actual": "7e1e19cef7096e4ae3b97aebc34a3479fcad29b0decf16dbbe9e6ca09a800ce5",
+        "equal": true
+      }
+    ]
+  },
+  "discarded_python_full_run": "Fixture auto-rebuilt the installed extension. Its source-drift guard rejected that run. Later isolated runs set RUNTIME_CORE_NO_BUILD=1 and report no drift.",
+  "reviews": "Three axes clear after actual-range ordering, named level source, shared candidate screening, and immutable proof-input snapshot fixes.",
+  "remaining": [
+    "Original crossings and continuity must complete and pass.",
+    "Reduce synchronous contour fallback and repeated cold proof work.",
+    "Complete live training validation.",
+    "Remove prototype diagnostics and reconcile caches before adoption.",
+    "Adoption requires version/golden/binding updates, project checks and browser artifact-size evidence."
+  ]
+}

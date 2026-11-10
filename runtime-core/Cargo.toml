@@ -35,6 +35,39 @@ python = ["pyo3", "pyo3/extension-module", "pythonize"]
 wasm = ["wasm-bindgen", "js-sys"]
 
 default = []
+experimental-operational-field = []
+
+[[example]]
+name = "operational_field_report"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_coverage_prepare"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_fidelity_audit"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_source_audit"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_contour_prepare"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_derivative_witness"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_integration_diagnostic"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "operational_source_refinement"
+required-features = ["experimental-operational-field"]
 
 [build-dependencies]
 # Use a lightweight build script which invokes the Python-side stub generator

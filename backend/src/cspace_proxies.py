@@ -1277,12 +1277,13 @@ class _ControlsStep(torch.autograd.Function):
         import runtime_core
 
         # Fail closed if the destination binding is absent (no flat fallback)
-        rust_step = getattr(runtime_core, "controls_integrate_step", None)
-        if rust_step is None:
+        try:
+            rust_step = runtime_core.controls_integrate_step
+        except AttributeError as error:
             raise RuntimeError(
                 "runtime_core.controls_integrate_step is unavailable; refusing flat fallback. "
                 "Rebuild runtime_core wheel (maturin develop --release)."
-            )
+            ) from error
         rc_config = runtime_core.ManifoldConfig(
             config.d_ref, config.epsilon, config.lambda_sq, config.kappa, config.mu
         )
@@ -1294,7 +1295,7 @@ class _ControlsStep(torch.autograd.Function):
             grip=float(grip.item()),
             impulse=float(impulse.item()),
         )
-        new_re, new_im, new_vx, new_vy, _info = rust_step(
+        new_re, new_im, new_vx, new_vy, info = rust_step(
             float(c_re.item()),
             float(c_im.item()),
             float(vx.item()),
@@ -1309,15 +1310,28 @@ class _ControlsStep(torch.autograd.Function):
         ctx.save_for_backward(
             c_re, c_im, vx, vy, dir_x, dir_y, throttle, brake, grip, impulse
         )
+        energy = torch.tensor(
+            [
+                info.kinetic,
+                info.potential,
+                info.total,
+                info.delta_total,
+                info.delta_kinetic,
+            ],
+            dtype=torch.float64,
+            device="cpu",
+        )
+        ctx.mark_non_differentiable(energy)
         return (
             torch.tensor(new_re, device=device, dtype=dtype),
             torch.tensor(new_im, device=device, dtype=dtype),
             torch.tensor(new_vx, device=device, dtype=dtype),
             torch.tensor(new_vy, device=device, dtype=dtype),
+            energy,
         )
 
     @staticmethod
-    def backward(ctx, grad_re, grad_im, grad_vx, grad_vy):
+    def backward(ctx, grad_re, grad_im, grad_vx, grad_vy, _grad_energy):
         # STE: route upstream c/v gradients back to predecessor c/v and to
         # the motion components that drive Q. The exact manifold gradient is
         # undefined across the PyO3 boundary; this surrogate keeps the graph
@@ -1385,7 +1399,7 @@ def controls_v2_sequence(
     Returns:
         (trajectory, infos): complex tensor (N,) and per-frame energy infos
     """
-    import runtime_core
+    import runtime_core  # noqa: F401 - fail early if runtime-core is unavailable
 
     cfg = config if config is not None else ManifoldConfig()
     n = direction_x.shape[0]
@@ -1452,38 +1466,18 @@ def controls_v2_sequence(
             dx = dx / mag
             dy = dy / mag
 
-        v_old_re = float(v_re.detach())
-        v_old_im = float(v_im.detach())
-        new_re, new_im, v_re, v_im = _ControlsStep.apply(
+        new_re, new_im, v_re, v_im, energy = _ControlsStep.apply(
             cur_re, cur_im, v_re, v_im, dx, dy, th, br, gr, imp, dt_t, cfg
         )
-        # Energy diagnostics (detached, via Rust bindings for the new state)
-        rc_config = runtime_core.ManifoldConfig(
-            cfg.d_ref, cfg.epsilon, cfg.lambda_sq, cfg.kappa, cfg.mu
-        )
-        c_new = complex(float(new_re.detach()), float(new_im.detach()))
-        c_old = complex(float(cur_re.detach()), float(cur_im.detach()))
-        v_new = (float(v_re.detach()), float(v_im.detach()))
-        v_old = (v_old_re, v_old_im)
-        # For info, compute KE at new/old via Rust
-        try:
-            k_new = runtime_core.manifold_kinetic_energy(
-                v_new[0], v_new[1], c_new, rc_config
-            )
-            u_new = runtime_core.manifold_potential_energy(c_new, rc_config)
-            k_old = runtime_core.manifold_kinetic_energy(
-                v_old[0], v_old[1], c_old, rc_config
-            )
-            u_old = runtime_core.manifold_potential_energy(c_old, rc_config)
-        except Exception:
-            k_new = u_new = k_old = u_old = 0.0
+        # The Rust step returns the complete post-impulse energy record. Keep
+        # that record detached, and never turn a geometry refusal into zeros.
         infos.append(
             ManifoldEnergyInfo(
-                kinetic=k_new,
-                potential=u_new,
-                total=k_new + u_new,
-                delta_total=(k_new + u_new) - (k_old + u_old),
-                delta_kinetic=k_new - k_old,
+                kinetic=float(energy[0].item()),
+                potential=float(energy[1].item()),
+                total=float(energy[2].item()),
+                delta_total=float(energy[3].item()),
+                delta_kinetic=float(energy[4].item()),
             )
         )
 

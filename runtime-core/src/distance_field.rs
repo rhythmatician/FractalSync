@@ -33,6 +33,10 @@ pub fn clear_distance_field() {
     }
 }
 
+pub fn is_field_loaded() -> bool {
+    DIST_FIELD.read().ok().and_then(|g| g.as_ref().map(|_| true)).unwrap_or(false)
+}
+
 pub fn load_distance_field<P: AsRef<Path>>(_path: P) -> Result<(), String> {
     Err("loading .npy from Rust is not implemented in this build; use `set_distance_field_from_vec` (Python) or `load_builtin_distance_field` instead".into())
 }
@@ -376,7 +380,7 @@ pub fn mandelbrot_distance_estimate_with_params(
 
         let sdf_vals = sample_distance_field(&perimeter_cs)?;
         if sdf_vals.len() != perimeter_cs.len() { return Err("sdf length mismatch".to_string()) }
-        let mut best = std::f64::INFINITY;
+        let mut best = f64::INFINITY;
         for (p, &sdf) in perimeter_cs.iter().zip(sdf_vals.iter()) {
             let xb = p.re;
             let yb = p.im;

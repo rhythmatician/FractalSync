@@ -1,0 +1,87 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1445,24 +1445,25 @@
+ 
+ static FIELD_NODE_CACHE: Lazy<RwLock<LruCache<(u32,u64,u64),f64>>> = Lazy::new(|| RwLock::new(LruCache::new(4096)));
+ fn point_membership_stable(c:Complex64,tile:&ShoreTile)->bool {
+- let Some((distance,projection))=tile.segments.iter().map(|s|point_to_segment_distance(c.re,c.im,s)).min_by(|a,b|a.0.total_cmp(&b.0)) else {return false;};
++ let nearest=tile.segments.iter().map(|s|point_to_segment_distance(c.re,c.im,s).0).min_by(f64::total_cmp);
++ let Some(distance)=nearest else {return false;};
++ let projections:Vec<_>=tile.segments.iter().filter_map(|s| {
++  let (candidate,projection)=point_to_segment_distance(c.re,c.im,s);
++  (candidate==distance).then_some(projection)
++ }).collect();
+  tile.unstable_nodes.iter().all(|&(x,y)| {
+   let dx=((c.re-x).abs()-tile.h).max(0.);let dy=((c.im-y).abs()-tile.h).max(0.);
+-  dx.hypot(dy)>distance && (projection.0-x).abs().max((projection.1-y).abs())>DYADIC_STABILITY_BAND_CELLS as f64*tile.h
++  dx.hypot(dy)>distance && projections.iter().all(|projection|
++   (projection.0-x).abs().max((projection.1-y).abs())>DYADIC_STABILITY_BAND_CELLS as f64*tile.h)
+  })
+ }
+-fn field_node(c:Complex64,k:u32,source:&ShoreTile)->Option<f64> {
++fn field_node(c:Complex64,k:u32,_source:&ShoreTile)->Option<f64> {
+  if let Some(value)=bounded_component_distance(c) {return Some(value);}
+  let key=(k,c.re.to_bits(),c.im.to_bits());
+  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {if let Some(v)=cache.get(&key){return Some(v);}}
+ 
+- // The caller supplies a contained global-tile search covering the active
+- // spline stencil plus its stability band. Reuse the identical global data.
+- if point_membership_stable(c,source) {
+-  let value=signed_shore_distance(c,source.h,&source.segments)?;
+-  if let Ok(mut cache)=FIELD_NODE_CACHE.write() {cache.insert(key,value);}
+-  return Some(value);
+- }
++ // A retained node is defined only by its own coordinates and start level.
++ // Query-centered source reuse is excluded until equivalence is proved.
+  for q in k..=(k+8).min(32) {
+   let Ok((tile,_))=contained_tile(c,q) else {continue;};
+   if !point_membership_stable(c,&tile) {continue;}
+@@ -3283,3 +3284,18 @@
+   }
+  }
+ }
++
++#[cfg(test)] mod canonical_node_tests {
++ use super::*;
++ #[test] fn every_tied_projection_participates_in_uncertainty_certification() {
++  let c=Complex64::new(0.,0.);
++  let mut tile=ShoreTile {k:0,h:0.01,origin_re:-2.,origin_im:-2.,
++   segments:vec![Segment{p1:(-1.,-0.1),p2:(-1.,0.1),normal:(1.,0.)},Segment{p1:(1.,-0.1),p2:(1.,0.1),normal:(-1.,0.)}],
++   unstable_nodes:vec![(-1.03,0.03)]};
++  assert!(!point_membership_stable(c,&tile));
++  tile.segments.reverse();
++  assert!(!point_membership_stable(c,&tile));
++  tile.unstable_nodes.clear();
++  assert!(point_membership_stable(c,&tile));
++ }
++}
+--- a/runtime-core/src/geometry_provider/interval.rs
++++ b/runtime-core/src/geometry_provider/interval.rs
+@@ -50,15 +50,10 @@
+     }
+ 
+     pub(super) fn square(self) -> Self {
+-        let lo = if self.lo <= 0.0 && self.hi >= 0.0 {
+-            0.0
+-        } else {
+-            self.lo.abs().min(self.hi.abs()).powi(2).next_down()
+-        };
+-        Self {
+-            lo,
+-            hi: self.lo.abs().max(self.hi.abs()).powi(2).next_up(),
+-        }
++        let minimum=self.lo.abs().min(self.hi.abs());
++        let maximum=self.lo.abs().max(self.hi.abs());
++        let lo=if self.lo<=0. && self.hi>=0. {0.} else {(minimum*minimum).next_down()};
++        Self {lo,hi:(maximum*maximum).next_up()}
+     }
+ 
+     pub(super) fn finite(self) -> bool {
+@@ -68,7 +63,6 @@
+ 
+ 
+ impl Interval {
+-    pub(super) fn neg(self)->Self {Self{lo:-self.hi,hi:-self.lo}}
+     pub(super) fn div_positive(self,other:Self)->Self {
+         assert!(other.lo>0.);
+         self.mul(Self{lo:(1./other.hi).next_down(),hi:(1./other.lo).next_up()})

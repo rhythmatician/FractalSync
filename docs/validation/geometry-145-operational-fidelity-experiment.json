@@ -1,0 +1,12 @@
+{
+  "schema": "operational-fidelity-audit/1",
+  "date": "2026-10-30",
+  "field_id": "068e8e016b4ad6b7",
+  "generator": "canonical geometry::lobe_point_at_angle(1, 0, theta, 1-inset)",
+  "angle_divisions": 256,
+  "multiplier_insets": [0.000001, 0.00001, 0.0001],
+  "epsilon": 0.0001,
+  "quality_fraction": 0.25,
+  "reference": "existing conservative operational_reference_membership; no escalation",
+  "scope": "pointwise returned-scalar error lower bounds only; no regional distance or derivative certificate"
+}

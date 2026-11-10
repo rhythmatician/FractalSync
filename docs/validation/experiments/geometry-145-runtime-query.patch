@@ -1,0 +1,952 @@
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+--- a/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/certified.rs
+@@ -3,7 +3,7 @@
+     BoundaryInterval, NodalSample, DYADIC_CUT_NORMAL_DEGREES, DYADIC_CUT_TIE_FACTOR,
+ };
+ use super::{
+-    branch::cover, endpoint_distance_upper, finite, point_proof, propose, witness_candidates, C,
++    branch::cover, endpoint_distance_upper, finite, point_proof, propose, C,
+ };
+ use std::sync::Arc;
+
+@@ -60,6 +60,7 @@
+         if !finite(query) || !error.is_finite() || error <= 0. {
+             return None;
+         }
++        let geometry_start = std::time::Instant::now();
+         let proposal = propose(query)?;
+         let lower = self.curve.clearance(query).ok()?.lower();
+         if lower < (proposal.distance - error).next_up() {
+@@ -67,24 +68,33 @@
+         }
+         // Floating membership only ranks candidates. A fresh directed proof at
+         // the exact represented endpoint is the sole exterior authority.
+-        let mut witness = None;
+-        'search: for window in [error * 0.25, error] {
+-            let Some(candidates) = witness_candidates(query, window) else {
+-                continue;
+-            };
+-            for (point, _, _) in candidates {
++        let geometry_s = geometry_start.elapsed().as_secs_f64();
++        let witness_start = std::time::Instant::now();
++        let mut mp_s = 0.;
++        let mut fast_hit = false;
++        let witness = [error * 0.25, error].into_iter().find_map(|window| {
++            super::witness_window(query, window, &proposal, |point| {
++                if let Some(proof) = super::fast_escape::escape([point.re, point.im], 32768) {
++                    fast_hit = true;
++                    if std::env::var_os("GEOMETRY145_REPLAY_FAST").is_some() {
++                        assert!(point_proof::escape([point.re, point.im], 512, proof.update + 1).is_some());
++                    }
++                    return Some(Arc::new(ExteriorWitness { point, _proof: proof }));
++                }
++                None
++            }, |point| {
+                 for precision in [128, 256] {
+-                    if let Some(proof) = point_proof::escape([point.re, point.im], precision, 32768)
+-                    {
+-                        witness = Some(Arc::new(ExteriorWitness {
+-                            point,
+-                            _proof: proof,
+-                        }));
+-                        break 'search;
++                    let mp_start = std::time::Instant::now();
++                    let proof = point_proof::escape([point.re, point.im], precision, 32768);
++                    mp_s += mp_start.elapsed().as_secs_f64();
++                    if let Some(proof) = proof {
++                        return Some(Arc::new(ExteriorWitness { point, _proof: proof }));
+                     }
+                 }
+-            }
+-        }
++                None
++            })
++        });
++        eprintln!("[PROFILE_NODE145] geometry_s={geometry_s} witness_s={} mp_s={mp_s} fast_hit={fast_hit}", witness_start.elapsed().as_secs_f64());
+         Self::finish(query, error, proposal, lower, witness?)
+     }
+
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/fast_escape.rs b/runtime-core/src/geometry_provider/periodic_boundary/fast_escape.rs
+new file mode 100644
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/periodic_boundary/fast_escape.rs
+@@ -0,0 +1,231 @@
++//! Prototype only: outward f64 critical-orbit disks, with conservative refusal.
++use super::super::interval::Interval as I;
++use super::{point_proof::EscapeProof, C};
++
++fn norm_upper(re: I, im: I) -> f64 {
++    re.square().add(im.square()).hi.sqrt().next_up()
++}
++
++fn enclosing_exponent(radius: f64) -> Option<i32> {
++    if !radius.is_finite() || radius <= 0. {
++        return None;
++    }
++    let bits = radius.to_bits();
++    let exponent = ((bits >> 52) & 0x7ff) as i32;
++    let fraction = bits & ((1u64 << 52) - 1);
++    if exponent != 0 {
++        Some(exponent - 1023 + i32::from(fraction != 0))
++    } else {
++        let floor = 63 - fraction.leading_zeros() as i32 - 1074;
++        Some(floor + i32::from(!fraction.is_power_of_two()))
++    }
++}
++
++#[derive(Clone, Copy)]
++struct Disk {
++    center: C,
++    radius: f64,
++}
++
++impl Disk {
++    fn proves_escape(self) -> bool {
++        let z = self.center;
++        let radius = self.radius;
++        let re = I::point(z.re);
++        let im = I::point(z.im);
++        let lower = re.square().add(im.square()).lo.max(0.).sqrt().next_down();
++        (lower - radius).next_down() > 2.
++    }
++
++    fn advance(self, c: [f64; 2]) -> Option<Self> {
++        let z = self.center;
++        let radius = self.radius;
++        if !super::finite(z)
++            || !radius.is_finite()
++            || radius < 0.
++            || !c.into_iter().all(f64::is_finite)
++        {
++            return None;
++        }
++        let re = I::point(z.re);
++        let im = I::point(z.im);
++        let exact_re = re.square().sub(im.square()).add(I::point(c[0]));
++        let exact_im = I::point(2.).mul(re).mul(im).add(I::point(c[1]));
++        let next = C::new(z.re * z.re - z.im * z.im + c[0], 2. * z.re * z.im + c[1]);
++        if !super::finite(next) {
++            return None;
++        }
++        let rounding = norm_upper(
++            I::point(exact_re.sub(I::point(next.re)).abs_upper()),
++            I::point(exact_im.sub(I::point(next.im)).abs_upper()),
++        );
++        let r = I::point(radius);
++        let radius = I::point(2.)
++            .mul(I::point(norm_upper(re, im)))
++            .mul(r)
++            .add(r.square())
++            .add(I::point(rounding))
++            .hi;
++        if !radius.is_finite() || radius < 0. {
++            return None;
++        }
++        Some(Self {
++            center: next,
++            radius,
++        })
++    }
++}
++
++pub(super) fn escape(c: [f64; 2], budget: usize) -> Option<EscapeProof> {
++    if !c.into_iter().all(f64::is_finite) || budget == 0 || budget > 32768 {
++        return None;
++    }
++    let mut disk = Disk {
++        center: C::new(0., 0.),
++        radius: 0.,
++    };
++    for update in 0..budget {
++        if disk.proves_escape() {
++            return Some(EscapeProof {
++                update,
++                precision: 53,
++                radius_exponent: enclosing_exponent(disk.radius),
++            });
++        }
++        disk = disk.advance(c)?;
++    }
++    None
++}
++
++#[cfg(test)]
++mod tests {
++    use super::super::complex_ball::Complex as MP;
++    use super::*;
++    use astro_float::{BigFloat as B, RoundingMode as R};
++
++    fn mp(point: C) -> MP {
++        MP {
++            re: B::from_f64(point.re, 512),
++            im: B::from_f64(point.im, 512),
++        }
++    }
++    fn contains(disk: Disk, center: &MP, uncertainty: &B) -> bool {
++        let separation = center.distance_upper(&mp(disk.center), 512).unwrap();
++        separation
++            .add(uncertainty, 512, R::Up)
++            .cmp(&B::from_f64(disk.radius, 512))
++            .is_some_and(|order| order <= 0)
++    }
++
++    #[test]
++    fn exact_image_replay_catches_roundoff_linear_and_quadratic_radius_loss() {
++        for (disk, c, point) in [
++            (
++                Disk {
++                    center: C::new(0., 0.),
++                    radius: 0.25,
++                },
++                C::new(0., 0.),
++                C::new(0.25, 0.),
++            ),
++            (
++                Disk {
++                    center: C::new(1., 0.),
++                    radius: 0.125,
++                },
++                C::new(0., 0.),
++                C::new(1.125, 0.),
++            ),
++            (
++                Disk {
++                    center: C::new(1.1, 0.2),
++                    radius: 0.,
++                },
++                C::new(0.3, 0.4),
++                C::new(1.1, 0.2),
++            ),
++            (
++                Disk {
++                    center: C::new(-0.5, 0.5),
++                    radius: 2f64.powi(-26),
++                },
++                C::new(-0.75, 0.1),
++                C::new(-0.5 + 2f64.powi(-26), 0.5),
++            ),
++        ] {
++            assert!(contains(disk, &mp(point), &B::from(0u8)));
++            let next = disk.advance([c.re, c.im]).unwrap();
++            let (image, error) = mp(point).step(&mp(c), 512).unwrap();
++            assert!(
++                contains(next, &image, &error),
++                "exact image outside propagated disk"
++            );
++        }
++    }
++
++    #[test]
++    fn critical_prefixes_enclose_independent_512_bit_orbits() {
++        for c in [
++            C::new(0.32049988639807619, 0.04733531447355364),
++            C::new(0.35659381055433242, 0.06404656757776669),
++            C::new(f64::from_bits(1), -f64::from_bits(1)),
++            C::new(1., 0.),
++        ] {
++            let mut disk = Disk {
++                center: C::new(0., 0.),
++                radius: 0.,
++            };
++            let mut reference = mp(C::new(0., 0.));
++            let mut uncertainty = B::from(0u8);
++            let mut checked = 0;
++            for prefix in 0..2048 {
++                assert!(
++                    contains(disk, &reference, &uncertainty),
++                    "prefix {prefix}, c={c:?}"
++                );
++                checked += 1;
++                if disk.proves_escape() {
++                    break;
++                }
++                let Some(next) = disk.advance([c.re, c.im]) else {
++                    break;
++                };
++                (reference, uncertainty) = reference.advance(&uncertainty, &mp(c), 512).unwrap();
++                disk = next;
++            }
++            assert!(checked >= 4);
++            eprintln!("[FAST_PREFIX145] c={c:?} checked={checked}");
++        }
++    }
++    #[test]
++    fn radius_metadata_encloses_adjacent_powers_and_subnormals() {
++        for exponent in [-1022, -100, 0, 100, 1023] {
++            let power = f64::from_bits(((exponent + 1023) as u64) << 52);
++            assert_eq!(enclosing_exponent(power), Some(exponent));
++            assert_eq!(enclosing_exponent(power.next_up()), Some(exponent + 1));
++            assert_eq!(enclosing_exponent(power.next_down()), Some(exponent));
++        }
++        assert_eq!(enclosing_exponent(f64::from_bits(1)), Some(-1074));
++        assert_eq!(enclosing_exponent(f64::from_bits(2)), Some(-1073));
++        assert_eq!(enclosing_exponent(f64::from_bits(3)), Some(-1072));
++        assert_eq!(enclosing_exponent(f64::MAX), Some(1024));
++        for invalid in [0., -1., f64::NAN, f64::INFINITY] {
++            assert!(enclosing_exponent(invalid).is_none());
++        }
++    }
++    #[test]
++    fn strict_budget_and_independent_exterior_replay() {
++        assert!(escape([1., 0.], 3).is_none());
++        assert_eq!(escape([1., 0.], 4).unwrap().update, 3);
++        for point in [[1., 0.], [2., 0.], [-2.1, 0.], [0., 1.1]] {
++            let fast = escape(point, 32768).unwrap();
++            let replay = super::super::point_proof::escape(point, 512, fast.update + 1).unwrap();
++            assert!(replay.update <= fast.update);
++        }
++        for point in [[0., 0.], [-1., 0.], [0.25, 0.], [f64::NAN, 0.]] {
++            assert!(escape(point, 32768).is_none());
++        }
++        assert!(escape([2., 0.], 0).is_none());
++        assert!(escape([2., 0.], 32769).is_none());
++    }
++}
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+--- a/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/tiles.rs
+@@ -49,6 +49,7 @@
+
+ impl Tile {
+     fn new(key: Key) -> Option<Self> {
++        let profile_start = std::time::Instant::now();
+         let (k, ix, iy, error) = key;
+         let h = dyadic_h(k);
+         let error = f64::from_bits(error);
+@@ -69,6 +70,8 @@
+             .copied()
+             .filter(|&q| super::propose(q).is_some())
+             .collect();
++        let proposal_s = profile_start.elapsed().as_secs_f64();
++        let cover_start = std::time::Instant::now();
+         let midpoint = origin + C::new(4. * h, 4. * h);
+         let center = *usable.iter().min_by(|a, b| {
+             (**a - midpoint)
+@@ -81,6 +84,7 @@
+             center,
+             &usable.iter().map(|&q| (q, error)).collect::<Vec<_>>(),
+         )?;
++        eprintln!("[PROFILE_CONSTRUCTOR145] k={k} proposal_s={proposal_s} cover_s={}", cover_start.elapsed().as_secs_f64());
+         Some(Self {
+             cover,
+             targets,
+@@ -92,6 +96,7 @@
+         if targets.iter().any(|q| !self.targets.contains(q)) {
+             return None;
+         }
++        let nodes_start = std::time::Instant::now();
+         let mut nodes = Vec::with_capacity(81);
+         for &point in targets {
+             let key = (point.re.to_bits(), point.im.to_bits());
+@@ -101,13 +106,26 @@
+                 if self.nodes.len() >= NODE_CAPACITY {
+                     return None;
+                 }
+-                let node = self.cover.sample(point, error)?;
++                // Fixed even-grid anchors are proved directly, never from
++                // whichever donor happened to be cached by an earlier query.
++                let position=self.targets.iter().position(|&q|q==point)?;
++                let x=position%NODE_SIDE;let y=position/NODE_SIDE;
++                let anchor=self.targets[(y/2*2)*NODE_SIDE+x/2*2];
++                let anchor_key=(anchor.re.to_bits(),anchor.im.to_bits());
++                if anchor!=point && !self.nodes.contains_key(&anchor_key) {
++                    if let Some(node)=self.cover.sample(anchor,error) {self.nodes.insert(anchor_key,node);}
++                }
++                let node = self.nodes.get(&anchor_key)
++                    .and_then(|donor|self.cover.sample_reusing(point,error,donor))
++                    .or_else(||self.cover.sample(point,error))?;
+                 let sample = node.sample();
+                 self.nodes.insert(key, node);
+                 sample
+             };
+             nodes.push(sample);
+         }
++        let nodes_s = nodes_start.elapsed().as_secs_f64();
++        let center_start = std::time::Instant::now();
+         // Non-grid query points do not grow the retained node cache.
+         let donor = targets
+             .iter()
+@@ -122,10 +140,12 @@
+         let center = donor
+             .and_then(|node| self.cover.sample_reusing(query, error, node))
+             .or_else(|| self.cover.sample(query, error))?;
++        let direction_agrees = self.cover.direction_agrees(&center, h);
++        eprintln!("[PROFILE_FIELD145] nodes_s={nodes_s} center_s={}", center_start.elapsed().as_secs_f64());
+         Some(CertifiedField {
+             nodes,
+             reference: center.sample().value,
+-            direction_agrees: self.cover.direction_agrees(&center, h),
++            direction_agrees,
+         })
+     }
+ }
+@@ -159,6 +179,17 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn cold_profile() {
++        for (query, error, k) in [
++            (C::new(0.32049988639807619, 0.04733531447355364), 5e-8, 17),
++            (C::new(0.35659381055433242, 0.06404656757776669), 5e-10, 24),
++        ] {
++            let cache = RwLock::new(LruCache::new(TILE_CAPACITY));
++            assert!(sample_field_using(&cache, query, k, error).is_some());
++        }
++    }
++
+
+     fn same_field(a: &CertifiedField, b: &CertifiedField, query: C, k: u32) {
+         assert_eq!(a.reference.to_bits(), b.reference.to_bits());
+@@ -272,7 +303,19 @@
+             let key = key(query, k, error).unwrap();
+             let tile = cache.write().unwrap().get(&key).unwrap();
+             let tile = tile.lock().unwrap();
+-            assert_eq!(tile.nodes.len(), 81);
++            // A first stencil may also retain its fixed even-grid anchors.
++            // Every extra entry must be one of those anchors, within this tile.
++            let requested:std::collections::BTreeSet<_>=first.nodes.iter()
++                .map(|node|(node.query.re.to_bits(),node.query.im.to_bits())).collect();
++            let mut allowed=requested.clone();
++            for sample in &first.nodes {
++                let position=tile.targets.iter().position(|&q|q==sample.query).unwrap();
++                let anchor=tile.targets[(position/NODE_SIDE/2*2)*NODE_SIDE+(position%NODE_SIDE/2*2)];
++                allowed.insert((anchor.re.to_bits(),anchor.im.to_bits()));
++            }
++            assert!(requested.iter().all(|key|tile.nodes.contains_key(key)));
++            assert!(tile.nodes.keys().all(|key|allowed.contains(key)));
++            assert!(tile.nodes.len()<=90&&tile.nodes.len()<=NODE_CAPACITY);
+             assert_eq!(tile.targets.len(), NODE_CAPACITY);
+             assert_eq!(cache.read().unwrap().map.len(), 1);
+             eprintln!(
+diff --git a/runtime-core/src/geometry_provider/periodic_boundary.rs b/runtime-core/src/geometry_provider/periodic_boundary.rs
+--- a/runtime-core/src/geometry_provider/periodic_boundary.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary.rs
+@@ -5,6 +5,7 @@
+ mod complex_ball;
+ mod point_proof;
+ mod certified;
++mod fast_escape;
+ mod tiles;
+ pub(super) use tiles::sample_field;
+ #[path = "periodic_boundary_cases.rs"]
+@@ -112,7 +113,7 @@
+     (finite(c1) && finite(c2)).then_some((c1, c2))
+ }
+
+-#[derive(Debug)]
++#[derive(Debug, Clone, Copy)]
+ pub(super) struct Proposal {
+     pub(super) distance: f64,
+     pub(super) period: usize,
+@@ -208,6 +209,19 @@
+ }
+
+ pub(super) fn propose(query: C) -> Option<Proposal> {
++    static CACHE: once_cell::sync::Lazy<std::sync::RwLock<super::LruCache<(u64,u64),Option<Proposal>>>> =
++        once_cell::sync::Lazy::new(||std::sync::RwLock::new(super::LruCache::new(4096)));
++    propose_using(&CACHE,query)
++}
++fn propose_using(cache:&std::sync::RwLock<super::LruCache<(u64,u64),Option<Proposal>>>,query:C)->Option<Proposal> {
++    if !finite(query) {return None;}
++    let key=(query.re.to_bits(),query.im.to_bits());
++    if let Ok(mut guard)=cache.write() {if let Some(value)=guard.get(&key) {return value;}}
++    let result=propose_uncached(query);
++    if let Ok(mut guard)=cache.write() {guard.insert(key,result);}
++    result
++}
++fn propose_uncached(query:C)->Option<Proposal> {
+     let mut orbit = crate::visual_metrics::MembershipOrbit::new(query);
+     let (seed, hint) = orbit.geometry_seed(32768)?;
+     let machine_period = if let Some(period) = hint {
+@@ -302,54 +316,49 @@
+     let upper = re.square().add(im.square()).hi.sqrt().next_up();
+     (upper.is_finite() && upper > 0.).then_some(upper)
+ }
+-pub(super) fn witness_candidates(query: C, error: f64) -> Option<Vec<(C, f64, usize)>> {
+-    if !finite(query) || !error.is_finite() || error <= 0. {
+-        return None;
+-    }
+-    let p = propose(query)?;
+-    let direction = (p.boundary - query) / p.distance;
+-    let mut candidates = Vec::new();
+-    let mut seen = std::collections::BTreeSet::new();
+-    for fraction in [0.25, 0.5, 0.75, 0.95] {
+-        for k in -40..=40 {
+-            let point =
+-                query + direction * C::from_polar(p.distance + error * fraction, k as f64 * 0.005);
+-            if !seen.insert((point.re.to_bits(), point.im.to_bits())) {
+-                continue;
+-            }
+-            let Some(upper) = endpoint_distance_upper(query, point) else {
+-                continue;
+-            };
+-            if !(finite(point)
+-                && upper.is_finite()
+-                && upper > 0.
+-                && upper <= (p.distance + error).next_down())
+-            {
+-                continue;
+-            }
+-            let mut orbit = crate::visual_metrics::MembershipOrbit::new(point);
+-            if orbit.inside_at(32768) {
+-                continue;
+-            }
+-            // Rank only. A floating escape cannot issue an exterior certificate.
+-            let (mut lo, mut hi) = (0usize, 32768usize);
+-            while hi - lo > 1 {
+-                let middle = lo + (hi - lo) / 2;
+-                if orbit.inside_at(middle) {
+-                    lo = middle;
+-                } else {
+-                    hi = middle;
+-                }
+-            }
+-            candidates.push((point, upper, hi - 1));
+-        }
+-    }
+-    candidates.sort_by(|a, b| {
+-        a.2.cmp(&b.2)
+-            .then_with(|| a.1.total_cmp(&b.1))
+-            .then_with(|| a.0.re.total_cmp(&b.0.re))
+-            .then_with(|| a.0.im.total_cmp(&b.0.im))
+-    });
++struct WitnessSearch {
++    query:C,
++    distance:f64,
++    direction:C,
++    error:f64,
++    seen:std::collections::BTreeSet<(u64,u64)>,
++}
++impl WitnessSearch {
++    fn new(query:C,error:f64,proposal:&Proposal)->Option<Self> {
++        if !finite(query)||!error.is_finite()||error<=0.
++            ||!proposal.distance.is_finite()||proposal.distance<=0. {return None;}
++        Some(Self{query,distance:proposal.distance,
++            direction:(proposal.boundary-query)/proposal.distance,error,
++            seen:std::collections::BTreeSet::new()})
++    }
++    // Shared geometry and screening only. A returned candidate is not a proof.
++    fn screen(&mut self,fraction:f64,angle:i32)->Option<(C,f64,usize)> {
++        let point=self.query+self.direction*C::from_polar(
++            self.distance+self.error*fraction,angle as f64*0.005);
++        if !self.seen.insert((point.re.to_bits(),point.im.to_bits())) {return None;}
++        let upper=endpoint_distance_upper(self.query,point)?;
++        if !(finite(point)&&upper.is_finite()&&upper>0.
++            &&upper<=(self.distance+self.error).next_down()) {return None;}
++        let mut orbit=crate::visual_metrics::MembershipOrbit::new(point);
++        if orbit.inside_at(32768) {return None;}
++        let (mut lo,mut hi)=(0,32768);
++        while hi-lo>1 {let middle=lo+(hi-lo)/2;
++            if orbit.inside_at(middle) {lo=middle;} else {hi=middle;}}
++        Some((point,upper,hi-1))
++    }
++}
++pub(super) fn witness_candidates(query:C,error:f64)->Option<Vec<(C,f64,usize)>> {
++    if !finite(query)||!error.is_finite()||error<=0. {return None;}
++    let proposal=propose(query)?;
++    let mut search=WitnessSearch::new(query,error,&proposal)?;
++    let mut candidates=Vec::new();
++    for fraction in [0.25,0.5,0.75,0.95] {
++        for angle in -40..=40 {
++            if let Some(candidate)=search.screen(fraction,angle) {candidates.push(candidate);}
++        }
++    }
++    candidates.sort_by(|a,b|a.2.cmp(&b.2).then_with(||a.1.total_cmp(&b.1))
++        .then_with(||a.0.re.total_cmp(&b.0.re)).then_with(||a.0.im.total_cmp(&b.0.im)));
+     candidates.truncate(32);
+     (!candidates.is_empty()).then_some(candidates)
+ }
+@@ -682,3 +691,55 @@
+         }
+     }
+ }
++
++/// Bounded candidate screening only. The callback must independently prove exteriority.
++fn first_witness<T>(query:C,error:f64,proposal:&Proposal,
++    mut certify:impl FnMut(C)->Option<T>)->Option<T> {
++    let mut search=WitnessSearch::new(query,error,proposal)?;
++    for fraction in [0.25,0.5,0.75,0.95] {
++        for index in 0..81i32 {
++            let angle=if index==0 {0} else if index%2==1 {-(index+1)/2} else {index/2};
++            if let Some((point,_,_))=search.screen(fraction,angle) {return certify(point);}
++        }
++    }
++    None
++}
++
++fn witness_window<T>(query:C,error:f64,proposal:&Proposal,
++    fast:impl FnMut(C)->Option<T>,mut slow:impl FnMut(C)->Option<T>)->Option<T> {
++    first_witness(query,error,proposal,fast).or_else(|| {
++        witness_candidates(query,error)?.into_iter().find_map(|(point,_,_)|slow(point))
++    })
++}
++
++#[cfg(test)] mod cost_schedule_tests {
++ use super::*;
++ fn bits(p:Option<Proposal>)->Option<[u64;10]> {
++  p.map(|p|[p.distance.to_bits(),p.period as u64,p.stationarity.to_bits(),
++   p.root.re.to_bits(),p.root.im.to_bits(),p.boundary.re.to_bits(),p.boundary.im.to_bits(),
++   p.multiplier.re.to_bits(),p.multiplier.im.to_bits(),0])
++ }
++ #[test] fn proposal_cache_preserves_results_after_order_changes_and_eviction() {
++  let a=C::new(0.32049988639807619,0.04733531447355364);
++  let b=C::new(0.35659381055433242,0.06404656757776669);
++  let c=C::new(1.,1.);
++  let expected=[a,b,c].map(|q|bits(propose_uncached(q)));
++  assert!(expected[0].is_some()&&expected[1].is_some()&&expected[2].is_none());
++  let cache=std::sync::RwLock::new(super::super::LruCache::new(2));
++  for index in [0,1,2,0,2,1,0] {
++   assert_eq!(bits(propose_using(&cache,[a,b,c][index])),expected[index]);
++   assert!(cache.read().unwrap().map.len()<=2);
++  }
++ }
++ #[test] fn rejected_fast_probe_keeps_original_ranked_mp_schedule() {
++  let q=C::new(0.32049988639807619,0.04733531447355364);
++  let proposal=propose(q).unwrap();let error=5e-8;
++  let expected:Vec<_>=witness_candidates(q,error).unwrap().into_iter()
++   .map(|(q,_,_)|(q.re.to_bits(),q.im.to_bits())).collect();
++  let mut fast_count=0;let mut visited=Vec::new();
++  let result:Option<()>=witness_window(q,error,&proposal,|_|{fast_count+=1;None},|p|{
++   visited.push((p.re.to_bits(),p.im.to_bits()));None});
++  assert!(result.is_none());assert_eq!(fast_count,1);assert_eq!(visited,expected);
++  assert!(visited.len()<=32);
++ }
++}
+diff --git a/runtime-core/src/geometry_provider.rs b/runtime-core/src/geometry_provider.rs
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -1249,14 +1249,23 @@
+         self.advance_bounded(jet,epsilon,certified,detail,f64::INFINITY);
+     }
+     fn advance_bounded(&mut self, jet: &GeometryJet, epsilon: f64, certified: bool, detail: FieldJet,size_bound:f64) {
++        let range=if certified {RangeJet::exact(jet.d,jet.grad_d,jet.hessian_d)} else {unknown_field_range(size_bound)};
++        self.advance_enclosed(jet,epsilon,certified,detail,size_bound,range);
++    }
++    fn advance_enclosed(&mut self,jet:&GeometryJet,epsilon:f64,certified:bool,detail:FieldJet,size_bound:f64,range:RangeJet) {
+         self.models.push(FieldModel {
+             size_bound,
+-            range:if certified {RangeJet::exact(jet.d,jet.grad_d,jet.hessian_d)} else {unknown_field_range(size_bound)},
++            range,
+             field: FieldJet::from_geometry(jet),
+             h: jet.resolved_scale,
+             detail,
+             certified,
+         });
++        if let Some((field,h,_))=self.certified_zero_tail(epsilon) {
++            self.sum=field; self.effective_h=h;
++            self.product=FieldJet::constant(0.); self.closed=true; self.certified=true;
++            return;
++        }
+         let mut prefix = FieldJet::constant(0.);
+         let mut prefix_h: f64 = 0.;
+         let mut prefix_certified = true;
+@@ -1309,7 +1318,54 @@
+             product = next;
+         }
+     }
++    // Constant zero, including derivatives and interval coefficients, kills
++    // the entire finer tail. Earlier weights keep their operand certificates.
++    fn certified_zero_tail(&self,epsilon:f64)->Option<(FieldJet,f64,RangeJet)> {
++        let mut product=FieldJet::constant(1.);
++        let mut range_product=RangeJet::constant(1.);
++        let mut sum=FieldJet::constant(0.);
++        let mut range_sum=RangeJet::constant(0.);
++        let mut effective_h:f64=0.;
++        for (i,coarse) in self.models.iter().enumerate() {
++            let size=Self::next_weight(coarse.field,coarse.h,epsilon,coarse.detail);
++            let range_weight=coarse.range.size_weight(coarse.h,epsilon,GEOMETRY_SCALE_ALPHA/128.)?;
++            let zero=field_zero(size)&&range_weight.is_constant(0.);
++            let one=|v:FieldJet|v.d==1.&&v.g==[0.;2]&&v.h==[[0.;2];2];
++            if zero {
++                if !coarse.certified {return None;}
++            } else {
++                let bounded_one=one(size)&&size_saturated_by_bound(coarse.h,epsilon,coarse.size_bound);
++                let operands=if let (Some(first),Some(second))=(self.models.get(i+1),self.models.get(i+2)) {
++                    let error1=Self::disagreement(coarse.field,first.field,epsilon);
++                    let error2=Self::disagreement(coarse.field,second.field,epsilon);
++                    coarse.certified&&(one(size)||(first.certified&&one(error1))
++                        ||(second.certified&&one(error2))||(first.certified&&second.certified))
++                } else {coarse.certified&&one(size)};
++                if !(bounded_one||operands) {return None;}
++            }
++            let next=if one(size) {product} else if field_zero(size) {
++                FieldJet::constant(0.)
++            } else {product.mul(size)};
++            let range_next=if range_weight.is_constant(1.) {range_product}
++                else if range_weight.is_constant(0.) {RangeJet::constant(0.)}
++                else {range_product.mul(range_weight)};
++            let retained=product.add(next.scale(-1.));
++            let range_retained=if range_weight.is_constant(0.) {range_product}
++                else if range_weight.is_constant(1.) {RangeJet::constant(0.)}
++                else {range_product.add(range_next.scale(-1.))};
++            if !field_zero(retained) {
++                if !coarse.certified {return None;}
++                sum=sum.add(retained.mul(coarse.field));effective_h=effective_h.max(coarse.h);
++            }
++            range_sum=range_sum.add(range_retained.mul(coarse.range));
++            if zero {return range_sum.finite().then_some((sum,effective_h,range_sum));}
++            product=next;range_product=range_next;
++        }
++        None
++    }
++
+     fn enclosed_output(&self,epsilon:f64)->Option<RangeJet> {
++        if let Some((_,_,range))=self.certified_zero_tail(epsilon) {return Some(range);}
+         let mut product=RangeJet::constant(1.);let mut prefix=RangeJet::constant(0.);
+         let mut sum=self.models.first()?.range;
+         for i in 0..self.models.len().saturating_sub(2) {
+@@ -2181,8 +2237,18 @@
+     direction: (f64, f64),
+ }
+
++#[derive(Clone,Copy,PartialEq,Eq)]
++enum LevelSource { Component, Covered, Shore }
++struct LevelEvaluation {
++    fitted:FittedJet,
++    scalar_certified:bool,
++    segments:Vec<Segment>,
++    ties:Option<Vec<NearestFeature>>,
++    source:LevelSource,
++    direction_agrees:bool,
++}
+ struct PreviousLevel {
+-    component:bool,
++    source:LevelSource,
+     jet: GeometryJet,
+     fit_rms: f64,
+     ties: Option<Vec<NearestFeature>>,
+@@ -2319,6 +2385,7 @@
+     let mut k = 0;
+     while k <= DYADIC_MAX_K {
+         let h = dyadic_h(k);
++        eprintln!("[HOOK_LEVEL145] k={k} h={h}");
+
+         // No raw convergence sample is made here. Every admissible coefficient
+         // assignment forces this model's size gate to one, so its field value
+@@ -2339,10 +2406,15 @@
+                 continue;
+             }
+         }
+-        let (fitted,certified,segs,ties,component)=if let Some(model)=component_level(c,epsilon,k,h) {
++        let evaluated=if let Some(model)=component_level(c,epsilon,k,h) {
+             let Some(features)=component_features(c,h) else {previous=None;k+=1;continue;};
+             let ties=has_competing_directions(&features).then_some(features);
+-            (model,true,Vec::new(),ties,true)
++            LevelEvaluation{fitted:model,scalar_certified:true,segments:Vec::new(),ties,
++                source:LevelSource::Component,direction_agrees:true}
++        } else if let Some((model, direction)) = covered_query_probe(c,epsilon,k) {
++            eprintln!("[HOOK_COVERED145] k={k} direction={direction}");
++            LevelEvaluation{fitted:model,scalar_certified:true,segments:Vec::new(),ties:None,
++                source:LevelSource::Covered,direction_agrees:direction}
+         } else {
+         let (tile, certified) = match contained_tile(c, k) {
+             Ok(tile) => tile,
+@@ -2360,20 +2432,23 @@
+
+             let Some(model)=compute_jet_at_level(c,epsilon,k,h,&tile) else {return Ok(last);};
+             let ties=competing_normals(c,&tile.segments,h);
+-            (model,certified,tile.segments,ties,false)
++            LevelEvaluation{fitted:model,scalar_certified:certified,segments:tile.segments,ties,
++                source:LevelSource::Shore,direction_agrees:true}
+         };
++        let LevelEvaluation{fitted,scalar_certified:certified,segments:segs,ties,source,
++            direction_agrees:direction}=evaluated;
+         if !certified {previous=None;}
+-        if previous.as_ref().is_some_and(|p|p.component && !component) {previous=None;}
++        if previous.as_ref().is_some_and(|p|p.source==LevelSource::Component && source!=LevelSource::Component) {previous=None;}
+         let FittedJet{range,size_bound,nodes_certified,detail,jet:mut jet,fit_rms:rms,stencil}=fitted;
+         if let Some(field) = &mut hierarchy {
+-            field.advance_bounded(&jet, epsilon, nodes_certified, detail,size_bound);
++            field.advance_enclosed(&jet, epsilon, nodes_certified, detail,size_bound,range);
+         } else {
+             hierarchy = Some(FieldHierarchy::new_bounded(&jet, epsilon, nodes_certified, detail,size_bound));
+         }
+         if let Some(field)=&mut hierarchy {
+-            field.models.last_mut().unwrap().range=range;
+-        }
+-        if ties.is_some() {
++            if field.models.len()==1 {field.models[0].range=range;}
++        }
++        if ties.is_some() || !direction {
+             pending = None;
+         }
+         // Fixed lookahead dependencies cannot become certified by appending
+@@ -2387,7 +2462,7 @@
+             jet.estimated_error = f64::INFINITY;
+             return Ok(jet);
+         }
+-        if let Some(field) = hierarchy.as_ref().filter(|f| f.closed && f.certified) {
++        if let Some(field) = hierarchy.as_ref().filter(|f| f.closed && f.certified && direction) {
+             if let Some(raw) = &pending {
+                 let output = field.output(raw, epsilon);
+                 if output.resolved_scale <= output.requested_scale
+@@ -2399,7 +2474,11 @@
+         }
+         if let Some(previous) = &previous {
+             let prev = &previous.jet;
+-            let field_error=if previous.component {
++            let field_error=if previous.source==LevelSource::Covered {
++                let errors:Option<Vec<_>>=stencil.iter().map(|&(dx,dy,d)|periodic_boundary::propose(Complex64::new(c.re+dx,c.im+dy)).map(|value|(-value.distance-d).abs())).collect();
++                let Some(errors)=errors else {return Ok(last);};
++                errors.into_iter().fold(0.,f64::max)
++            } else if previous.source==LevelSource::Component {
+                 let errors:Option<Vec<_>>=stencil.iter().map(|&(dx,dy,d)|bounded_component_distance(Complex64::new(c.re+dx,c.im+dy)).map(|value|(value-d).abs())).collect();
+                 let Some(errors)=errors else {return Ok(last);};
+                 errors.into_iter().fold(0.,f64::max)
+@@ -2436,6 +2515,7 @@
+                     }
+                 }
+                 if ties.is_none()
++                    && direction
+                     && prev.resolved_scale <= jet.requested_scale
+                     && jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale
+                 {
+@@ -2463,7 +2543,7 @@
+         // Skipping levels can jump to a tile too small to contain the Shore.
+         // Refine monotonically one level at a time until the ruler and error agree.
+         previous = certified.then_some(PreviousLevel {
+-            component,
++            source,
+             jet,
+             fit_rms: rms,
+             ties,
+@@ -3520,14 +3600,14 @@
+         assert_eq!(f.effective_h, 0.03125 / 16.);
+     }
+     #[test]
+-    fn uncertified_zero_weight_lookahead_is_refused() {
++    fn zero_weight_requires_retained_certificate_without_unused_lookahead() {
+         for coarse_cert in [false, true] {
+             let zero = FieldJet::constant(0.);
+             let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, coarse_cert, zero);
+             f.advance(&jet(0.04, 0.00005), 1e-4, false, zero);
+             f.advance(&jet(0.04, 0.000025), 1e-4, false, zero);
+             assert!(f.closed);
+-            assert!(!f.certified);
++            assert_eq!(f.certified,coarse_cert);
+         }
+     }
+     fn field_at(x: f64) -> FieldJet {
+@@ -3576,20 +3656,20 @@
+     #[test]
+     fn partial_disagreement_with_uncertain_data_is_refused() {
+         let zero = FieldJet::constant(0.);
+-        let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
+-        f.advance(&jet(0.04, 0.00005), 1e-4, true, zero);
+-        f.advance(&jet(0.0403, 0.000025), 1e-4, false, zero);
++        let mut f = FieldHierarchy::new(&jet(0.04, 0.0006), 1e-4, true, zero);
++        f.advance(&jet(0.04, 0.0003), 1e-4, true, zero);
++        f.advance(&jet(0.0403, 0.00015), 1e-4, false, zero);
+         assert!(!f.certified);
+     }
+
+     #[test]
+-    fn uncertified_lookahead_cannot_certify_a_zero_refinement_plateau() {
++    fn certified_zero_size_plateau_ignores_unused_lookahead() {
+         let zero = FieldJet::constant(0.);
+         let mut f = FieldHierarchy::new(&jet(0.04, 0.0001), 1e-4, true, zero);
+         f.advance(&jet(0.04, 0.00005), 1e-4, false, zero);
+         f.advance(&jet(0.04, 0.000025), 1e-4, false, zero);
+         assert!(f.closed);
+-        assert!(!f.certified, "Uncertified inputs selected the zero plateau");
++        assert!(f.certified, "Certified coarse field independently selects zero");
+     }
+
+     #[test]
+@@ -3806,3 +3886,94 @@
+   }
+  }
+ }
++
++// Diagnostic adapter only. Unavailable proposals never become certificates.
++fn covered_query_probe(c:Complex64, epsilon:f64,k:u32)->Option<(FittedJet,bool)> {
++ let h=dyadic_h(k);
++ if distance_stencil(c,h).any(|p|periodic_boundary::propose(p).is_none()) {
++  eprintln!("[HOOK_UNAVAILABLE145] k={k}");return None;
++ }
++ let start=std::time::Instant::now();
++ let distance=periodic_boundary::propose(c)?.distance;
++ // This is a quantized request budget, never an outward proof bound.
++ let cap=f64::from_bits((distance/128.).to_bits() & (0x7ff_u64<<52));
++ let error=(epsilon/2000.).min(cap);
++ if !(error.is_finite()&&error>0.) {return None;}
++ let result=covered_level(c,epsilon,k,error);
++ eprintln!("[HOOK_ATTEMPT145] k={k} available={} elapsed_s={}",result.is_some(),start.elapsed().as_secs_f64());
++ result
++}
++#[cfg(test)] mod actual_query_hook_probe {
++ use super::*;
++ #[test] fn native_recorded_refusal() {
++  let result=query_scale_aware(Complex64::new(0.32049988639807619,0.04733531447355364),1e-4).unwrap();
++  eprintln!("[HOOK_RESULT145] {}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++ #[test] fn python_recorded_refusal() {
++  let result=query_scale_aware(Complex64::new(0.35659381055433242,0.06404656757776669),1e-4).unwrap();
++  eprintln!("[HOOK_RESULT145] {}",serde_json::to_string(&result).unwrap());
++  assert_eq!(result.validity,GeometryValidity::Regular);
++ }
++}
++
++#[cfg(test)] mod certified_zero_tail_tests {
++ use super::*;
++ fn jet(d:f64,h:f64)->GeometryJet {
++  GeometryJet {d,grad_d:[0.;2],hessian_d:[[0.;2];2],resolved_scale:h,
++   requested_scale:0.,estimated_error:0.,validity:GeometryValidity::Unresolved,
++   singularity:SingularityKind::None,provider_version:GEOMETRY_PROVIDER_VERSION.into(),
++   tile_id:"zero-tail-test".into(),is_bridge:false}
++ }
++ #[test] fn certified_last_model_closes_without_lookahead() {
++  let raw=jet(-1e-6,1e-9);
++  let mut f=FieldHierarchy::new(&raw,1e-4,true,FieldJet::constant(0.));
++  let (value,_,range)=f.certified_zero_tail(1e-4).unwrap();
++  assert_eq!(value.d.to_bits(),raw.d.to_bits());
++  f.advance(&jet(99.,5e-10),1e-4,false,FieldJet::constant(0.));
++  assert!(f.closed&&f.certified);assert_eq!(f.sum.d.to_bits(),value.d.to_bits());
++  assert_eq!(f.sum.g,value.g);assert_eq!(f.sum.h,value.h);
++  assert_eq!(f.enclosed_output(1e-4).unwrap().d.lo,range.d.lo);
++ }
++ #[test] fn uncertified_zero_weight_cannot_close() {
++  let raw=jet(0.,1e-9);
++  let f=FieldHierarchy::new(&raw,1e-4,false,FieldJet::constant(0.));
++  assert!(f.certified_zero_tail(1e-4).is_none());
++ }
++ #[test] fn nonzero_final_weight_cannot_close() {
++  let raw=jet(0.,1e-3);
++  let f=FieldHierarchy::new(&raw,1e-4,true,FieldJet::constant(0.));
++  assert!(f.certified_zero_tail(1e-4).is_none());
++ }
++ #[test] fn numerical_zero_without_interval_zero_cannot_close() {
++  let raw=jet(100.,1e-6);
++  let mut f=FieldHierarchy::new(&raw,1e-4,true,FieldJet::constant(0.));
++  f.models[0].range=RangeJet::constant(0.);
++  assert!(field_zero(FieldHierarchy::next_weight(f.models[0].field,raw.resolved_scale,1e-4,FieldJet::constant(0.))));
++  assert!(f.certified_zero_tail(1e-4).is_none());
++ }
++ #[test] fn zero_value_with_nonzero_derivative_is_not_zero_weight() {
++  let mut weight=FieldJet::constant(0.);weight.g[0]=1.;assert!(!field_zero(weight));
++ }
++}
++
++#[cfg(test)] mod attached_range_closure_tests {
++ use super::*;
++ #[test] fn actual_range_is_attached_before_newest_model_can_close() {
++  let make=|d,h| {let mut j=failure_jet(d,h,GeometryValidity::Regular,SingularityKind::None);
++   j.grad_d=[0.;2];j.hessian_d=[[0.;2];2];j};
++  let zero=FieldJet::constant(0.);
++  let coarse=make(0.,1e-3);
++  let mut field=FieldHierarchy::new_bounded(&coarse,1e-4,false,zero,0.);
++  assert!(size_saturated_by_bound(coarse.resolved_scale,1e-4,0.));
++  let fine=make(100.,1e-6);
++  let actual=RangeJet{d:BoundaryInterval{lo:0.,hi:100.},..RangeJet::constant(0.)};
++  assert!(field_zero(FieldHierarchy::next_weight(FieldJet::from_geometry(&fine),fine.resolved_scale,1e-4,zero)));
++  assert!(!actual.size_weight(fine.resolved_scale,1e-4,GEOMETRY_SCALE_ALPHA/128.).unwrap().is_constant(0.));
++  field.advance_enclosed(&fine,1e-4,true,zero,f64::INFINITY,actual);
++  assert!(!field.closed);
++  assert!(field.certified_zero_tail(1e-4).is_none());
++  assert_eq!(field.models[1].range.d.lo,0.);
++  assert_eq!(field.models[1].range.d.hi,100.);
++ }
++}

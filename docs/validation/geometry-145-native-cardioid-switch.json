@@ -1,0 +1,52 @@
+{
+  "diagnostic_only": true,
+  "not_a_certificate_for_full_mandelbrot": true,
+  "method": "Primary cardioid boundary p(t)=0.5 exp(it)-0.25 exp(2it). Local curved minimum isolated by the stationarity root in [0.4,0.7], 60 bisections. The cusp is the second local minimum. Distance-gap root along the refused step uses 60 bisections.",
+  "rows": [
+    {
+      "step_fraction": 0.0,
+      "c": [
+        0.21656074663216787,
+        0.1261080346748591
+      ],
+      "curved_foot": [
+        0.31027690173433176,
+        0.03580033639632707
+      ],
+      "cusp_distance": 0.13046616448471815,
+      "curved_distance": 0.1301468328293056,
+      "cusp_minus_curve_distance": 0.0003193316554125636,
+      "distance_direction_angle_degrees": 31.21011861518538
+    },
+    {
+      "step_fraction": 0.8126410933614061,
+      "c": [
+        0.2150824863954059,
+        0.12743439114293312
+      ],
+      "curved_foot": [
+        0.31008116515857237,
+        0.035597536691412496
+      ],
+      "cusp_distance": 0.1321315889645511,
+      "curved_distance": 0.1321315889645511,
+      "cusp_minus_curve_distance": 0.0,
+      "distance_direction_angle_degrees": 30.64635063243976
+    },
+    {
+      "step_fraction": 1.0,
+      "c": [
+        0.2147416653072901,
+        0.12774018997553147
+      ],
+      "curved_foot": [
+        0.3100332935450877,
+        0.035548036286227214
+      ],
+      "cusp_distance": 0.13251681516052227,
+      "curved_distance": 0.13258916853982802,
+      "cusp_minus_curve_distance": -7.23533793057507e-05,
+      "distance_direction_angle_degrees": 30.516769079409624
+    }
+  ]
+}

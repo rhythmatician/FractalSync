@@ -1,0 +1,84 @@
+{
+  "baseline_commit": "30c9b9bcf4f7ae2822a827df59b5e40625b0c786",
+  "protocol": "Record ordered tile keys in isolated cold/repeat public queries; replay the deterministic LRU at each capacity. Counts are trace simulation, timings are measured separately.",
+  "rows": [
+    {
+      "case": "cut_locus",
+      "c": [-1.0, 0.0],
+      "epsilon": 0.0001,
+      "requests": 108,
+      "unique_tiles": 103,
+      "lru_trace_replay": [
+        {
+          "capacity": 64,
+          "cold_misses": 103,
+          "repeat_misses": 103
+        },
+        {
+          "capacity": 96,
+          "cold_misses": 103,
+          "repeat_misses": 103
+        },
+        {
+          "capacity": 128,
+          "cold_misses": 103,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 160,
+          "cold_misses": 103,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 192,
+          "cold_misses": 103,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 256,
+          "cold_misses": 103,
+          "repeat_misses": 0
+        }
+      ]
+    },
+    {
+      "case": "live_training",
+      "c": [0.30752043982706229, 0.02876420131721053],
+      "epsilon": 0.0001,
+      "requests": 140,
+      "unique_tiles": 134,
+      "lru_trace_replay": [
+        {
+          "capacity": 64,
+          "cold_misses": 134,
+          "repeat_misses": 134
+        },
+        {
+          "capacity": 96,
+          "cold_misses": 134,
+          "repeat_misses": 134
+        },
+        {
+          "capacity": 128,
+          "cold_misses": 134,
+          "repeat_misses": 134
+        },
+        {
+          "capacity": 160,
+          "cold_misses": 134,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 192,
+          "cold_misses": 134,
+          "repeat_misses": 0
+        },
+        {
+          "capacity": 256,
+          "cold_misses": 134,
+          "repeat_misses": 0
+        }
+      ]
+    }
+  ]
+}

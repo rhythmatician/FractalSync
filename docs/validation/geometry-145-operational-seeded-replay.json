@@ -1,0 +1,27 @@
+{
+  "schema": "operational-coverage-experiment/1",
+  "parent_experiment": "geometry-145-operational-experiment.json",
+  "date": "2026-10-30",
+  "purpose": "Bounded coefficient-witness seeding of homogeneous reference cells; no field evaluator or physics change",
+  "selected_integrator": "Rk4FourSubsteps",
+  "preparation": {
+    "origin": [
+      -1.002,
+      -0.702
+    ],
+    "spacing": 0.0005,
+    "shape": [
+      3425,
+      2825
+    ]
+  },
+  "controlled_change": "Reuse the already-required coefficient membership samples to seed reference-cell refinement; two frozen source coarse grids retain the same final contour spacing",
+  "source_evidence": "measured finite-orbit contour; coefficient seeds improve observed-feature capture but do not prove complete contour or true-distance fidelity",
+  "coverage_policy": "prepare once before fresh replays; no coefficient, domain, policy or method replacement during any rollout",
+  "acceptance": "same original tests, scalar audit generator, perturbations, derivative tolerance, energy limits and provisional cost targets; retain every refusal and failure",
+  "shipping_adoption": false,
+  "field_id": "ccc45e15857947e9",
+  "asset_sha256": "b28c4538de5e134448372d608be11509c1ef0ff6ef45268e5009c5c548ca58be",
+  "reference_policy_sha256": "895294e150d8750119f472ddaef1fb4b125310e3f1cb98c05dd37f524a0897fd",
+  "source_experiment": "geometry-145-operational-seeded-fine-experiment.json"
+}

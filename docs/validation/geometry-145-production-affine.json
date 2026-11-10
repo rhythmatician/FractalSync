@@ -1,0 +1,475 @@
+{
+  "changed_serialized_jets": 0,
+  "rows": [
+    {
+      "case": "regular_interior",
+      "epsilon": 0.01,
+      "jet_sha256": "c8e5c2745e8fefe56d5881669ca39e0b4397777c39ae1545518e13e3b7431d25",
+      "before_cold_us": 90247,
+      "after_cold_us": 83923
+    },
+    {
+      "case": "regular_interior",
+      "epsilon": 0.0001,
+      "jet_sha256": "99d58c9c74b6cefe91ea5800a7f171bad86590bca284b330ef620b5f4d7afd1f",
+      "before_cold_us": 88394,
+      "after_cold_us": 79972
+    },
+    {
+      "case": "regular_interior",
+      "epsilon": 1e-06,
+      "jet_sha256": "9acefd76f5983ef9974e690eee0baf1ebe8fa14509855503237bb4f2aab20e69",
+      "before_cold_us": 105262,
+      "after_cold_us": 76061
+    },
+    {
+      "case": "regular_interior",
+      "epsilon": 1e-08,
+      "jet_sha256": "bf815d834f56598907dddf65814379ed00b3e5b441b4ab1fceac9ac25aa93a5e",
+      "before_cold_us": 88149,
+      "after_cold_us": 77737
+    },
+    {
+      "case": "regular_shore_approach",
+      "epsilon": 0.01,
+      "jet_sha256": "3f820398d7f3d7bd0f46ae9f9cec2e8e5a2397c0da871d242cad7dd9628b33be",
+      "before_cold_us": 44438,
+      "after_cold_us": 39593
+    },
+    {
+      "case": "regular_shore_approach",
+      "epsilon": 0.0001,
+      "jet_sha256": "126468a6d9ea78e4bbf7959e483b26fa963d75423843c0364ef1b48b6996f060",
+      "before_cold_us": 154858,
+      "after_cold_us": 132097
+    },
+    {
+      "case": "regular_shore_approach",
+      "epsilon": 1e-06,
+      "jet_sha256": "f0cd25315c40721b46eddd3edd16529df1e5393a6d152873520e06384995b31b",
+      "before_cold_us": 151724,
+      "after_cold_us": 131438
+    },
+    {
+      "case": "regular_shore_approach",
+      "epsilon": 1e-08,
+      "jet_sha256": "610095e5eee22c0d7e3e3374332fb86828dc028ed48f9d838fea41f791e63c16",
+      "before_cold_us": 155751,
+      "after_cold_us": 134055
+    },
+    {
+      "case": "crossing_corridor",
+      "epsilon": 0.01,
+      "jet_sha256": "e3375f6a250707dcf2ddf34cddf676b36c42518865340396a9868ce675d9819b",
+      "before_cold_us": 275686,
+      "after_cold_us": 235013
+    },
+    {
+      "case": "crossing_corridor",
+      "epsilon": 0.0001,
+      "jet_sha256": "657784df98b6831d9b3cbcf198c238feed140d393a732b039b5d5957ca80b2f7",
+      "before_cold_us": 249406,
+      "after_cold_us": 232615
+    },
+    {
+      "case": "crossing_corridor",
+      "epsilon": 1e-06,
+      "jet_sha256": "db4d8e490f8a0b33e2c11c3f010646c79da6b49f51009c458630bc1a3d091f7c",
+      "before_cold_us": 234044,
+      "after_cold_us": 213600
+    },
+    {
+      "case": "crossing_corridor",
+      "epsilon": 1e-08,
+      "jet_sha256": "2629de7416c93384b7b9bbf3491b78b813022f18452de78b6bd31c3a7ca95258",
+      "before_cold_us": 218238,
+      "after_cold_us": 220183
+    },
+    {
+      "case": "unique_cusp_projection",
+      "epsilon": 0.01,
+      "jet_sha256": "02ddd795db4f22f5ca00f5ed66c51b9f2b6ce0b665b58a474d2b934d30a7802f",
+      "before_cold_us": 67424,
+      "after_cold_us": 72828
+    },
+    {
+      "case": "unique_cusp_projection",
+      "epsilon": 0.0001,
+      "jet_sha256": "44217738b6d9e7aecbd5f6cfea816496b4a7c764b393f56ba6e90cbccaa86ec1",
+      "before_cold_us": 66949,
+      "after_cold_us": 72035
+    },
+    {
+      "case": "unique_cusp_projection",
+      "epsilon": 1e-06,
+      "jet_sha256": "e39fd92ca809a18ab85a2bf19823014dc8e113825aefc35fcfd0c4eb0e7afff2",
+      "before_cold_us": 71197,
+      "after_cold_us": 73111
+    },
+    {
+      "case": "unique_cusp_projection",
+      "epsilon": 1e-08,
+      "jet_sha256": "33bc1a5bbca3a678b43863c721e43797e71f8255dff6d3f6d536c1b74436891c",
+      "before_cold_us": 70825,
+      "after_cold_us": 78362
+    },
+    {
+      "case": "cut_locus",
+      "epsilon": 0.01,
+      "jet_sha256": "4daaf95739e3dd0220b408a89cdb6ae426488345667c7e60d795ae37d82bd1d9",
+      "before_cold_us": 1594729,
+      "after_cold_us": 1808703
+    },
+    {
+      "case": "cut_locus",
+      "epsilon": 0.0001,
+      "jet_sha256": "6ae51ce44ff72adf53330d90cc1e5ac76ba5a1eb728b3db1bbfc0f9116ace360",
+      "before_cold_us": 1667669,
+      "after_cold_us": 1735587
+    },
+    {
+      "case": "cut_locus",
+      "epsilon": 1e-06,
+      "jet_sha256": "19f45e084f394269a4986971bb50bec68ca660b6dd977ae21a1e7482c16c60eb",
+      "before_cold_us": 1810594,
+      "after_cold_us": 1688244
+    },
+    {
+      "case": "cut_locus",
+      "epsilon": 1e-08,
+      "jet_sha256": "fe8f2c0f2385209f600cd3ea2294fea05d2bad0e7b4d377994e4ddf49af196fa",
+      "before_cold_us": 2037124,
+      "after_cold_us": 1874515
+    },
+    {
+      "case": "cardioid_cusp",
+      "epsilon": 0.01,
+      "jet_sha256": "8fe4b277eda94bc095cec2195eb9d61eab79a596db01a480c3998df184a9ccdf",
+      "before_cold_us": 11,
+      "after_cold_us": 9
+    },
+    {
+      "case": "cardioid_cusp",
+      "epsilon": 0.0001,
+      "jet_sha256": "4d1695d80756af0abb02e7cf787601907f3fdc001e8a6b92f65e231b24334961",
+      "before_cold_us": 11,
+      "after_cold_us": 9
+    },
+    {
+      "case": "cardioid_cusp",
+      "epsilon": 1e-06,
+      "jet_sha256": "1d6d986a137e5aefb566e2458b9a12b64b1b12fa64afa7e9326ea847d6bb2fec",
+      "before_cold_us": 11,
+      "after_cold_us": 9
+    },
+    {
+      "case": "cardioid_cusp",
+      "epsilon": 1e-08,
+      "jet_sha256": "9c0fc3c512f8bc452f680a2224bf13067e55c8f7adc6ca6cfeb21438233221a1",
+      "before_cold_us": 10,
+      "after_cold_us": 10
+    },
+    {
+      "case": "rejected_rollout_endpoint",
+      "epsilon": 0.01,
+      "jet_sha256": "b242f6c1af1331c6015b37087d343ea38e56ddf657ab70420191fad4cdfd546f",
+      "before_cold_us": 79040,
+      "after_cold_us": 69031
+    },
+    {
+      "case": "rejected_rollout_endpoint",
+      "epsilon": 0.0001,
+      "jet_sha256": "cc7ef42dbdcb2ea962d661d7ec9929dda32ccc998893fee730bb58cb97f0c5ac",
+      "before_cold_us": 187773,
+      "after_cold_us": 164235
+    },
+    {
+      "case": "rejected_rollout_endpoint",
+      "epsilon": 1e-06,
+      "jet_sha256": "52ba0015d28324012ae5f1da37204e245f339211ec8250e7a5601f8f3afdd4d0",
+      "before_cold_us": 165966,
+      "after_cold_us": 162572
+    },
+    {
+      "case": "rejected_rollout_endpoint",
+      "epsilon": 1e-08,
+      "jet_sha256": "aa6c71d57d718a6914aa3fc9db1256efa6ca49033880c567502359f92ccfd803",
+      "before_cold_us": 156307,
+      "after_cold_us": 194515
+    },
+    {
+      "case": "high_curvature_rollout",
+      "epsilon": 0.01,
+      "jet_sha256": "2700bd41848cf9e6b1578f0a3097e2545d80be9e6311f9b2f8eed33106e9ff0f",
+      "before_cold_us": 172314,
+      "after_cold_us": 184161
+    },
+    {
+      "case": "high_curvature_rollout",
+      "epsilon": 0.0001,
+      "jet_sha256": "e09153a482dc6ce98d17ba14093d56079fb824eb2ad7071be42ec5943320970a",
+      "before_cold_us": 162094,
+      "after_cold_us": 176401
+    },
+    {
+      "case": "high_curvature_rollout",
+      "epsilon": 1e-06,
+      "jet_sha256": "6a13abf912d08a1c4959c69936f8d98fea64672039b8eaea1ee6b71058e7e4f3",
+      "before_cold_us": 154825,
+      "after_cold_us": 181651
+    },
+    {
+      "case": "high_curvature_rollout",
+      "epsilon": 1e-08,
+      "jet_sha256": "d4513543f975b37c4cecfab15fda03f72db3b0c5fa5ee2206060b0c0d75a7748",
+      "before_cold_us": 173368,
+      "after_cold_us": 202750
+    },
+    {
+      "case": "remaining_crossing_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "bea5053883c63ff1391e57747e705374ae1872f1a5356ffbfb70cbaa70ecacc3",
+      "before_cold_us": 412841,
+      "after_cold_us": 473887
+    },
+    {
+      "case": "remaining_crossing_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "756f2ad18e67c78659b86105770cd7dcd21bc1a38556fd37a25499eff09104e6",
+      "before_cold_us": 338878,
+      "after_cold_us": 404942
+    },
+    {
+      "case": "remaining_crossing_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "b13bfee7777d56378b29c38789dc9554f5952b9d3586488e7fce3313f1701301",
+      "before_cold_us": 346545,
+      "after_cold_us": 413897
+    },
+    {
+      "case": "remaining_crossing_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "ebc7b045efae15a33a23abfb2171a198c8acc52d91b951468b74101fa3c9b619",
+      "before_cold_us": 391455,
+      "after_cold_us": 426081
+    },
+    {
+      "case": "inward_before_jump",
+      "epsilon": 0.01,
+      "jet_sha256": "10c1888ee78b28e33d56deafb188e5fefdad0aedf22d0c065e8b328f1ab90861",
+      "before_cold_us": 205469,
+      "after_cold_us": 217091
+    },
+    {
+      "case": "inward_before_jump",
+      "epsilon": 0.0001,
+      "jet_sha256": "ce98b9341d9dddb35ee33576bb8e60287ade889a70f5ddbeb6ca552f4c6f4335",
+      "before_cold_us": 196202,
+      "after_cold_us": 223791
+    },
+    {
+      "case": "inward_before_jump",
+      "epsilon": 1e-06,
+      "jet_sha256": "2dc7ca1e441aa4b32f00ecbdc17d1ec34e5e4950e49d283edf424ab396ff9f90",
+      "before_cold_us": 219244,
+      "after_cold_us": 247040
+    },
+    {
+      "case": "inward_before_jump",
+      "epsilon": 1e-08,
+      "jet_sha256": "49a0d18185805c2693faae8471ea5b855fe01c90d08e3aa97a3e94d912c9870e",
+      "before_cold_us": 213067,
+      "after_cold_us": 246146
+    },
+    {
+      "case": "inward_after_jump",
+      "epsilon": 0.01,
+      "jet_sha256": "b97dcf1e10f21a0954d6875832fce766e9cdbc28fbcbfa0f1f4a89765f05f1ad",
+      "before_cold_us": 210470,
+      "after_cold_us": 223304
+    },
+    {
+      "case": "inward_after_jump",
+      "epsilon": 0.0001,
+      "jet_sha256": "e15a5cfd58fea068168128d7b5c8022ddcabe72389618e53c73df39a081cc7d6",
+      "before_cold_us": 211186,
+      "after_cold_us": 203485
+    },
+    {
+      "case": "inward_after_jump",
+      "epsilon": 1e-06,
+      "jet_sha256": "94a33e004caa2ca0287ca944a2d33bfd69dbd0e237629f13b5d5834824081c78",
+      "before_cold_us": 214694,
+      "after_cold_us": 213321
+    },
+    {
+      "case": "inward_after_jump",
+      "epsilon": 1e-08,
+      "jet_sha256": "d23b8e73e64d7f3efbcef8f513c90dfd5742bdb789d5290c8bc96613d52bc105",
+      "before_cold_us": 229107,
+      "after_cold_us": 201722
+    },
+    {
+      "case": "coherent_field_inward_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "1266337142dd0e101e50ba6aae2bcee3ee95dbdef9bac2318a7339f6335e99a0",
+      "before_cold_us": 226095,
+      "after_cold_us": 223107
+    },
+    {
+      "case": "coherent_field_inward_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "06ab34d9134ba435c094a89d45897e3136ff38201af7caf0b374e98dee29af8f",
+      "before_cold_us": 233413,
+      "after_cold_us": 233009
+    },
+    {
+      "case": "coherent_field_inward_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "8d72edcb1eafb4e24bc3a85856948918116bfc4aa6fd254095819cd414963b07",
+      "before_cold_us": 234374,
+      "after_cold_us": 226535
+    },
+    {
+      "case": "coherent_field_inward_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "a40cadef7139fba42f4a6739d6d24a5f4af53365e5e1bef28e79c9df689e2bd1",
+      "before_cold_us": 251375,
+      "after_cold_us": 233365
+    },
+    {
+      "case": "live_training_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "9429f6a219953ab473b9957f29ce96c1cbb73c8d165f5c239493781761e84871",
+      "before_cold_us": 120723,
+      "after_cold_us": 110487
+    },
+    {
+      "case": "live_training_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "d52c6c355084da6e65297f60c20f113748db949b0ca003bbf58803d830909481",
+      "before_cold_us": 770696,
+      "after_cold_us": 767346
+    },
+    {
+      "case": "live_training_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "9cc2d0811f241bf1da3c3fc955bc7e4024b6c3702a0961de863836bd38ecd569",
+      "before_cold_us": 753023,
+      "after_cold_us": 786833
+    },
+    {
+      "case": "live_training_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "de29b1a2dbd109497421adf14b1746f2beda5cd8264c5a17899581be1c636654",
+      "before_cold_us": 719313,
+      "after_cold_us": 784406
+    },
+    {
+      "case": "kinetic_crossing_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "567dab6b2b1ebf8cc1db75dc1f3cdaa19532028263bde95071f0591f59b5fc69",
+      "before_cold_us": 44775,
+      "after_cold_us": 47494
+    },
+    {
+      "case": "kinetic_crossing_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "2eaca822ffea5e1379fa8260a9b2016d61e871fc5cac36f9e6dc9523850dd0f8",
+      "before_cold_us": 266824,
+      "after_cold_us": 276000
+    },
+    {
+      "case": "kinetic_crossing_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "7c65cc317d4be644ada556f8534671027e196355332423ed0d15ba5831c5e039",
+      "before_cold_us": 264715,
+      "after_cold_us": 297128
+    },
+    {
+      "case": "kinetic_crossing_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "09f7c395efad80258162816303a1bc9c895298cb0bd2d7370bd2478899753b83",
+      "before_cold_us": 275670,
+      "after_cold_us": 282663
+    },
+    {
+      "case": "new_native_crossing_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "33d0655ddc5245e6cbcb956feee119b3687ae56f4f6acf225008f9a430989a0f",
+      "before_cold_us": 329649,
+      "after_cold_us": 334901
+    },
+    {
+      "case": "new_native_crossing_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "06c4e9f9b7b216b67546759f95ded82f1d60965f689812425332384fe527d7ae",
+      "before_cold_us": 337723,
+      "after_cold_us": 362742
+    },
+    {
+      "case": "new_native_crossing_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "944633ff629e35277cba22cfcecc8247ea37af35f72a61b21efb61cc95cf6ca9",
+      "before_cold_us": 324684,
+      "after_cold_us": 343919
+    },
+    {
+      "case": "new_native_crossing_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "6d61cde78d887e51ab6f6d519b8e7eb6da9ed836ddbca1ec8c26a8b08e6d0e5f",
+      "before_cold_us": 316495,
+      "after_cold_us": 345638
+    },
+    {
+      "case": "new_kinetic_crossing_refusal",
+      "epsilon": 0.01,
+      "jet_sha256": "007a57e584980ff9cd66526a27042de65bfbee9ef3f774a4b9a4f963daf9cbaf",
+      "before_cold_us": 45182,
+      "after_cold_us": 43774
+    },
+    {
+      "case": "new_kinetic_crossing_refusal",
+      "epsilon": 0.0001,
+      "jet_sha256": "40d2a9ade5bd4440a6782f67bb84bd709f7770ddb7c1ff556cb4f0c10055f748",
+      "before_cold_us": 2400107,
+      "after_cold_us": 2663162
+    },
+    {
+      "case": "new_kinetic_crossing_refusal",
+      "epsilon": 1e-06,
+      "jet_sha256": "83f591dccab2e002933de239a487f43d8b82f30aa924de15975299da86cfd3a6",
+      "before_cold_us": 2975386,
+      "after_cold_us": 2716457
+    },
+    {
+      "case": "new_kinetic_crossing_refusal",
+      "epsilon": 1e-08,
+      "jet_sha256": "7e1e19cef7096e4ae3b97aebc34a3479fcad29b0decf16dbbe9e6ca09a800ce5",
+      "before_cold_us": 2560505,
+      "after_cold_us": 2527246
+    }
+  ],
+  "timing_protocol": "Separate existing baseline and current runs, not an isolated paired timing experiment. Other validation jobs were running. No general speedup claimed.",
+  "before_summed_cold_s": 27.134323,
+  "after_summed_cold_s": 27.495944,
+  "mutation_checks": "Both exact-budget guard and public fallback regressions fail under actual-source mutations.",
+  "rust_totals": {
+    "passed": 257,
+    "failed": 1,
+    "ignored": 1,
+    "known_failure": "Original native crossing test at unchanged production refusal coordinate."
+  },
+  "rust_working_directory_note": "Library rerun through cargo after direct-executable harness exposed a relative audio-fixture path; the corrected library run is the archived result.",
+  "installed_extension_sha256": "ce96c11df89002abfa23165c0ab66346d08592bc462dec6d5ec41bdecd97c6db",
+  "installed_extension_matched_rebuilt_python_target": true,
+  "preflight": "C:\\Users\\JeffHall\\git\\FractalSync\\scripts\\preflight_parity.py:497: RuntimeWarning: overflow encountered in scalar multiply\n  lcg = lcg * MUL + ADD\nC:\\Users\\JeffHall\\git\\FractalSync\\scripts\\preflight_parity.py:497: RuntimeWarning: overflow encountered in scalar add\n  lcg = lcg * MUL + ADD\nMinimap artifacts present:\n  mandel_F_mips_f32.bin: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_F_mips_f32.bin\n  mandel_S_mips_f32.bin: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_S_mips_f32.bin\n  mandel_mips_meta.json: C:\\Users\\JeffHall\\git\\FractalSync\\mandel_mips_meta.json\nMinimap binding available: runtime_core.load_mip_pyramid_py\n================================================================\nPreflight parity checks\n================================================================\nPASS  a) Carrier parity (Rust vs closed form)       max abs err = 0.000e+00\nPASS  b) Mirror parity (synthesize_c vs Rust)       max abs err = 1.211e-07\nPASS  c) Shared phase source                        max abs err = 0.000e+00\nPASS  e) Orbit mirror parity (trainer vs runtime)   max abs err = 3.320e-08\nPASS  e3) Shore-biased dynamics parity (Rust vs Rust-oracle) max abs err = 0.000e+00\nPASS  e4) Trainer-oracle consistency (mirror vs Rust forward) max abs err = 8.941e-08\nPASS  e5) Manifold physics parity (mirror vs Rust, issue #106) max abs err = 1.490e-08\nPASS  f) Golden vector version (stale-golden guard) max abs err = 0.000e+00\nPASS  g) Feature golden parity (Python mirror vs Rust) max abs err = 1.221e-15\nPASS  h) Feature golden version (stale-golden guard) max abs err = 0.000e+00\nPASS  d) Minimap availability (warning only)        max abs err = 0.000e+00\n================================================================\nAll mandatory parity checks PASSED.\n",
+  "architecture": "architecture guardrail: OK (97 files scanned, 9 manifested mirrors)\n",
+  "surfaces": "Canonical surfaces gate: PASS\n",
+  "python-physics": ".................F.........                                              [100%]\n================================== FAILURES ===================================\n_ TestShoreCrossings.test_shore_ridge_reflects_below_barrier_and_crosses_above_it _\n\nself = <test_manifold_physics.TestShoreCrossings object at 0x0000023DA693F490>\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\n\n    def test_shore_ridge_reflects_below_barrier_and_crosses_above_it(self, rc):\n        \"\"\"Scale-relative kinetic energy can carry a native Shore crossing.\"\"\"\n        config = ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        rc_config = rc.ManifoldConfig(0.1, 1e-4, 1.0, 0.1)\n        shore_y = 0.05\n        c0 = (0.4, shore_y)\n        x_shore = _locate_shore_x(rc, y=shore_y, x_lo=0.2, x_hi=0.5)\n        assert 0.2 < x_shore < 0.5\n    \n        u0 = rc.manifold_potential_energy(complex(*c0), rc_config)\n        u_crest = rc.manifold_potential_energy(complex(x_shore, shore_y), rc_config)\n        barrier = u_crest - u0\n        assert barrier > 0.0\n    \n        g0 = rc.manifold_induced_metric(complex(*c0), rc_config)\n        g_xx = g0[0][0]\n        assert math.isfinite(g_xx) and g_xx > 0.0\n    \n        def _vx_for_ke(target_ke):\n            # For v=(-vx,0), K = 1/2 * G_xx(c0) * vx^2.\n            vx = math.sqrt(2.0 * target_ke / g_xx)\n            measured = rc.manifold_kinetic_energy(vx, 0.0, complex(*c0), rc_config)\n            assert measured == pytest.approx(target_ke, rel=1e-9, abs=1e-12)\n            return vx\n    \n        def _crest_attempt(vx, dt):\n            c = c0\n            v = (-vx, 0.0)\n            crossed = False\n            min_d = math.inf\n            energy_log = []\n            guard_fired = False\n            crossing_time = None\n            for step in range(round(5.0 / dt)):\n                # The |c| < 2 hard invariant (outer-domain wall) may fail the\n                # step closed if the trajectory would leave the valid disk.\n                # That is a defined outcome (\"did not cross\"), not a crash.\n                try:\n                    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n                        rc, c, v, (0.0, 0.0), 0.0, dt, config\n                    )\n                except RuntimeError as e:\n                    if \"Hard invariant violated\" in str(e):\n                        guard_fired = True\n                        break\n                    raise\n                c = (new_re, new_im)\n                v = (new_vx, new_vy)\n                d = _signed_distance(rc, c, config.epsilon)\n                min_d = min(min_d, d)\n                if d < 0.0:\n                    crossed = True\n                    crossing_time = (step + 1) * dt\n                    k = rc.manifold_kinetic_energy(v[0], v[1], complex(*c), rc_config)\n                    u = rc.manifold_potential_energy(complex(*c), rc_config)\n                    u_wall = rc.manifold_wall_potential(complex(*c), rc_config)\n                    energy_log.append((k, u + u_wall, k + u + u_wall))\n                    break\n            return crossed, min_d, c, energy_log, guard_fired, crossing_time\n    \n        ke_under = 0.5 * barrier\n        vx_under = _vx_for_ke(ke_under)\n        crossed_under, min_d_under, _, _, _, _ = _crest_attempt(vx_under, 0.001)\n        assert not crossed_under, (\n            f\"underpowered trajectory crested the ridge: min D={min_d_under}\"\n        )\n        assert min_d_under > 0.0\n    \n        # The sampled Hessian makes the discrete path more demanding than the\n        # continuous scalar barrier alone; this established launch still uses\n        # only native kinetic energy and no external generalized force.\n        ke_high = 25.0 * barrier\n        vx_high = _vx_for_ke(ke_high)\n>       attempts = [_crest_attempt(vx_high, dt) for dt in (0.002, 0.001, 0.0005)]\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nbackend\\tests\\test_manifold_physics.py:531: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\nbackend\\tests\\test_manifold_physics.py:496: in _crest_attempt\n    new_re, new_im, new_vx, new_vy, _ = _rust_step(\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nrc = <module 'runtime_core' from 'C:\\\\Users\\\\JeffHall\\\\git\\\\FractalSync\\\\.venv\\\\Lib\\\\site-packages\\\\runtime_core\\\\__init__.py'>\nc = (0.35659512991586934, 0.06404443350221226)\nv = (-0.0006602770310771159, 0.0010669118815194072), q = (0.0, 0.0), beta = 0.0\ndt = 0.002\nconfig = ManifoldConfig(d_ref=0.1, epsilon=0.0001, lambda_sq=1.0, kappa=0.1, mu=0.3183098861837907)\n\n    def _rust_step(rc, c, v, q, beta, dt, config):\n        \"\"\"Call the Rust scalar binding with a Python config mirror.\"\"\"\n        rc_config = rc.ManifoldConfig(\n            config.d_ref, config.epsilon, config.lambda_sq, config.kappa\n        )\n>       return rc.manifold_integrate_step(\n            c[0], c[1], v[0], v[1], q[0], q[1], beta, dt, rc_config\n        )\nE       RuntimeError: geometry not regular: Unresolved (singularity=None) at c=(0.35659381055433242, 0.06404656757776669); provider=geometry-provider/6, tile=scale-aware:23:2991325:537261:1.49e-8, requested=0.000010000015272244462, resolved=0.000000014901161193847656, error=inf\n\nbackend\\tests\\test_manifold_physics.py:68: RuntimeError\n============================== warnings summary ===============================\nbackend/tests/test_manifold_physics.py: 18 warnings\n  C:\\Users\\JeffHall\\git\\FractalSync\\.venv\\Lib\\site-packages\\torch\\jit\\_script.py:1480: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ===========================\nFAILED backend/tests/test_manifold_physics.py::TestShoreCrossings::test_shore_ridge_reflects_below_barrier_and_crosses_above_it\n",
+  "python_physics_totals": {
+    "passed": 26,
+    "failed": 1,
+    "known_failure": "Recorded Python crossing at (0.35659381055433242, 0.06404656757776669)."
+  }
+}

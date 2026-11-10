@@ -1,0 +1,300 @@
+--- a/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
++++ b/runtime-core/src/geometry_provider/periodic_boundary/branch/cover.rs
+@@ -34,6 +34,39 @@
+     lower: f64,
+     winding: i32,
+ }
++/// Conditional boundary-direction coverage inside one represented query disk.
++/// Nearest-foot use additionally requires an independently proved distance upper
++/// bound no greater than this radius. Failure is not a cut classification.
++#[derive(Debug)]
++pub(in super::super) struct BoundaryDirectionCone {
++    query: C,
++    radius: f64,
++    axis: C,
++    axis_cosine_lower: f64,
++    work: usize,
++    pieces: usize,
++}
++impl BoundaryDirectionCone {
++    pub(in super::super) fn query(&self) -> C {
++        self.query
++    }
++    pub(in super::super) fn radius(&self) -> f64 {
++        self.radius
++    }
++    pub(in super::super) fn axis(&self) -> C {
++        self.axis
++    }
++    pub(in super::super) fn work(&self) -> usize {
++        self.work
++    }
++    /// Minimum cosine to the retained axis; not a pairwise cosine bound.
++    pub(in super::super) fn axis_cosine_lower(&self) -> f64 {
++        self.axis_cosine_lower
++    }
++    pub(in super::super) fn pieces(&self) -> usize {
++        self.pieces
++    }
++}
+ impl Clearance {
+     pub(in super::super) fn lower(&self) -> f64 {
+         self.lower
+@@ -43,6 +76,58 @@
+     }
+ }
+ impl ClosedCover {
++    /// Every boundary point in this disk has a radial direction represented by
++    /// a curve capsule in the same disk: complement(M) has zero winding, so
++    /// segments to approaching exterior points cross the attracting curve.
++    /// Bound each retained capsule inside a common half-angle cone; this proves
++    /// pairwise directional dot products exceed the supplied cosine threshold.
++    pub(in super::super) fn boundary_direction_cone(
++        &self,
++        q: C,
++        radius: f64,
++        axis: C,
++        cosine: f64,
++    ) -> Option<BoundaryDirectionCone> {
++        if !finite(q)
++            || !finite(axis)
++            || (axis.re == 0. && axis.im == 0.)
++            || !radius.is_finite()
++            || radius <= 0.
++            || !cosine.is_finite()
++            || cosine <= 0.
++            || cosine >= 1.
++        {
++            return None;
++        }
++        let clearance = self.clearance(q).ok()?;
++        if radius < clearance.lower {
++            return None;
++        }
++        let half_cosine = (((1. + cosine).next_up() * 0.5).next_up()).sqrt().next_up();
++        let mut axis_cosine_lower = f64::INFINITY;
++        let mut pieces = 0;
++        let mut work = 0;
++        for i in 0..self.edges.len() {
++            let a = &self.edges[i];
++            let b = &self.edges[(i + 1) % self.edges.len()];
++            for cap in [a.capsule, connector(a, b)] {
++                let (lower, count) =
++                    capsule_direction_cone(cap, q, radius, axis, half_cosine, 0, &mut work)?;
++                if count > 0 {
++                    axis_cosine_lower = axis_cosine_lower.min(lower);
++                    pieces += count;
++                }
++            }
++        }
++        (pieces > 0).then_some(BoundaryDirectionCone {
++            query: q,
++            radius,
++            axis,
++            axis_cosine_lower,
++            work,
++            pieces,
++        })
++    }
+     pub(in super::super) fn reference_rows(&self) -> Vec<[f64; 25]> {
+         self.edges
+             .iter()
+@@ -111,6 +196,93 @@
+         }
+         Ok(Clearance { lower, winding })
+     }
++}
++// Subdivide only the affine capsule representation. Both children include the
++// midpoint rounding error, so their union covers the original capsule.
++fn capsule_direction_cone(
++    cap: Capsule,
++    q: C,
++    radius: f64,
++    axis: C,
++    threshold: f64,
++    depth: u32,
++    work: &mut usize,
++) -> Option<(f64, usize)> {
++    *work += 1;
++    if *work > 65536 {
++        return None;
++    }
++    if distance_lower(cap, q).ok()? > radius {
++        return Some((f64::INFINITY, 0));
++    }
++    if let Some(lower) = capsule_axis_cosine_lower(cap, q, axis) {
++        if lower > threshold {
++            return Some((lower, 1));
++        }
++    }
++    if depth >= 12 {
++        return None;
++    }
++    let mid = cap.a * 0.5 + cap.b * 0.5;
++    if mid == cap.a || mid == cap.b || !finite(mid) {
++        return None;
++    }
++    let p = I::point;
++    let error = super::round(
++        mid,
++        p(cap.a.re).mul(p(0.5)).add(p(cap.b.re).mul(p(0.5))),
++        p(cap.a.im).mul(p(0.5)).add(p(cap.b.im).mul(p(0.5))),
++    );
++    let child_radius = up_add(cap.radius, error);
++    let (a, na) = capsule_direction_cone(
++        Capsule {
++            a: cap.a,
++            b: mid,
++            radius: child_radius,
++        },
++        q,
++        radius,
++        axis,
++        threshold,
++        depth + 1,
++        work,
++    )?;
++    let (b, nb) = capsule_direction_cone(
++        Capsule {
++            a: mid,
++            b: cap.b,
++            radius: child_radius,
++        },
++        q,
++        radius,
++        axis,
++        threshold,
++        depth + 1,
++        work,
++    )?;
++    Some((a.min(b), na + nb))
++}
++fn capsule_axis_cosine_lower(cap: Capsule, q: C, axis: C) -> Option<f64> {
++    let p = I::point;
++    let ax = p(cap.a.re).sub(p(q.re));
++    let ay = p(cap.a.im).sub(p(q.im));
++    let bx = p(cap.b.re).sub(p(q.re));
++    let by = p(cap.b.im).sub(p(q.im));
++    let adot = ax.mul(p(axis.re)).add(ay.mul(p(axis.im)));
++    let bdot = bx.mul(p(axis.re)).add(by.mul(p(axis.im)));
++    let axis_norm = norm(axis);
++    let remainder = (cap.radius * axis_norm).next_up();
++    let numerator = (adot.lo.min(bdot.lo) - remainder).next_down();
++    let across = ax.mul(p(axis.im)).sub(ay.mul(p(axis.re)));
++    let bcross = bx.mul(p(axis.im)).sub(by.mul(p(axis.re)));
++    let cross_upper = up_add(across.abs_upper().max(bcross.abs_upper()), remainder);
++    if numerator <= 0. || !numerator.is_finite() || !cross_upper.is_finite() {
++        return None;
++    }
++    let tangent = (cross_upper / numerator).next_up();
++    let denominator = up_add(1., (tangent * tangent).next_up()).sqrt().next_up();
++    let lower = (1. / denominator).next_down();
++    (denominator.is_finite() && lower.is_finite()).then_some(lower)
+ }
+ fn edge(patch: Certificate, start: C, end: C) -> Result<Edge, Refusal> {
+     if ![start, end].into_iter().all(finite) {
+@@ -449,6 +621,104 @@
+         }
+     }
+     #[test]
++    fn complete_direction_coverage_accepts_a_smooth_side_and_refuses_the_center() {
++        let zero = C::new(0., 0.);
++        let center = C::new(-1., 0.);
++        let query = C::new(-1.2, 0.);
++        let r = Request {
++            radius: 0.999999,
++            root_radius: 0.9,
++            root_width: 0.025,
++            initial_edges: 512,
++            max_regions: 65536,
++        };
++        let curve = build_seeded(zero, center, zero, 2, r, &[(query, 0.04999)]).unwrap();
++        let cosine = crate::geometry_provider::DYADIC_CUT_NORMAL_DEGREES
++            .to_radians()
++            .cos();
++        let cone = curve
++            .boundary_direction_cone(query, 0.050001, C::new(-1., 0.), cosine)
++            .unwrap();
++        assert_eq!(cone.query(), query);
++        assert_eq!(cone.radius(), 0.050001);
++        assert!(cone.pieces() > 0);
++        assert!(cone.axis_cosine_lower() > 0.96);
++        assert!(curve
++            .boundary_direction_cone(query, 0.050001, C::new(1., 0.), cosine)
++            .is_none());
++        assert!(curve
++            .boundary_direction_cone(center, 0.250001, C::new(1., 0.), cosine)
++            .is_none());
++        assert!(curve
++            .boundary_direction_cone(C::new(2., 0.), 1., C::new(1., 0.), cosine)
++            .is_none());
++        for value in [0., -1., f64::NAN, f64::INFINITY] {
++            assert!(curve
++                .boundary_direction_cone(query, value, C::new(-1., 0.), cosine)
++                .is_none());
++        }
++    }
++    #[test]
++    fn capsule_cones_clip_only_by_certified_distance_and_require_half_angles() {
++        let q = C::new(0., 0.);
++        let axis = C::new(1., 0.);
++        let threshold = 15f64.to_radians().cos().next_up();
++        let mut work = 0;
++        let radial = Capsule {
++            a: C::new(1., 0.),
++            b: C::new(100., 0.),
++            radius: 1e-4,
++        };
++        assert!(capsule_direction_cone(radial, q, 1.01, axis, threshold, 0, &mut work).is_some());
++        let tangent = Capsule {
++            a: C::new(1., -1.),
++            b: C::new(1., 1.),
++            radius: 1e-4,
++        };
++        assert!(capsule_axis_cosine_lower(tangent, q, axis).unwrap() < threshold);
++        let (lower, count) =
++            capsule_direction_cone(tangent, q, 1.01, axis, threshold, 0, &mut work).unwrap();
++        assert!(lower > threshold && count > 0);
++        let separated = Capsule {
++            a: C::new(1., 0.3),
++            b: C::new(1., 0.3),
++            radius: 0.,
++        };
++        assert!(capsule_direction_cone(separated, q, 2., axis, threshold, 0, &mut work).is_none());
++        let (_, count) =
++            capsule_direction_cone(separated, q, 0.5, axis, threshold, 0, &mut work).unwrap();
++        assert_eq!(count, 0);
++        let angular_radius = Capsule {
++            a: axis,
++            b: axis,
++            radius: 0.27,
++        };
++        assert!(
++            capsule_direction_cone(angular_radius, q, 2., axis, threshold, 0, &mut work).is_none()
++        );
++        let point = Capsule {
++            a: axis,
++            b: axis,
++            radius: 0.,
++        };
++        let limit = distance_lower(point, q).unwrap();
++        let (_, count) =
++            capsule_direction_cone(point, q, limit, axis, threshold, 0, &mut work).unwrap();
++        assert_eq!(count, 1, "equality of lower bound cannot prune a capsule");
++        let contains_query = Capsule {
++            a: q,
++            b: q,
++            radius: 1.,
++        };
++        assert!(
++            capsule_direction_cone(contains_query, q, 2., axis, threshold, 0, &mut work).is_none()
++        );
++        let mut exhausted = 65536;
++        assert!(
++            capsule_direction_cone(radial, q, 1.01, axis, threshold, 0, &mut exhausted).is_none()
++        );
++    }
++    #[test]
+     fn capsule_radius_and_orientation_bounds_are_not_optional() {
+         let zero = C::new(0., 0.);
+         let capsule = Capsule {

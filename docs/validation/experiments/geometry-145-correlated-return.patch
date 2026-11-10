@@ -1,0 +1,249 @@
+--- a/runtime-core/src/geometry_provider/uniform_box.rs
++++ b/runtime-core/src/geometry_provider/uniform_box.rs
+@@ -1,6 +1,8 @@
+ //! Conservative empty-contour shortcut. An uncertain box uses ordinary tiles.
+ 
+ use super::interval::Interval;
++#[path = "affine_return.rs"]
++mod affine_return;
+ 
+ /// `Some` proves that every point has the same membership. `None` is only a
+ /// failed shortcut, never a membership refusal. Outward-rounded intervals may
+@@ -252,29 +254,18 @@
+  let mut centers=vec![z];let mut all_bounded=true;
+  let mut radius=0.;
+  for n in 1usize..=4096 {
+-  let magnitude=norm_upper(z);let sensitivity=norm_upper(d);
+-  let total=upper_add(upper_mul(sensitivity,cr),remainder);
+-  let a=upper_add(magnitude,total);
+-  let cb=upper_add(norm_upper(c),cr);
+-  // Bounds both the machine critical-orbit update and center update.
+-  let round=machine_round_error(a,cb);
+-  let next=[z[0]*z[0]-z[1]*z[1]+c[0],2.*z[0]*z[1]+c[1]];
+-  let next_d=[2.*(z[0]*d[0]-z[1]*d[1])+1.,2.*(z[0]*d[1]+z[1]*d[0])];
++  let next=affine_return::AffineBall{z,d,remainder}.step(c,cr)?;
++  z=next.z;d=next.d;remainder=next.remainder;radius=next.radius(cr);
+   let p=Interval::point;
+-  let dr=p(2.).mul(p(z[0]).mul(p(d[0])).sub(p(z[1]).mul(p(d[1])))).add(p(1.));
+-  let di=p(2.).mul(p(z[0]).mul(p(d[1])).add(p(z[1]).mul(p(d[0]))));
+-  let de=dr.sub(p(next_d[0]));let ie=di.sub(p(next_d[1]));
+-  let coefficient_error=de.square().add(ie.square()).hi.sqrt().next_up();
+-  remainder=upper_add(upper_add(upper_mul(upper_mul(2.,magnitude),remainder),upper_mul(total,total)),
+-     upper_add(round,upper_mul(coefficient_error,cr)));
+-  z=next;d=next_d;
+-  radius=upper_add(upper_mul(norm_upper(d),cr),remainder);
+-  if !radius.is_finite() || radius>4. || !z.iter().all(|x|x.is_finite()) {return None;}
+   let low=p(z[0]).square().add(p(z[1]).square()).lo.max(0.).sqrt().next_down();
+   // The ordinary 512-update query checks escape before each update.
+   if n<512 && (low-radius).next_down()>2. {return Some(false);}
+   all_bounded &= Ball{z,radius}.bounded();
+   centers.push(z);
++  if all_bounded && n>=128 && n.is_power_of_two() {
++   let prefix=affine_return::AffineBall{z,d,remainder};
++   if periodic_affine_trap(prefix,&centers,c,cr) {return Some(true);}
++  }
+   if n>=512 {
+    // Exterior semantics remain limited to the minimum ordinary budget.
+    // Additional prefix work may prove interior only, with every earlier
+@@ -370,3 +361,38 @@
+   }}
+  }
+ }
++
++fn periodic_affine_trap(prefix:affine_return::AffineBall, centers:&[[f64;2]],c:[f64;2],cr:f64)->bool {
++ let Some(last)=centers.len().checked_sub(1) else {return false;};
++ let mut period=0;let mut separation=f64::INFINITY;
++ for p in 1..=last {
++  let distance=distance_upper(prefix.z,centers[last-p]);
++  if distance<separation {period=p;separation=distance;}
++ }
++ for factor in [2.,8.,32.,128.] {
++  let radius=upper_mul(factor,upper_add(prefix.remainder,separation));
++  if prefix.traps(c,cr,period,radius) {return true;}
++ }
++ false
++}
++
++#[cfg(test)]
++mod correlated_return_tests {
++ use super::*;
++ #[test]
++ fn high_period_box_proofs_agree_with_shared_critical_orbits() {
++  for (center,k) in [([0.32049988639807619,0.04733531447355364],24),
++                     ([0.35659381055433242,0.06404656757776669],28)] {
++   let width=56.*0.125*2f64.powi(-k);
++   let re=center[0]-width/2.;let im=center[1]-width/2.;
++   assert_eq!(affine_box(re,im,width),Some(true));
++   assert_eq!(membership(re,im,width),Some(true));
++   for y in 0..=56 {for x in 0..=56 {
++    let c=num_complex::Complex64::new(re+width*x as f64/56.,im+width*y as f64/56.);
++    for budget in [512,2048,32768] {
++     assert!(crate::visual_metrics::mandelbrot_membership(c,budget),"{c:?}, N={budget}");
++    }
++   }}
++  }
++ }
++}
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/affine_return.rs
+@@ -0,0 +1,142 @@
++//! Correlated periodic return of an already enclosed critical-orbit prefix.
++use super::{
++    distance_upper, machine_round_error, norm_upper, upper_add, upper_mul, Ball, Interval,
++};
++
++#[derive(Clone, Copy)]
++pub(super) struct AffineBall {
++    pub(super) z: [f64; 2],
++    pub(super) d: [f64; 2],
++    pub(super) remainder: f64,
++}
++
++impl AffineBall {
++    pub(super) fn radius(self, cr: f64) -> f64 {
++        upper_add(upper_mul(norm_upper(self.d), cr), self.remainder)
++    }
++
++    pub(super) fn bounded(self, cr: f64) -> bool {
++        Ball {
++            z: self.z,
++            radius: self.radius(cr),
++        }
++        .bounded()
++    }
++
++    pub(super) fn step(self, c: [f64; 2], cr: f64) -> Option<Self> {
++        let magnitude = norm_upper(self.z);
++        let total = self.radius(cr);
++        let a = upper_add(magnitude, total);
++        let cb = upper_add(norm_upper(c), cr);
++        let round = machine_round_error(a, cb);
++        let z = [
++            self.z[0] * self.z[0] - self.z[1] * self.z[1] + c[0],
++            2. * self.z[0] * self.z[1] + c[1],
++        ];
++        let d = [
++            2. * (self.z[0] * self.d[0] - self.z[1] * self.d[1]) + 1.,
++            2. * (self.z[0] * self.d[1] + self.z[1] * self.d[0]),
++        ];
++        let p = Interval::point;
++        let dr = p(2.)
++            .mul(
++                p(self.z[0])
++                    .mul(p(self.d[0]))
++                    .sub(p(self.z[1]).mul(p(self.d[1]))),
++            )
++            .add(p(1.));
++        let di = p(2.).mul(
++            p(self.z[0])
++                .mul(p(self.d[1]))
++                .add(p(self.z[1]).mul(p(self.d[0]))),
++        );
++        let de = dr.sub(p(d[0]));
++        let ie = di.sub(p(d[1]));
++        let coefficient_error = de.square().add(ie.square()).hi.sqrt().next_up();
++        let remainder = upper_add(
++            upper_add(
++                upper_mul(upper_mul(2., magnitude), self.remainder),
++                upper_mul(total, total),
++            ),
++            upper_add(round, upper_mul(coefficient_error, cr)),
++        );
++        let next = Self { z, d, remainder };
++        let radius = next.radius(cr);
++        (radius.is_finite() && radius <= 4. && z.iter().all(|x| x.is_finite())).then_some(next)
++    }
++
++    /// For every fixed parameter delta in its disk, the return maps the disk
++    /// z + d*delta + |error|<=radius strictly into itself. It contains the
++    /// enclosed prefix and all intermediate machine-orbit disks stay bounded.
++    pub(super) fn traps(self, c: [f64; 2], cr: f64, period: usize, radius: f64) -> bool {
++        if period == 0
++            || !cr.is_finite()
++            || cr < 0.
++            || !radius.is_finite()
++            || !self.remainder.is_finite()
++            || self.remainder < 0.
++            || radius < self.remainder
++        {
++            return false;
++        }
++        let mut end = Self {
++            remainder: radius,
++            ..self
++        };
++        if !end.bounded(cr) {
++            return false;
++        }
++        for _ in 0..period {
++            let Some(next) = end.step(c, cr) else {
++                return false;
++            };
++            if !next.bounded(cr) {
++                return false;
++            }
++            end = next;
++        }
++        let coefficient_gap = distance_upper(end.d, self.d);
++        let returned = upper_add(
++            distance_upper(end.z, self.z),
++            upper_add(upper_mul(coefficient_gap, cr), end.remainder),
++        );
++        returned.is_finite() && returned < radius
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn correlated_return_covers_a_parameter_disk() {
++        let prefix = AffineBall {
++            z: [0.; 2],
++            d: [1., 0.],
++            remainder: 1e-4,
++        };
++        assert!(prefix.traps([0.; 2], 0.01, 1, 0.001));
++        assert!(!prefix.traps([0.; 2], 0.01, 1, 1e-5));
++    }
++    #[test]
++    fn return_must_account_for_the_changed_parameter_coefficient() {
++        let prefix = AffineBall {
++            z: [0.1, 0.],
++            d: [0.; 2],
++            remainder: 1e-5,
++        };
++        assert!(!prefix.traps([0.09, 0.], 0.001, 1, 1e-5));
++    }
++    #[test]
++    fn neutral_and_invalid_returns_refuse() {
++        let prefix = AffineBall {
++            z: [0.5, 0.],
++            d: [0.; 2],
++            remainder: 1e-6,
++        };
++        assert!(!prefix.traps([0.25, 0.], 0., 1, 1e-5));
++        for cr in [-1., f64::NAN, f64::INFINITY] {
++            assert!(!prefix.traps([0.25, 0.], cr, 1, 1e-5));
++        }
++        assert!(!prefix.traps([0.25, 0.], 0., 0, 1e-5));
++    }
++}
+--- /dev/null
++++ b/runtime-core/examples/geometry145_query.rs
+@@ -0,0 +1,15 @@
++use num_complex::Complex64;
++use runtime_core::geometry_provider::{query_geometry, GeometryValidity, DYADIC_FIT_ERROR_FACTOR};
++
++fn main() {
++    let args: Vec<_> = std::env::args().skip(1).map(|value| value.parse::<f64>().unwrap()).collect();
++    assert_eq!(args.len(), 3, "expected X Y EPSILON");
++    let start = std::time::Instant::now();
++    let jet = query_geometry(Complex64::new(args[0], args[1]), args[2]).unwrap();
++    if jet.validity == GeometryValidity::Regular {
++        assert!(jet.resolved_scale <= jet.requested_scale);
++        assert!(jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale);
++    }
++    println!("{}", serde_json::json!({"c":[args[0],args[1]],"epsilon":args[2],
++        "elapsed_s":start.elapsed().as_secs_f64(),"jet":jet}));
++}

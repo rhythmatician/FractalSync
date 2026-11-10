@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/3";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/5";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -64,7 +64,7 @@ pub struct ActionSnapshot {
     pub raw: RawMotionControls,
     pub effective: EffectiveMotionControls,
     /// Metric-consistent generalized drive covector Q_drive actually used.
-    pub drive_covector: [f64; 2],
+    pub drive_covector: Option<[f64; 2]>,
     /// Effective friction coefficient beta = GRIP_BASE + grip*GRIP_COEFF + brake*BRAKE_COEFF.
     pub friction_beta: f64,
     /// Frictional power P = v^T Q_friction <= 0 (PSD dissipation evidence).
@@ -84,35 +84,35 @@ pub struct PhysicsSnapshot {
     /// Planar velocity v = (vx, vy).
     pub velocity: [f64; 2],
     /// Signed distance D(c): <0 inside M, >0 outside, 0 on The Shore.
-    pub signed_distance: f64,
+    pub signed_distance: Option<f64>,
     /// Realm: -1 inside, +1 outside, 0 on the boundary.
-    pub realm: i8,
+    pub realm: Option<i8>,
     /// Regularized distance rho = sqrt(D^2 + epsilon^2).
-    pub rho: f64,
+    pub rho: Option<f64>,
     /// Authoritative H3 rendering data, using this snapshot's manifold config.
-    pub upper_half: UpperHalfGeometry,
+    pub upper_half: Option<UpperHalfGeometry>,
     /// Mandelbrot scale sigma(c) = log2(d_ref / rho). Distinct from Julia zoom.
-    pub sigma: f64,
+    pub sigma: Option<f64>,
     /// sigma_dot = grad(sigma) . v (no independent v_sigma state exists).
-    pub sigma_dot: f64,
+    pub sigma_dot: Option<f64>,
     /// Scale gradient grad(sigma) = (gx, gy).
-    pub scale_gradient: [f64; 2],
+    pub scale_gradient: Option<[f64; 2]>,
     /// Induced metric G = rho^-2 I + lambda^2 grad(sigma) grad(sigma)^T, flat [g11, g12, g22].
-    pub metric: [f64; 3],
+    pub metric: Option<[f64; 3]>,
     /// Metric speed sqrt(v^T G v).
-    pub metric_speed: f64,
+    pub metric_speed: Option<f64>,
     /// Kinetic energy K = 1/2 v^T G v.
-    pub kinetic: f64,
+    pub kinetic: Option<f64>,
     /// Shore potential U_sigma = kappa * sigma(c), used for crest diagnostics.
-    pub potential: f64,
+    pub potential: Option<f64>,
     /// Total mechanical energy E = K + U_sigma + U_wall.
-    pub total: f64,
+    pub total: Option<f64>,
     /// Geodesic (curvature) acceleration -Gamma(v,v) as coordinate acceleration.
-    pub geodesic_accel: [f64; 2],
+    pub geodesic_accel: Option<[f64; 2]>,
     /// Shore force covector Q_sigma = -kappa grad(sigma).
-    pub potential_force: [f64; 2],
+    pub potential_force: Option<[f64; 2]>,
     /// Net coordinate acceleration applied last step (diagnostic).
-    pub net_accel: [f64; 2],
+    pub net_accel: Option<[f64; 2]>,
     /// Physics validity: sampled derivatives and displayed dynamics are finite at c.
     pub derivative_valid: bool,
 }
@@ -150,9 +150,11 @@ pub struct GeometrySnapshot {
     /// Deterministic tile/cache identity at c.
     pub tile_id: String,
     /// Requested local scale: alpha * max(rho, epsilon).
-    pub requested_scale: f64,
+    pub requested_scale: Option<f64>,
     /// Actual resolved scale / error capability the provider achieved.
-    pub resolved_scale: f64,
+    pub resolved_scale: Option<f64>,
+    /// Measured cross-level jet error, in distance units.
+    pub estimated_error: Option<f64>,
     /// Whether this jet came from the temporary bridge (true) or destination provider.
     pub is_bridge: bool,
     /// Validity classification: regular / unresolved / singular / outside_provider / provider_failure.
@@ -160,13 +162,13 @@ pub struct GeometrySnapshot {
     /// Singularity classification where known: none / cut_locus / high_curvature / etc.
     pub singularity: String,
     /// Signed distance D(c).
-    pub d: f64,
+    pub d: Option<f64>,
     /// Gradient norm |grad D| (eikonal: ~1 where smooth).
-    pub grad_d_norm: f64,
+    pub grad_d_norm: Option<f64>,
     /// Hessian Frobenius norm |H_D|.
-    pub hessian_norm: f64,
+    pub hessian_norm: Option<f64>,
     /// Hessian eigenvalues where valid.
-    pub hessian_eigenvalues: [f64; 2],
+    pub hessian_eigenvalues: Option<[f64; 2]>,
 }
 
 /// Diagnostics section: integrator/derivative health evidence for #82-style
@@ -242,92 +244,86 @@ pub fn snapshot_from_state(
     config: &crate::manifold::ManifoldConfig,
     last_delta_total: Option<f64>,
 ) -> Result<DebugSnapshot, String> {
-    // ---- Physics: every value from the canonical manifold functions ----
-    let signed_distance = crate::manifold::signed_distance(c)?;
-    let realm: i8 = if signed_distance < 0.0 {
-        -1
-    } else if signed_distance > 0.0 {
-        1
-    } else {
-        0
-    };
-    let rho = crate::manifold::regularized_distance(c, config.epsilon)?;
-    let sigma = crate::manifold::mandelbrot_scale(c, config)?;
-    let (gx, gy) = crate::manifold::scale_gradient(c, config)?;
-    let sigma_dot = crate::manifold::sigma_dot(c, v, config)?;
-    let g = crate::manifold::induced_metric(c, config)?;
-    let gv0 = g[0][0] * v.0 + g[0][1] * v.1;
-    let gv1 = g[1][0] * v.0 + g[1][1] * v.1;
-    let metric_speed = (v.0 * gv0 + v.1 * gv1).sqrt();
-    let kinetic = crate::manifold::kinetic_energy(v, c, config)?;
-    let potential = crate::manifold::potential_energy(c, config)?;
-    let total = crate::manifold::total_energy(v, c, config)?;
-    let geodesic = crate::manifold::geodesic_acceleration(v, c, config)?;
-    let q_potential = crate::manifold::potential_force(c, config)?;
-    let q_wall = crate::manifold::wall_force(c, config)?;
+    validate_snapshot_inputs(c, v, last_action, manifold_drag, config, last_delta_total)?;
 
-    // Net coordinate acceleration of the last step, reconstructed from the
-    // same covector sum the kernel uses (potential + wall + drive + drag ->
-    // G^-1). MUST mirror manifold::integrate_step's force sum exactly — if
-    // the kernel gains a term, this reconstruction gains it too.
-    let (q_drive, beta_used) = match last_action {
-        Some(a) => {
-            let q = a.raw.clamped().drive_covector(c, config)?;
-            (q, a.friction_beta)
+    // The provider may return a useful value jet while explicitly refusing
+    // derivative semantics at a cut locus or unresolved location. Preserve
+    // scalar values there, but only evaluate ordinary manifold dynamics for a
+    // Regular jet; never turn best-effort derivatives into apparent physics.
+    let jet = crate::manifold::geometry_jet(c, config)?;
+    let signed_distance = jet.d.is_finite().then_some(jet.d);
+    let realm = signed_distance.map(|d| if d < 0.0 { -1 } else if d > 0.0 { 1 } else { 0 });
+    let rho = crate::geometry_provider::rho_from_jet(&jet, config.epsilon);
+    let rho = rho.is_finite().then_some(rho);
+    let sigma_value = crate::geometry_provider::sigma_from_jet(&jet, config);
+    let sigma = sigma_value.is_finite().then_some(sigma_value);
+    let potential = sigma.map(|s| config.kappa * s).filter(|x| x.is_finite());
+
+    let regular = jet.validity == crate::geometry_provider::GeometryValidity::Regular;
+    let mut q_drive: Option<(f64, f64)> = None;
+    let mut derivative_error: Option<String> = None;
+    let (upper_half, sigma_dot, scale_gradient, metric, metric_speed, kinetic, total,
+        geodesic_accel, potential_force, net_accel) = if regular {
+        let evaluate = || -> Result<_, String> {
+            let rho = rho.ok_or_else(|| "geometry provider returned no finite rho".to_string())?;
+            let (gx, gy) = crate::manifold::scale_gradient(c, config)?;
+            let sd = crate::manifold::sigma_dot(c, v, config)?;
+            let g = crate::manifold::induced_metric(c, config)?;
+            let gv0 = g[0][0] * v.0 + g[0][1] * v.1;
+            let gv1 = g[1][0] * v.0 + g[1][1] * v.1;
+            let speed = (v.0 * gv0 + v.1 * gv1).sqrt();
+            let k = crate::manifold::kinetic_energy(v, c, config)?;
+            let energy = crate::manifold::total_energy(v, c, config)?;
+            let geodesic = crate::manifold::geodesic_acceleration(v, c, config)?;
+            let q_potential = crate::manifold::potential_force(c, config)?;
+            let q_wall = crate::manifold::wall_force(c, config)?;
+            let (drive, beta) = match last_action {
+                Some(a) => (a.raw.clamped().drive_covector(c, config)?, a.friction_beta),
+                None => ((0.0, 0.0), manifold_drag.unwrap_or(0.0)),
+            };
+            let q_drag = crate::manifold::drag_force(v, c, beta, config)?;
+            let q_total = (q_potential.0 + q_wall.0 + drive.0 + q_drag.0,
+                           q_potential.1 + q_wall.1 + drive.1 + q_drag.1);
+            let acceleration = crate::manifold::apply_generalized_force(q_total, c, config)?;
+            let net = (acceleration.0 - geodesic.0, acceleration.1 - geodesic.1);
+            let hess = crate::manifold::scale_hessian(c, config)?;
+            let finite = [gx, gy, sd, speed, k, energy, geodesic.0, geodesic.1,
+                q_potential.0, q_potential.1, net.0, net.1]
+                .iter().all(|x| x.is_finite())
+                && g.iter().flatten().all(|x| x.is_finite())
+                && hess.iter().flatten().all(|x| x.is_finite());
+            if !finite { return Err("regular geometry produced non-finite derivatives".into()); }
+            let upper = UpperHalfGeometry::new(rho, [gx, gy], sd, config);
+            if !upper.a.is_finite()
+                || !upper.z.is_finite()
+                || upper.gradient.iter().any(|x| !x.is_finite())
+                || !upper.z_dot.is_finite()
+            {
+                return Err("regular geometry produced non-finite upper-half values".into());
+            }
+            Ok((upper, gx, gy, sd, g, speed, k, energy, geodesic, q_potential, net, drive))
+        };
+        match evaluate() {
+            Ok((upper, gx, gy, sd, g, speed, k, energy, geo, force, net, drive)) => {
+                q_drive = Some(drive);
+                (Some(upper),
+                 Some(sd), Some([gx, gy]), Some([g[0][0], g[0][1], g[1][1]]),
+                 Some(speed), Some(k), Some(energy), Some([geo.0, geo.1]),
+                 Some([force.0, force.1]), Some([net.0, net.1]))
+            }
+            Err(error) => {
+                derivative_error = Some(error);
+                (None, None, None, None, None, None, None, None, None, None)
+            }
         }
-        None => ((0.0, 0.0), manifold_drag.unwrap_or(0.0)),
+    } else {
+        (None, None, None, None, None, None, None, None, None, None)
     };
-    let q_drag = crate::manifold::drag_force(v, c, beta_used, config)?;
-    let q_total = (
-        q_potential.0 + q_wall.0 + q_drive.0 + q_drag.0,
-        q_potential.1 + q_wall.1 + q_drive.1 + q_drag.1,
-    );
-    let a_force = crate::manifold::apply_generalized_force(q_total, c, config)?;
-    let net_accel = (-geodesic.0 + a_force.0, -geodesic.1 + a_force.1);
-
-    // Physics validity: every sampled derivative and displayed dynamic must be finite.
-    let hess = crate::manifold::scale_hessian(c, config)?;
-    let derivative_valid = c.re.is_finite()
-        && c.im.is_finite()
-        && v.0.is_finite()
-        && v.1.is_finite()
-        && signed_distance.is_finite()
-        && rho.is_finite()
-        && sigma.is_finite()
-        && gx.is_finite()
-        && gy.is_finite()
-        && sigma_dot.is_finite()
-        && g.iter().all(|row| row.iter().all(|x| x.is_finite()))
-        && metric_speed.is_finite()
-        && kinetic.is_finite()
-        && potential.is_finite()
-        && total.is_finite()
-        && geodesic.0.is_finite()
-        && geodesic.1.is_finite()
-        && q_potential.0.is_finite()
-        && q_potential.1.is_finite()
-        && net_accel.0.is_finite()
-        && net_accel.1.is_finite()
-        && hess.iter().all(|row| row.iter().all(|x| x.is_finite()));
-
+    let derivative_valid = regular && derivative_error.is_none();
     let physics = PhysicsSnapshot {
-        c: [c.re, c.im],
-        velocity: [v.0, v.1],
-        signed_distance,
-        realm,
-        rho,
-        upper_half: UpperHalfGeometry::new(rho, [gx, gy], sigma_dot, config),
-        sigma,
-        sigma_dot,
-        scale_gradient: [gx, gy],
-        metric: [g[0][0], g[0][1], g[1][1]],
-        metric_speed,
-        kinetic,
-        potential,
-        total,
-        geodesic_accel: [geodesic.0, geodesic.1],
-        potential_force: [q_potential.0, q_potential.1],
-        net_accel: [net_accel.0, net_accel.1],
+        c: [c.re, c.im], velocity: [v.0, v.1], signed_distance, realm, rho,
+        upper_half, sigma, sigma_dot, scale_gradient, metric, metric_speed,
+        kinetic, potential, total, geodesic_accel, potential_force, net_accel,
         derivative_valid,
     };
 
@@ -349,7 +345,7 @@ pub fn snapshot_from_state(
                 grip: clamped.grip,
                 impulse: clamped.impulse,
             },
-            drive_covector: [q_drive.0, q_drive.1],
+            drive_covector: q_drive.map(|q| [q.0, q.1]),
             friction_beta: a.friction_beta,
             friction_power: a.friction_power,
         }
@@ -372,38 +368,32 @@ pub fn snapshot_from_state(
     });
 
     // ---- Diagnostics section (ADR 0004: scale-aware geometry provider) ----
-    let jet = crate::geometry_provider::query_geometry(c, config.epsilon)
-        .unwrap_or_else(|_| crate::geometry_provider::GeometryJet {
-            d: signed_distance,
-            grad_d: [f64::NAN, f64::NAN],
-            hessian_d: [[f64::NAN; 2]; 2],
-            resolved_scale: f64::NAN,
-            requested_scale: f64::NAN,
-            validity: crate::geometry_provider::GeometryValidity::ProviderFailure,
-            singularity: crate::geometry_provider::SingularityKind::None,
-            provider_version: crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string(),
-            tile_id: "error".to_string(),
-            is_bridge: false,
-        });
+    let validity = jet.validity.as_str().to_string();
+    let singularity = jet.singularity.as_str().to_string();
+    let last_error = derivative_error.or_else(|| {
+        (!derivative_valid).then(|| format!("geometry not regular: {validity} (singularity={singularity})"))
+    });
     let diagnostics = DiagnosticsSnapshot {
         derivative_step: crate::manifold::derivative_step(),
-        valid: true,
-        last_error: None,
+        valid: derivative_valid,
+        last_error,
         last_delta_total,
         crest_potential: config.kappa * (config.d_ref / config.epsilon).log2(),
         geometry: GeometrySnapshot {
             provider_version: jet.provider_version.clone(),
             provider_name: if jet.is_bridge { "raster-bridge".to_string() } else { "scale-aware".to_string() },
             tile_id: jet.tile_id.clone(),
-            requested_scale: jet.requested_scale,
-            resolved_scale: jet.resolved_scale,
+            requested_scale: jet.requested_scale.is_finite().then_some(jet.requested_scale),
+            resolved_scale: jet.resolved_scale.is_finite().then_some(jet.resolved_scale),
+            estimated_error: jet.estimated_error.is_finite().then_some(jet.estimated_error),
             is_bridge: jet.is_bridge,
-            validity: jet.validity.as_str().to_string(),
-            singularity: jet.singularity.as_str().to_string(),
-            d: jet.d,
-            grad_d_norm: jet.grad_norm(),
-            hessian_norm: jet.hessian_norm(),
-            hessian_eigenvalues: jet.hessian_eigenvalues(),
+            validity,
+            singularity,
+            d: jet.d.is_finite().then_some(jet.d),
+            grad_d_norm: (regular && jet.grad_norm().is_finite()).then(|| jet.grad_norm()),
+            hessian_norm: (regular && jet.hessian_norm().is_finite()).then(|| jet.hessian_norm()),
+            hessian_eigenvalues: (regular && jet.hessian_eigenvalues().iter().all(|x| x.is_finite()))
+                .then(|| jet.hessian_eigenvalues()),
         },
     };
 
@@ -415,6 +405,64 @@ pub fn snapshot_from_state(
         physics,
         diagnostics,
     })
+}
+
+fn validate_snapshot_inputs(
+    c: Complex64,
+    v: (f64, f64),
+    last_action: Option<LastAction>,
+    manifold_drag: Option<f64>,
+    config: &crate::manifold::ManifoldConfig,
+    last_delta_total: Option<f64>,
+) -> Result<(), String> {
+    if !c.re.is_finite() || !c.im.is_finite() || !v.0.is_finite() || !v.1.is_finite() {
+        return Err("debug snapshot state c and velocity must be finite".into());
+    }
+    if !config.epsilon.is_finite() || config.epsilon <= 0.0 {
+        return Err("debug snapshot config epsilon must be finite and positive".into());
+    }
+    if !config.d_ref.is_finite() || config.d_ref <= 0.0 {
+        return Err("debug snapshot config d_ref must be finite and positive".into());
+    }
+    if !config.lambda_sq.is_finite() || config.lambda_sq < 0.0 {
+        return Err("debug snapshot config lambda_sq must be finite and nonnegative".into());
+    }
+    if !config.kappa.is_finite() || !config.mu.is_finite() {
+        return Err("debug snapshot config kappa and mu must be finite".into());
+    }
+    let scale_ratio = config.d_ref / config.epsilon;
+    if !scale_ratio.is_finite() || scale_ratio <= 0.0 {
+        return Err("debug snapshot config d_ref/epsilon must be finite and positive".into());
+    }
+    let crest = config.kappa * scale_ratio.log2();
+    if !crest.is_finite() {
+        return Err("debug snapshot config produces a non-finite crest potential".into());
+    }
+    if manifold_drag.is_some_and(|x| !x.is_finite())
+        || last_delta_total.is_some_and(|x| !x.is_finite())
+    {
+        return Err("debug snapshot drag and energy delta must be finite when present".into());
+    }
+    if let Some(action) = last_action {
+        let raw = action.raw;
+        let effective = raw.clamped();
+        if raw.direction.iter().any(|x| !x.is_finite())
+            || !raw.throttle.is_finite()
+            || !raw.brake.is_finite()
+            || !raw.grip.is_finite()
+            || !raw.impulse.is_finite()
+            || !action.friction_beta.is_finite()
+            || !action.friction_power.is_finite()
+            || effective.direction.iter().any(|x| !x.is_finite())
+            || !effective.throttle.is_finite()
+            || !effective.brake.is_finite()
+            || !effective.grip.is_finite()
+            || !effective.impulse.is_finite()
+        {
+            return Err("debug snapshot action values must be finite".into());
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -510,14 +558,16 @@ pub fn terrain_patch(
         for col in 0..n {
             let re = cx - half + 2.0 * half * (col as f64) / ((n - 1) as f64);
             let c = Complex64::new(re, im);
-            let d = crate::manifold::signed_distance(c)?;
-            let sigma = crate::manifold::mandelbrot_scale(c, config)?;
+            let jet = crate::manifold::geometry_jet(c, config)?;
+            let d = jet.d;
+            if !d.is_finite() { return Err(format!("terrain geometry has no finite distance: {:?}", jet.validity)); }
+            let sigma = crate::geometry_provider::sigma_from_jet(&jet, config);
             positions.push(re);
             positions.push(im);
             positions.push(lambda * sigma);
             upper_z.push(
                 lambda / std::f64::consts::LN_2
-                    * crate::manifold::regularized_distance(c, config.epsilon)?,
+                    * crate::geometry_provider::rho_from_jet(&jet, config.epsilon),
             );
             let r: i8 = if d < 0.0 {
                 -1
@@ -563,21 +613,21 @@ mod tests {
 
         assert!(wall > 0.0);
         assert!(
-            (snapshot.physics.total
-                - (snapshot.physics.kinetic + snapshot.physics.potential + wall))
+            (snapshot.physics.total.unwrap()
+                - (snapshot.physics.kinetic.unwrap() + snapshot.physics.potential.unwrap() + wall))
                 .abs()
                 < 1e-10
         );
-        assert!(snapshot.physics.potential < snapshot.physics.total);
+        assert!(snapshot.physics.potential.unwrap() < snapshot.physics.total.unwrap());
     }
 
     #[test]
-    fn snapshot_fails_closed_when_wall_energy_is_not_finite() {
+    fn snapshot_reports_outside_domain_without_derivatives() {
         let _lock = crate::distance_field::global_test_mutex()
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let config = crate::manifold::ManifoldConfig::default();
-        let error = snapshot_from_state(
+        let snapshot = snapshot_from_state(
             Complex64::new(2.0, 0.0),
             (0.0, 0.0),
             None,
@@ -585,7 +635,14 @@ mod tests {
             &config,
             None,
         )
-        .expect_err("a state on the open-disk wall must not produce a valid snapshot");
-        assert!(error.contains("wall potential unstable"));
+        .expect("outside-domain geometry should remain inspectable");
+        assert_eq!(snapshot.diagnostics.geometry.validity, "outside_provider");
+        assert!(!snapshot.diagnostics.valid);
+        assert!(snapshot.diagnostics.last_error.is_some());
+        assert!(!snapshot.physics.derivative_valid);
+        assert!(snapshot.physics.metric.is_none());
+        assert!(snapshot.physics.kinetic.is_none());
+        assert!(snapshot.physics.total.is_none());
+        assert!(snapshot.physics.geodesic_accel.is_none());
     }
 }

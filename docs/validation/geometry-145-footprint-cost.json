@@ -1,0 +1,514 @@
+{
+  "provider_version": "geometry-provider/6",
+  "cache_capacity": 384,
+  "expansion_radius": 5,
+  "memory_protocol": "Windows GetProcessMemoryInfo peaks sampled every 10 ms in separate fresh workers; whole process, not cache payload alone.",
+  "memory_rows": [
+    {
+      "phase": "provider6_cache384",
+      "case": "cut_locus",
+      "peak_working_set_bytes": 6668288,
+      "peak_commit_bytes": 2932736,
+      "validity": "singular"
+    },
+    {
+      "phase": "provider6_cache384",
+      "case": "remaining_crossing_refusal",
+      "peak_working_set_bytes": 5627904,
+      "peak_commit_bytes": 1626112,
+      "validity": "regular"
+    },
+    {
+      "phase": "provider6_cache384",
+      "case": "live_training_refusal",
+      "peak_working_set_bytes": 5451776,
+      "peak_commit_bytes": 1449984,
+      "validity": "regular"
+    },
+    {
+      "phase": "provider6_cache384",
+      "case": "kinetic_crossing_refusal",
+      "peak_working_set_bytes": 5263360,
+      "peak_commit_bytes": 1241088,
+      "validity": "regular"
+    }
+  ],
+  "cache256_to_384_jet_equivalence_rows": 52,
+  "timing_protocol": "Final 384-entry release executable; isolated-process cold then immediate repeat. Machine/load dependent, concurrent acceptance work. Timing excludes process startup.",
+  "rows": [
+    {
+      "c": [
+        -0.5,
+        0.1
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "regular_interior",
+      "cold_us": 208343,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.2381859342979673,
+        "estimated_error": 0.0011156222577739516,
+        "grad_D": [
+          -0.9713310905328848,
+          0.23444875100593565
+        ],
+        "hessian_D": [
+          [
+            0.07174505919186913,
+            0.5738151879221363
+          ],
+          [
+            0.5738151879221363,
+            2.676774127540824
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.023818595528997004,
+        "resolved_scale": 0.0078125,
+        "singularity": "none",
+        "tile_id": "scale-aware:4:-8:1:7.81e-3",
+        "validity": "regular"
+      },
+      "warm_us": 2199
+    },
+    {
+      "c": [
+        0.3,
+        0.05
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "regular_shore_approach",
+      "cold_us": 304251,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.017217075498211706,
+        "estimated_error": 3.347029752879052e-05,
+        "grad_D": [
+          0.7364147221891287,
+          -0.6757956675881737
+        ],
+        "hessian_D": [
+          [
+            -5.570306742259163,
+            -0.6266725605149759
+          ],
+          [
+            -0.6266725605149759,
+            -4.466399567315193
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.001721736590512968,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:76:12:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 2140
+    },
+    {
+      "c": [
+        0.35,
+        0.05
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "crossing_corridor",
+      "cold_us": 548876,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.0070220696361238295,
+        "estimated_error": 7.434270790475719e-06,
+        "grad_D": [
+          0.9579789453105378,
+          -0.285119247361191
+        ],
+        "hessian_D": [
+          [
+            11.680541778192492,
+            38.87349420134342
+          ],
+          [
+            38.87349420134342,
+            130.85288059137383
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.0007022781640815287,
+        "resolved_scale": 0.0001220703125,
+        "singularity": "none",
+        "tile_id": "scale-aware:10:358:51:1.22e-4",
+        "validity": "regular"
+      },
+      "warm_us": 3033
+    },
+    {
+      "c": [
+        0.0,
+        0.0
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "unique_cusp_projection",
+      "cold_us": 175844,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.2504866970151787,
+        "estimated_error": 0.00048828125,
+        "grad_D": [
+          0.9980512262643504,
+          -1.054711873393899e-15
+        ],
+        "hessian_D": [
+          [
+            -0.01551892014624201,
+            -1.4210854715202004e-14
+          ],
+          [
+            -1.4210854715202004e-14,
+            -3.9983730772147017
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.02504867169763178,
+        "resolved_scale": 0.0078125,
+        "singularity": "none",
+        "tile_id": "scale-aware:4:0:0:7.81e-3",
+        "validity": "regular"
+      },
+      "warm_us": 1995
+    },
+    {
+      "c": [
+        -1.0,
+        0.0
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "cut_locus",
+      "cold_us": 5776145,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.24776407821825547,
+        "estimated_error": 0.0022311121502981146,
+        "grad_D": [
+          0.0004893198555497857,
+          -2.220446049250313e-16
+        ],
+        "hessian_D": [
+          [
+            197.6689579393676,
+            -3.410605131648481e-13
+          ],
+          [
+            -3.410605131648481e-13,
+            197.39015091816145
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.024776409839874263,
+        "resolved_scale": 0.001953125,
+        "singularity": "cut_locus",
+        "tile_id": "scale-aware:6:-64:0:1.95e-3",
+        "validity": "singular"
+      },
+      "warm_us": 15525
+    },
+    {
+      "c": [
+        0.25,
+        0.0
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "cardioid_cusp",
+      "cold_us": 2,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.0,
+        "estimated_error": null,
+        "grad_D": [
+          null,
+          null
+        ],
+        "hessian_D": [
+          [
+            null,
+            null
+          ],
+          [
+            null,
+            null
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 1e-05,
+        "resolved_scale": 0.0,
+        "singularity": "non_unique_normal",
+        "tile_id": "scale-aware:known:primary-cardioid-cusp",
+        "validity": "singular"
+      },
+      "warm_us": 0
+    },
+    {
+      "c": [
+        0.29835945330580743,
+        0.0515177858286498
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "rejected_rollout_endpoint",
+      "cold_us": 400768,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.01945212541946514,
+        "estimated_error": 3.192456393029744e-05,
+        "grad_D": [
+          0.7361423039774939,
+          -0.6762271797934049
+        ],
+        "hessian_D": [
+          [
+            -4.362148709813027,
+            0.05194837495912452
+          ],
+          [
+            0.05194837495912452,
+            -3.3854569635777807
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.0019452382459087163,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:76:13:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 2566
+    },
+    {
+      "c": [
+        0.4005984941807052,
+        0.054142245287925383
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "high_curvature_rollout",
+      "cold_us": 340797,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.045858291180571456,
+        "estimated_error": 2.9173640662134848e-05,
+        "grad_D": [
+          0.9433344582205112,
+          -0.33132668573623403
+        ],
+        "hessian_D": [
+          [
+            2.3985999269757485,
+            6.814054886749545
+          ],
+          [
+            6.814054886749545,
+            19.41285420392433
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.004585840021197946,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:102:13:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 2658
+    },
+    {
+      "c": [
+        0.21656074663216787,
+        0.1261080346748591
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "remaining_crossing_refusal",
+      "cold_us": 1036971,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": -0.13014784572056254,
+        "estimated_error": 8.519527330651007e-05,
+        "grad_D": [
+          0.6194982159061659,
+          -0.7653758460691469
+        ],
+        "hessian_D": [
+          [
+            153.48005570929308,
+            97.13540570971236
+          ],
+          [
+            97.13540570971236,
+            54.55697708426851
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.013014788413840373,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:55:32:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 5256
+    },
+    {
+      "c": [
+        0.39494073887023606,
+        0.04996931486326729
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "inward_before_jump",
+      "cold_us": 530667,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.042303777360476635,
+        "estimated_error": 2.7742650634397792e-05,
+        "grad_D": [
+          0.888880972933999,
+          -0.45779731482133346
+        ],
+        "hessian_D": [
+          [
+            4.955773365555615,
+            9.61660847423309
+          ],
+          [
+            9.61660847423309,
+            18.68162377452518
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.004230389555306669,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:101:12:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 3310
+    },
+    {
+      "c": [
+        0.3948230501337527,
+        0.0499674412699672
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "inward_after_jump",
+      "cold_us": 639701,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.04220003982054825,
+        "estimated_error": 2.7727579747532927e-05,
+        "grad_D": [
+          0.8882772279660281,
+          -0.4589669128740867
+        ],
+        "hessian_D": [
+          [
+            4.9933326405757725,
+            9.658300397143648
+          ],
+          [
+            9.658300397143648,
+            18.702093988318666
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 0.0042200158303682435,
+        "resolved_scale": 0.00048828125,
+        "singularity": "none",
+        "tile_id": "scale-aware:8:101:12:4.88e-4",
+        "validity": "regular"
+      },
+      "warm_us": 4262
+    },
+    {
+      "c": [
+        0.3075204398270623,
+        0.02876420131721053
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "live_training_refusal",
+      "cold_us": 1702368,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.0004389061197643488,
+        "estimated_error": 1.1483973467194073e-07,
+        "grad_D": [
+          -0.9588916946660184,
+          -0.28366379746958037
+        ],
+        "hessian_D": [
+          [
+            183.43545603845268,
+            -619.7056059597526
+          ],
+          [
+            -619.7056059597526,
+            2095.0825195182115
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 4.501539536276416e-05,
+        "resolved_scale": 1.9073486328125e-06,
+        "singularity": "none",
+        "tile_id": "scale-aware:16:20153:1885:1.91e-6",
+        "validity": "regular"
+      },
+      "warm_us": 3779
+    },
+    {
+      "c": [
+        0.35714730438616327,
+        0.0638088557734046
+      ],
+      "cache_protocol": "isolated_process_cold_then_immediate_repeat",
+      "case": "kinetic_crossing_refusal",
+      "cold_us": 987990,
+      "epsilon": 0.0001,
+      "jet": {
+        "D": 0.00011043874062980252,
+        "estimated_error": 2.477482459270909e-08,
+        "grad_D": [
+          0.5707211470927485,
+          0.8211234660966569
+        ],
+        "hessian_D": [
+          [
+            6105.14210037142,
+            -4243.212598071434
+          ],
+          [
+            -4243.212598071434,
+            2949.2607532348484
+          ]
+        ],
+        "is_bridge": false,
+        "provider_version": "geometry-provider/6",
+        "requested_scale": 1.489856215609305e-05,
+        "resolved_scale": 4.76837158203125e-07,
+        "singularity": "none",
+        "tile_id": "scale-aware:18:93624:16727:4.77e-7",
+        "validity": "regular"
+      },
+      "warm_us": 3940
+    }
+  ],
+  "source_commit": "1e692d2",
+  "source_sha256": {
+    "runtime-core/src/geometry_provider.rs": "22c515fd4812bb201c149b584664ba31abb4954238baed8a58b03ea7bdfd91e6",
+    "runtime-core/src/visual_metrics.rs": "c4fa405bcc77cd2a636e26a53370dd2b903521550dd76cd9a1a8cffe2acef1a6",
+    "runtime-core/src/controller.rs": "b274c74398caac8aa5b762aba7b13f7817f6307fbc318d2dad6749f596eb2590"
+  }
+}

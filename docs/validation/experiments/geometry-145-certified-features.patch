@@ -1,0 +1,409 @@
+--- a/runtime-core/src/geometry_provider.rs
++++ b/runtime-core/src/geometry_provider.rs
+@@ -31,6 +31,8 @@
+ 
+ mod uniform_box;
+ mod interval;
++mod certified_cardioid;
++mod feature_cover;
+ 
+ /// Version of the geometry provider contract. Bump when jet shape, semantics,
+ /// or validity classification changes in the same commit as manifold/debug
+@@ -1433,14 +1435,34 @@
+  let mut candidates:Vec<_>=theta.into_iter().map(|t| {let p=curve(t);((p[0]-x).hypot(p[1]-y),t,p)}).collect();
+  candidates.sort_by(|a,b|a.0.total_cmp(&b.0));-candidates[0].0
+ }
++// Component selection is proved by outward interval evaluation.
++fn component_kind(c:Complex64)->Option<bool> {
++ if !c.re.is_finite() || !c.im.is_finite() {return None;}
++ let x=BoundaryInterval::point(c.re).sub(BoundaryInterval::point(0.25));
++ let y=BoundaryInterval::point(c.im);let yy=y.square();
++ let q=x.square().add(yy);
++ let cardioid=q.mul(q.add(x)).sub(BoundaryInterval::point(0.25).mul(yy));
++ if cardioid.finite() && cardioid.hi<0. {return Some(true);}
++ let bx=BoundaryInterval::point(c.re).add(BoundaryInterval::point(1.));
++ let bulb=bx.square().add(yy);
++ if bulb.finite() && bulb.hi<0.0625 {return Some(false);}
++ None
++}
++static COMPONENT_VALUE_CACHE: Lazy<RwLock<LruCache<(u64,u64),f64>>> = Lazy::new(||RwLock::new(LruCache::new(4096)));
+ fn component_distance(c:Complex64)->Option<f64> {
+- if !c.re.is_finite() || !c.im.is_finite() {return None;}
+- if c.im==0. && (c.re==0.25 || c.re== -0.75) {return Some(0.);}
+- let x=c.re-0.25;let y=c.im;let q=x*x+y*y;let value=q*(q+x)-0.25*y*y;let scale=(q*(q+x)).abs()+(0.25*y*y).abs();
+- if value < -64.*f64::EPSILON*scale {return Some(cardioid_distance([c.re,c.im]));}
+- let bx=c.re+1.;let r2=bx*bx+y*y;
+- if r2<0.0625-64.*f64::EPSILON*(r2+0.0625) {return Some(r2.sqrt()-0.25);}
+- None
++ let kind=component_kind(c)?;
++ let key=(c.re.to_bits(),c.im.to_bits());
++ if let Ok(mut cache)=COMPONENT_VALUE_CACHE.write() {if let Some(value)=cache.get(&key) {return Some(value);}}
++ let value=if kind {
++  let bounds=certified_cardioid::distance_bounds([c.re,c.im],1e-13,8192)?;
++  // The old root guess only selects a scalar inside a certified global
++  // enclosure. It cannot establish completeness or bypass exhaustion.
++  cardioid_distance([c.re,c.im]).clamp(-bounds.upper,-bounds.lower)
++ } else {
++  (c.re+1.).hypot(c.im)-0.25
++ };
++ if let Ok(mut cache)=COMPONENT_VALUE_CACHE.write() {cache.insert(key,value);}
++ Some(value)
+ }
+ 
+ static FIELD_NODE_CACHE: Lazy<RwLock<LruCache<(u32,u64,u64),f64>>> = Lazy::new(|| RwLock::new(LruCache::new(4096)));
+@@ -1480,25 +1502,26 @@
+ 
+ 
+ fn component_features(c:Complex64,h:f64)->Option<Vec<NearestFeature>> {
+- bounded_component_distance(c)?;
++ let kind=component_kind(c)?;
++ if kind {
++  let cover=feature_cover::cover([c.re,c.im],DYADIC_CUT_TIE_FACTOR*h,h/64.,65536)?;
++  if !feature_cover::directions_agree(&cover,DYADIC_CUT_NORMAL_DEGREES.to_radians().cos()) {return None;}
++  return Some(cover.projections().into_iter().map(|point| {
++   let d=(c.re-point[0]).hypot(c.im-point[1]);
++   NearestFeature{projection:(point[0],point[1]),direction:((c.re-point[0])/d,(c.im-point[1])/d)}
++  }).collect());
++ }
+  let r=(c.re+1.).hypot(c.im);
+- let points=if r<0.25 {
+-  if r==0. {vec![[-0.75,0.],[-1.25,0.]]} else {
+-   let v=[0.25*(c.re+1.)/r,0.25*c.im/r];vec![[-1.+v[0],v[1]],[-1.-v[0],-v[1]]]
+-  }
+- } else {
+-  let x=c.re;let y=c.im;let a=[0.5-2.*x,-6.*y,6.*x+0.5,2.*y];let mut theta=vec![0.];
+-  theta.extend(roots(a).into_iter().map(|s|2.*s.atan()));
+-  theta.extend(roots([a[3],a[2],a[1],a[0]]).into_iter().map(|r|std::f64::consts::PI-2.*r.atan()));
+-  theta.into_iter().map(|t|[0.5*t.cos()-0.25*(2.*t).cos(),0.5*t.sin()-0.25*(2.*t).sin()]).collect()
++ let points=if r==0. {vec![[-0.75,0.],[-1.25,0.]]} else {
++  let v=[0.25*(c.re+1.)/r,0.25*c.im/r];vec![[-1.+v[0],v[1]],[-1.-v[0],-v[1]]]
+  };
+  let best=points.iter().map(|p|(c.re-p[0]).hypot(c.im-p[1])).fold(f64::INFINITY,f64::min);
+- let features:Vec<_>=points.into_iter().filter_map(|p| {
++ Some(points.into_iter().filter_map(|p| {
+   let d=(c.re-p[0]).hypot(c.im-p[1]);
+   (d>0. && d-best<=DYADIC_CUT_TIE_FACTOR*h).then_some(NearestFeature{projection:(p[0],p[1]),direction:((c.re-p[0])/d,(c.im-p[1])/d)})
+- }).collect();
+- Some(features)
+-}
++ }).collect())
++}
++
+ fn component_level(c:Complex64,epsilon:f64,k:u32,h:f64)->Option<FittedJet> {
+  let d0=bounded_component_distance(c)?;
+  let stencil:Option<Vec<_>>=distance_stencil(c,h).map(|p|bounded_component_distance(p).map(|d|(p.re-c.re,p.im-c.im,d))).collect();
+@@ -1508,7 +1531,7 @@
+  let (field,detail)=quintic_field(c,h,&stencil);
+  let rms=rms.max((field.d-d0).abs());
+  let mut jet=failure_jet(field.d,h,GeometryValidity::Regular,SingularityKind::None);
+- jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms;
++ jet.grad_d=field.g;jet.hessian_d=field.h;jet.estimated_error=rms.max(1e-13);
+  jet.requested_scale=GEOMETRY_SCALE_ALPHA*(field.d*field.d+epsilon*epsilon).sqrt();
+  jet.tile_id=format!("component:{k}");jet.is_bridge=false;
+  Some(FittedJet{size_bound:f64::INFINITY,nodes_certified:true,detail,jet,fit_rms:rms,stencil})
+@@ -2018,7 +2041,7 @@
+             }
+         }
+         let (fitted,certified,segs,ties,component)=if let Some(model)=component_level(c,epsilon,k,h) {
+-            let features=component_features(c,h).expect("component center");
++            let Some(features)=component_features(c,h) else {previous=None;k+=1;continue;};
+             let ties=has_competing_directions(&features).then_some(features);
+             (model,true,Vec::new(),ties,true)
+         } else {
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/certified_cardioid.rs
+@@ -0,0 +1,153 @@
++use super::interval::Interval;
++use std::cmp::Ordering;
++use std::collections::BinaryHeap;
++
++#[derive(Clone, Copy, Debug)]
++pub(super) struct DistanceBounds {
++    pub(super) lower: f64,
++    pub(super) upper: f64,
++    pub(super) visits: usize,
++}
++
++pub(super) fn curve_box(a: f64, b: f64, cotangent: bool) -> [Interval; 2] {
++    if !a.is_finite() || !b.is_finite() || a < -1. || b > 1. || a > b {
++        return [Interval { lo: f64::NEG_INFINITY, hi: f64::INFINITY }; 2];
++    }
++    let one = Interval::point(1.);
++    let parameter = Interval { lo: a, hi: b };
++    let square = parameter.square();
++    let denominator = one.add(square);
++    let numerator = if cotangent { square.sub(one) } else { one.sub(square) };
++    let u = numerator.div_positive(denominator);
++    let v = Interval::point(2.).mul(parameter).div_positive(denominator);
++    let half = Interval::point(0.5);
++    let quarter = Interval::point(0.25);
++    [half.mul(u).sub(quarter.mul(u.square().sub(v.square()))),
++     half.mul(v).sub(half.mul(u.mul(v)))]
++}
++
++fn norm_bounds(vector: [Interval; 2]) -> Interval {
++    let square = vector[0].square().add(vector[1].square());
++    Interval { lo: square.lo.max(0.).sqrt().next_down().max(0.),
++               hi: square.hi.sqrt().next_up() }
++}
++
++fn point_distance(c: [f64; 2], point: [Interval; 2]) -> Interval {
++    norm_bounds([Interval::point(c[0]).sub(point[0]), Interval::point(c[1]).sub(point[1])])
++}
++
++fn midpoint_and_radius(point: [Interval; 2]) -> ([f64; 2], f64) {
++    let middle = [point[0].lo + (point[0].hi - point[0].lo) * 0.5,
++                  point[1].lo + (point[1].hi - point[1].lo) * 0.5];
++    let radius = norm_bounds([point[0].sub(Interval::point(middle[0])),
++                              point[1].sub(Interval::point(middle[1]))]).hi;
++    (middle, radius)
++}
++
++fn chord_distance(c: [f64; 2], a: [f64; 2], b: [f64; 2]) -> Interval {
++    let delta = [Interval::point(b[0]).sub(Interval::point(a[0])),
++                 Interval::point(b[1]).sub(Interval::point(a[1]))];
++    let relative = [Interval::point(c[0]).sub(Interval::point(a[0])),
++                    Interval::point(c[1]).sub(Interval::point(a[1]))];
++    let denominator = delta[0].square().add(delta[1].square());
++    if denominator.lo <= 0. {
++        // A nonpositive denominator enclosure need not prove equal endpoints.
++        // Distance to this segment is at least endpoint distance minus its
++        // full length and at most endpoint distance.
++        let endpoint = norm_bounds(relative);
++        let length = norm_bounds(delta).hi;
++        return Interval {lo:(endpoint.lo-length).next_down().max(0.),hi:endpoint.hi};
++    }
++    let numerator = relative[0].mul(delta[0]).add(relative[1].mul(delta[1]));
++    let t = numerator.div_positive(denominator);
++    let clamped = Interval { lo: t.lo.clamp(0., 1.), hi: t.hi.clamp(0., 1.) };
++    norm_bounds([relative[0].sub(clamped.mul(delta[0])),
++                 relative[1].sub(clamped.mul(delta[1]))])
++}
++
++#[derive(Clone, Copy)]
++struct Region { a: f64, b: f64, cotangent: bool, lower: f64, upper: f64 }
++impl PartialEq for Region { fn eq(&self, other: &Self) -> bool { self.cmp(other) == Ordering::Equal } }
++impl Eq for Region {}
++impl PartialOrd for Region { fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) } }
++impl Ord for Region {
++    fn cmp(&self, other: &Self) -> Ordering {
++        other.lower.total_cmp(&self.lower)
++            .then_with(|| self.a.total_cmp(&other.a))
++            .then_with(|| self.b.total_cmp(&other.b))
++            .then_with(|| self.cotangent.cmp(&other.cotangent))
++    }
++}
++
++fn region_bounds(c: [f64; 2], a: f64, b: f64, cotangent: bool) -> Region {
++    let (first, first_error) = midpoint_and_radius(curve_box(a, a, cotangent));
++    let (last, last_error) = midpoint_and_radius(curve_box(b, b, cotangent));
++    let chord = chord_distance(c, first, last);
++    // p(theta)=e^(i theta)/2-e^(2i theta)/4 has |p'|<=1, |p''|<=3/2.
++    // Both rational charts have |theta'|<=2 and |theta''|<=4.
++    // Thus |d²p/ds²|<=10. Linear interpolation has Hausdorff error
++    // at most 10*(b-a)^2/8 in both directions, by its integral remainder.
++    let width = (b - a).next_up();
++    let interpolation = (1.25 * (width * width).next_up()).next_up();
++    let error = (interpolation + first_error.max(last_error)).next_up();
++    Region { a, b, cotangent,
++             lower: (chord.lo - error).next_down().max(0.),
++             upper: (chord.hi + error).next_up() }
++}
++
++pub(super) fn distance_bounds(c: [f64; 2], tolerance: f64, budget: usize) -> Option<DistanceBounds> {
++    if !c.iter().all(|x| x.is_finite()) || !tolerance.is_finite() || tolerance <= 0. { return None; }
++    let mut upper = point_distance(c, curve_box(0., 0., false)).hi
++        .min(point_distance(c, curve_box(0., 0., true)).hi);
++    let mut heap = BinaryHeap::new();
++    for cotangent in [false, true] {
++        let region = region_bounds(c, -1., 1., cotangent);
++        upper = upper.min(region.upper);
++        heap.push(region);
++    }
++    for visits in 1..=budget {
++        let region = heap.pop()?;
++        if region.lower > upper { continue; }
++        if (upper - region.lower).next_up() <= tolerance {
++            return Some(DistanceBounds { lower: region.lower, upper, visits });
++        }
++        let middle = region.a + (region.b - region.a) * 0.5;
++        if middle == region.a || middle == region.b { return None; }
++        for (a,b) in [(region.a,middle),(middle,region.b)] {
++            let child = region_bounds(c,a,b,region.cotangent);
++            if !child.lower.is_finite() || !child.upper.is_finite() { return None; }
++            upper = upper.min(child.upper);
++            if child.lower <= upper { heap.push(child); }
++        }
++    }
++    None
++}
++
++#[cfg(test)] mod tests {
++    use super::*;
++    #[test] fn encloses_exact_nearest_cusp_and_left_tip_distances() {
++        for c in [[0.,0.],[-0.5,0.]] {
++            let bounds=distance_bounds(c,1e-13,8192).unwrap();
++            assert!(bounds.lower<=0.25 && bounds.upper>=0.25);
++            assert!((bounds.upper-bounds.lower).next_up()<=1e-13);
++        }
++    }
++    #[test] fn contains_regular_reference_distances() {
++        for (c,expected) in [([-0.5,0.1],0.23815848417896568),
++            ([0.30007240651412576,0.05348910097156354],0.019521804826773806),
++            ([0.21474166530729011,0.12774018997553147],0.13251681516052227),
++            ([0.21398109574495830,0.12976651381062876],0.13453475128696687)] {
++            let bounds=distance_bounds(c,1e-13,8192).unwrap();
++            assert!(bounds.lower<=expected+1e-15 && bounds.upper>=expected-1e-15,"{c:?} {bounds:?}");
++        }
++    }
++    #[test] fn exhausted_or_invalid_queries_cannot_supply_a_certificate() {
++        assert!(distance_bounds([-0.5,0.1],1e-13,0).is_none());
++        assert!(distance_bounds([f64::NAN,0.],1e-13,8192).is_none());
++        assert!(distance_bounds([0.,0.],0.,8192).is_none());
++    }
++    #[test] fn underflowing_nonzero_chord_still_encloses_its_endpoint() {
++        let bounds=chord_distance([1e-200,0.],[0.,0.],[1e-200,0.]);
++        assert!(bounds.lo<=0. && bounds.hi>=0.);
++    }
++}
+--- /dev/null
++++ b/runtime-core/src/geometry_provider/feature_cover.rs
+@@ -0,0 +1,138 @@
++use super::interval::Interval;
++use super::certified_cardioid::{curve_box, distance_bounds};
++
++pub(super) struct FeatureCover {
++    query: [f64; 2],
++    points: Vec<[Interval; 2]>,
++    pub(super) visits: usize,
++}
++impl FeatureCover {
++    pub(super) fn projections(&self)->Vec<[f64;2]> {
++        self.points.iter().map(|p|[p[0].lo+(p[0].hi-p[0].lo)*0.5,
++            p[1].lo+(p[1].hi-p[1].lo)*0.5]).collect()
++    }
++}
++
++fn stationary(c: [f64; 2], a: f64, b: f64, cotangent: bool) -> Interval {
++    let one=Interval::point(1.);
++    let two=Interval::point(2.);
++    let half=Interval::point(0.5);
++    let s=Interval{lo:a,hi:b};
++    let ss=s.square();
++    let denominator=one.add(ss);
++    let denominator2=denominator.square();
++    let numerator=if cotangent {ss.sub(one)} else {one.sub(ss)};
++    let u=numerator.div_positive(denominator);
++    let v=two.mul(s).div_positive(denominator);
++    let du=Interval::point(if cotangent {4.} else {-4.}).mul(s).div_positive(denominator2);
++    let dv=two.mul(one.sub(ss)).div_positive(denominator2);
++    let dx=half.mul(du).sub(half.mul(u.mul(du).sub(v.mul(dv))));
++    let dy=half.mul(dv).sub(half.mul(du.mul(v).add(u.mul(dv))));
++    let p=curve_box(a,b,cotangent);
++    Interval::point(c[0]).sub(p[0]).mul(dx)
++        .add(Interval::point(c[1]).sub(p[1]).mul(dy))
++}
++
++fn distance_lower(c:[f64;2], p:[Interval;2])->f64 {
++    let x=Interval::point(c[0]).sub(p[0]);
++    let y=Interval::point(c[1]).sub(p[1]);
++    x.square().add(y.square()).lo.max(0.).sqrt().next_down().max(0.)
++}
++
++// Contains every global nearest point and every stationary point whose
++// distance can lie within the supplied tie band. Boxes need not contain a
++// root: retaining an extra candidate can only prevent a regular certificate.
++// Budget limits feature subdivision. Distance preprocessing has its own cap.
++pub(super) fn cover(c:[f64;2], tie_band:f64, spatial_width:f64, budget:usize)->Option<FeatureCover> {
++    if budget==0 || !tie_band.is_finite() || tie_band<0. || !spatial_width.is_finite() || spatial_width<=0. {return None;}
++    let bounds=distance_bounds(c,1e-13,8192)?;
++    let threshold=(bounds.upper+tie_band).next_up();
++    let mut stack=vec![(-1.,1.,false),(-1.,1.,true)];
++    let mut points=Vec::new();
++    let mut visits=0;
++    while let Some((a,b,cotangent))=stack.pop() {
++        visits+=1;
++        if visits>budget {return None;}
++        let point=curve_box(a,b,cotangent);
++        if distance_lower(c,point)>threshold {continue;}
++        let derivative=stationary(c,a,b,cotangent);
++        if !derivative.finite() {return None;}
++        if derivative.lo>0. || derivative.hi<0. {continue;}
++        let width=(point[0].hi-point[0].lo).next_up()
++            .max((point[1].hi-point[1].lo).next_up());
++        if width<=spatial_width {points.push(point);continue;}
++        let middle=a+(b-a)*0.5;
++        if middle==a || middle==b {return None;}
++        stack.push((middle,b,cotangent));
++        stack.push((a,middle,cotangent));
++    }
++    (!points.is_empty()).then_some(FeatureCover{query:c,points,visits})
++}
++
++pub(super) fn directions_agree(cover:&FeatureCover, cosine:f64)->bool {
++    let c=cover.query;
++    if !cosine.is_finite() || !(-1. ..=1.).contains(&cosine) {return false;}
++    let directions:Option<Vec<_>>=cover.points.iter().map(|p| {
++        let v=[Interval::point(c[0]).sub(p[0]),Interval::point(c[1]).sub(p[1])];
++        let square=v[0].square().add(v[1].square());
++        let norm=Interval{lo:square.lo.max(0.).sqrt().next_down(),hi:square.hi.sqrt().next_up()};
++        if !norm.finite() || norm.lo<=0. {return None;}
++        Some([v[0].div_positive(norm),v[1].div_positive(norm)])
++    }).collect();
++    let Some(directions)=directions else {return false;};
++    !directions.is_empty() && directions.iter().all(|a|directions.iter().all(|b|
++        a[0].mul(b[0]).add(a[1].mul(b[1])).lo>=cosine))
++}
++
++#[cfg(test)] mod tests {
++    use super::*;
++    #[test] fn regular_queries_have_complete_agreeing_direction_covers() {
++        for c in [[-0.5,0.1],[0.,0.],[0.21474166530729011,0.12774018997553147],
++            [0.32046083605181780,0.04736134021833255],[0.3,0.05]] {
++            let cover=cover(c,0.5e-6,1e-6/64.,65536).expect("complete cover");
++            assert!(directions_agree(&cover,30f64.to_radians().cos()),"{c:?}");
++        }
++    }
++    #[test] fn symmetric_medial_axis_and_boundary_do_not_certify_regular() {
++        for c in [[-0.25,0.],[0.25,0.],[-0.75,0.]] {
++            let cover=cover(c,0.5e-6,1e-6/64.,65536).expect("complete cover");
++            assert!(!directions_agree(&cover,30f64.to_radians().cos()),"{c:?}");
++        }
++    }
++    #[test] fn candidate_cover_contains_the_cusp_at_origin() {
++        let cover=cover([0.,0.],0.,1e-7,65536).unwrap();
++        assert!(cover.points.iter().any(|p| p[0].lo<=0.25 && p[0].hi>=0.25 && p[1].lo<=0. && p[1].hi>=0.));
++    }
++    #[test] fn incomplete_or_invalid_cover_cannot_certify() {
++        assert!(cover([0.,0.],0.,1e-7,0).is_none());
++        assert!(cover([0.,0.],-1.,1e-7,65536).is_none());
++        assert!(cover([f64::NAN,0.],0.,1e-7,65536).is_none());
++        assert!(!directions_agree(&FeatureCover{query:[0.,0.],points:vec![],visits:0},0.8));
++    }
++    #[test] fn rational_chart_seams_retain_known_stationary_feet() {
++        for sign in [-1.,1.] {
++            let query=[0.20,sign*0.45];
++            let cover=cover(query,0.5e-6,1e-6/64.,65536).unwrap();
++            assert_eq!(cover.query,query);
++            assert!(cover.points.iter().any(|p|p[0].lo<=0.25 && p[0].hi>=0.25 &&
++                p[1].lo<=sign*0.5 && p[1].hi>=sign*0.5));
++            assert!(directions_agree(&cover,30f64.to_radians().cos()));
++        }
++    }
++    #[test] fn a_tie_band_near_the_medial_axis_keeps_both_directions() {
++        for y in [-1e-10,0.,1e-10] {
++            let cover=cover([-0.25,y],0.5e-6,1e-6/64.,65536).unwrap();
++            assert!(cover.points.iter().any(|p|p[1].lo>0.));
++            assert!(cover.points.iter().any(|p|p[1].hi<0.));
++            assert!(!directions_agree(&cover,30f64.to_radians().cos()));
++        }
++    }
++    #[test] fn equal_distance_opposite_feet_are_both_retained() {
++        let cover=cover([-0.25,0.],0.,1e-6/64.,65536).unwrap();
++        for x in [-0.75,0.25] {
++            assert!(cover.points.iter().any(|p|p[0].lo<=x && p[0].hi>=x &&
++                p[1].lo<=0. && p[1].hi>=0.));
++        }
++        assert!(!directions_agree(&cover,30f64.to_radians().cos()));
++    }
++}

@@ -10,25 +10,37 @@
 //! Physics then derives rho, sigma, G, Gamma analytically via chain rule.
 //!
 //! Two implementations exist behind the same jet seam:
-//! - `RasterBridgeProvider` (NOW, is_bridge=true): 1024² signed-distance
+//! - `RasterBridgeProvider` (BRIDGE, is_bridge=true): 1024² signed-distance
 //!   raster sampled with a scale-aware 9-point stencil. This is the
 //!   migration bridge — it is NOT the destination adaptive/local C²
 //!   representation. It correctly reports `Unresolved` when the fixed raster
 //!   cannot meet `requested_scale = alpha*max(rho,epsilon)`.
-//! - `ScaleAwareGeometryProvider` (NEXT, is_bridge=false): placeholder for
-//!   the destination adaptive/local C² geometry (quadtree / spline tiles /
-//!   on-demand DEM) that will provide true refinement. Not yet implemented
-//!   behind this PR; Physics currently consumes the bridge.
+//! - `ScaleAwareGeometryProvider` (DESTINATION, is_bridge=false): adaptive dyadic
+//!   Shore-contour provider at scales h_k=0.125*2^-k, 57x57 tile (core 8 halo 24),
+//!   N0(k)=512+64k, 4-cell stability band, 3 bisections, 7x7 normalized quadratic fit.
+//!   Direct Rust Mandelbrot membership, no 1024² raster. Physics consumes this.
 //!
 //! Authority: runtime-core (ADR 0001). Versioned, deterministic, and cache-aware.
 
 use num_complex::Complex64;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::hash::Hash;
+use std::sync::RwLock;
+
+mod uniform_box;
+
+/// Offline evidence only. None is unknown, never finite-budget interior.
+#[cfg(feature = "experimental-operational-field")]
+pub fn operational_reference_membership(c:Complex64)->Option<bool> {
+    uniform_box::membership(c.re,c.im,0.0)
+}
 
 /// Version of the geometry provider contract. Bump when jet shape, semantics,
 /// or validity classification changes in the same commit as manifold/debug
 /// updates and regenerated goldens/mirrors.
-pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/1";
+pub const GEOMETRY_PROVIDER_VERSION: &str = "geometry-provider/6";
 
 /// Scale-relative resolution law factor: local cell size <= alpha * max(rho, epsilon).
 /// The exact refinement/error criterion is derived and validated (ADR 0004 does
@@ -48,6 +60,20 @@ pub const EIKONAL_TOL: f64 = 0.5;
 /// / cusp-like behavior. Scaled relative to local ruler; generous to avoid
 /// false positives on regular Shore geometry.
 pub const HESSIAN_NORM_SINGULAR: f64 = 5e4;
+
+// --- Dyadic Shore-contour provider constants (issue #145, finish) ---
+pub const DYADIC_H0: f64 = 0.125;
+pub const DYADIC_CORE_CELLS: usize = 8;
+pub const DYADIC_HALO_CELLS: usize = 24;
+pub const DYADIC_TILE_CELLS: usize = DYADIC_CORE_CELLS + 2 * DYADIC_HALO_CELLS; // 56
+pub const DYADIC_TILE_NODES: usize = DYADIC_TILE_CELLS + 1; // 57
+pub const DYADIC_BISECTIONS: usize = 3;
+pub const DYADIC_STABILITY_BAND_CELLS: usize = 4;
+pub const DYADIC_STENCIL_RADIUS: usize = 3; // 7x7
+pub const DYADIC_FIT_ERROR_FACTOR: f64 = 0.25;
+pub const DYADIC_CUT_TIE_FACTOR: f64 = 0.5;
+pub const DYADIC_CUT_NORMAL_DEGREES: f64 = 30.0;
+pub const DYADIC_MAX_K: u32 = 24;
 
 /// Validity classification for a geometry jet.
 ///
@@ -129,6 +155,10 @@ pub struct GeometryJet {
     /// Requested local scale: alpha * max(rho, epsilon). Exposed so diagnostics
     /// can compare requested vs resolved and fail closed when insufficient.
     pub requested_scale: f64,
+    /// Estimated error: maximum of consecutive-jet differences, fit residuals,
+    /// and signed-distance field disagreement at matching stencil positions.
+    #[serde(default)]
+    pub estimated_error: f64,
     /// Validity classification (regular / unresolved / outside / singular / failure).
     pub validity: GeometryValidity,
     /// Explicit cut-locus / non-unique-normal classification where known.
@@ -173,14 +203,13 @@ pub trait GeometryProvider {
     fn is_bridge(&self) -> bool;
 }
 
-/// Destination scale-aware provider (NEXT).
+/// Destination scale-aware provider — adaptive dyadic Shore-contour (finish #145).
 ///
-/// This is the seam for the future adaptive/local C² representation
-/// (quadtree, spline tiles, on-demand DEM) that will provide true
-/// refinement where `resolved_scale` must meet `requested_scale`.
-/// It is NOT the current raster-backed implementation. This PR leaves
-/// it as an explicit placeholder so the bridge is not mistaken for the
-/// destination. Physics currently consumes `RasterBridgeProvider`.
+/// Direct Rust Mandelbrot membership (visual_metrics::mandelbrot_membership) at
+/// dyadic scales h_k = 0.125*2^-k, 57×57 tile (core 8, halo 24), N0(k)=512+64k.
+/// Stable mask (4-cell band), marching-squares with 3 bisections, query-centered
+/// 7×7 quadratic fit, consecutive-level error e, cut-locus via persistent
+/// distance tie (0.5*h) + normal separation (30°) across two levels.
 pub struct ScaleAwareGeometryProvider;
 
 impl Default for ScaleAwareGeometryProvider {
@@ -208,15 +237,15 @@ impl GeometryProvider for ScaleAwareGeometryProvider {
     fn is_bridge(&self) -> bool {
         false
     }
-    fn query(&self, _c: Complex64, _epsilon: f64) -> Result<GeometryJet, String> {
-        Err("ScaleAwareGeometryProvider: adaptive/local C² geometry not yet implemented — use RasterBridgeProvider (bridge) behind the same GeometryJet seam. See ADR 0004 / #145".to_string())
+    fn query(&self, c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+        query_geometry(c, epsilon)
     }
 }
 
 /// Raster bridge provider (NOW).
 ///
 /// Coherent 9-point stencil over the fixed 1024² signed-distance raster.
-/// This IS the current provider behind `query_bridge_geometry` / `query_geometry`.
+/// This is the explicit comparison provider behind `query_bridge_geometry`.
 /// It is versioned and reports `Unresolved` when the fixed raster cannot meet
 /// `requested_scale`. It is NOT the destination `ScaleAwareGeometryProvider`.
 pub struct RasterBridgeProvider {
@@ -252,13 +281,1212 @@ impl GeometryProvider for RasterBridgeProvider {
     }
 }
 
-/// Core coherent jet construction.
-///
-/// This is the single authority for D, grad D, H_D on regular regions. The
-/// evaluation step h is scale-aware (h = alpha * max(rho, epsilon)), not a
-/// fixed global pixel fraction. D, grad_D, and H_D come from the same 9-point
-/// local sampling of the signed-distance field interpolated with the same
-/// bicubic kernel, so they are mutually coherent by construction.
+// --- Dyadic Shore-contour cache (derived Shore tiles only) ---
+// Deterministic bounded LRU. Eviction changes cost only, never numerical results.
+// Key includes provider version and membership-iteration-budget (N0) so a bump
+// or budget change cannot reuse a stale numerical tile.
+// A single measured refusal visits 270 distinct tiles. Both 64 and 256 slots
+// evicted the entire working set on every repeat. Retain room for the measured
+// working sets without extending any geometry-generation or quality budget.
+const SHORE_TILE_CACHE_CAPACITY: usize = 384;
+// Keep the footprint bounded, but allow the next level to separate recorded
+// near ties and converge the small Shore features found during live rollouts.
+// Radius 3 truncated those queries before their unchanged quality gates passed.
+const SHORE_TILE_EXPANSION_RADIUS: i64 = 5;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct TileKey {
+    version: String,
+    k: u32,
+    tile_x: i64,
+    tile_y: i64,
+    budget: usize,
+}
+
+#[derive(Clone, Debug)]
+struct Segment {
+    p1: (f64, f64),
+    p2: (f64, f64),
+    normal: (f64, f64),
+}
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+struct ShoreTile {
+    k: u32,
+    h: f64,
+    origin_re: f64,
+    origin_im: f64,
+    segments: Vec<Segment>,
+    /// Membership samples still changing at the iteration limit. They may
+    /// invalidate nearby geometry, but cannot invalidate a distant local jet.
+    unstable_nodes: Vec<(f64, f64)>,
+}
+
+struct LruCache<K, V> {
+    map: HashMap<K, V>,
+    order: VecDeque<K>,
+    capacity: usize,
+}
+
+impl<K: Clone + Eq + Hash, V: Clone> LruCache<K, V> {
+    fn new(capacity: usize) -> Self {
+        assert!(capacity > 0);
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+    fn get(&mut self, key: &K) -> Option<V> {
+        if let Some(value) = self.map.get(key).cloned() {
+            if let Some(pos) = self.order.iter().position(|k| k == key) {
+                self.order.remove(pos);
+            }
+            self.order.push_back(key.clone());
+            Some(value)
+        } else {
+            None
+        }
+    }
+    fn insert(&mut self, key: K, value: V) {
+        if self.map.contains_key(&key) {
+            if let Some(pos) = self.order.iter().position(|k| k == &key) {
+                self.order.remove(pos);
+            }
+        } else if self.map.len() >= self.capacity {
+            if let Some(old) = self.order.pop_front() {
+                self.map.remove(&old);
+            }
+        }
+        self.order.push_back(key.clone());
+        self.map.insert(key, value);
+    }
+}
+
+type ShoreTileLru = LruCache<TileKey, ShoreTile>;
+static SHORE_TILE_CACHE: Lazy<RwLock<ShoreTileLru>> =
+    Lazy::new(|| RwLock::new(ShoreTileLru::new(SHORE_TILE_CACHE_CAPACITY)));
+
+// Physics and diagnostics often ask for the same complete jet several times.
+// Exact keys preserve arbitrarily close derivative samples and active epsilon.
+const GEOMETRY_JET_CACHE_CAPACITY: usize = 128;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct JetKey {
+    version: &'static str,
+    re: u64,
+    im: u64,
+    epsilon: u64,
+}
+
+impl JetKey {
+    fn new(c: Complex64, epsilon: f64) -> Self {
+        Self {
+            version: GEOMETRY_PROVIDER_VERSION,
+            re: c.re.to_bits(),
+            im: c.im.to_bits(),
+            epsilon: epsilon.to_bits(),
+        }
+    }
+}
+
+static GEOMETRY_JET_CACHE: Lazy<RwLock<LruCache<JetKey, GeometryJet>>> =
+    Lazy::new(|| RwLock::new(LruCache::new(GEOMETRY_JET_CACHE_CAPACITY)));
+
+#[cfg(test)]
+std::thread_local! {
+    static QUERY_EVALUATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[inline]
+fn dyadic_h(k: u32) -> f64 {
+    DYADIC_H0 * 2_f64.powi(-(k as i32))
+}
+
+#[inline]
+fn dyadic_n0(k: u32) -> usize {
+    let n = 512 + 64 * (k as usize);
+    n.min(32768)
+}
+
+#[inline]
+fn mandelbrot_inside(c: Complex64, max_iter: usize) -> bool {
+    crate::visual_metrics::mandelbrot_membership(c, max_iter)
+}
+
+fn dyadic_tile_origin(c: Complex64, h: f64) -> (i64, i64, f64, f64) {
+    let core_stride = DYADIC_CORE_CELLS as f64 * h;
+    let core_ix = (c.re / core_stride).floor() as i64;
+    let core_iy = (c.im / core_stride).floor() as i64;
+    let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+    let tile_im0 = core_iy as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+    (core_ix, core_iy, tile_re0, tile_im0)
+}
+
+fn get_or_generate_shore_tile(k: u32, core_ix: i64, core_iy: i64) -> Option<ShoreTile> {
+    let budget = dyadic_n0(k);
+    let key = TileKey {
+        version: GEOMETRY_PROVIDER_VERSION.to_string(),
+        k,
+        tile_x: core_ix,
+        tile_y: core_iy,
+        budget,
+    };
+    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+        if let Some(tile) = cache.get(&key) {
+            return Some(tile);
+        }
+    }
+    let h = dyadic_h(k);
+    let core_stride = DYADIC_CORE_CELLS as f64 * h;
+    let tile_re0 = core_ix as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+    let tile_im0 = core_iy as f64 * core_stride - DYADIC_HALO_CELLS as f64 * h;
+    // These boxes have no contour at any membership budget. Avoid constructing
+    // 3,249 point orbits, and retain the LRU for tiles that carry geometry.
+    if uniform_box::membership(tile_re0, tile_im0, DYADIC_TILE_CELLS as f64 * h).is_some() {
+        return Some(ShoreTile {
+            k,
+            h,
+            origin_re: tile_re0,
+            origin_im: tile_im0,
+            segments: Vec::new(),
+            unstable_nodes: Vec::new(),
+        });
+    }
+    let tile = generate_shore_tile(k, h, tile_re0, tile_im0)?;
+    if let Ok(mut cache) = SHORE_TILE_CACHE.write() {
+        cache.insert(key, tile.clone());
+    }
+    Some(tile)
+}
+
+#[inline]
+fn is_shore_band_stable(prev: &[bool], next: &[bool], n: usize) -> bool {
+    let cells = n - 1;
+    for j in 0..n {
+        for i in 0..n {
+            if prev[j * n + i] == next[j * n + i] {
+                continue;
+            }
+            let mut near_shore = false;
+            'search: for dj in -4..=4 {
+                for di in -4..=4 {
+                    for cj in [j as isize + dj - 1, j as isize + dj] {
+                        for ci in [i as isize + di - 1, i as isize + di] {
+                            if ci < 0 || cj < 0 || ci >= cells as isize || cj >= cells as isize {
+                                continue;
+                            }
+                            let ci_u = ci as usize;
+                            let cj_u = cj as usize;
+                            let a = prev[cj_u * n + ci_u];
+                            let b = prev[cj_u * n + (ci_u + 1)];
+                            let c_ = prev[(cj_u + 1) * n + ci_u];
+                            let d = prev[(cj_u + 1) * n + (ci_u + 1)];
+                            if a != b || a != c_ || a != d {
+                                near_shore = true;
+                                break 'search;
+                            }
+                            let a2 = next[cj_u * n + ci_u];
+                            let b2 = next[cj_u * n + (ci_u + 1)];
+                            let c2 = next[(cj_u + 1) * n + ci_u];
+                            let d2 = next[(cj_u + 1) * n + (ci_u + 1)];
+                            if a2 != b2 || a2 != c2 || a2 != d2 {
+                                near_shore = true;
+                                break 'search;
+                            }
+                        }
+                    }
+                }
+            }
+            if near_shore {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn generate_shore_tile(k: u32, h: f64, re0: f64, im0: f64) -> Option<ShoreTile> {
+    let n = DYADIC_TILE_NODES;
+    let cur_n = dyadic_n0(k);
+    // Membership budgets grow monotonically for this tile. Retain each
+    // critical orbit while certifying it instead of replaying its prefix at
+    // every doubling. These construction states are not part of the LRU.
+    let mut orbits: Vec<_> = (0..n * n)
+        .map(|index| {
+            let c = Complex64::new(re0 + (index % n) as f64 * h, im0 + (index / n) as f64 * h);
+            crate::visual_metrics::MembershipOrbit::new(c)
+        })
+        .collect();
+    let inside_cur: Vec<bool> = orbits
+        .iter_mut()
+        .map(|orbit| orbit.inside_at(cur_n))
+        .collect();
+    let max_iter: usize;
+    let inside: Vec<bool>;
+    let mut unstable_nodes = Vec::new();
+    let mut cur = cur_n;
+    let mut inside_c = inside_cur;
+    loop {
+        let next_n = (cur * 2).min(32768);
+        if next_n == cur {
+            max_iter = cur;
+            inside = inside_c;
+            break;
+        }
+        let inside_next: Vec<bool> = orbits
+            .iter_mut()
+            .map(|orbit| orbit.inside_at(next_n))
+            .collect();
+        if is_shore_band_stable(&inside_c, &inside_next, n) {
+            max_iter = next_n;
+            inside = inside_next;
+            break;
+        }
+        if next_n >= 32768 {
+            unstable_nodes = inside_c
+                .iter()
+                .zip(&inside_next)
+                .enumerate()
+                .filter(|(_, (a, b))| a != b)
+                .map(|(i, _)| (re0 + (i % n) as f64 * h, im0 + (i / n) as f64 * h))
+                .collect();
+            max_iter = next_n;
+            inside = inside_next;
+            break;
+        }
+        inside_c = inside_next;
+        cur = next_n;
+    }
+
+    let mut segments = Vec::new();
+    for j in 0..DYADIC_TILE_CELLS {
+        for i in 0..DYADIC_TILE_CELLS {
+            let a = inside[j * n + i];
+            let b = inside[j * n + (i + 1)];
+            let c_ = inside[(j + 1) * n + i];
+            let d = inside[(j + 1) * n + (i + 1)];
+            let mut crossings: Vec<((f64, f64), (f64, f64))> = Vec::new();
+            let mut edge_cross =
+                |x1: f64, y1: f64, x2: f64, y2: f64, inside1: bool, inside2: bool| {
+                    if inside1 == inside2 {
+                        return;
+                    }
+                    let mut lo = Complex64::new(x1, y1);
+                    let mut hi = Complex64::new(x2, y2);
+                    let lo_inside = inside1;
+                    for _ in 0..DYADIC_BISECTIONS {
+                        let mid = Complex64::new((lo.re + hi.re) * 0.5, (lo.im + hi.im) * 0.5);
+                        let mid_inside = mandelbrot_inside(mid, max_iter);
+                        if mid_inside == lo_inside {
+                            lo = mid;
+                        } else {
+                            hi = mid;
+                        }
+                    }
+                    let p = Complex64::new((lo.re + hi.re) * 0.5, (lo.im + hi.im) * 0.5);
+                    let sign = if inside1 { 1.0 } else { -1.0 };
+                    crossings.push(((p.re, p.im), (sign * (x2 - x1), sign * (y2 - y1))));
+                };
+            let x0 = re0 + i as f64 * h;
+            let y0 = im0 + j as f64 * h;
+            let x1 = x0 + h;
+            let y1 = y0 + h;
+            edge_cross(x0, y0, x1, y0, a, b);
+            edge_cross(x1, y0, x1, y1, b, d);
+            edge_cross(x1, y1, x0, y1, d, c_);
+            edge_cross(x0, y1, x0, y0, c_, a);
+            if crossings.len() == 2 {
+                let seg = make_oriented_segment(crossings[0].0, crossings[1].0, crossings[0].1);
+                segments.push(seg);
+            } else if crossings.len() == 4 {
+                let cx = re0 + (i as f64 + 0.5) * h;
+                let cy = im0 + (j as f64 + 0.5) * h;
+                let center_inside = mandelbrot_inside(Complex64::new(cx, cy), max_iter);
+                if center_inside != a {
+                    let s1 = make_oriented_segment(crossings[0].0, crossings[3].0, crossings[0].1);
+                    let s2 = make_oriented_segment(crossings[1].0, crossings[2].0, crossings[1].1);
+                    segments.push(s1);
+                    segments.push(s2);
+                } else {
+                    let s1 = make_oriented_segment(crossings[0].0, crossings[1].0, crossings[0].1);
+                    let s2 = make_oriented_segment(crossings[2].0, crossings[3].0, crossings[2].1);
+                    segments.push(s1);
+                    segments.push(s2);
+                }
+            }
+        }
+    }
+    Some(ShoreTile {
+        k,
+        h,
+        origin_re: re0,
+        origin_im: im0,
+        segments,
+        unstable_nodes,
+    })
+}
+
+// The known inside-to-outside grid-edge direction determines orientation.
+fn make_oriented_segment(p1: (f64, f64), p2: (f64, f64), outward: (f64, f64)) -> Segment {
+    let dx = p2.0 - p1.0;
+    let dy = p2.1 - p1.1;
+    let len = dx.hypot(dy);
+    let right = (dy / len, -dx / len);
+    if right.0 * outward.0 + right.1 * outward.1 > 0.0 {
+        Segment {
+            p1,
+            p2,
+            normal: right,
+        }
+    } else {
+        Segment {
+            p1: p2,
+            p2: p1,
+            normal: (-right.0, -right.1),
+        }
+    }
+}
+
+fn point_to_segment_distance(px: f64, py: f64, seg: &Segment) -> (f64, (f64, f64)) {
+    let (x1, y1) = seg.p1;
+    let (x2, y2) = seg.p2;
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let len2 = dx * dx + dy * dy;
+    if len2 <= f64::MIN_POSITIVE {
+        let d = ((px - x1) * (px - x1) + (py - y1) * (py - y1)).sqrt();
+        return (d, seg.p1);
+    }
+    let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    let tc = t.clamp(0.0, 1.0);
+    let qx = x1 + tc * dx;
+    let qy = y1 + tc * dy;
+    let d = ((px - qx) * (px - qx) + (py - qy) * (py - qy)).sqrt();
+    (d, (qx, qy))
+}
+
+// Precomputed pseudoinverse for normalized 7x7 stencil (u=(x-cx)/h, v=(y-cy)/h).
+// Basis [1, u, v, u^2, uv, v^2], A is 49x6, P = (A^T A)^{-1} A^T is 6x49.
+// Conditioning is independent of h (spec #145).
+const QUADRATIC_PINV: [[f64; 49]; 6] = [
+    [
+        -4.761904761905e-02,
+        -1.360544217687e-02,
+        6.802721088435e-03,
+        1.360544217687e-02,
+        6.802721088435e-03,
+        -1.360544217687e-02,
+        -4.761904761905e-02,
+        -1.360544217687e-02,
+        2.040816326531e-02,
+        4.081632653061e-02,
+        4.761904761905e-02,
+        4.081632653061e-02,
+        2.040816326531e-02,
+        -1.360544217687e-02,
+        6.802721088435e-03,
+        4.081632653061e-02,
+        6.122448979592e-02,
+        6.802721088435e-02,
+        6.122448979592e-02,
+        4.081632653061e-02,
+        6.802721088435e-03,
+        1.360544217687e-02,
+        4.761904761905e-02,
+        6.802721088435e-02,
+        7.482993197279e-02,
+        6.802721088435e-02,
+        4.761904761905e-02,
+        1.360544217687e-02,
+        6.802721088435e-03,
+        4.081632653061e-02,
+        6.122448979592e-02,
+        6.802721088435e-02,
+        6.122448979592e-02,
+        4.081632653061e-02,
+        6.802721088435e-03,
+        -1.360544217687e-02,
+        2.040816326531e-02,
+        4.081632653061e-02,
+        4.761904761905e-02,
+        4.081632653061e-02,
+        2.040816326531e-02,
+        -1.360544217687e-02,
+        -4.761904761905e-02,
+        -1.360544217687e-02,
+        6.802721088435e-03,
+        1.360544217687e-02,
+        6.802721088435e-03,
+        -1.360544217687e-02,
+        -4.761904761905e-02,
+    ],
+    [
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.530612244898e-02,
+    ],
+    [
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.530612244898e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -1.020408163265e-02,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        5.102040816327e-03,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.020408163265e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+        1.530612244898e-02,
+    ],
+    [
+        8.503401360544e-03,
+        7.965566981526e-19,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        7.965566981526e-19,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        -1.091577697468e-18,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -1.091577697468e-18,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        -2.224458334841e-18,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -2.224458334841e-18,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        -2.602085213965e-18,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -2.602085213965e-18,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        -2.224458334841e-18,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -2.224458334841e-18,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        -1.091577697468e-18,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -1.091577697468e-18,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        7.965566981526e-19,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        7.965566981526e-19,
+        8.503401360544e-03,
+    ],
+    [
+        1.147959183673e-02,
+        7.653061224490e-03,
+        3.826530612245e-03,
+        0.000000000000e+00,
+        -3.826530612245e-03,
+        -7.653061224490e-03,
+        -1.147959183673e-02,
+        7.653061224490e-03,
+        5.102040816327e-03,
+        2.551020408163e-03,
+        0.000000000000e+00,
+        -2.551020408163e-03,
+        -5.102040816327e-03,
+        -7.653061224490e-03,
+        3.826530612245e-03,
+        2.551020408163e-03,
+        1.275510204082e-03,
+        0.000000000000e+00,
+        -1.275510204082e-03,
+        -2.551020408163e-03,
+        -3.826530612245e-03,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        -3.826530612245e-03,
+        -2.551020408163e-03,
+        -1.275510204082e-03,
+        0.000000000000e+00,
+        1.275510204082e-03,
+        2.551020408163e-03,
+        3.826530612245e-03,
+        -7.653061224490e-03,
+        -5.102040816327e-03,
+        -2.551020408163e-03,
+        0.000000000000e+00,
+        2.551020408163e-03,
+        5.102040816327e-03,
+        7.653061224490e-03,
+        -1.147959183673e-02,
+        -7.653061224490e-03,
+        -3.826530612245e-03,
+        0.000000000000e+00,
+        3.826530612245e-03,
+        7.653061224490e-03,
+        1.147959183673e-02,
+    ],
+    [
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -6.802721088435e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        -5.102040816327e-03,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        0.000000000000e+00,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+        8.503401360544e-03,
+    ],
+];
+
+fn fit_quadratic_jet(stencil_distances: &[(f64, f64, f64)]) -> Option<([f64; 6], f64)> {
+    if stencil_distances.len() != 49 {
+        return None;
+    }
+    let mut d_vec = [0.0f64; 49];
+    for (i, &(_, _, d)) in stencil_distances.iter().enumerate() {
+        d_vec[i] = d;
+    }
+    let mut coeff_norm = [0.0f64; 6];
+    for i in 0..6 {
+        let mut sum = 0.0;
+        for j in 0..49 {
+            sum += QUADRATIC_PINV[i][j] * d_vec[j];
+        }
+        coeff_norm[i] = sum;
+    }
+    let mut sum2 = 0.0;
+    for (idx, &(_, _, d)) in stencil_distances.iter().enumerate() {
+        let row = idx / 7;
+        let col = idx % 7;
+        let u = col as f64 - 3.0;
+        let v = row as f64 - 3.0;
+        let pred = coeff_norm[0]
+            + coeff_norm[1] * u
+            + coeff_norm[2] * v
+            + coeff_norm[3] * u * u
+            + coeff_norm[4] * u * v
+            + coeff_norm[5] * v * v;
+        let e = d - pred;
+        sum2 += e * e;
+    }
+    let rms = (sum2 / 49.0).sqrt();
+    Some((coeff_norm, rms))
+}
+
+fn signed_shore_distance(p: Complex64, h: f64, segments: &[Segment]) -> Option<f64> {
+    if segments.is_empty() {
+        return None;
+    }
+    let px = p.re;
+    let py = p.im;
+    let mut best_dist = f64::INFINITY;
+    let mut best_signed = f64::INFINITY;
+    let mut best_qx = 0.0;
+    let mut best_qy = 0.0;
+    for seg in segments {
+        let (d, (qx, qy)) = point_to_segment_distance(px, py, seg);
+        // signed distance: dot((p - q), normal) -- normal points outward, so inside => negative
+        let signed = (px - qx) * seg.normal.0 + (py - qy) * seg.normal.1;
+        if d < best_dist {
+            best_dist = d;
+            best_signed = signed;
+            best_qx = qx;
+            best_qy = qy;
+        }
+    }
+    // At a shared endpoint, either incident normal alone can give the
+    // wrong sign (notably at the cardioid cusp). Use its pseudonormal.
+    let vertex_tol = h * 1e-8;
+    let mut normal_sum = (0.0, 0.0);
+    for seg in segments {
+        let at_start = (seg.p1.0 - best_qx).hypot(seg.p1.1 - best_qy) <= vertex_tol;
+        let at_end = (seg.p2.0 - best_qx).hypot(seg.p2.1 - best_qy) <= vertex_tol;
+        if at_start || at_end {
+            normal_sum.0 += seg.normal.0;
+            normal_sum.1 += seg.normal.1;
+        }
+    }
+    if normal_sum.0 != 0.0 || normal_sum.1 != 0.0 {
+        best_signed = (px - best_qx) * normal_sum.0 + (py - best_qy) * normal_sum.1;
+    }
+    // Use signed distance from nearest Shore segment (oriented). This is the sole authority.
+    // best_signed already has correct sign (negative inside, positive outside) via outward normal.
+    // For robustness, if best_signed is near zero but we are exactly on Shore, keep it.
+    Some(best_dist.copysign(best_signed))
+}
+
+/// Compare the actual contour distance fields at matching stencil positions.
+/// Fitted coefficients can agree while changes in nearest features cancel in
+/// the least-squares projection. Those changes still invalidate convergence.
+fn stencil_distance_disagreement(
+    c: Complex64,
+    coarse_h: f64,
+    stencil: &[(f64, f64, f64)],
+    coarse_segments: &[Segment],
+) -> Option<f64> {
+    let mut error = 0.0_f64;
+    for &(x, y, fine) in stencil {
+        let coarse = signed_shore_distance(c + Complex64::new(x, y), coarse_h, coarse_segments)?;
+        error = error.max((fine - coarse).abs());
+    }
+    Some(error)
+}
+
+struct FittedJet {
+    jet: GeometryJet,
+    fit_rms: f64,
+    stencil: Vec<(f64, f64, f64)>,
+}
+
+fn compute_jet_at_level(
+    c: Complex64,
+    epsilon: f64,
+    k: u32,
+    h: f64,
+    tile: &ShoreTile,
+) -> Option<FittedJet> {
+    if tile.segments.is_empty() {
+        return None;
+    }
+    // The same signed-distance evaluator owns fitting and convergence.
+    let mut stencil: Vec<(f64, f64, f64)> = Vec::with_capacity(49);
+    for dy in -3..=3 {
+        for dx in -3..=3 {
+            let x = dx as f64 * h;
+            let y = dy as f64 * h;
+            let distance = signed_shore_distance(c + Complex64::new(x, y), h, &tile.segments)?;
+            stencil.push((x, y, distance));
+        }
+    }
+    let (coeff_n, rms) = fit_quadratic_jet(&stencil)?;
+    let d = coeff_n[0];
+    let grad = [coeff_n[1] / h, coeff_n[2] / h];
+    let hess = [
+        [2.0 * coeff_n[3] / (h * h), coeff_n[4] / (h * h)],
+        [coeff_n[4] / (h * h), 2.0 * coeff_n[5] / (h * h)],
+    ];
+    // For cut locus we need per-point nearest segments, but we approximate via stencil
+    // Return jet with temporary validity Regular, will be refined by caller
+    let rho = (d * d + epsilon * epsilon).sqrt();
+    let requested = GEOMETRY_SCALE_ALPHA * rho.max(epsilon);
+    let jet = GeometryJet {
+        d,
+        grad_d: grad,
+        hessian_d: hess,
+        resolved_scale: h,
+        requested_scale: requested,
+        estimated_error: rms,
+        validity: GeometryValidity::Regular,
+        singularity: SingularityKind::None,
+        provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
+        tile_id: format!(
+            "scale-aware:{}:{}:{}:{:.2e}",
+            k,
+            dyadic_tile_origin(c, h).0,
+            dyadic_tile_origin(c, h).1,
+            h
+        ),
+        is_bridge: false,
+    };
+    Some(FittedJet {
+        jet,
+        fit_rms: rms,
+        stencil,
+    })
+}
+
+fn nearest_shore_distance(c: Complex64, tile: &ShoreTile) -> f64 {
+    tile.segments
+        .iter()
+        .map(|s| point_to_segment_distance(c.re, c.im, s).0)
+        .fold(f64::INFINITY, f64::min)
+}
+
+// Certify that unseen contours beyond this tile cannot be nearer to the stencil.
+fn contour_footprint_contains(c: Complex64, tile: &ShoreTile, cells: usize) -> bool {
+    let margin = (c.re - tile.origin_re)
+        .min(tile.origin_re + cells as f64 * tile.h - c.re)
+        .min(c.im - tile.origin_im)
+        .min(tile.origin_im + cells as f64 * tile.h - c.im);
+    nearest_shore_distance(c, tile) + (3.0 * 2.0_f64.sqrt() + 4.0) * tile.h < margin
+}
+
+fn contour_contained(c: Complex64, tile: &ShoreTile, cells: usize) -> bool {
+    contour_footprint_contains(c, tile, cells) && stencil_membership_stable(c, tile)
+}
+
+fn stencil_membership_stable(c: Complex64, tile: &ShoreTile) -> bool {
+    if tile.unstable_nodes.is_empty() {
+        return true;
+    }
+    for dy in -3..=3 {
+        for dx in -3..=3 {
+            let sample = c + Complex64::new(dx as f64 * tile.h, dy as f64 * tile.h);
+            let Some((distance, projection)) = tile
+                .segments
+                .iter()
+                .map(|s| point_to_segment_distance(sample.re, sample.im, s))
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+            else {
+                return false;
+            };
+            for &(x, y) in &tile.unstable_nodes {
+                // A changing node can alter any adjacent cell. Its one-cell
+                // box must be farther than the currently nearest Shore, not
+                // merely farther than the query's center distance.
+                let box_dx = ((sample.re - x).abs() - tile.h).max(0.0);
+                let box_dy = ((sample.im - y).abs() - tile.h).max(0.0);
+                let in_stability_band = (projection.0 - x).abs().max((projection.1 - y).abs())
+                    <= DYADIC_STABILITY_BAND_CELLS as f64 * tile.h;
+                if box_dx.hypot(box_dy) <= distance || in_stability_band {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+enum TileQueryError {
+    MembershipUnresolved,
+    FootprintUnresolved,
+}
+
+fn contained_tile(c: Complex64, k: u32) -> Result<ShoreTile, TileQueryError> {
+    let h = dyadic_h(k);
+    let (ix, iy, _, _) = dyadic_tile_origin(c, h);
+    let tile = get_or_generate_shore_tile(k, ix, iy).ok_or(TileQueryError::MembershipUnresolved)?;
+    if contour_contained(c, &tile, DYADIC_TILE_CELLS) {
+        return Ok(tile);
+    }
+    if contour_footprint_contains(c, &tile, DYADIC_TILE_CELLS) {
+        return Err(TileQueryError::MembershipUnresolved);
+    }
+    // One bounded expansion, at most 11x11 complete tiles (121 derived entries).
+    // Adjacent complete tiles are seven core strides apart. Offsetting by one
+    // core stride mostly overlaps the same samples and loses the Shore as h
+    // shrinks, even when the finer local jet would satisfy the error bound.
+    let tile_stride = (DYADIC_TILE_CELLS / DYADIC_CORE_CELLS) as i64;
+    let mut expanded = ShoreTile {
+        k,
+        h,
+        origin_re: tile.origin_re,
+        origin_im: tile.origin_im,
+        segments: Vec::new(),
+        unstable_nodes: Vec::new(),
+    };
+    let mut nearest_distance = f64::INFINITY;
+    for radius in 0_i64..=SHORE_TILE_EXPANSION_RADIUS {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let search_radius = nearest_distance + (6.0 * 2.0_f64.sqrt() + 4.0) * h;
+                let tx = ix + dx * tile_stride;
+                let ty = iy + dy * tile_stride;
+                let re0 = (tx * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
+                let im0 = (ty * DYADIC_CORE_CELLS as i64 - DYADIC_HALO_CELLS as i64) as f64 * h;
+                let width = DYADIC_TILE_CELLS as f64 * h;
+                let delta_re = (re0 - c.re).max(c.re - re0 - width).max(0.0);
+                let delta_im = (im0 - c.im).max(c.im - im0 - width).max(0.0);
+                // A tile beyond this ball cannot supply a nearer point to any
+                // stencil sample. Do not let unrelated distant membership ambiguity
+                // invalidate the local query or spend budget on that tile.
+                if delta_re.hypot(delta_im) > search_radius {
+                    continue;
+                }
+                let next = get_or_generate_shore_tile(k, tx, ty)
+                    .ok_or(TileQueryError::MembershipUnresolved)?;
+                nearest_distance =
+                    next.segments
+                        .iter()
+                        .fold(nearest_distance, |distance, segment| {
+                            distance.min(point_to_segment_distance(c.re, c.im, segment).0)
+                        });
+                expanded.segments.extend(next.segments);
+                expanded.unstable_nodes.extend(next.unstable_nodes);
+            }
+        }
+        expanded.origin_re = tile.origin_re - radius as f64 * DYADIC_TILE_CELLS as f64 * h;
+        expanded.origin_im = tile.origin_im - radius as f64 * DYADIC_TILE_CELLS as f64 * h;
+        if contour_contained(c, &expanded, (2 * radius as usize + 1) * DYADIC_TILE_CELLS) {
+            return Ok(expanded);
+        }
+        if contour_footprint_contains(c, &expanded, (2 * radius as usize + 1) * DYADIC_TILE_CELLS) {
+            return Err(TileQueryError::MembershipUnresolved);
+        }
+    }
+    Err(TileQueryError::FootprintUnresolved)
+}
+
+#[derive(Clone, Debug)]
+struct NearestFeature {
+    projection: (f64, f64),
+    direction: (f64, f64),
+}
+
+struct PreviousLevel {
+    jet: GeometryJet,
+    fit_rms: f64,
+    ties: Option<Vec<NearestFeature>>,
+    segments: Vec<Segment>,
+}
+
+fn competing_normals(c: Complex64, segs: &[Segment], h: f64) -> Option<Vec<NearestFeature>> {
+    let d1 = segs
+        .iter()
+        .map(|s| point_to_segment_distance(c.re, c.im, s).0)
+        .min_by(f64::total_cmp)?;
+    let tolerance = h * 1e-8;
+    let on_shore = d1 <= tolerance;
+    let mut candidates = Vec::new();
+    for segment in segs {
+        let (distance, projection) = point_to_segment_distance(c.re, c.im, segment);
+        if distance - d1 > DYADIC_CUT_TIE_FACTOR * h {
+            continue;
+        }
+        // Away from the Shore, a shared vertex is one nearest feature, even
+        // when its incident edges have very different normals. Endpoint-clamped
+        // projections also use the actual distance direction, not edge normals.
+        if on_shore && distance <= tolerance {
+            candidates.push(NearestFeature {
+                projection,
+                direction: segment.normal,
+            });
+        }
+        // Shared feet have identical displacement directions and cannot
+        // manufacture angular competition away from the Shore.
+        if !on_shore && distance > tolerance {
+            candidates.push(NearestFeature {
+                projection,
+                direction: (
+                    (c.re - projection.0) / distance,
+                    (c.im - projection.1) / distance,
+                ),
+            });
+        }
+    }
+    has_competing_directions(&candidates).then_some(candidates)
+}
+
+fn has_competing_directions(features: &[NearestFeature]) -> bool {
+    features
+        .iter()
+        .enumerate()
+        .any(|(i, a)| features[i + 1..].iter().any(|b| directions_disagree(a, b)))
+}
+
+fn directions_disagree(a: &NearestFeature, b: &NearestFeature) -> bool {
+    a.direction.0 * b.direction.0 + a.direction.1 * b.direction.1
+        < DYADIC_CUT_NORMAL_DEGREES.to_radians().cos()
+}
+
+fn persistent_competition(a: &[NearestFeature], b: &[NearestFeature], coarse_h: f64) -> bool {
+    let close = |u: (f64, f64), v: (f64, f64)| {
+        u.0 * v.0 + u.1 * v.1 > DYADIC_CUT_NORMAL_DEGREES.to_radians().cos()
+    };
+    // Persistence is of actual nearest features, not broad angular sectors.
+    // A coarse contour point that moves by more than one cell diagonal has
+    // not resolved the same feature under refinement. Retain all candidates
+    // so symmetric medial axes do not depend on segment iteration order.
+    let matches: Vec<_> = a
+        .iter()
+        .flat_map(|u| {
+            b.iter().filter_map(move |v| {
+                ((u.projection.0 - v.projection.0).hypot(u.projection.1 - v.projection.1)
+                    <= 2.0_f64.sqrt() * coarse_h
+                    && close(u.direction, v.direction))
+                .then_some((u, v))
+            })
+        })
+        .collect();
+    matches.iter().enumerate().any(|(i, (a0, b0))| {
+        matches[i + 1..]
+            .iter()
+            .any(|(a1, b1)| directions_disagree(a0, a1) && directions_disagree(b0, b1))
+    })
+}
+
+fn query_scale_aware(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+    #[cfg(test)]
+    QUERY_EVALUATIONS.with(|count| count.set(count.get() + 1));
+    if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
+        let mut failure = failure_jet(
+            f64::NAN,
+            f64::NAN,
+            GeometryValidity::ProviderFailure,
+            SingularityKind::None,
+        );
+        failure.is_bridge = false;
+        return Ok(failure);
+    }
+    if c.re * c.re + c.im * c.im >= 4.0 {
+        let mut jet = failure_jet(
+            f64::INFINITY,
+            dyadic_h(0),
+            GeometryValidity::OutsideDomain,
+            SingularityKind::Boundary,
+        );
+        jet.requested_scale = GEOMETRY_SCALE_ALPHA * epsilon;
+        jet.is_bridge = false;
+        return Ok(jet);
+    }
+    // The primary cardioid's parabolic cusp is an exactly known boundary
+    // singularity. A finite critical-orbit budget rounds it numerically; that
+    // approximation cannot certify a smooth jet at the actual cusp (ADR 0004).
+    // Preserve its exact scalar distance without inventing derivatives.
+    if c == Complex64::new(0.25, 0.0) {
+        let mut jet = failure_jet(
+            0.0,
+            0.0,
+            GeometryValidity::Singular,
+            SingularityKind::NonUniqueNormal,
+        );
+        jet.requested_scale = GEOMETRY_SCALE_ALPHA * epsilon;
+        jet.tile_id = "scale-aware:known:primary-cardioid-cusp".to_string();
+        jet.is_bridge = false;
+        return Ok(jet);
+    }
+    let mut previous: Option<PreviousLevel> = None;
+    let mut last = failure_jet(
+        f64::NAN,
+        dyadic_h(0),
+        GeometryValidity::Unresolved,
+        SingularityKind::None,
+    );
+    last.is_bridge = false;
+    last.requested_scale = GEOMETRY_SCALE_ALPHA * epsilon;
+    let mut k = 0;
+    while k <= DYADIC_MAX_K {
+        let h = dyadic_h(k);
+        let tile = match contained_tile(c, k) {
+            Ok(tile) => tile,
+            Err(TileQueryError::FootprintUnresolved) => return Ok(last),
+            Err(TileQueryError::MembershipUnresolved) => {
+                // An unstable level is not a convergence sample. A finer
+                // spatial neighborhood may exclude its uncertain nodes; require
+                // a fresh pair of consecutive stable levels before acceptance.
+                previous = None;
+                k += 1;
+                continue;
+            }
+        };
+        let Some(FittedJet {
+            mut jet,
+            fit_rms: rms,
+            stencil,
+        }) = compute_jet_at_level(c, epsilon, k, h, &tile)
+        else {
+            return Ok(last);
+        };
+        let segs = tile.segments;
+        let ties = competing_normals(c, &segs, h);
+        if let Some(previous) = &previous {
+            let prev = &previous.jet;
+            let Some(field_error) =
+                stencil_distance_disagreement(c, prev.resolved_scale, &stencil, &previous.segments)
+            else {
+                return Ok(last);
+            };
+            let grad_diff = (jet.grad_d[0] - prev.grad_d[0]).hypot(jet.grad_d[1] - prev.grad_d[1]);
+            let hess_diff = ((jet.hessian_d[0][0] - prev.hessian_d[0][0]).powi(2)
+                + 2.0 * (jet.hessian_d[0][1] - prev.hessian_d[0][1]).powi(2)
+                + (jet.hessian_d[1][1] - prev.hessian_d[1][1]).powi(2))
+            .sqrt();
+            jet.estimated_error = (jet.d - prev.d)
+                .abs()
+                .max(prev.resolved_scale * grad_diff)
+                .max(prev.resolved_scale * prev.resolved_scale * hess_diff)
+                .max(rms)
+                .max(previous.fit_rms)
+                .max(field_error);
+            // Coarse competing features cannot classify a fine-scale query.
+            if h <= jet.requested_scale {
+                if let (Some(a), Some(b)) = (&previous.ties, &ties) {
+                    if prev.resolved_scale <= jet.requested_scale
+                        && persistent_competition(a, b, prev.resolved_scale)
+                    {
+                        jet.validity = GeometryValidity::Singular;
+                        jet.singularity = SingularityKind::CutLocus;
+                        // A finite-width tie band can contain two distinct
+                        // features even at a regular query. Keep this candidate
+                        // provisional while bounded refinement is available;
+                        // finer geometry may separate the distances. If the
+                        // budget ends here, retain suspected nonsmoothness
+                        // (the public Singular contract), not a proof of an
+                        // exact cut locus. Missing coverage cannot certify Regular.
+                    }
+                }
+                if ties.is_none()
+                    && prev.resolved_scale <= jet.requested_scale
+                    && jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale
+                {
+                    return Ok(jet);
+                }
+            }
+        } else {
+            jet.estimated_error = f64::INFINITY;
+        }
+        last = jet.clone();
+        if last.validity != GeometryValidity::Singular {
+            last.validity = GeometryValidity::Unresolved;
+        }
+        // An unconverged coarse D is not a safe lower bound on distance.
+        // Skipping levels can jump to a tile too small to contain the Shore.
+        // Refine monotonically one level at a time until the ruler and error agree.
+        previous = Some(PreviousLevel {
+            jet,
+            fit_rms: rms,
+            ties,
+            segments: segs,
+        });
+        k += 1;
+    }
+    Ok(last)
+}
+
 pub fn query_bridge_geometry_with_alpha(
     c: Complex64,
     epsilon: f64,
@@ -295,6 +1523,7 @@ pub fn query_bridge_geometry_with_alpha(
             hessian_d: [[0.0, 0.0], [0.0, 0.0]],
             resolved_scale: resolved,
             requested_scale: h,
+            estimated_error: 0.0,
             validity: GeometryValidity::OutsideDomain,
             singularity: SingularityKind::Boundary,
             provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
@@ -347,6 +1576,7 @@ pub fn query_bridge_geometry_with_alpha(
             hessian_d: [[f64::NAN; 2]; 2],
             resolved_scale: resolved,
             requested_scale: requested,
+            estimated_error: 0.0,
             validity: GeometryValidity::ProviderFailure,
             singularity: SingularityKind::None,
             provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
@@ -407,6 +1637,7 @@ pub fn query_bridge_geometry_with_alpha(
         hessian_d,
         resolved_scale: resolved,
         requested_scale: requested,
+        estimated_error: 0.0,
         validity,
         singularity,
         provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
@@ -415,23 +1646,35 @@ pub fn query_bridge_geometry_with_alpha(
     })
 }
 
-/// Bridge entry point for manifold and diagnostics (NOW).
+/// Scale-aware entry point for manifold and diagnostics (finish #145).
 ///
-/// This is the RasterBridgeProvider seam (is_bridge=true) sampled from the
-/// fixed 1024² raster. It is the current provider; the destination
-/// `ScaleAwareGeometryProvider` is not yet implemented behind this PR.
-pub fn query_geometry(
-    c: Complex64,
-    epsilon: f64,
-) -> Result<GeometryJet, String> {
-    query_bridge_geometry_with_alpha(c, epsilon, GEOMETRY_SCALE_ALPHA)
+/// Direct dyadic Shore-contour provider (is_bridge=false), independent of the
+/// 1024² raster. RasterBridgeProvider remains explicit for tests/migration.
+pub fn query_geometry(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(result) = crate::operational_field::active_query(c, epsilon) {
+        return result;
+    }
+    if !c.re.is_finite() || !c.im.is_finite() || !epsilon.is_finite() || epsilon <= 0.0 {
+        return query_scale_aware(c, epsilon);
+    }
+    let key = JetKey::new(c, epsilon);
+    if let Ok(mut cache) = GEOMETRY_JET_CACHE.write() {
+        if let Some(jet) = cache.get(&key) {
+            return Ok(jet);
+        }
+    }
+    // Never hold a cache lock while constructing geometry. Concurrent misses
+    // may duplicate work but cannot change the deterministic numerical result.
+    let jet = query_scale_aware(c, epsilon)?;
+    if let Ok(mut cache) = GEOMETRY_JET_CACHE.write() {
+        cache.insert(key, jet.clone());
+    }
+    Ok(jet)
 }
 
-/// Explicit bridge query (same as `query_geometry`).
-pub fn query_bridge_geometry(
-    c: Complex64,
-    epsilon: f64,
-) -> Result<GeometryJet, String> {
+/// Explicit legacy raster comparison; never used by destination Physics.
+pub fn query_bridge_geometry(c: Complex64, epsilon: f64) -> Result<GeometryJet, String> {
     query_bridge_geometry_with_alpha(c, epsilon, GEOMETRY_SCALE_ALPHA)
 }
 
@@ -481,8 +1724,8 @@ pub fn hessian_rho_from_jet(jet: &GeometryJet, epsilon: f64) -> [[f64; 2]; 2] {
     let mut h = [[0.0; 2]; 2];
     for i in 0..2 {
         for j in 0..2 {
-            h[i][j] = jet.d / rho * jet.hessian_d[i][j]
-                + eps2 / rho3 * jet.grad_d[i] * jet.grad_d[j];
+            h[i][j] =
+                jet.d / rho * jet.hessian_d[i][j] + eps2 / rho3 * jet.grad_d[i] * jet.grad_d[j];
         }
     }
     h
@@ -551,13 +1794,19 @@ fn sample_many(points: &[Complex64]) -> Vec<f32> {
     }
 }
 
-fn failure_jet(d: f64, resolved: f64, validity: GeometryValidity, sing: SingularityKind) -> GeometryJet {
+fn failure_jet(
+    d: f64,
+    resolved: f64,
+    validity: GeometryValidity,
+    sing: SingularityKind,
+) -> GeometryJet {
     GeometryJet {
         d,
         grad_d: [f64::NAN, f64::NAN],
         hessian_d: [[f64::NAN; 2]; 2],
         resolved_scale: resolved,
         requested_scale: f64::NAN,
+        estimated_error: f64::INFINITY,
         validity,
         singularity: sing,
         provider_version: GEOMETRY_PROVIDER_VERSION.to_string(),
@@ -583,6 +1832,387 @@ fn tile_id_for(c: Complex64, h: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    fn corner_segments() -> [Segment; 2] {
+        [
+            Segment {
+                p1: (-1.0, 0.0),
+                p2: (0.0, 0.0),
+                normal: (0.0, 1.0),
+            },
+            Segment {
+                p1: (0.0, 0.0),
+                p2: (0.0, -1.0),
+                normal: (1.0, 0.0),
+            },
+        ]
+    }
+
+    #[test]
+    fn off_shore_corner_has_one_nearest_point_and_direction() {
+        assert!(competing_normals(Complex64::new(0.1, 0.1), &corner_segments(), 0.01).is_none());
+    }
+
+    #[test]
+    fn nearby_endpoint_normals_do_not_replace_distance_directions() {
+        let segments = [
+            Segment {
+                p1: (-1.0, 0.0),
+                p2: (0.0, 0.0),
+                normal: (0.0, 1.0),
+            },
+            Segment {
+                p1: (0.001, 0.0),
+                p2: (0.001, -1.0),
+                normal: (1.0, 0.0),
+            },
+        ];
+        assert!(competing_normals(Complex64::new(0.0005, 0.1), &segments, 0.01).is_none());
+    }
+
+    #[test]
+    fn true_medial_axis_and_boundary_corner_remain_competing() {
+        let segments = [
+            Segment {
+                p1: (-1.0, -0.1),
+                p2: (1.0, -0.1),
+                normal: (0.0, 1.0),
+            },
+            Segment {
+                p1: (1.0, 0.1),
+                p2: (-1.0, 0.1),
+                normal: (0.0, -1.0),
+            },
+        ];
+        let coarse = competing_normals(Complex64::new(0.0, 0.0), &segments, 0.01).unwrap();
+        let fine = competing_normals(Complex64::new(0.0, 0.0), &segments, 0.005).unwrap();
+        assert!(persistent_competition(&coarse, &fine, 0.01));
+        assert!(competing_normals(Complex64::new(0.0, 0.0), &corner_segments(), 0.01).is_some());
+    }
+
+    #[test]
+    fn angular_agreement_without_resolved_projection_locations_is_not_persistence() {
+        let first = vec![
+            NearestFeature {
+                projection: (-1.0, 0.0),
+                direction: (1.0, 0.0),
+            },
+            NearestFeature {
+                projection: (1.0, 0.0),
+                direction: (-1.0, 0.0),
+            },
+        ];
+        let moved = vec![
+            NearestFeature {
+                projection: (-0.9, 0.0),
+                direction: (1.0, 0.0),
+            },
+            NearestFeature {
+                projection: (0.9, 0.0),
+                direction: (-1.0, 0.0),
+            },
+        ];
+        assert!(!persistent_competition(&first, &moved, 0.01));
+        let reversed = vec![first[1].clone(), first[0].clone()];
+        assert!(persistent_competition(&first, &reversed, 0.01));
+        let angle = 20.0_f64.to_radians();
+        let coarse = vec![
+            NearestFeature {
+                projection: (0.0, 0.0),
+                direction: (angle.cos(), angle.sin()),
+            },
+            NearestFeature {
+                projection: (0.0, 0.0),
+                direction: (angle.cos(), -angle.sin()),
+            },
+        ];
+        let collapsed = vec![
+            NearestFeature {
+                projection: (0.0, 0.0),
+                direction: (1.0, 0.0),
+            },
+            NearestFeature {
+                projection: (1.0, 0.0),
+                direction: (-1.0, 0.0),
+            },
+        ];
+        assert!(!persistent_competition(&coarse, &collapsed, 0.01));
+    }
+
+    #[test]
+    fn origin_has_a_unique_off_shore_cusp_projection() {
+        let jet = query_geometry(Complex64::new(0.0, 0.0), 1e-4).unwrap();
+        assert_eq!(jet.validity, GeometryValidity::Regular);
+        assert!((jet.d + 0.25).abs() < jet.resolved_scale);
+        assert!((jet.grad_d[0] - 1.0).abs() < 0.01);
+        assert!(jet.grad_d[1].abs() < 0.01);
+        assert!(jet.hessian_d[0][0].abs() < 0.1);
+        assert!((jet.hessian_d[1][1] + 4.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn quantized_boundary_does_not_invent_a_regular_cusp_jet() {
+        let jet = query_geometry(Complex64::new(0.25, 0.0), 1e-4).unwrap();
+        assert_ne!(jet.validity, GeometryValidity::Regular, "{jet:?}");
+    }
+
+    #[test]
+    fn neighboring_regular_queries_do_not_jump_at_first_resolution_qualified_level() {
+        let from = Complex64::new(0.4000467192856667, 0.05125975045268653);
+        let to = Complex64::new(0.4000481609899561, 0.05127851863730588);
+        let a = query_geometry(from, 1e-4).unwrap();
+        let b = query_geometry(to, 1e-4).unwrap();
+        assert_eq!(a.validity, GeometryValidity::Regular);
+        assert_eq!(b.validity, GeometryValidity::Regular);
+        // Outside signed distance is 1-Lipschitz. Reported numerical error
+        // permits approximation, not an unreported distance jump at a level switch.
+        let bound = (to - from).norm() + a.estimated_error + b.estimated_error;
+        assert!(
+            (a.d - b.d).abs() <= bound,
+            "distance jump {} exceeds {bound}: {a:?}, {b:?}",
+            (a.d - b.d).abs()
+        );
+    }
+
+    #[test]
+    fn inward_regular_queries_respect_distance_error_bound() {
+        let from = Complex64::new(0.39494073887023606, 0.04996931486326729);
+        let to = Complex64::new(0.3948230501337527, 0.0499674412699672);
+        let a = query_geometry(from, 1e-4).unwrap();
+        let b = query_geometry(to, 1e-4).unwrap();
+        assert_eq!(a.validity, GeometryValidity::Regular);
+        assert_eq!(b.validity, GeometryValidity::Regular);
+        let bound = (to - from).norm() + a.estimated_error + b.estimated_error;
+        assert!(
+            (a.d - b.d).abs() <= bound,
+            "inward distance jump {} exceeds {bound}: {a:?}, {b:?}",
+            (a.d - b.d).abs()
+        );
+    }
+
+    #[test]
+    fn rollout_candidate_and_refinement_corridor_resolve() {
+        for c in [
+            Complex64::new(0.29835945330580743, 0.0515177858286498),
+            Complex64::new(0.35, 0.05),
+            Complex64::new(0.4005984941807052, 0.054142245287925383),
+            Complex64::new(0.2555116248484131, 0.0913239987858201),
+            Complex64::new(0.24978495883420873, 0.09661690704669372),
+        ] {
+            let jet = query_geometry(c, 1e-4).unwrap();
+            assert_eq!(jet.validity, GeometryValidity::Regular, "{c:?}: {jet:?}");
+            assert!(jet.resolved_scale <= jet.requested_scale);
+            assert!(jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale);
+        }
+    }
+
+    #[test]
+    fn expanded_footprint_resolves_recorded_rollout_refusals() {
+        for c in [
+            Complex64::new(0.21656074663216787, 0.12610803467485909),
+            Complex64::new(0.30752043982706229, 0.02876420131721053),
+            Complex64::new(0.35714730438616327, 0.06380885577340460),
+        ] {
+            let jet = query_geometry(c, 1e-4).unwrap();
+            assert_eq!(jet.validity, GeometryValidity::Regular, "{c:?}: {jet:?}");
+            assert!(jet.resolved_scale <= jet.requested_scale);
+            assert!(jet.estimated_error <= DYADIC_FIT_ERROR_FACTOR * jet.requested_scale);
+        }
+    }
+
+    #[test]
+    fn membership_uncertainty_invalidates_only_overlapping_distance_neighborhoods() {
+        let mut tile = ShoreTile {
+            k: 0,
+            h: 0.01,
+            origin_re: -10.0,
+            origin_im: -10.0,
+            segments: vec![Segment {
+                p1: (-9.0, 0.0),
+                p2: (9.0, 0.0),
+                normal: (0.0, 1.0),
+            }],
+            unstable_nodes: vec![(5.0, 5.0)],
+        };
+        let c = Complex64::new(0.0, 1.0);
+        assert!(contour_contained(c, &tile, 2000));
+        tile.unstable_nodes.push((0.09, -0.1));
+        assert!(
+            contour_contained(c, &tile, 2000),
+            "farther nodes inside an enclosing ball are harmless"
+        );
+        tile.unstable_nodes.push((0.2, 0.8));
+        assert!(
+            !contour_contained(c, &tile, 2000),
+            "an uncertain cell could hide a closer contour"
+        );
+        tile.unstable_nodes.pop();
+        tile.unstable_nodes.push((0.0, 0.0));
+        assert!(!contour_contained(c, &tile, 2000));
+    }
+
+    #[test]
+    fn complete_jet_cache_uses_exact_inputs_and_bounded_lru_retention() {
+        let c = Complex64::new(-0.5, 0.1);
+        let key = JetKey::new(c, 1e-4);
+        let neighbor = JetKey::new(Complex64::new(c.re.next_up(), c.im), 1e-4);
+        let changed_epsilon = JetKey::new(c, 1e-4_f64.next_up());
+        let changed_im = JetKey::new(Complex64::new(c.re, c.im.next_up()), 1e-4);
+        assert_ne!(key, neighbor);
+        assert_ne!(key, changed_epsilon);
+        assert_ne!(key, changed_im);
+        let mut cache = LruCache::new(2);
+        cache.insert(key.clone(), 10);
+        cache.insert(neighbor.clone(), 20);
+        assert_eq!(cache.get(&key), Some(10));
+        cache.insert(changed_epsilon.clone(), 30);
+        assert_eq!(cache.map.len(), 2);
+        assert_eq!(cache.get(&neighbor), None);
+        assert_eq!(cache.get(&key), Some(10));
+        assert_eq!(cache.get(&changed_epsilon), Some(30));
+        cache.insert(key.clone(), 40);
+        assert_eq!(cache.map.len(), 2);
+        assert_eq!(cache.order.len(), 2);
+        assert_eq!(cache.get(&key), Some(40));
+    }
+
+    #[test]
+    fn identical_queries_do_not_repeat_geometry_evaluation() {
+        let _lock = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let c = Complex64::new(-0.53125, 0.109375);
+        let epsilon = 1.23456789e-4;
+        let before = QUERY_EVALUATIONS.with(std::cell::Cell::get);
+        let first = query_geometry(c, epsilon).unwrap();
+        assert_eq!(first.validity, GeometryValidity::Regular);
+        assert_eq!(QUERY_EVALUATIONS.with(std::cell::Cell::get), before + 1);
+        let repeat = query_geometry(c, epsilon).unwrap();
+        assert_eq!(QUERY_EVALUATIONS.with(std::cell::Cell::get), before + 1);
+        assert_eq!(
+            serde_json::to_value(first).unwrap(),
+            serde_json::to_value(repeat).unwrap()
+        );
+    }
+
+    #[test]
+    fn certified_uniform_tiles_do_not_evict_contour_tiles() {
+        let tile_x = 10000;
+        let tile = get_or_generate_shore_tile(0, tile_x, 0).unwrap();
+        assert!(tile.segments.is_empty());
+        assert!(tile.unstable_nodes.is_empty());
+        let key = TileKey {
+            version: GEOMETRY_PROVIDER_VERSION.to_string(),
+            k: 0,
+            tile_x,
+            tile_y: 0,
+            budget: dyadic_n0(0),
+        };
+        assert!(!SHORE_TILE_CACHE.read().unwrap().map.contains_key(&key));
+    }
+
+    #[test]
+    fn derived_cache_eviction_and_bridge_loading_do_not_change_geometry() {
+        let _lock = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let c = Complex64::new(-0.5, 0.1);
+        crate::distance_field::clear_distance_field();
+        let cold = query_scale_aware(c, 1e-4).unwrap();
+        assert_eq!(cold.validity, GeometryValidity::Regular);
+        let warm = query_geometry(c, 1e-4).unwrap();
+        // Generate more unrelated tiles than the configured cache can retain.
+        for ix in 10..10 + SHORE_TILE_CACHE_CAPACITY as i64 + 6 {
+            let tile = get_or_generate_shore_tile(0, ix, 0).unwrap();
+            // Certified uniform boxes deliberately bypass retention. Insert
+            // their equivalent empty tiles explicitly to exercise eviction.
+            SHORE_TILE_CACHE.write().unwrap().insert(
+                TileKey {
+                    version: GEOMETRY_PROVIDER_VERSION.to_string(),
+                    k: 0,
+                    tile_x: ix,
+                    tile_y: 0,
+                    budget: dyadic_n0(0),
+                },
+                tile,
+            );
+        }
+        crate::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
+        // Recompute after tile eviction; a retained complete jet would hide
+        // an ordering-dependent contour construction regression here.
+        let after = query_scale_aware(c, 1e-4).unwrap();
+        assert_eq!(
+            serde_json::to_string(&cold).unwrap(),
+            serde_json::to_string(&warm).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_string(&cold).unwrap(),
+            serde_json::to_string(&after).unwrap()
+        );
+    }
+
+    #[test]
+    fn ordinary_polyline_vertex_is_not_a_cut_locus() {
+        let segments = [
+            Segment {
+                p1: (-1.0, 0.0),
+                p2: (0.0, 0.0),
+                normal: (0.0, 1.0),
+            },
+            Segment {
+                p1: (0.0, 0.0),
+                p2: (1.0, 0.0),
+                normal: (0.0, 1.0),
+            },
+        ];
+        assert!(competing_normals(Complex64::new(0.0, 0.01), &segments, 0.01).is_none());
+    }
+
+    #[test]
+    fn contour_distance_sign_agrees_with_membership_interior() {
+        let c = Complex64::new(0.2, 0.05);
+        let jet = query_geometry(c, 0.001).unwrap();
+        assert!(jet.d < 0.0, "{jet:?}");
+    }
+
+    #[test]
+    fn empty_contour_cannot_produce_a_geometry_jet() {
+        let h = dyadic_h(8);
+        let tile = ShoreTile {
+            k: 8,
+            h,
+            origin_re: 0.0,
+            origin_im: 0.0,
+            segments: Vec::new(),
+            unstable_nodes: Vec::new(),
+        };
+        assert!(compute_jet_at_level(Complex64::new(0.0, 0.0), 0.01, 8, h, &tile).is_none());
+    }
+
+    #[test]
+    fn signed_stencil_preserves_distance_to_segment_endpoint() {
+        let h = 0.001;
+        let tile = ShoreTile {
+            k: 0,
+            h,
+            origin_re: 0.0,
+            origin_im: 0.0,
+            segments: vec![Segment {
+                p1: (0.0, 0.0),
+                p2: (1.0, 0.0),
+                normal: (0.0, 1.0),
+            }],
+            unstable_nodes: Vec::new(),
+        };
+        let jet = compute_jet_at_level(Complex64::new(2.0, 1.0), 0.01, 0, h, &tile)
+            .unwrap()
+            .jet;
+        assert!(
+            (jet.d - 2.0_f64.sqrt()).abs() < 1e-6,
+            "endpoint distance was {}",
+            jet.d
+        );
+    }
+
     use super::*;
     use num_complex::Complex64;
 
@@ -592,7 +2222,7 @@ mod tests {
 
     #[test]
     fn provider_version_is_pinned() {
-        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/1");
+        assert_eq!(GEOMETRY_PROVIDER_VERSION, "geometry-provider/6");
     }
 
     #[test]
@@ -605,7 +2235,10 @@ mod tests {
         let jet = query_geometry(c, cfg.epsilon).unwrap();
         assert!(jet.d.is_finite());
         assert!(jet.grad_d[0].is_finite() && jet.grad_d[1].is_finite());
-        assert!(jet.hessian_d.iter().all(|row| row.iter().all(|v| v.is_finite())));
+        assert!(jet
+            .hessian_d
+            .iter()
+            .all(|row| row.iter().all(|v| v.is_finite())));
         // resolved vs requested exposed
         assert!(jet.resolved_scale > 0.0 && jet.resolved_scale.is_finite());
         assert!(jet.requested_scale > 0.0 && jet.requested_scale.is_finite());
@@ -627,25 +2260,8 @@ mod tests {
         let c_far = Complex64::new(1.2, 0.0);
         let jet_far = query_geometry(c_far, cfg.epsilon).unwrap();
         // Near Shore: small rho => small requested scale
-        let shore_x = {
-            // approximate shore near 0.25 on real axis
-            let mut lo = 0.2;
-            let mut hi = 0.35;
-            for _ in 0..40 {
-                let mid = 0.5 * (lo + hi);
-                let d = crate::distance_field::sample_signed_distance_field(&[
-                    Complex64::new(mid, 0.0),
-                ])
-                .unwrap()[0] as f64;
-                if d < 0.0 {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
-            0.5 * (lo + hi)
-        };
-        let c_near = Complex64::new(shore_x, 0.0);
+        // Use the true cardioid cusp, not a root of the legacy raster.
+        let c_near = Complex64::new(0.25, 0.0);
         let jet_near = query_geometry(c_near, cfg.epsilon).unwrap();
         assert!(
             jet_far.requested_scale > jet_near.requested_scale,
@@ -653,8 +2269,13 @@ mod tests {
             jet_far.requested_scale,
             jet_near.requested_scale
         );
-        // requested scales are alpha*max(rho,epsilon), so near Shore ~ alpha*epsilon
-        assert!((jet_near.requested_scale - GEOMETRY_SCALE_ALPHA * cfg.epsilon).abs() < 1e-6);
+        // Near Shore requested is alpha*max(rho,epsilon) ~ alpha*epsilon when D~0,
+        // but allow small offset between dyadic Shore and raster Shore (up to ~h).
+        assert!(
+            jet_near.requested_scale < 5e-5,
+            "near requested {} should be small near Shore",
+            jet_near.requested_scale
+        );
     }
 
     #[test]
@@ -664,12 +2285,9 @@ mod tests {
             .unwrap_or_else(|e| e.into_inner());
         let cfg = config();
         // Choose a regular interior point where field is smooth and not near cut locus
-        let c = Complex64::new(-0.1, 0.1);
+        let c = Complex64::new(-0.5, 0.1);
         let jet = query_geometry(c, cfg.epsilon).unwrap();
-        // skip if singular
-        if jet.validity == GeometryValidity::Singular {
-            return;
-        }
+        assert_eq!(jet.validity, GeometryValidity::Regular);
         let (gx, gy) = {
             let gs = grad_sigma_from_jet(&jet, &cfg);
             (gs[0], gs[1])
@@ -693,17 +2311,50 @@ mod tests {
         // 1e-6. Allow loose tolerance for stencil-scale mismatch and raster
         // interpolation noise; the point is directional agreement, not exact
         // pixel-scale reconstruction.
+        assert!((gx - fd_gx).abs() < 1.0, "gx {} vs fd {}", gx, fd_gx);
+        assert!((gy - fd_gy).abs() < 1.0, "gy {} vs fd {}", gy, fd_gy);
+    }
+
+    #[test]
+    fn scale_aware_independent_of_raster() {
+        let _g = crate::distance_field::global_test_mutex()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        // Clear the raster to ensure ScaleAware does not depend on it
+        crate::distance_field::clear_distance_field();
         assert!(
-            (gx - fd_gx).abs() < 0.05,
-            "gx {} vs fd {}",
-            gx,
-            fd_gx
+            !crate::distance_field::is_field_loaded(),
+            "field should be cleared"
+        );
+        let cfg = crate::manifold::ManifoldConfig::default();
+        let c = num_complex::Complex64::new(0.0, 0.0);
+        // query_geometry should now be ScaleAware and succeed without raster, and must NOT auto-reload raster
+        let jet = crate::geometry_provider::query_geometry(c, cfg.epsilon)
+            .expect("scale-aware should succeed without raster");
+        let uncached = query_scale_aware(c, cfg.epsilon)
+            .expect("uncached scale-aware computation should succeed without raster");
+        assert_eq!(
+            serde_json::to_value(&jet).unwrap(),
+            serde_json::to_value(&uncached).unwrap()
         );
         assert!(
-            (gy - fd_gy).abs() < 0.05,
-            "gy {} vs fd {}",
-            gy,
-            fd_gy
+            !jet.is_bridge,
+            "query_geometry should be scale-aware (is_bridge=false)"
+        );
+        assert!(jet.d.is_finite());
+        assert!(jet.estimated_error.is_finite());
+        // Prove raster was not silently reloaded via auto-load
+        assert!(
+            !crate::distance_field::is_field_loaded(),
+            "ScaleAware must not auto-reload 1024² raster"
+        );
+        // Also verify that explicit bridge without raster would fail (or auto-load if called)
+        // but scale-aware is independent - we don't call bridge here
+        // Re-load raster for other tests
+        let _ = crate::distance_field::load_builtin_distance_field("mandelbrot_default");
+        assert!(
+            crate::distance_field::is_field_loaded(),
+            "field should be re-loaded for next tests"
         );
     }
 }

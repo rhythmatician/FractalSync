@@ -1,0 +1,131 @@
+diff --git a/docs/validation/experiments/geometry-145-branch-mutations.py b/docs/validation/experiments/geometry-145-branch-mutations.py
+index 43569a3..021d20d 100644
+--- a/docs/validation/experiments/geometry-145-branch-mutations.py
++++ b/docs/validation/experiments/geometry-145-branch-mutations.py
+@@ -4,6 +4,8 @@ root=Path("docs/validation/experiments/geometry-145-point-proof")
+ p=root/"src/validated_branch.rs"
+ original=p.read_bytes()
+ cases=[
++ ("neighbor-requires-fresh-proof", "if let Ok(patch) = certify(z, c, mu, period, mu_radius, errors[0], errors[1])", "if let Ok(patch) = Ok::<_, Refusal>(previous.clone())", 1, "neighboring_domain_is_only_a_hint_and_keeps_strict_proof_gates"),
++ ("neighbor-keeps-fallback", "certify_auto(z, c, mu, period, mu_radius)\n        .map(|(patch, attempts)| (patch, attempts + extra_attempts))", "Err(Refusal::NumericalFailure)", 1, "neighboring_domain_is_only_a_hint_and_keeps_strict_proof_gates"),
+  ("self-inclusion", ".filter(|_| included && contracting)", ".filter(|_| true && contracting)", 1, "insufficient_quadratic_remainder_refuses"),
+  ("contraction", ".filter(|_| included && contracting)", ".filter(|_| included && true)", 1, "self_inclusion_without_contraction_refuses"),
+  ("operation-roundoff", "Some((center, abs(&C { re, im })))", "Some((center, B::new(P)))", 2, "center_roundoff_must_not_disappear"),
+diff --git a/docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs b/docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs
+index 691f86a..6769b78 100644
+--- a/docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs
++++ b/docs/validation/experiments/geometry-145-point-proof/src/validated_branch.rs
+@@ -436,6 +436,43 @@ pub(super) fn certify_auto(
+     Err(Refusal::NumericalFailure)
+ }
+ 
++/// A neighboring patch only proposes the first domain size. A fresh strict
++/// certificate remains mandatory, and a failed proposal uses the original
++/// bounded search without changing any of its acceptance checks.
++pub(super) fn certify_nearby(
++    z: &C,
++    c: &C,
++    mu: &C,
++    period: usize,
++    mu_radius: f64,
++    previous: Option<&Certificate>,
++) -> Result<(Certificate, usize), Refusal> {
++    let mut extra_attempts = 0;
++    if let Some(previous) = previous.filter(|patch| {
++        patch.period() == period && patch.mu_radius.is_finite() && patch.mu_radius > 0.
++    }) {
++        let ratio = mu_radius / previous.mu_radius;
++        let scale = 2. * ratio * ratio;
++        // Reuse the measured enclosure, not the requested domain. Repeatedly
++        // inflating the latter compounds slack along an otherwise smooth arc.
++        let errors = [
++            (previous.inclusion[0] * scale).max(1e-22),
++            (previous.inclusion[1] * scale).max(1e-26),
++        ];
++        if mu_radius.is_finite()
++            && mu_radius > 0.
++            && errors.iter().all(|value| value.is_finite() && *value > 0.)
++        {
++            extra_attempts = 1;
++            if let Ok(patch) = certify(z, c, mu, period, mu_radius, errors[0], errors[1]) {
++                return Ok((patch, 1));
++            }
++        }
++    }
++    certify_auto(z, c, mu, period, mu_radius)
++        .map(|(patch, attempts)| (patch, attempts + extra_attempts))
++}
++
+ fn subtract(a: &C, b: &C) -> Option<(C, B)> {
+     add(a, &b.scale(-1.))
+ }
+@@ -837,6 +874,45 @@ mod tests {
+         ));
+     }
+     #[test]
++    fn neighboring_domain_is_only_a_hint_and_keeps_strict_proof_gates() {
++        let mu = C::new(-0.4, 0.6);
++        let z = mu.scale(0.5);
++        let c = mu.scale(0.5).sub(&mu.mul(&mu).scale(0.25));
++        let (previous, cold_attempts) = certify_auto(&z, &c, &mu, 1, 1e-3).unwrap();
++        let (warm, warm_attempts) = certify_nearby(&z, &c, &mu, 1, 1e-3, Some(&previous)).unwrap();
++        assert!(warm_attempts < cold_attempts);
++        assert!(warm.contraction < 1.);
++        assert!(warm.inclusion[0] < warm.z_error && warm.inclusion[1] < warm.c_error);
++        // A valid neighboring proof cannot replace validation of new inputs.
++        assert!(certify_nearby(&C::new(f64::NAN, 0.), &c, &mu, 1, 1e-3, Some(&previous)).is_err());
++        assert!(matches!(
++            certify_nearby(&z, &c, &mu, 1, f64::NAN, Some(&previous)),
++            Err(Refusal::InvalidRequest)
++        ));
++        // A bad size proposal must not suppress the original successful search.
++        let mut oversized = previous.clone();
++        oversized.inclusion = [1e100; 2];
++        let (fallback, attempts) = certify_nearby(&z, &c, &mu, 1, 1e-3, Some(&oversized)).unwrap();
++        assert_eq!(attempts, cold_attempts + 1);
++        assert_eq!(fallback.inclusion, previous.inclusion);
++        // Nonfinite proposals and a different period skip the hint entirely.
++        oversized.mu_radius = f64::NAN;
++        assert_eq!(
++            certify_nearby(&z, &c, &mu, 1, 1e-3, Some(&oversized))
++                .unwrap()
++                .1,
++            cold_attempts
++        );
++        oversized = previous.clone();
++        oversized.model.period = 2;
++        assert_eq!(
++            certify_nearby(&z, &c, &mu, 1, 1e-3, Some(&oversized))
++                .unwrap()
++                .1,
++            cold_attempts
++        );
++    }
++    #[test]
+     fn wrong_center_or_invalid_input_refuses() {
+         assert!(certify(&zero(), &zero(), &C::new(0.5, 0.), 1, 0., 1e-12, 1e-12).is_err());
+         assert!(certify(&zero(), &zero(), &zero(), 0, 0., 1e-12, 1e-12).is_err());
+diff --git a/docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs b/docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs
+index 2f9037d..95f4347 100644
+--- a/docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs
++++ b/docs/validation/experiments/geometry-145-point-proof/src/validated_cover.rs
+@@ -429,8 +429,17 @@ impl Builder {
+                 best
+             });
+             (zm, cm) = profile::timed(0, || super::super::solve(best, cm, self.period, &mu))?;
+-            let (patch, attempts) =
+-                profile::timed(2, || super::certify_auto(&zm, &cm, &mu, self.period, h)).ok()?;
++            let (patch, attempts) = profile::timed(2, || {
++                super::certify_nearby(
++                    &zm,
++                    &cm,
++                    &mu,
++                    self.period,
++                    h,
++                    self.edges.last().map(|edge| &edge.patch),
++                )
++            })
++            .ok()?;
+             let item = profile::timed(3, || edge(&patch, start, end)).ok()?;
+             let bound = capsule_distance_lower(&item.capsule, &self.query)?;
+             if !bound.cmp(&B::new(P)).is_some_and(|v| v > 0)

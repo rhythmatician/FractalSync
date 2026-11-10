@@ -1,0 +1,609 @@
+{
+  "date": "2026-10-27",
+  "production_adoption": false,
+  "scope": "Diagnostic cache experiments on the unshipped public-query candidate at 20b1af8.",
+  "query": [
+    0.33125,
+    0.05
+  ],
+  "epsilon": 0.0001,
+  "runs": {
+    "before-cache": {
+      "exit_code": 1,
+      "timed_out": true,
+      "elapsed_s": 120.24978960002773,
+      "selected_tests": 1,
+      "exe_sha256": "b194bddfc02f7ce08a15c6c805317a471823e5c6dad1df14281f279181694516",
+      "source_sha256": {
+        "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+        "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+        "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+        "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+        "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+        "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+        "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+        "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+        "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+        "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+        "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+        "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+        "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+        "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+        "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+        "runtime-core\\src\\geometry_provider\\uniform_box.rs": "6baef913e930bf6174bbaab3ffa674d34dc1c9ee06eaf7980f1f5523d06850f8",
+        "runtime-core\\src\\geometry_provider.rs": "0f36aac4aa2ca4921d2de43eaf9e2cb729a5e4477a50d45e7062931a0d378f30",
+        "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+        "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+        "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+        "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+        "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+        "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+        "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+        "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+        "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+        "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+        "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+      },
+      "source_drift": [],
+      "levels": {
+        "11": {
+          "calls": 82,
+          "seconds": 0.2402512,
+          "max_leaves": 4,
+          "max_visits": 57
+        },
+        "12": {
+          "calls": 82,
+          "seconds": 0.3270916,
+          "max_leaves": 7,
+          "max_visits": 85
+        },
+        "13": {
+          "calls": 82,
+          "seconds": 0.2561528,
+          "max_leaves": 10,
+          "max_visits": 118
+        },
+        "14": {
+          "calls": 82,
+          "seconds": 0.3626576,
+          "max_leaves": 17,
+          "max_visits": 126
+        },
+        "15": {
+          "calls": 82,
+          "seconds": 0.0778831,
+          "max_leaves": 20,
+          "max_visits": 135
+        },
+        "16": {
+          "calls": 82,
+          "seconds": 0.1093765,
+          "max_leaves": 32,
+          "max_visits": 160
+        },
+        "17": {
+          "calls": 82,
+          "seconds": 0.2733218,
+          "max_leaves": 90,
+          "max_visits": 287
+        },
+        "18": {
+          "calls": 82,
+          "seconds": 0.4025516,
+          "max_leaves": 127,
+          "max_visits": 425
+        },
+        "19": {
+          "calls": 82,
+          "seconds": 1.098542,
+          "max_leaves": 284,
+          "max_visits": 1023
+        },
+        "20": {
+          "calls": 82,
+          "seconds": 1.172246,
+          "max_leaves": 265,
+          "max_visits": 1075
+        },
+        "21": {
+          "calls": 82,
+          "seconds": 76.7512422,
+          "max_leaves": 692,
+          "max_visits": 2292
+        },
+        "22": {
+          "calls": 12,
+          "seconds": 37.1351946,
+          "max_leaves": 2056,
+          "max_visits": 6056
+        }
+      },
+      "quality_lines": [],
+      "result_lines": [],
+      "log_sha256": "3120b4c2b6d2a1086f4ef4c6316e25743f25d203f1a146723d252c1d83db920e"
+    },
+    "membership-cache": {
+      "exit_code": 1,
+      "timed_out": true,
+      "elapsed_s": 120.0319469999522,
+      "selected_tests": 1,
+      "exe_sha256": "a433c31d73e2cfbf22e3d7d942f79fd537569bd5e66ef99c55c6753110d33c88",
+      "source_sha256": {
+        "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+        "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+        "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+        "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+        "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+        "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+        "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+        "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+        "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+        "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+        "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+        "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+        "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+        "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+        "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+        "runtime-core\\src\\geometry_provider\\uniform_box.rs": "53fd4ee236371dfef1eb553f9aa09ef5564b330f80cb7bb833113f139e9a38e0",
+        "runtime-core\\src\\geometry_provider.rs": "0f36aac4aa2ca4921d2de43eaf9e2cb729a5e4477a50d45e7062931a0d378f30",
+        "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+        "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+        "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+        "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+        "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+        "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+        "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+        "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+        "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+        "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+        "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+      },
+      "source_drift": [],
+      "levels": {
+        "11": {
+          "calls": 82,
+          "seconds": 0.2389346,
+          "max_leaves": 4,
+          "max_visits": 57
+        },
+        "12": {
+          "calls": 82,
+          "seconds": 0.3390292,
+          "max_leaves": 7,
+          "max_visits": 85
+        },
+        "13": {
+          "calls": 82,
+          "seconds": 0.2188042,
+          "max_leaves": 10,
+          "max_visits": 118
+        },
+        "14": {
+          "calls": 82,
+          "seconds": 0.3450749,
+          "max_leaves": 17,
+          "max_visits": 126
+        },
+        "15": {
+          "calls": 82,
+          "seconds": 0.0324776,
+          "max_leaves": 20,
+          "max_visits": 135
+        },
+        "16": {
+          "calls": 82,
+          "seconds": 0.0475519,
+          "max_leaves": 32,
+          "max_visits": 160
+        },
+        "17": {
+          "calls": 82,
+          "seconds": 0.11875759999999999,
+          "max_leaves": 90,
+          "max_visits": 287
+        },
+        "18": {
+          "calls": 82,
+          "seconds": 0.1573575,
+          "max_leaves": 127,
+          "max_visits": 425
+        },
+        "19": {
+          "calls": 82,
+          "seconds": 0.40423380000000003,
+          "max_leaves": 284,
+          "max_visits": 1023
+        },
+        "20": {
+          "calls": 82,
+          "seconds": 0.41038369999999996,
+          "max_leaves": 265,
+          "max_visits": 1075
+        },
+        "21": {
+          "calls": 82,
+          "seconds": 73.895525,
+          "max_leaves": 692,
+          "max_visits": 2292
+        },
+        "22": {
+          "calls": 14,
+          "seconds": 41.8185601,
+          "max_leaves": 2056,
+          "max_visits": 6056
+        }
+      },
+      "quality_lines": [],
+      "result_lines": [],
+      "log_sha256": "2540747f5a4b51eabdf43c44d9f36fc7874c63865ee1fb4acf84c61a765b55be"
+    },
+    "empty-cache": {
+      "exit_code": 1,
+      "timed_out": true,
+      "elapsed_s": 120.06335259997286,
+      "selected_tests": 1,
+      "exe_sha256": "81283e4b58e5c9018ac706d69d99c991ab26889cf9f8c5448b2dd91a17b17ad2",
+      "source_sha256": {
+        "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+        "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+        "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+        "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+        "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+        "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+        "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+        "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+        "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+        "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+        "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+        "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+        "runtime-core\\src\\geometry_provider\\empty_cache_controls.rs": "953e2c13cf3e88e4211537dbeb6dd951ba4f9dc7569506ddabc4fb5d18c1d7ce",
+        "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+        "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+        "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+        "runtime-core\\src\\geometry_provider\\uniform_box.rs": "53fd4ee236371dfef1eb553f9aa09ef5564b330f80cb7bb833113f139e9a38e0",
+        "runtime-core\\src\\geometry_provider.rs": "10279427b8de9467b8b7c5df33527d6ad3d3749676b81a18e261d1cb7d037dc0",
+        "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+        "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+        "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+        "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+        "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+        "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+        "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+        "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+        "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+        "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+        "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+      },
+      "source_drift": [],
+      "levels": {
+        "11": {
+          "calls": 82,
+          "seconds": 0.24208539999999998,
+          "max_leaves": 4,
+          "max_visits": 57
+        },
+        "12": {
+          "calls": 82,
+          "seconds": 0.32327849999999997,
+          "max_leaves": 7,
+          "max_visits": 85
+        },
+        "13": {
+          "calls": 82,
+          "seconds": 0.2248209,
+          "max_leaves": 10,
+          "max_visits": 118
+        },
+        "14": {
+          "calls": 82,
+          "seconds": 0.3400838,
+          "max_leaves": 17,
+          "max_visits": 126
+        },
+        "15": {
+          "calls": 82,
+          "seconds": 0.0293284,
+          "max_leaves": 20,
+          "max_visits": 135
+        },
+        "16": {
+          "calls": 82,
+          "seconds": 0.0466144,
+          "max_leaves": 32,
+          "max_visits": 160
+        },
+        "17": {
+          "calls": 82,
+          "seconds": 0.1208548,
+          "max_leaves": 90,
+          "max_visits": 287
+        },
+        "18": {
+          "calls": 82,
+          "seconds": 0.1478034,
+          "max_leaves": 127,
+          "max_visits": 425
+        },
+        "19": {
+          "calls": 82,
+          "seconds": 0.3970798,
+          "max_leaves": 284,
+          "max_visits": 1023
+        },
+        "20": {
+          "calls": 82,
+          "seconds": 0.45746370000000003,
+          "max_leaves": 265,
+          "max_visits": 1075
+        },
+        "21": {
+          "calls": 82,
+          "seconds": 1.3005313,
+          "max_leaves": 692,
+          "max_visits": 2292
+        },
+        "22": {
+          "calls": 82,
+          "seconds": 8.1958514,
+          "max_leaves": 2056,
+          "max_visits": 6056
+        },
+        "23": {
+          "calls": 16,
+          "seconds": 106.3768403,
+          "max_leaves": 4339,
+          "max_visits": 12062
+        }
+      },
+      "quality_lines": [],
+      "result_lines": [],
+      "log_sha256": "105c06126431c2225a4e45902e67fa221a111d619ec43071ebf54bf20ffae49c"
+    },
+    "roomy": {
+      "exit_code": 101,
+      "timed_out": false,
+      "elapsed_s": 33.647223100066185,
+      "selected_tests": 1,
+      "exe_sha256": "4a8512bfc70eba6abf9c71b2e9c9319e032fcc6ea06ad7eb9536204af1fa9975",
+      "source_sha256": {
+        "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+        "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+        "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+        "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+        "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+        "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+        "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+        "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+        "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+        "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+        "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+        "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+        "runtime-core\\src\\geometry_provider\\empty_cache_controls.rs": "953e2c13cf3e88e4211537dbeb6dd951ba4f9dc7569506ddabc4fb5d18c1d7ce",
+        "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+        "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+        "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+        "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+        "runtime-core\\src\\geometry_provider\\uniform_box.rs": "80cff599e6c88da3132db8e23af260455636648811be0a8269a02ff46dddc2d5",
+        "runtime-core\\src\\geometry_provider.rs": "e7c964feed217a2b3803a47f3d56af3fea84115a2edef9481682f34c3bf13aac",
+        "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+        "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+        "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+        "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+        "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+        "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+        "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+        "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+        "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+        "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+        "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+      },
+      "source_drift": [],
+      "levels": {
+        "11": {
+          "calls": 82,
+          "seconds": 0.2576691,
+          "max_leaves": 4,
+          "max_visits": 57
+        },
+        "12": {
+          "calls": 82,
+          "seconds": 0.3094962,
+          "max_leaves": 7,
+          "max_visits": 85
+        },
+        "13": {
+          "calls": 82,
+          "seconds": 0.2281696,
+          "max_leaves": 10,
+          "max_visits": 118
+        },
+        "14": {
+          "calls": 82,
+          "seconds": 0.335231,
+          "max_leaves": 17,
+          "max_visits": 126
+        },
+        "15": {
+          "calls": 82,
+          "seconds": 0.0307942,
+          "max_leaves": 20,
+          "max_visits": 135
+        },
+        "16": {
+          "calls": 82,
+          "seconds": 0.0479407,
+          "max_leaves": 32,
+          "max_visits": 160
+        },
+        "17": {
+          "calls": 82,
+          "seconds": 0.1103635,
+          "max_leaves": 90,
+          "max_visits": 287
+        },
+        "18": {
+          "calls": 82,
+          "seconds": 0.1472775,
+          "max_leaves": 127,
+          "max_visits": 425
+        },
+        "19": {
+          "calls": 82,
+          "seconds": 0.3991338,
+          "max_leaves": 284,
+          "max_visits": 1023
+        },
+        "20": {
+          "calls": 82,
+          "seconds": 0.4529972,
+          "max_leaves": 265,
+          "max_visits": 1075
+        },
+        "21": {
+          "calls": 82,
+          "seconds": 1.275206,
+          "max_leaves": 692,
+          "max_visits": 2292
+        },
+        "22": {
+          "calls": 82,
+          "seconds": 4.8433973,
+          "max_leaves": 2056,
+          "max_visits": 6056
+        },
+        "23": {
+          "calls": 82,
+          "seconds": 13.1099805,
+          "max_leaves": 4339,
+          "max_visits": 12062
+        },
+        "24": {
+          "calls": 82,
+          "seconds": 11.5477125,
+          "max_leaves": 3897,
+          "max_visits": 10644
+        }
+      },
+      "quality_lines": [
+        "[SHORE_QUALITY145] k=11 raw={\"D\":0.0007645055013596633,\"grad_D\":[-0.7965211040611607,-0.5311713984172224],\"hessian_D\":[[-2312.282257297942,3141.9805843620666],[3141.9805843620666,-3518.3698089297577]],\"resolved_scale\":0.00006103515625,\"requested_scale\":0.00007710179385780788,\"estimated_error\":null,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:11:678:102:6.10e-5\",\"is_bridge\":false} closed=false certified=false output={\"D\":0.0,\"grad_D\":[0.0,0.0],\"hessian_D\":[[0.0,0.0],[0.0,0.0]],\"resolved_scale\":0.0001220703125,\"requested_scale\":0.00001,\"estimated_error\":null,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:11:678:102:6.10e-5\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=12 raw={\"D\":0.0007678111139185484,\"grad_D\":[-0.8388807720300496,-0.472911679729593],\"hessian_D\":[[-4212.878798498557,5819.130534829732],[5819.130534829732,-6740.200496029854]],\"resolved_scale\":0.000030517578125,\"requested_scale\":0.0000774295748830408,\"estimated_error\":0.000019827058874707598,\"validity\":\"singular\",\"singularity\":\"cut_locus\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:12:1356:204:3.05e-5\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0007645055013596633,\"grad_D\":[-0.7965211040611607,-0.5311713984172224],\"hessian_D\":[[-2312.282257297942,3141.9805843620666],[3141.9805843620666,-3518.3698089297577]],\"resolved_scale\":0.00006103515625,\"requested_scale\":0.00007710179385780788,\"estimated_error\":0.000019827058874707598,\"validity\":\"singular\",\"singularity\":\"cut_locus\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:12:1356:204:3.05e-5\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=13 raw={\"D\":0.0005225918023693026,\"grad_D\":[-0.531408859912749,-0.8471157441891526],\"hessian_D\":[[1373.1674590524515,-861.4133892479533],[-861.4133892479533,540.3878090273438]],\"resolved_scale\":0.0000152587890625,\"requested_scale\":0.00005320734835561684,\"estimated_error\":0.00025334296249604797,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:13:2713:409:1.53e-5\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0007678111139185484,\"grad_D\":[-0.8388807720300496,-0.472911679729593],\"hessian_D\":[[-4212.878798498557,5819.130534829732],[5819.130534829732,-6740.200496029854]],\"resolved_scale\":0.000030517578125,\"requested_scale\":0.0000774295748830408,\"estimated_error\":0.00025334296249604797,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:13:2713:409:1.53e-5\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=14 raw={\"D\":0.0005221879639678576,\"grad_D\":[-0.5318199140171216,-0.8468574891483568],\"hessian_D\":[[1373.3898332747078,-862.4781237448638],[-862.4781237448638,541.6293981147065]],\"resolved_scale\":7.62939453125e-6,\"requested_scale\":0.000053167684707244544,\"estimated_error\":4.752769816887862e-7,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:14:5427:819:7.63e-6\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0005225918023693026,\"grad_D\":[-0.531408859912749,-0.8471157441891526],\"hessian_D\":[[1373.1674590524515,-861.4133892479533],[-861.4133892479533,540.3878090273438]],\"resolved_scale\":0.0000152587890625,\"requested_scale\":0.00005320734835561684,\"estimated_error\":4.752769816887862e-7,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:14:5427:819:7.63e-6\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=15 raw={\"D\":0.0003147393166776637,\"grad_D\":[-0.09453740348040049,0.9955213083022136],\"hessian_D\":[[3148.8365132654194,299.02202686273205],[299.02202686273205,28.395966054425717]],\"resolved_scale\":3.814697265625e-6,\"requested_scale\":0.00003302436032124206,\"estimated_error\":0.0002434887560182708,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:15:10854:1638:3.81e-6\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0005221879639678576,\"grad_D\":[-0.5318199140171216,-0.8468574891483568],\"hessian_D\":[[1373.3898332747078,-862.4781237448638],[-862.4781237448638,541.6293981147065]],\"resolved_scale\":7.62939453125e-6,\"requested_scale\":0.000053167684707244544,\"estimated_error\":0.0002434887560182708,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:15:10854:1638:3.81e-6\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=16 raw={\"D\":0.0002258005367997151,\"grad_D\":[-0.8640277228678075,-0.5034442341949282],\"hessian_D\":[[1122.4777969760396,-1926.4337561419036],[-1926.4337561419036,3306.2096327788868]],\"resolved_scale\":1.9073486328125e-6,\"requested_scale\":0.000024695319884350457,\"estimated_error\":0.00010458813811120067,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:16:21708:3276:1.91e-6\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0003147393166776637,\"grad_D\":[-0.09453740348040049,0.9955213083022136],\"hessian_D\":[[3148.8365132654194,299.02202686273205],[299.02202686273205,28.395966054425717]],\"resolved_scale\":3.814697265625e-6,\"requested_scale\":0.00003302436032124206,\"estimated_error\":0.00010458813811120067,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:16:21708:3276:1.91e-6\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=17 raw={\"D\":0.00022585203895835325,\"grad_D\":[-0.8640946030233932,-0.5033294320843704],\"hessian_D\":[[1121.7101155663881,-1925.7043145240052],[-1925.7043145240052,3305.9674229668967]],\"resolved_scale\":9.5367431640625e-7,\"requested_scale\":0.00002470002904889902,\"estimated_error\":5.213939541413534e-8,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:17:43417:6553:9.54e-7\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.0002258005367997151,\"grad_D\":[-0.8640277228678075,-0.5034442341949282],\"hessian_D\":[[1122.4777969760396,-1926.4337561419036],[-1926.4337561419036,3306.2096327788868]],\"resolved_scale\":1.9073486328125e-6,\"requested_scale\":0.000024695319884350457,\"estimated_error\":5.213939541413534e-8,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:17:43417:6553:9.54e-7\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=18 raw={\"D\":0.00016187322203858005,\"grad_D\":[-0.9292719334785624,-0.36939636390831937],\"hessian_D\":[[842.9663157039873,-2120.608145906552],[-2120.608145906552,5334.707714542275]],\"resolved_scale\":4.76837158203125e-7,\"requested_scale\":0.000019027070193056902,\"estimated_error\":0.00006437298337848236,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:18:86835:13107:4.77e-7\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.00022585203895835325,\"grad_D\":[-0.8640946030233932,-0.5033294320843704],\"hessian_D\":[[1121.7101155663881,-1925.7043145240052],[-1925.7043145240052,3305.9674229668967]],\"resolved_scale\":9.5367431640625e-7,\"requested_scale\":0.00002470002904889902,\"estimated_error\":0.00006437298337848236,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:18:86835:13107:4.77e-7\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=19 raw={\"D\":0.00016167543111501295,\"grad_D\":[-0.9302244543912693,-0.3669910958779118],\"hessian_D\":[[833.0422474586295,-2111.539703722905],[-2111.539703722905,5352.18944279682]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.000019010245928505316,\"estimated_error\":2.0106586097980357e-7,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:19:173670:26214:2.38e-7\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.00016187322203858005,\"grad_D\":[-0.9292719334785624,-0.36939636390831937],\"hessian_D\":[[842.9663157039873,-2120.608145906552],[-2120.608145906552,5334.707714542275]],\"resolved_scale\":4.76837158203125e-7,\"requested_scale\":0.000019027070193056902,\"estimated_error\":2.0106586097980357e-7,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:19:173670:26214:2.38e-7\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=20 raw={\"D\":0.00010553390210834586,\"grad_D\":[-0.9977464420484196,0.0670972233361789],\"hessian_D\":[[42.65963122913874,634.3555441288993],[634.3555441288993,9432.968389412516]],\"resolved_scale\":1.1920928955078125e-7,\"requested_scale\":0.000014538708503238495,\"estimated_error\":0.00005639832075298965,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:20:347340:52428:1.19e-7\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.00016167543111501295,\"grad_D\":[-0.9302244543912693,-0.3669910958779118],\"hessian_D\":[[833.0422474586295,-2111.539703722905],[-2111.539703722905,5352.18944279682]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.000019010245928505316,\"estimated_error\":0.00005639832075298965,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:20:347340:52428:1.19e-7\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=21 raw={\"D\":0.00010154677509388552,\"grad_D\":[-0.971218242316054,0.2381913638073722],\"hessian_D\":[[558.7092800378405,2278.120574872297],[2278.120574872297,9288.969277183845]],\"resolved_scale\":5.960464477539063e-8,\"requested_scale\":0.000014251928828045757,\"estimated_error\":4.043517552024839e-6,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:21:694681:104857:5.96e-8\",\"is_bridge\":false} closed=false certified=true output={\"D\":0.00012284143387346482,\"grad_D\":[-1.6191483840531502,-0.320092305642512],\"hessian_D\":[[2559.632425176678,4270.3991797724775],[4270.399179772477,16292.871397255381]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.00001583982887410367,\"estimated_error\":0.0000212946587795793,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:21:694681:104857:5.96e-8\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=22 raw={\"D\":0.00010082414985783108,\"grad_D\":[-0.37935653914581796,-0.9252505694174169],\"hessian_D\":[[8490.908350011392,-3481.3073480239646],[-3481.3073480239646,1427.3503312132898]],\"resolved_scale\":2.9802322387695312e-8,\"requested_scale\":0.000014200531396590193,\"estimated_error\":9.215388113748983e-7,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:22:1389363:209715:2.98e-8\",\"is_bridge\":false} closed=true certified=true output={\"D\":0.00012283832704465035,\"grad_D\":[-1.6201377257339287,-0.3199147896807296],\"hessian_D\":[[2345.010651660369,4323.389114320132],[4323.389114320131,16298.315087608467]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.000015839587933759032,\"estimated_error\":0.000022014177186819263,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:22:1389363:209715:2.98e-8\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=23 raw={\"D\":0.00009034412049239624,\"grad_D\":[-0.9081042743170027,-0.41874410678587887],\"hessian_D\":[[1940.8748504813577,-4209.054354470089],[-4209.054354470089,9127.91414236342]],\"resolved_scale\":1.4901161193847656e-8,\"requested_scale\":0.0000134766687677425,\"estimated_error\":0.000010541661860306368,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:23:2778726:419430:1.49e-8\",\"is_bridge\":false} closed=true certified=true output={\"D\":0.00012283832704465035,\"grad_D\":[-1.6201377257339287,-0.3199147896807296],\"hessian_D\":[[2345.010651660369,4323.389114320132],[4323.389114320131,16298.315087608467]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.000015839587933759032,\"estimated_error\":0.000032494206552254105,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:23:2778726:419430:1.49e-8\",\"is_bridge\":false}",
+        "[SHORE_QUALITY145] k=24 raw={\"D\":0.00007161828682331185,\"grad_D\":[-0.9977990778153786,0.06630988094078173],\"hessian_D\":[[61.395031859250594,923.8414021562351],[923.8414021562351,13901.519334189785]],\"resolved_scale\":7.450580596923828e-9,\"requested_scale\":0.000012300072767063684,\"estimated_error\":0.000018744143402759172,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:24:5557452:838860:7.45e-9\",\"is_bridge\":false} closed=true certified=true output={\"D\":0.00012283832704465035,\"grad_D\":[-1.6201377257339287,-0.3199147896807296],\"hessian_D\":[[2345.010651660369,4323.389114320132],[4323.389114320131,16298.315087608467]],\"resolved_scale\":2.384185791015625e-7,\"requested_scale\":0.000015839587933759032,\"estimated_error\":0.000051220040221338495,\"validity\":\"regular\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:24:5557452:838860:7.45e-9\",\"is_bridge\":false}"
+      ],
+      "result_lines": [
+        "[SHORE_PROFILE145] result={\"D\":0.00007161828682331185,\"grad_D\":[-0.9977990778153786,0.06630988094078173],\"hessian_D\":[[61.395031859250594,923.8414021562351],[923.8414021562351,13901.519334189785]],\"resolved_scale\":7.450580596923828e-9,\"requested_scale\":0.000012300072767063684,\"estimated_error\":0.000018744143402759172,\"validity\":\"unresolved\",\"singularity\":\"none\",\"provider_version\":\"geometry-provider/6\",\"tile_id\":\"scale-aware:24:5557452:838860:7.45e-9\",\"is_bridge\":false}"
+      ],
+      "log_sha256": "0c471dfa81b32b5544ddb2f0c43047d9d8427f78b7b03ecb04528ab873f2c65b"
+    }
+  },
+  "changed_files": [
+    "runtime-core/src/geometry_provider.rs",
+    "runtime-core/src/geometry_provider/uniform_box.rs",
+    "runtime-core/src/geometry_provider/empty_cache_controls.rs"
+  ],
+  "patch_sha256": "c3e9e7b13247a5d13277bb01ff68ada4aec97ea195d429299a8ead0abdf6360d",
+  "source_sha256": {
+    "runtime-core\\src\\bin\\diagnose_antenna_mini.rs": "5b41a7642f4fb9635b45fa51e5a3e6ea868bb35230a456cc113a5f39db16c709",
+    "runtime-core\\src\\bin\\generate_golden_vectors.rs": "853177ab5b81d06f870bee9d768f32f3d90a39adb14e1c13e03f74f33ad6d93e",
+    "runtime-core\\src\\controller.rs": "27259496177e299e4c38b4d363b20753fa92cfebfad5bc42e7b3d6b262410611",
+    "runtime-core\\src\\controls.rs": "500b4d29ffb105efc07e7f6e928477fafd704eafba7c2e239a998f1a419bb6a5",
+    "runtime-core\\src\\cycle_bank.rs": "aebca4ebbd6e123fb270d94201d7f7450d065f7e82afaaba2ef8ba185eedd5e8",
+    "runtime-core\\src\\debug.rs": "4330c9f8b7d6a10be8879fb5691d28e92a5022aba95404e0db0734251ebf2386",
+    "runtime-core\\src\\distance_field.rs": "bb649e62d30a4b14dfba988c225843e7778d4fcaa56fa84295051e14ac22b18f",
+    "runtime-core\\src\\features.rs": "771c345fcf80d726f2dfeb237e30e300f4869be861a65da6e0e8429023ff9482",
+    "runtime-core\\src\\features_test.rs": "8da77b64493cbaed34cb6bb58e0e2a0f7747d0f8d5d4a35597274011e88bfdc4",
+    "runtime-core\\src\\geometry.rs": "6a80087be417cd28efe7e37581c42b6a9a28e851a39fd44baa49a5e63275ece3",
+    "runtime-core\\src\\geometry_provider\\affine_return.rs": "e9898b052265818b4c488ec378d5ee0f0d5154aa658fb9f550c53fa8d6fbd387",
+    "runtime-core\\src\\geometry_provider\\certified_cardioid.rs": "1e34511e73967fe1a01e435e71019aeced25af228ff47bd854c4d55f53d39965",
+    "runtime-core\\src\\geometry_provider\\empty_cache_controls.rs": "953e2c13cf3e88e4211537dbeb6dd951ba4f9dc7569506ddabc4fb5d18c1d7ce",
+    "runtime-core\\src\\geometry_provider\\feature_cover.rs": "5ac894570cb1c5a971d6e680964eacd2f7cf8077662983a3b71525e9b5968256",
+    "runtime-core\\src\\geometry_provider\\interval.rs": "77e2caf4eab724f2d2e5cd04c0a02ed6d0bcd0ecdcd96940d947259fd567519a",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch\\cover.rs": "2bc176ddcaffc0a0b2d6aa3292b39f60b6629c377b47419b936d2357b3049ca9",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\branch.rs": "3f9af861499e7c86c95b221406cfb2f3c3f72d05c3846d6a571c43085d96604f",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\certified.rs": "ed0bc48870884f918a5dfe73ed15cea729e2937cd052efd0de09c2c651b0250d",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\complex_ball.rs": "7308742352b3d9838ea52652b3f027ddd5a4e809042dc8700cf70f2ffc7589fb",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\directed_norm.rs": "8a416594aff8424ce756ca65770569f1d1521d7c14bd374feeb717bc0faa4d3e",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\fast_escape.rs": "b88e1e86543fd3adbc4ba7952a118183de6f0bf4871f75b79a419fe3e1349db2",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\point_proof.rs": "1a6912966e4325ff070ce8681dcc9fe853b703be7a96f48c22c7e0fc837456a6",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary\\tiles.rs": "372a497769ffc9a416fdb81a8514d9191defd8224071ba92d5bdac066e1704a4",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary.rs": "0261672ee71fe5b357dea557e462fcb724e7d2d93a2833a081c15e92b650e699",
+    "runtime-core\\src\\geometry_provider\\periodic_boundary_cases.rs": "589d90bf27b59855281dfdf446dee4accf789a373fb640be3ecf18d6f42f7080",
+    "runtime-core\\src\\geometry_provider\\range_jet.rs": "3d05702b0e033626279a7c1227af1506738601a7cdaf051b4a79e4c85b08fb26",
+    "runtime-core\\src\\geometry_provider\\uniform_box.rs": "80cff599e6c88da3132db8e23af260455636648811be0a8269a02ff46dddc2d5",
+    "runtime-core\\src\\geometry_provider.rs": "e7c964feed217a2b3803a47f3d56af3fea84115a2edef9481682f34c3bf13aac",
+    "runtime-core\\src\\hyperbolic.rs": "51fda4ca2f4b35323611bf17ef31d8a0555ad0b3b5c0bba58e5c9ff26b4f5558",
+    "runtime-core\\src\\lib.rs": "235588c68a3f4d18616a5152393b6ebee4d22aab141ce6b1b0666346d9c20057",
+    "runtime-core\\src\\manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+    "runtime-core\\src\\minimap.rs": "f260cb242adbd827a3846d94f3efca49fcba2ada90c2eb1be8a215aa3c771b14",
+    "runtime-core\\src\\model_io.rs": "b8216c914faf81ad54f0d09fdd15aaee780a11498b42eb3ad6a0eaa7024d50c0",
+    "runtime-core\\src\\proxies.rs": "7c7ee1f29de514fb39a785d74ff3bec5d15155044b1931cbaa042c2ea131c6f0",
+    "runtime-core\\src\\pybindings.rs": "d2b94724fc565ce348939a77f3e0f6846d19087a6458fd01f6532b64ac8564d1",
+    "runtime-core\\src\\scale_relative_map.rs": "509fd511f1aa2fbd79118b8d5ac458a9861f969ed832e7610fe83a98b5236823",
+    "runtime-core\\src\\timebase.rs": "1b990c0e139695c7471c0b2595808701f0401332da4c4281e9cb0016c686941a",
+    "runtime-core\\src\\visual_metrics.rs": "7aae267e24ed1b0e8d0af95c8bd21fb1c87a2604e36a242a2637ebae124888c7",
+    "runtime-core\\src\\wasm_bindings.rs": "9a90d24d7ff36984a6a622e8053e137ad6dffe8165dc04c8e5f4bb2be22d96c6"
+  },
+  "controls": {
+    "uniform_box_suite": "16 passed, 186 filtered, 0.35 seconds",
+    "fresh_empty_tile_comparison": "1 passed, 201 filtered, 0.04 seconds"
+  },
+  "limitations": [
+    "Single cold query and targeted cache controls only; no complete crossings or live training.",
+    "Cache capacities of 4096 and 16384 are diagnostic settings, not approved runtime settings.",
+    "The original geometry thresholds and crossing tests remain unchanged."
+  ],
+  "unchanged_crossing_files": {
+    "runtime-core/src/manifold.rs": "ef369e8321bbd04b0afad26241017d3b5b6df17c3ee4098d7fd69b9b65518166",
+    "backend/tests/test_manifold_physics.py": "2451ab5c7ffa18f9cc8259ef109a4bca27cd1af846f9ac6843a626ed93c84536"
+  }
+}
