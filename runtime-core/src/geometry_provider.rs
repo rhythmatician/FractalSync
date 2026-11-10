@@ -108,6 +108,13 @@ impl SingularityKind {
 
 /// One coherent differential sample from the local geometry representation.
 ///
+/// Interpret metadata according to `provider_version`: for the opt-in
+/// experimental operational field, `d` is its scalar F, `resolved_scale` is
+/// coefficient spacing, and `Regular` means the complete operational jet is
+/// available. None of these certifies true Shore distance, its resolution, or
+/// reference differential fidelity. Its provider version explicitly reports
+/// `reference-distance-unknown`.
+///
 /// The invariant is that D, grad_D, and hessian_D come from one coherent
 /// local representation (scale-aware local stencil), not independent heuristics
 /// or nested finite differences of sigma.

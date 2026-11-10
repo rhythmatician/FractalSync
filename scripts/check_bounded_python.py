@@ -11,6 +11,15 @@ def main() -> None:
     asset += struct.pack("<144d", *([1.0] * 144))
     field_id = BoundedOperationalRollout.asset_field_id(asset)
     policy = json.dumps({"field_id": field_id, "refusals": []})
+    for kappa, mu in ((-0.1, 0.0), (0.0, -0.1)):
+        try:
+            BoundedOperationalRollout(
+                asset, policy, 0.1, 0.02, 0.0, kappa, mu, 0.01, 0.0
+            )
+        except ValueError as error:
+            assert "invalid experimental Physics profile" in str(error)
+        else:
+            raise AssertionError("negative potential coefficient must refuse")
     engine = BoundedOperationalRollout(
         asset, policy, 0.1, 0.02, 0.0, 0.0, 0.0, 0.01, 0.0
     )

@@ -72,6 +72,8 @@ impl PhysicsProfile {
             || config.d_ref <= 0.0
             || config.epsilon < 1e-4
             || config.lambda_sq < 0.0
+            || config.kappa < 0.0
+            || config.mu < 0.0
             || dt <= 0.0
             || beta < 0.0
         {
@@ -532,6 +534,68 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_rejects_negative_potentials_but_allows_zero() {
+        for (kappa, mu) in [(-0.1, 0.0), (0.0, -0.1)] {
+            let config = ManifoldConfig {
+                kappa,
+                mu,
+                ..ManifoldConfig::default()
+            };
+            assert!(PhysicsProfile::new(config, 0.001, 0.0, Integrator::Rk4).is_err());
+        }
+        let config = ManifoldConfig {
+            kappa: 0.0,
+            mu: 0.0,
+            ..ManifoldConfig::default()
+        };
+        assert!(PhysicsProfile::new(config, 0.001, 0.0, Integrator::Rk4).is_ok());
+    }
+
+    #[test]
+    fn operational_jet_regularity_does_not_claim_reference_resolution() {
+        let mut values = Vec::new();
+        for _ in 0..16 {
+            for x in 0..16 {
+                values.push(-0.8 + x as f64 * 0.1);
+            }
+        }
+        let field = Arc::new(PreparedField::new([-0.8; 2], 0.1, [16; 2], values).unwrap());
+        let rollout = FrozenRollout::new(
+            field,
+            PhysicsProfile::new(ManifoldConfig::default(), 0.001, 0.0, Integrator::Rk4).unwrap(),
+            vec![],
+        )
+        .unwrap();
+        rollout
+            .evaluate(|config| {
+                let jet = crate::geometry_provider::query_geometry(
+                    Complex64::new(0.0, 0.0),
+                    config.epsilon,
+                )?;
+                assert_eq!(
+                    jet.validity,
+                    crate::geometry_provider::GeometryValidity::Regular
+                );
+                assert!(jet
+                    .provider_version
+                    .contains("experimental-operational-field"));
+                assert!(jet.provider_version.contains("reference-distance-unknown"));
+                assert!((jet.requested_scale - 1e-5).abs() < 1e-12);
+                assert_eq!(jet.resolved_scale, 0.1);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            rollout.probe([0.0, 0.0]).unwrap()["reference_distance_accuracy"],
+            "unknown"
+        );
+        assert!(rollout
+            .probe([2.0, 0.0])
+            .unwrap_err()
+            .contains("GeometryUnavailable"));
+    }
     fn constant(missing: Option<f64>) -> Arc<PreparedField> {
         let (shape, h, origin) = ([5005, 20], 1e-5, [0.39, -0.0001]);
         let mut c = vec![Some(1.0); shape[0] * shape[1]];

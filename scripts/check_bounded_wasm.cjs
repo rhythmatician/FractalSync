@@ -14,6 +14,9 @@ asset.writeBigUInt64LE(0n, 48);
 for (let i = 0; i < 144; i++) asset.writeDoubleLE(1.0, 56 + i * 8);
 const fieldId = BoundedOperationalRollout.asset_field_id(asset);
 const policy = JSON.stringify({ field_id: fieldId, refusals: [] });
+for (const [kappa, mu] of [[-0.1, 0], [0, -0.1]]) {
+  assert.throws(() => new BoundedOperationalRollout(asset, policy, 0.1, 0.02, 0, kappa, mu, 0.01, 0), /invalid experimental Physics profile/);
+}
 const engine = new BoundedOperationalRollout(asset, policy, 0.1, 0.02, 0, 0, 0, 0.01, 0);
 const before = JSON.parse(engine.start(0, 0, 0.1, 0));
 const after = JSON.parse(engine.step(0, 0));
