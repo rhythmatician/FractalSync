@@ -34,7 +34,17 @@ python = ["pyo3", "pyo3/extension-module", "pythonize"]
 # Build WebAssembly bindings (wasm-bindgen).
 wasm = ["wasm-bindgen", "js-sys"]
 
+experimental-operational-field = []
+
 default = []
+
+[[example]]
+name = "benchmark_bounded_engine"
+required-features = ["experimental-operational-field"]
+
+[[example]]
+name = "replay_bounded_motion"
+required-features = ["experimental-operational-field"]
 
 [build-dependencies]
 # Use a lightweight build script which invokes the Python-side stub generator

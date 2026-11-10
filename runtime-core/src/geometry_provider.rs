@@ -424,6 +424,23 @@ pub fn query_geometry(
     c: Complex64,
     epsilon: f64,
 ) -> Result<GeometryJet, String> {
+    #[cfg(feature = "experimental-operational-field")]
+    if let Some(field) = crate::operational_field::ACTIVE.with(|active| active.borrow().clone()) {
+        crate::operational_engine::check_query(c, epsilon)?;
+        let jet = field.query([c.re, c.im]).map_err(|_| "GeometryUnavailable".to_string())?;
+        return Ok(GeometryJet {
+            d: jet.value,
+            grad_d: jet.gradient,
+            hessian_d: jet.hessian,
+            resolved_scale: field.spacing(),
+            requested_scale: GEOMETRY_SCALE_ALPHA * (jet.value * jet.value + epsilon * epsilon).sqrt(),
+            validity: GeometryValidity::Regular,
+            singularity: SingularityKind::None,
+            provider_version: "experimental-operational-field/1;reference-distance-unknown".into(),
+            tile_id: format!("operational:{:016x}", field.identity()),
+            is_bridge: false,
+        });
+    }
     query_bridge_geometry_with_alpha(c, epsilon, GEOMETRY_SCALE_ALPHA)
 }
 
