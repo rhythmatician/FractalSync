@@ -29,10 +29,11 @@ jobs:
         run: |
           python -m venv .venv
           . .venv/bin/activate
-          python -m pip install maturin
+          python -m pip install maturin mypy
           maturin build --release --manifest-path runtime-core/Cargo.toml --features python,experimental-operational-field --bindings pyo3 --out tmp/operational-wheel
           python -m pip install tmp/operational-wheel/*.whl
           python scripts/check_bounded_python.py
+          MYPYPATH=runtime-core/experimental-stubs python -m mypy scripts/check_bounded_python.py scripts/replay_bounded_energy.py scripts/replay_bounded_crossing.py scripts/check_bounded_browser_parity.py scripts/check_bounded_asset_parity.py
       - name: Build and exercise the opt-in WASM binding
         run: |
           cargo install wasm-pack --locked

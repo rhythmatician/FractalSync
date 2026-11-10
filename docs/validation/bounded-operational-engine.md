@@ -8,6 +8,9 @@ work, and energy together only after all stages and the weighted endpoint pass.
 A missing differential stencil refuses as `GeometryUnavailable`; there is no
 fallback to the base provider during an operational rollout.
 
+Python consumers can point `MYPYPATH` at `runtime-core/experimental-stubs`
+when checking this feature-only API; the default runtime stubs stay unchanged.
+
 The field is a smooth operational scalar, not a certified Mandelbrot distance.
 Reference-distance accuracy and reference-cut coverage outside the supplied
 snapshot are unknown. The exact known cusp and cut at `(0.25, 0)` and `(-1, 0)`

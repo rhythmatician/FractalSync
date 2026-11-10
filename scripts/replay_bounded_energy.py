@@ -26,7 +26,7 @@ def main() -> None:
         ("high_curvature", [0.4, 0.05], 150),
         ("near_shore", [0.3, 0.05], 100),
     ):
-        initial = json.loads(engine.start(*start, 0.0, 0.02))
+        initial = json.loads(engine.start(start[0], start[1], 0.0, 0.02))
         maximum = 0.0
         for _ in range(steps):
             state = json.loads(engine.step(0.0, 0.0))
