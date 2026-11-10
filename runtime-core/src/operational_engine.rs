@@ -628,6 +628,47 @@ mod tests {
                 .contains("ReferenceSingularity"));
         }
     }
+
+    #[test]
+    fn changed_profile_field_or_reference_evidence_rejects_old_state() {
+        let original =
+            FrozenRollout::new(constant(None), profile(Integrator::Rk4), vec![]).unwrap();
+        let state = original.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
+        let different_method =
+            FrozenRollout::new(constant(None), profile(Integrator::Rk4FourSubsteps), vec![])
+                .unwrap();
+        let different_field =
+            FrozenRollout::new(constant(Some(0.43)), profile(Integrator::Rk4), vec![]).unwrap();
+        let cut = ReferenceCut {
+            bounds: [0.45, -0.00001, 0.46, 0.00001],
+            authority: "synthetic reference evidence".into(),
+        };
+        let different_evidence =
+            FrozenRollout::new(constant(None), profile(Integrator::Rk4), vec![cut]).unwrap();
+        for other in [&different_method, &different_field, &different_evidence] {
+            let mut candidate = state;
+            assert!(other
+                .attempt_step(&mut candidate, [0.0; 2])
+                .unwrap_err()
+                .contains("FrozenIdentity"));
+            assert_eq!(candidate, state);
+        }
+    }
+
+    #[test]
+    fn reference_refusal_at_intermediate_stage_rolls_back_everything() {
+        let cut = ReferenceCut {
+            bounds: [0.41599, -0.00001, 0.41601, 0.00001],
+            authority: "synthetic reference evidence".into(),
+        };
+        let rollout =
+            FrozenRollout::new(constant(None), profile(Integrator::Rk4), vec![cut]).unwrap();
+        let mut state = rollout.initial_state([0.4, 0.0], [0.2, 0.0]).unwrap();
+        let before = state;
+        let error = rollout.attempt_step(&mut state, [0.0; 2]).unwrap_err();
+        assert!(error.contains("ReferenceSingularity"), "{error}");
+        assert_eq!(state, before);
+    }
     #[test]
     fn plane_control_reaches_regularization_metric_connection_and_integration() {
         let mut c = Vec::new();
