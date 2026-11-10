@@ -1,0 +1,354 @@
+{
+  "provenance": {
+    "source_commit": "0c71d63948f29265a184011b9a8ed1b93e77995a",
+    "worktree_status": "",
+    "platform": "Windows-11-10.0.26100-SP0",
+    "sha256": {
+      "runtime_core-0.1.0-cp38-abi3-win_amd64.whl:tmp\\final2-default": "0570808391a39d4b3d182c2d52a191bc7057f9a0a647049b2f1ef02814af2c34",
+      "runtime_core-0.1.0-cp38-abi3-win_amd64.whl:tmp\\final2-operational": "ab4c573b674e298727f879583016671195a61507da45a5e7858c1c012987ee9c",
+      "runtime_core.pyd:tmp\\final2-default-install\\runtime_core": "961959818dcb2487b420005220b9cb5d6708c8261756784638319d6c4b3c680a",
+      "runtime_core.pyd:tmp\\final2-operational-install\\runtime_core": "717829406919f04145bda53364beaecc05beb26ca9a4a277959b5b44f4e1772e",
+      "orbit_synth_wasm_bg.wasm:tmp\\final-web": "1cb4c3a6bc599f693b256de76add45ac2a8eb151163e289d53d11deb90a41e86",
+      "geometry145-retained-fine.bin:C:\\Users\\JeffHall\\git\\FractalSync\\tmp": "bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb",
+      "geometry145-retained-policy.json:C:\\Users\\JeffHall\\git\\FractalSync\\tmp": "7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd"
+    }
+  },
+  "backend_tests": {
+    "default": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "189",
+      "time": "58.776",
+      "timestamp": "2026-11-10T14:14:26.303280-06:00",
+      "hostname": "DANTE"
+    },
+    "operational": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "189",
+      "time": "56.699",
+      "timestamp": "2026-11-10T14:15:42.541954-06:00",
+      "hostname": "DANTE"
+    }
+  },
+  "operational_crossing": {
+    "operational_crossing": "passed",
+    "reference_crossing": "unverified",
+    "reference_distance_accuracy": "unknown",
+    "field_id": "9721bb7647a0b8e6",
+    "under": {
+      "crossed": false,
+      "minimum": 0.00653701957379228,
+      "state": {
+        "position": [
+          0.35117487609666326,
+          0.060162651423180245
+        ],
+        "velocity": [
+          -0.0014994792736626845,
+          0.0017193468114306046
+        ],
+        "mechanical_time": 5.000000000000004,
+        "integrated_work": 0.0,
+        "energy": 0.5542577137502886,
+        "field_id": "9721bb7647a0b8e6",
+        "physics_profile_id": "1e83ff5f5aa0ab25"
+      },
+      "max_energy_excursion": 1.0084377777275222e-11
+    },
+    "attempts": [
+      {
+        "crossed": true,
+        "time": 3.8632321510746928,
+        "minimum": -4.2357627978844705e-07,
+        "max_energy_excursion": 2.412076679547681e-05,
+        "state": {
+          "position": [
+            0.3437451130553353,
+            0.06863603526429841
+          ],
+          "velocity": [
+            -4.4512143003709145e-05,
+            0.0006501095127744423
+          ],
+          "mechanical_time": 3.863999999999796,
+          "integrated_work": 0.0,
+          "energy": 22.227950115518805,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "235e87d31c7e3266"
+        }
+      },
+      {
+        "crossed": true,
+        "time": 3.863267817772695,
+        "minimum": -4.039745872249219e-07,
+        "max_energy_excursion": 2.23441734092944e-06,
+        "state": {
+          "position": [
+            0.3437435979809586,
+            0.0686359331092158
+          ],
+          "velocity": [
+            -4.4886611089422435e-05,
+            0.0006500843455815351
+          ],
+          "mechanical_time": 3.8639999999996855,
+          "integrated_work": 0.0,
+          "energy": 22.227971088112813,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "1e83ff5f5aa0ab25"
+        }
+      },
+      {
+        "crossed": true,
+        "time": 3.863270683544104,
+        "minimum": -1.2651683741439915e-07,
+        "max_energy_excursion": 7.629464349179216e-08,
+        "state": {
+          "position": [
+            0.34374349993994713,
+            0.06863559990646029
+          ],
+          "velocity": [
+            -4.491640514640254e-05,
+            0.0006500846648361831
+          ],
+          "mechanical_time": 3.8635000000004576,
+          "integrated_work": 0.0,
+          "energy": 22.227972783837604,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "e5574fd7739da125"
+        }
+      },
+      {
+        "crossed": true,
+        "time": 3.8632705540856422,
+        "minimum": -1.265917934365574e-07,
+        "max_energy_excursion": 6.324505363863864e-09,
+        "state": {
+          "position": [
+            0.3437435055846359,
+            0.06863560029035821
+          ],
+          "velocity": [
+            -4.4915007397196306e-05,
+            0.0006500847602778924
+          ],
+          "mechanical_time": 3.8634999999992186,
+          "integrated_work": 0.0,
+          "energy": 22.2279727299304,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "967ac67d4bd35c7c"
+        }
+      }
+    ]
+  },
+  "energy": {
+    "field_id": "9721bb7647a0b8e6",
+    "physics_profile_id": "474d990b6faa6ead",
+    "runs": [
+      {
+        "name": "high_curvature",
+        "maximum_absolute_excursion": 2.2870594307278225e-14,
+        "absolute_drift": 1.176836406102666e-14,
+        "limit": 0.05,
+        "initial": {
+          "position": [
+            0.4,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ],
+          "mechanical_time": 0.0,
+          "integrated_work": 0.0,
+          "energy": 1.369315182173777,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "474d990b6faa6ead"
+        },
+        "final": {
+          "position": [
+            0.40027859132730814,
+            0.05491011859589031
+          ],
+          "velocity": [
+            0.0019081618968619053,
+            0.013092750179708722
+          ],
+          "mechanical_time": 0.3000000000000002,
+          "integrated_work": 0.0,
+          "energy": 1.3693151821737652,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "474d990b6faa6ead"
+        }
+      },
+      {
+        "name": "near_shore",
+        "maximum_absolute_excursion": 2.4278357102502923e-11,
+        "absolute_drift": 2.2891910589351028e-11,
+        "limit": 0.05,
+        "initial": {
+          "position": [
+            0.3,
+            0.05
+          ],
+          "velocity": [
+            0.0,
+            0.02
+          ],
+          "mechanical_time": 0.0,
+          "integrated_work": 0.0,
+          "energy": 3.8811684948777536,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "474d990b6faa6ead"
+        },
+        "final": {
+          "position": [
+            0.30008894762264426,
+            0.054644245544272385
+          ],
+          "velocity": [
+            0.0012622637053391846,
+            0.026575664225800943
+          ],
+          "mechanical_time": 0.20000000000000015,
+          "integrated_work": 0.0,
+          "energy": 3.8811684948548617,
+          "field_id": "9721bb7647a0b8e6",
+          "physics_profile_id": "474d990b6faa6ead"
+        }
+      }
+    ]
+  },
+  "native_motion": {
+    "driven": [
+      true,
+      [
+        0.32065862304058457,
+        0.047310609063976376
+      ]
+    ],
+    "field_id": "9721bb7647a0b8e6",
+    "operational_crossing": "passed",
+    "physics_profile_id": "58f1bbc568587ca3",
+    "reference_crossing": "unverified",
+    "undriven": [
+      false,
+      [
+        -0.6701750879973066,
+        0.14725723259204962
+      ]
+    ]
+  },
+  "derivatives": {
+    "field_id": "9721bb7647a0b8e6",
+    "joins": {
+      "gradient_absolute_error": 1.8163131976223212e-07,
+      "hessian_normalized_error": 4.802137132721352e-06,
+      "passed": true,
+      "tolerance": 0.0001
+    },
+    "neighbors": {
+      "base_increments": [
+        1e-06,
+        1e-07
+      ],
+      "evidence": {
+        "gradient_max_absolute_error": 1.1841220559638543e-08,
+        "gradient_resolution_max_absolute_error": 1.817990202823694e-08,
+        "hessian_max_normalized_error": 3.0019812418125014e-06,
+        "hessian_resolution_max_normalized_error": 4.190166732032097e-06,
+        "legacy_gradient_max_absolute_error": 7.081021143884314e-07,
+        "legacy_hessian_max_normalized_error": 0.00023429016361537557
+      },
+      "legacy_central_difference_passed": false,
+      "passed": true,
+      "points": 1000,
+      "scope": "measured differential self-consistency only; no reference fidelity or singularity permission",
+      "tolerance": 0.0001,
+      "verifier": "richardson-neighbor/1"
+    }
+  },
+  "native_timing": {
+    "field_id": "9721bb7647a0b8e6",
+    "first_query_ns": 9200,
+    "first_step_ns": 46900,
+    "load_ns": 123875500,
+    "physics_profile_id": "f81b32eb42d9ef08",
+    "query_count": 10000,
+    "query_max_ns": 4700,
+    "query_p99_ns": 200,
+    "scope": "native process, fixed local region, no cache stress; preparation excluded",
+    "step_count": 1000,
+    "step_max_ns": 231500,
+    "step_p99_ns": 63800,
+    "work": {
+      "coefficient_reads_upper_bound": 5760,
+      "geometry_evaluations": 160
+    }
+  },
+  "browser": {
+    "browser": "153.0.8010.12",
+    "device": "Intel(R) Core(TM) i9-14900",
+    "asset_sha256": "bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb",
+    "policy_sha256": "7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd",
+    "wasm_sha256": "1cb4c3a6bc599f693b256de76add45ac2a8eb151163e289d53d11deb90a41e86",
+    "result": {
+      "wasm_init_ms": 21.5,
+      "fetch_ms": 98.30000001192093,
+      "load_ms": 136.30000001192093,
+      "first_probe_us": 1199.999988079071,
+      "probe_p99_us": 100.00002384185791,
+      "probe_max_us": 399.9999761581421,
+      "first_step_us": 500,
+      "step_p99_us": 199.99998807907104,
+      "step_max_us": 500,
+      "probe": {
+        "field_id": "9721bb7647a0b8e6",
+        "metric": [
+          [
+            676.5092663934358,
+            -398.8323333213035
+          ],
+          [
+            -398.8323333213035,
+            1249.7259593098593
+          ]
+        ],
+        "operational_value": 0.046029370104198865,
+        "physics_profile_id": "1e83ff5f5aa0ab25",
+        "potential": 0.11193699903088919,
+        "reference_distance_accuracy": "unknown"
+      },
+      "parity_state": {
+        "position": [
+          0.39999004964969886,
+          0.049999905068743127
+        ],
+        "velocity": [
+          -0.0009900723421768047,
+          -1.898631231719998e-05
+        ],
+        "mechanical_time": 0.010000000000000002,
+        "integrated_work": 0,
+        "energy": 0.11227525366699899,
+        "field_id": "9721bb7647a0b8e6",
+        "physics_profile_id": "1e83ff5f5aa0ab25"
+      }
+    },
+    "note": "Probe includes metric, potential and JSON; not a single geometry-query timing. Timer quantization and no cache stress apply."
+  },
+  "caveats": [
+    "reference crossing unverified",
+    "reference distance and reference cut coverage unknown outside snapshot",
+    "frontend model-inference checks returned early without model files",
+    "one concurrent backend run failed trainer export message; isolated and serial full reruns passed",
+    "browser probe timing is not a single geometry query",
+    "native timing is fixed region without cache stress"
+  ]
+}

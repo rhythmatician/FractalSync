@@ -48,3 +48,45 @@ increments and checks agreement at two resolutions. The report also exposes the
 original raw central-difference outcome separately; a failure there cannot be
 described as a passing raw diagnostic. These tests check field self-consistency,
 not fidelity to reference derivatives.
+
+## Recorded local integration results
+
+On Windows build 26100, Intel Core i9-14900, Chromium 153.0.8010.12, source
+`0c71d63948f29265a184011b9a8ed1b93e77995a` was clean during builds. The default
+and feature-enabled wheels each passed 189 backend tests with no skips; default
+Rust passed 55 tests and feature-enabled Rust passed 69. The first simultaneous
+backend run produced one trainer export-message failure; its isolated rerun
+and the full feature-enabled suite run serially passed. Default frontend tests
+and build passed after generating the default WASM package; some pre-existing
+model-inference checks returned early because model/baseline files were absent.
+
+The operational asset has field ID `9721bb7647a0b8e6`, SHA-256
+`bc2604771c2cc48fb71cda6cb22c6e4338a776b6591fa923dd065977817ad9fb`;
+the policy SHA-256 is
+`7931b4d06e7d1aab6e60ef35b065c5594b00bad216ccc4146dee55925d9dd1cd`.
+The Rust Controls crossing and Python barrier crossing pass on that asset;
+their reference crossings remain **unverified**. The four interpolated Python
+times are `3.8632321511`, `3.8632678178`, `3.8632706835`, and `3.8632705541`
+seconds. High-curvature and near-Shore maximum absolute energy excursions are
+`2.29e-14` and `2.43e-11`, below `0.05`. Across 1,000 fixed points, the
+Richardson neighboring Hessian error is `3.00e-6`; the join error is `4.80e-6`.
+The separately retained raw central-difference Hessian diagnostic fails at
+`2.34e-4` against `1e-4`. Neither diagnostic measures reference fidelity.
+
+For one 10-step frozen-asset trajectory, native Python and headless Chromium
+match within `1e-9` for scalar, metric, potential, state, and ledger; the
+observed maximum difference was zero, without requiring bitwise parity.
+The local native run measured first prepared field query `9.2 µs`, query p99
+`0.2 µs`, maximum sampled query `4.7 µs`, first complete step `46.9 µs`,
+step p99 `63.8 µs`, and maximum step `231.5 µs`. Loading took `123.9 ms`;
+preparation was not timed here. These are fixed-region samples without cache
+stress. One complete step reported 160 geometry evaluations and an upper bound
+of 5,760 coefficient reads.
+
+The browser measured first **probe** `1.2 ms`, probe p99 `100 µs`, maximum
+probe `400 µs`, first complete step `500 µs`, step p99 `200 µs`, and maximum
+step `500 µs`. A probe includes metric, potential, and JSON serialization; it
+is not the single geometry-query metric in the provisional target. Browser
+timers are quantized, the sample was not cache-stressed, and the measurements
+do not establish a hard deadline. WASM initialization, fetch and asset decoding
+took `21.5`, `98.3`, and `136.3 ms` respectively, outside the timed calls.
