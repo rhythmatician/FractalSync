@@ -29,7 +29,7 @@ jobs:
         run: |
           python -m venv .venv
           . .venv/bin/activate
-          python -m pip install maturin mypy
+          python -m pip install maturin mypy numpy
           maturin build --release --manifest-path runtime-core/Cargo.toml --features python,experimental-operational-field --bindings pyo3 --out tmp/operational-wheel
           python -m pip install tmp/operational-wheel/*.whl
           python scripts/check_bounded_python.py
