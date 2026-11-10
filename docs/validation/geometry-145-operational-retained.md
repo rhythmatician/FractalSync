@@ -109,6 +109,17 @@ are intact. The separate five-timestep segment-event diagnostic converges toward
 `3.863270565` seconds; energy excursion decreases from `2.412e-5` to `6.517e-10`.
 It does not replace the original assertion or certify an exact Shore event.
 
+An independent exact-solution control makes the sampling limitation explicit.
+`python scripts/diagnose_crossing_time_quantization.py` evaluates
+`x(t) = 3.863270565 - t` using exact rational arithmetic and records the first
+negative sample at the three original step sizes. It obtains `3.864`, `3.864`,
+and `3.8635` seconds: the coarse gap is zero and the fine gap is `0.0005`, so
+the strict gap-refinement assertion fails even though the trajectory and event
+time are exact. The control establishes that this assertion is not a general
+test of trajectory convergence; it does not establish that the actual field or
+trajectory meets the original acceptance contract. The original test remains
+unchanged and failing on the prepared field.
+
 ## Evaluation cost
 
 Device: Intel Core i9-14900, Windows 10.0.26100, headless Chromium 153.0.8010.12.
