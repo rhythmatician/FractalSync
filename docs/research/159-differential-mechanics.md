@@ -1,10 +1,12 @@
-# Field Hessians, the compact connection, and continuous work-energy
+# Field differentials, normalized Map remainders, and continuous work-energy
 
 This note records the checked differential extension of #157/#159. It uses the
 existing positive local-ruler metric and inverse rather than creating a second
 metric definition. The source modules are
 [`RulerDifferential.lean`](../../formal/FractalSync/RulerDifferential.lean) and
-[`ContinuousMechanics.lean`](../../formal/FractalSync/ContinuousMechanics.lean).
+[`ContinuousMechanics.lean`](../../formal/FractalSync/ContinuousMechanics.lean),
+with the normalized Map extension in
+[`NormalizedMapDifferential.lean`](../../formal/FractalSync/NormalizedMapDifferential.lean).
 
 The Hessian results differentiate actual Fréchet differentials. The mechanics
 results differentiate actual time traces and derive work-energy from the
@@ -261,17 +263,105 @@ The separate AC crossing-action result in
 [the #160 continuation](160-absolute-continuous-paths.md) bounds an integral
 of kinetic energy rather than the work in (13).
 
-## 5. Remaining Phase A work
+## 5. The normalized Map differential and quadratic residual
+
+Let D be a real-valued field on a real normed space. Hold the anchor c and
+physical window scale h fixed, with h nonzero, and write
+
+\[
+M_{D,c,h}(u)=\frac{D(c+hu)-D(c)}h.
+\]
+
+Where D is Fréchet differentiable at the queried point c+hu, Lean proves the
+actual window differential
+
+\[
+\boxed{d_uM_{D,c,h}(u)=dD(c+hu),\qquad
+d_uM_{D,c,h}(0)=dD(c).}
+\tag{15}
+\]
+
+The first identity requires differentiability at c+hu; the second requires
+it at c. The differential of the affine query contributes a factor h, which
+cancels the denominator. These are `hasFDerivAt_normalizedMap`,
+`hasFDerivAt_normalizedMap_zero`, and `fderiv_normalizedMap`. In particular,
+the last theorem identifies the actual `fderiv` fields, rather than a
+separately supplied gradient formula. The scale remains fixed in this
+derivative even when its chosen value is h=q rho(c). Differentiation with
+respect to the anchor c, or a varying ruler, is a different calculation.
+
+For the quadratic residual, put
+
+\[
+K_{c,h,u}=\{c+t(hu):0\le t\le1\},\qquad
+R_{D,c,h}(u)=M_{D,c,h}(u)-dD(c)[u].
+\]
+
+The checked Hessian-bound theorem assumes the following on this entire
+closed physical segment, including both endpoints:
+
+- D is Fréchet differentiable at each z in K.
+- The actual differential field `fderiv ℝ D` has Fréchet derivative H(z)
+  at each such z, as a map into the space of continuous linear functionals.
+- Its operator norm satisfies ||H(z)|| <= L, with L >= 0.
+
+Under those hypotheses,
+
+\[
+\boxed{|R_{D,c,h}(u)|\le\frac{L|h|}{2}\|u\|^2.}
+\tag{16}
+\]
+
+`normalizedMap_quadratic_remainder_of_hessian_bound` proves (16) for the
+actual normalized query. The operator norm is that of
+\(H(z)\in\mathcal L(E,\mathcal L(E,\mathbb R))\); the hypotheses concern ambient derivatives at
+the segment points. They are not merely differentiability of a restricted
+one-dimensional trace. No finite-dimensionality, inner product, global C2
+regularity, or ideal signed-distance assumption is needed.
+
+The proof first obtains an L-Lipschitz bound for the actual differential
+on K, using the convex mean-value theorem. The theorem
+`normalizedMap_quadratic_remainder_of_lipschitz_fderiv` also accepts that
+Lipschitz hypothesis directly, without a Hessian field. The more general
+`field_quadratic_remainder` and `normalizedMap_quadratic_remainder` need
+only the anchored variation bound
+
+\[
+\|dD(c+t hu)-dD(c)\|\le L\|t hu\|\quad(0\le t\le1).
+\]
+
+A mean-value comparison with a quadratic scalar function checks the factor
+1/2. For the physical convention h=q rho(c)>0, (16) becomes
+|R(u)| <= L q rho(c) ||u||^2 / 2. The constant L may be specific to this
+segment; a uniform statement over a whole window requires the same bound
+on every queried segment.
+
+There is also a weaker, nonsmooth value contract:
+`normalizedMap_value_bound_on_segment` proves |M(u)| <= L0 ||u|| when D is
+L0-Lipschitz only on K. Taking L0=1 recovers the ideal-field value bound
+without a global Lipschitz hypothesis. This value theorem requires no
+derivative. Normalization remains defined at a cut locus, but neither
+(15) nor (16) applies there without its stated differentiability hypotheses.
+
+The companion [normalized-field note](162-normalized-distance-fields.md)
+records the chart identities and provider-error boundaries alongside these
+new differential contracts.
+
+## 6. Remaining Phase A work
 
 This increment supplies the full ruler/scale Hessians, scale-origin and
 summit identities, local connection identification, and continuous work-energy
-contracts. The normalized Map differential and quadratic remainder bounds,
-the full catalog of explicit potential/force formulas including the outer
-wall, and additional specific control contracts remain separate obligations.
+contracts. The normalized Map differential and its segment Hessian-bound
+quadratic remainder are now checked as well. The full catalog of explicit
+potential/force formulas including the outer wall, and additional specific
+control contracts remain separate obligations.
 
 The local hypotheses do not certify a numerical GeometryProvider's sampled
 derivatives. Rust remains the runtime authority; these exact-real proofs do
 not establish floating-point implementation correspondence, numerical
 stability, solution existence, or global smoothness of a regularized signed
-distance field. No runtime or training contract changes follow from this
-development-time extension.
+distance field. In particular, an arbitrary sampled gradient or Hessian is
+not identified with `fderiv` by these statements, and no error certificate is
+derived for that approximation. The combined recomputed-ruler provider-error
+bound in the #162 note remains a conventional proof. No runtime or training
+contract changes follow from this development-time extension.

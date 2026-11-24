@@ -15,11 +15,12 @@ contract, primary experiment, reward, or first-training prerequisites.
 | Issue | Conventional proof note | Main progress | Practical consequence |
 | --- | --- | --- | --- |
 | #157/#159 | [Metric foundations](157-scale-metric.md) | Checked rank-one positive metric, two-sided inverse, arbitrary-dimensional determinant, conditional anisotropy, plane rotations, and exact impulse-energy bound | One shared metric supports the downstream proofs. Exact algebra does not certify floating-point thresholds or provider derivatives. |
-| #159 | [Differential mechanics](159-differential-mechanics.md) | Actual field Hessians and scale identities; local compact connection with Koszul uniqueness; continuous work-energy, signed work integral and dissipation | The local geometric coefficients now connect to actual calculus. Smoothness and the equation of motion remain explicit hypotheses. |
-| #160 | [Distance geometry](160-distance-geometry.md), [checked radial profile](160-radial-profile.md), [AC paths and exact infimum](160-absolute-continuous-paths.md) | Unrestricted AC calibration and integrability; attained Shore-distance path minimum in both orientations; sharp Lipschitz constant; duration and kinetic-action bounds | The exact nearest-Shore result now includes the actual path infimum. General pairwise metric properties and the full componentwise limit remain conventional. |
+| #159 | [Differential mechanics](159-differential-mechanics.md) | Actual field Hessians and scale identities; local compact connection with Koszul uniqueness; continuous work-energy and dissipation; normalized Map differential and quadratic residual | The local geometric coefficients now connect to actual calculus. Smoothness, derivative bounds, and the equation of motion remain explicit hypotheses. |
+| #160 | [Distance geometry](160-distance-geometry.md), [checked radial profile](160-radial-profile.md), [AC paths and exact infimum](160-absolute-continuous-paths.md) | Unrestricted AC calibration and integrability; attained Shore-distance path minimum in both orientations; sharp Lipschitz constant; duration and kinetic-action bounds | The exact nearest-Shore result includes the actual path infimum. Its all-minimizer classification remains conventional. |
+| #160 | [Pairwise metric and zero-floor limit](160-pairwise-metric-limit.md) | Actual AC path metric, reversal/concatenation, topology, properness and completeness; every fixed-pair zero-floor branch; quantitative same-component comparison | Different components and distinct Shore endpoints separate to infinite distance; same-component distances converge to the actual zero-floor infimum. General minimizing-curve existence still needs the metric-length bridge. |
 | #160 | [Flat and curved Shore](160-flat-shore.md) | Checked scalar curvature calculations, strict excursion-span monotonicity and unique radius; conventional full planar cut locus from prior art, threshold shortcut asymptotics, and a local curved-Shore cubic-root branch | The induced graph has positive curvature at smooth Shore points. The flat shortcut threshold is pi epsilon; curved-Shore response near it is singular. |
 | #161 | [Sensitivity preconditioning](161-sensitivity-preconditioning.md) | Arbitrary localized-template geometry; derivative-error transfer; unequal-exponent and regularization obstructions | Measure both normalized singular values. A scalar distance multiplier cannot cure divergent directional anisotropy; small image residual is not a derivative certificate. |
-| #162 | [Normalized distance fields](162-normalized-distance-fields.md) | Exact recenter/rescale identity; correlated provider-and-ruler error budget; Lipschitz sample envelopes; topology and blow-up counterexamples | Overlapping Map views have exact algebraic consistency laws. Finite sample accuracy does not certify connectivity. |
+| #162 | [Normalized distance fields](162-normalized-distance-fields.md) | Checked recenter/rescale identity, local differential and quadratic remainder; conventional correlated provider-and-ruler error budget, sample envelopes, topology and blow-up counterexamples | Overlapping Map views have exact consistency laws and local linearization bounds under actual derivative hypotheses. Finite sample accuracy does not certify connectivity. |
 | #163 | [Covariant phase statistics](163-covariant-phase-harmonics.md) | Common-reference equivalence; holonomy/PSD obstruction; unknown-epoch pooling range; perturbation bounds | Use actual-trajectory transport. Avoid duplicate covariant ablations and unsupported squared-coherence or cross-epoch interpretations. |
 
 Each note states assumptions and gives conventional proofs. The
@@ -50,21 +51,25 @@ claimed by the current proof files.
 
 ## Relationship to the existing Lean issues
 
-The pinned package under `formal/` now contains 291 explicit theorem/lemma
-declarations: 252 in seventeen result modules and 39 in eight analysis-support
-modules. The latter include the attributed upstream AC FTC backport needed by
-the unchanged Lean 4.24.0/Mathlib environment. Its transitive audit permits only the
-standard classical Lean/Mathlib axioms. Lean 4, Lake, cached Mathlib and a pinned
-optional LSP/MCP server were exercised locally; the reproducible setup and
-precise tool boundary are in [formal/README.md](../../formal/README.md).
+The pinned package under `formal/` now contains 400 explicit theorem/lemma
+declarations: 357 in twenty-seven result modules and 43 in nine analysis-support
+modules. The latter include the attributed upstream AC FTC backport and four
+new project AC composition/gluing proofs. Lean 4.24.0, Lake and the pinned
+Mathlib cache were restored in the current environment. The complete build
+passed with 2,593 jobs and the audit passed for 741 declarations, allowing only
+`propext`, `Classical.choice` and `Quot.sound`. The optional LSP/MCP result
+belongs to an earlier verification run and was not rerun here. The
+[formal inventory](../../formal/README.md) and
+[verification record](verification.md) give the reproducible setup and exact
+trust boundary.
 
 The metric and continuous kinetic results substantially advance #157. Its
 remaining client-specific persistent authoring setup is not silently marked
 complete. For #159, the full ruler/scale Hessians, summit/reference-origin
 identities, compact local connection, continuous work-energy and impulse
-contracts are checked. The normalized Map differential/remainder, full
-potential-force catalog and remaining specific control contracts still need
-their own Phase A follow-up.
+contracts are checked, as are the normalized Map differential and segment
+Hessian-bound quadratic remainder. The full potential-force catalog and
+remaining specific control contracts still need their own Phase A follow-up.
 Aeneas/Charon (#158) is independent of this work.
 
 Keep one proof package when those issues proceed. Extend its definitions and

@@ -2,8 +2,9 @@
 
 This continuation closes the absolutely continuous calibration and
 Shore-distance path-infimum gaps in #160. The primary results in Sections 1--5
-are checked in Lean. Section 7 gives an additional conventional classification
-of all minimizing paths and labels its different proof status explicitly.
+and the pairwise continuation in Section 8 are checked in Lean. Section 7
+gives an additional conventional classification of all nearest-Shore minimizing
+paths and labels its different proof status explicitly.
 
 The source modules are
 [`AbsolutelyContinuousPaths.lean`](../../formal/FractalSync/AbsolutelyContinuousPaths.lean),
@@ -13,6 +14,9 @@ The duration/action corollaries are in
 [`CrossingAction.lean`](../../formal/FractalSync/CrossingAction.lean).
 They extend the existing definitions and the actual interval-integral radial
 profile. They do not replace the path problem with a stipulated formula.
+The new pairwise construction and complete fixed-pair zero-floor limit are
+documented in the [pairwise metric continuation](160-pairwise-metric-limit.md),
+with its source modules linked in Section 8 below.
 
 ## 1. The curve class and length functional
 
@@ -160,7 +164,8 @@ The opposite orientation is checked independently. `pointToShorePathLengths`
 uses gamma(0)=x and gamma(1) in S; a reversed nearest segment attains the same
 minimum. `pointToShorePathLengths_sInf_eq_intrinsicShoreDistance` equates the
 two infima. This does not rely on assuming symmetry of a general pairwise
-metric that has not yet been formally constructed.
+metric. That symmetry is now proved separately for the actual pairwise
+construction described in Section 8.
 
 The same module proves that the infimum is zero exactly when x belongs to S.
 For every fixed x outside S it also proves
@@ -171,8 +176,9 @@ For every fixed x outside S it also proves
 \tag{10}
 \]
 
-Equation (10) is now a theorem about a path infimum. It is not the complete
-componentwise limit of distances between two arbitrary off-Shore points.
+Equation (10) is a theorem about the Shore-path infimum. The complete pointwise
+limit of distances between arbitrary endpoint pairs requires the additional
+pairwise construction and component arguments in Section 8.
 
 ## 4. The optimal global Lipschitz constant for F
 
@@ -297,13 +303,140 @@ This says nothing comparable about minimizing paths between two general
 points; the flat-Shore shortcut and cut-locus phenomena concern that different
 problem.
 
-## 8. Remaining formal boundary
+## 8. Checked pairwise metric and complete pointwise zero-floor limit
 
-The general pairwise intrinsic metric, its triangle inequality, equivalence
-with the path-length metric, properness, global minimizing curves between
-arbitrary endpoints, and the complete componentwise zero-floor limit still
-need their own formal construction. Their conventional arguments remain in
-the [distance-geometry note](160-distance-geometry.md).
+For arbitrary x,y in E, define the actual pairwise infimum
+
+\[
+D_{\epsilon,a}(x,y)=\inf\{L_{\epsilon,a}(\gamma):
+\gamma\in AC([0,1],E),\ \gamma(0)=x,\ \gamma(1)=y\}.
+\]
+
+`pairwisePathLengths` and `intrinsicDistance` in
+[`PairwiseDistance.lean`](../../formal/FractalSync/PairwiseDistance.lean)
+use the same actual length integral as Sections 1--3. Affine segments make
+the admissible class nonempty, and length nonnegativity supplies a lower
+bound before any use of real `sInf`.
+
+[`PathOperations.lean`](../../formal/FractalSync/PathOperations.lean) proves
+that reversal preserves AC and actual length, and that concatenation
+preserves AC and adds the actual lengths. The concatenation proof permits a
+corner at its joining time. Its AC infrastructure is in
+[`Analysis/ACComposition.lean`](../../formal/FractalSync/Analysis/ACComposition.lean).
+These facts prove symmetry and the triangle inequality of D in
+[`IntrinsicMetric.lean`](../../formal/FractalSync/IntrinsicMetric.lean).
+No minimizing path is assumed when proving the triangle inequality; paths
+arbitrarily close to their infima suffice.
+
+The checked comparison is
+
+\[
+\log\!\left(1+\frac{\|x-y\|}{\rho_\epsilon(x)}\right)
+\le D_{\epsilon,a}(x,y)
+\le\frac{\sqrt{1+a^2}}{\epsilon}\|x-y\|.
+\tag{12}
+\]
+
+The lower bound comes from actual AC logarithmic-displacement calculus in
+[`DisplacementBounds.lean`](../../formal/FractalSync/DisplacementBounds.lean).
+It separates distinct endpoints, completing the explicit `intrinsicMetricSpace`
+construction. The bounds also identify the intrinsic topology with the
+original normed-space topology. A closed intrinsic ball of radius R about x
+lies inside the ordinary closed ball of radius
+`rho_epsilon(x)(exp(R)-1)` and is ordinary closed. Finite dimension gives
+compactness. [`IntrinsicTopology.lean`](../../formal/FractalSync/IntrinsicTopology.lean)
+checks the topology identification, `ProperSpace` for the actual intrinsic
+metric, and `CompleteSpace` for its own uniform structure. Equality of
+topologies does not identify the uniform structures at infinity.
+
+For endpoints in one component of E minus S, define
+
+\[
+D_{0,a}(x,y)=\inf\{L_{0,a}(\gamma):
+\gamma\in AC([0,1],E),\ \gamma(0)=x,\ \gamma(1)=y,
+\ \gamma([0,1])\cap S=\varnothing\},
+\]
+
+where
+
+\[
+L_{0,a}(\gamma)=\int_0^1
+\frac{\sqrt{\|\gamma'\|^2+a^2((d\circ\gamma)')^2}}{d\circ\gamma}\,dt.
+\]
+
+The formal `zeroFloorDistance` is a real `sInf` over this exact avoiding
+path class. [`ACComponentPaths.lean`](../../formal/FractalSync/ACComponentPaths.lean)
+proves that actual membership in the same connected component of the open
+complement supplies an AC path avoiding S. Compactness of the path image
+then gives positive clearance, from which
+[`ZeroFloorLimit.lean`](../../formal/FractalSync/ZeroFloorLimit.lean) derives
+integrability of the actual zero-floor density. No extra integrability or
+reference-path assumption remains in the same-component limit theorem.
+This real infimum is used on nonempty classes; it is not an extended value
+for empty cross-component path classes.
+
+For each fixed x,y, the checked conclusions as epsilon decreases to zero are:
+
+| Endpoint case | Limit |
+| --- | --- |
+| x=y, including x in S | D_epsilon,a(x,x)=0 for every positive epsilon |
+| x,y outside S in one complementary component | D_epsilon,a(x,y) increases to the finite D_0,a(x,y) |
+| x,y outside S in different complementary components | D_epsilon,a(x,y) tends to positive infinity |
+| x differs from y and either endpoint lies in S | D_epsilon,a(x,y) tends to positive infinity |
+
+For different components, a continuous connecting path must hit S.
+[`ComponentCrossing.lean`](../../formal/FractalSync/ComponentCrossing.lean)
+proves this topological bridge. Equation (8) consequently bounds every
+admissible length, and hence its infimum:
+
+\[
+F_{\epsilon,a}(d(x))+F_{\epsilon,a}(d(y))
+\le D_{\epsilon,a}(x,y).
+\tag{13}
+\]
+
+`PairwiseDistance.lean` proves (13) and the resulting divergence without
+assuming a minimizing curve. If an endpoint lies on S, the logarithmic
+bound (12), together with symmetry, proves divergence for every distinct
+other endpoint. This includes two distinct points on S, for which the
+radial bound alone is zero.
+
+For the same-component limit, choose any actual off-Shore reference path
+with `L_0<=B`. For `0<epsilon<d(x)exp(-B)`, Lean proves
+
+\[
+\left(1-\frac{\epsilon^2}{[d(x)e^{-B}]^2}\right)D_{0,a}(x,y)
+\le D_{\epsilon,a}(x,y)\le D_{0,a}(x,y).
+\tag{14}
+\]
+
+The proof treats every regularized candidate path. If its length is at most
+B, the actual AC log-ruler calibration gives `rho_epsilon>=d(x)exp(-B)`
+along the entire path. The floor condition forces the path to avoid S,
+and a pointwise density comparison integrates to the lower bound in (14).
+If its length exceeds B, the same lower bound follows from `D_0<=B` and
+the factor in parentheses lying between zero and one. Thus the lower bound
+passes through the infimum with the exact B. No minimizing curve or
+approximate-minimizer choice is required in this argument. Comparing
+regularized and zero-floor lengths on every avoiding path gives the upper
+bound, and squeezing proves convergence.
+
+The quantitative estimate applies to fixed endpoints with a specified
+reference-path bound. It does not give a uniform rate over arbitrary
+endpoint pairs. The final same-component theorem is
+`intrinsicDistance_tendsto_zero_floor_of_mem_connectedComponentIn`; it uses
+the actual connected-component hypothesis to obtain its reference path.
+The detailed proof and declaration mapping are in the
+[pairwise metric continuation](160-pairwise-metric-limit.md).
+
+## 9. Remaining formal boundary
+
+The remaining pairwise geometric work is the identification of metric curve
+length with the graph-length integral, the resulting length-space property,
+and minimizing-curve existence between arbitrary endpoints. Formal properness
+and completeness do not by themselves establish those statements. The
+conventional continuation is retained in the
+[distance-geometry note](160-distance-geometry.md).
 
 The minimizer classification in Section 7, the smooth curvature interpretation,
 the flat cut locus, and the curved-Shore bifurcation remain conventional.

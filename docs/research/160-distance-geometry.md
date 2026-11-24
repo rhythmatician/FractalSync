@@ -6,11 +6,15 @@ The accompanying Lean package now checks the scalar integral calculus, closed
 primitive, sharp additive constant, optimal Lipschitz constant, scalar
 asymptotics, unrestricted absolutely continuous calibration, and the exact
 attained Shore-distance path infimum in both orientations. Crossing-duration
-and kinetic-action bounds are also checked. The general pairwise metric,
-properness and full componentwise metric-limit arguments remain conventional.
+and kinetic-action bounds are also checked. The package now constructs the
+actual pairwise AC path infimum as a metric, identifies its topology, proves
+properness and completeness, and checks every branch of its pointwise zero-floor
+limit. Identifying metric curve length with the graph integral and proving
+minimizing-curve existence between arbitrary endpoints remain conventional.
 No novelty claim is made. See the
 [radial formalization](160-radial-profile.md),
 [AC path and infimum formalization](160-absolute-continuous-paths.md),
+[pairwise metric and limit formalization](160-pairwise-metric-limit.md),
 [flat-Shore geometry](160-flat-shore.md), and
 [exact theorem inventory](../../formal/README.md).
 
@@ -34,8 +38,8 @@ d_{\epsilon,a}(x,y)=\inf_{\gamma:x\to y}L_{\epsilon,a}(\gamma).
 \tag{1}
 $$
 
-All curves in R^n are admissible here. A runtime validity domain is an additional
-restriction and can change the distance. No differentiable boundary, unique
+All absolutely continuous curves in R^n are admissible here. A runtime validity
+domain is an additional restriction and can change the distance. No differentiable boundary, unique
 nearest point, or globally smooth distance field is assumed. The scalar
 composition d(gamma) is absolutely continuous and satisfies
 `|d'| <= |gamma'|` almost everywhere. Also
@@ -186,7 +190,7 @@ cancellation for extreme parameters; it is not supplied as a production numerica
 algorithm. The log-coordinate quadrature (7) is an independent check, not a
 replacement Rust authority.
 
-## 4. Properness and minimizing paths do not require a smooth Shore
+## 4. Checked metric, topology, and properness
 
 Let k_epsilon be the length metric with density `|gamma'|/rho_epsilon`.
 Since rho_epsilon is 1-Lipschitz,
@@ -206,27 +210,53 @@ $$
 \tag{12}
 $$
 
-**Proof.** For a path of Euclidean arclength ell beginning at x,
-`rho(gamma(s)) <= rho(x)+s`. Its weighted length is therefore at least
-`log(1+ell/rho(x))`, which gives the lower bound. The straight segment and
-`rho>=epsilon` give the upper bound. Inequality (11) follows pointwise from
-`|rho'|<=|gamma'|`.
+**Checked proof.** The anchored scalar trace
+`log(rho(x)+|gamma(t)-x|)` is absolutely continuous. The one-Lipschitz ruler
+satisfies `rho(gamma(t)) <= rho(x)+|gamma(t)-x|`, and the actual a.e. derivative
+of this logarithmic trace is bounded above by the graph speed.
+The AC fundamental theorem of calculus gives the lower bound in (12) for
+every path, hence for its infimum. The straight segment and `rho>=epsilon`
+give the upper bound. Inequality (11) follows from the actual a.e. comparison
+`|rho'|<=|gamma'|`, integration, and the common path class. These results are in
+[`DisplacementBounds.lean`](../../formal/FractalSync/DisplacementBounds.lean),
+[`PairwiseDistance.lean`](../../formal/FractalSync/PairwiseDistance.lean), and
+[`MetricComparison.lean`](../../formal/FractalSync/MetricComparison.lean).
 
-Equation (12) shows that d_epsilon,a is a genuine finite metric and induces the
-Euclidean topology. A closed metric ball of radius R about x lies inside the
-Euclidean ball of radius `rho(x)(exp(R)-1)`. It is Euclidean closed, hence compact.
-Thus the space is proper and complete. It is a length space by construction;
-the length-space Hopf--Rinow theorem gives a minimizing curve between any two
-points [2, Theorem 2.5.23]. Local equivalence with Euclidean length makes such a
-curve Euclidean absolutely continuous after arclength parameterization. Its
-metric length equals the functional (1): for a>0 embed the graph by
-`x -> (x,a rho(x))` in scaled hyperbolic upper half-space. The ambient distance
-is bounded above by d_epsilon,a, whereas each d_epsilon,a increment is bounded
-above by the corresponding subpath's ambient length. Taking partition suprema
-gives equality of the two curve lengths. For a=0 the same equality is the
-standard continuous positive weighted-length construction. Thus the minimizing
-curve is admissible for (1). Neither uniqueness nor a classical geodesic ODE
-at a cut locus follows.
+Reversal preserves actual AC graph length, and concatenation adds the two
+actual lengths. Together with the nonempty, lower-bounded admissible length
+classes, these facts prove symmetry and the triangle inequality of the
+infimum. Equation (12) gives strict positivity for distinct endpoints.
+[`PathOperations.lean`](../../formal/FractalSync/PathOperations.lean) and
+[`IntrinsicMetric.lean`](../../formal/FractalSync/IntrinsicMetric.lean) construct
+an explicit `MetricSpace` whose distance is this infimum.
+
+The same bounds identify its topology with the Euclidean topology. A closed
+intrinsic ball of radius R about x lies inside the Euclidean ball of radius
+`rho(x)(exp(R)-1)`. The distance-to-x function is Euclidean continuous, so the
+intrinsic ball is Euclidean closed and compact. The topology identification
+then proves properness of the actual intrinsic metric, and properness supplies
+completeness for its own uniform structure. All these steps are checked in
+[`IntrinsicTopology.lean`](../../formal/FractalSync/IntrinsicTopology.lean).
+Equality of the two topologies does not assert equality of their uniformities
+at infinity. These positive-floor results also hold in finite-dimensional real
+normed spaces and for every real a.
+
+**Conventional continuation: minimizing curves.** Applying the length-space
+Hopf--Rinow theorem still requires identifying metric curve length with the
+functional (1) and establishing the length-space property. Those steps have
+not been formalized. The conventional Euclidean argument embeds the graph,
+for a>0, by `x -> (x,a rho(x))` in scaled hyperbolic upper half-space. Ambient
+distance is bounded above by d_epsilon,a, whereas each d_epsilon,a increment
+is bounded above by the corresponding subpath's ambient length. Taking
+partition suprema identifies the two curve lengths. For a=0 this is the
+standard continuous positive weighted-length construction. The resulting
+proper length space has a minimizing curve between any two points
+[2, Theorem 2.5.23]. Local equivalence with Euclidean length makes the curve
+Euclidean absolutely continuous after arclength parameterization, and the
+length identification makes it admissible for (1). This minimizing-curve
+existence argument remains conventional despite the now-formal properness
+and completeness. Neither uniqueness nor a classical geodesic ODE at a cut
+locus follows.
 
 Simultaneously scaling S, x, y, and epsilon by any beta>0 preserves every
 length in (1). Hence
@@ -237,6 +267,9 @@ d^{\beta S}_{\beta\epsilon,a}(\beta x,\beta y)
 \tag{13}
 $$
 
+This pairwise dilation statement remains conventional; the scalar radial
+dilation law is checked separately.
+
 ## 5. The zero-floor limit splits the space
 
 For a curve staying off S define the unregularized length
@@ -246,11 +279,23 @@ L_{0,a}(\gamma)=\int
 \frac{\sqrt{|\gamma'|^2+a^2|(d\circ\gamma)'|^2}}{d(\gamma)}dt.
 $$
 
-Let d_0,a be its intrinsic metric within each connected component of R^n minus S.
-Such a component is open and polygonally connected, so the distance between
-any two of its points is finite. For a=0 this is the usual quasihyperbolic
-metric of the component; the component boundary has the same distance function
-there. At a>0 it includes the graph correction.
+For x,y in one connected component of R^n minus S, define d_0,a as the
+infimum of these actual integrals over all AC unit-interval paths from x to y
+that avoid S at every time. The Lean definition is `zeroFloorDistance`, a real
+`sInf` of `zeroFloorPathLengths`. The existence of such a path follows from
+connectedness of the open component: AC reachability is relatively clopen
+because small balls admit affine segments and AC paths concatenate. This is
+checked in [`ACComponentPaths.lean`](../../formal/FractalSync/ACComponentPaths.lean).
+Compactness of an off-Shore AC path supplies positive clearance from S, and
+that clearance supplies integrability of its actual zero-floor density.
+Thus the admissible class is nonempty and d_0,a is finite in this case.
+
+The definition is used here only for nonempty admissible classes. A real
+`sInf` on an empty class does not represent positive infinity; cross-component
+divergence is stated separately as an `atTop` limit. Conventionally, for a=0
+the componentwise metric is the usual quasihyperbolic metric, since the
+component boundary has the same distance function there. At a>0 it includes
+the graph correction.
 
 **Theorem 3.** As epsilon decreases to zero:
 
@@ -260,6 +305,10 @@ there. At a>0 it includes the graph correction.
    `d_epsilon,a(x,y)` tends to infinity.
 3. If x and y are distinct and at least one lies in S,
    `d_epsilon,a(x,y)` tends to infinity.
+4. For x=y, including points of S, `d_epsilon,a(x,x)=0` for every epsilon>0.
+
+These four cases give the complete classification for every fixed endpoint
+pair. Their stated branches are checked in Lean.
 
 **Proof of monotonicity.** The square of the density is
 
@@ -289,24 +338,41 @@ $$
 \tag{15}
 $$
 
-Indeed choose an epsilon-minimizing curve, whose length is at most B by the
-previous upper bound. Along it, `|(log rho)'|<=ell_epsilon`, so
-`rho>=rho(x)exp(-B)>=d(x)exp(-B)>epsilon`. The curve avoids S and remains in
-the original component. Put `t=d^2/rho^2`. Then `t>=1-q_epsilon^2`. Comparing
-(14) with its epsilon=0 version gives
+To prove the lower bound, consider every admissible regularized candidate
+gamma and split at the exact reference bound B. If `L_epsilon(gamma)<=B`,
+the checked AC logarithmic-ruler calibration gives
+`rho>=rho(x)exp(-B)>=d(x)exp(-B)>epsilon` at every time. Therefore gamma avoids
+S. Put `t=d^2/rho^2`; then `t>=1-q_epsilon^2`. Comparing (14) with its
+epsilon=0 version gives
 
 $$
 \ell_\epsilon^2=t A+t^2 C\ge t^2(A+C)=t^2\ell_0^2,
 $$
 
 where `A=|gamma'|^2/d^2` and `C=a^2(d')^2/d^2` are nonnegative.
-Integrate to obtain (15). This proves convergence and an explicit relative
-O(epsilon^2) bound for fixed endpoints with a known off-S path-length bound.
-The factor exp(2B) makes this a conservative bound for long routes; it is not
-a general efficient distance approximation algorithm.
+Integrating gives `L_epsilon(gamma)>=(1-q_epsilon^2)L_0(gamma)` and hence
+`L_epsilon(gamma)>=(1-q_epsilon^2)d_0,a(x,y)`. If instead
+`L_epsilon(gamma)>B`, the same lower bound follows from `d_0,a(x,y)<=B`
+and `0<=1-q_epsilon^2<=1`. The bound therefore holds for every candidate
+and passes through its infimum. The upper bound follows by comparing
+`L_epsilon<=L_0` on every off-Shore path. No minimizing curve or
+approximate-minimizer choice is required.
 
-For different components every connecting curve hits S, and (3)--(4) on the
-two portions give
+The actual density comparisons, logarithmic confinement, integrability,
+infimum sandwich, and resulting limit are checked in
+[`ZeroFloorLimit.lean`](../../formal/FractalSync/ZeroFloorLimit.lean).
+This proves convergence and an explicit relative O(epsilon^2) bound for fixed
+endpoints with a known off-Shore path-length bound.
+The factor exp(2B) makes this a conservative bound for long routes; it is not
+a uniform rate over arbitrary endpoint pairs or a general efficient distance
+approximation algorithm.
+
+For different components every continuous connecting curve hits S: otherwise
+its connected image in the complement would place both endpoints in the same
+component. This topological bridge is checked in
+[`ComponentCrossing.lean`](../../formal/FractalSync/ComponentCrossing.lean).
+The unrestricted AC crossing bound applies to every candidate and passes
+through the infimum, giving
 
 $$
 d_{\epsilon,a}(x,y)\ge
@@ -314,9 +380,14 @@ F_{\epsilon,a}(d(x))+F_{\epsilon,a}(d(y))\longrightarrow\infty.
 \tag{16}
 $$
 
-If x lies in S, the lower bound in (12) is
-`log(1+|x-y|/epsilon)`, proving the third claim. This is convergence of pointwise
-distances to an extended metric, not a claimed Gromov--Hausdorff theorem.
+The inequality and divergence in (16) are checked in `PairwiseDistance.lean`.
+If x lies in S and x differs from y, the lower bound in (12) becomes
+`log(1+|x-y|/epsilon)` and diverges. `DisplacementBounds.lean` checks this
+argument; symmetry gives the other endpoint orientation in
+`IntrinsicMetric.lean`, including the case of two distinct Shore points.
+The constant path proves the diagonal case. These are pointwise finite-limit
+and divergence statements. No uniform limit over arbitrary x,y or
+Gromov--Hausdorff convergence is claimed.
 
 ## 6. Consequences for FractalSync and remaining obligations
 
@@ -325,8 +396,10 @@ numerical denominator guard. Setting it to zero makes crossings between
 complementary components infinitely long. This statement does not prescribe
 a new epsilon value or modify the adopted metric.
 
-For any path that hits the Shore, (16) is a length lower bound even when its
-endpoints are in the same component. If intrinsic speed is bounded by U>0,
+Every Shore-crossing path gamma satisfies
+`L_epsilon,a(gamma) >= F_epsilon,a(d(x))+F_epsilon,a(d(y))`, including when its
+endpoints lie in the same component. This bounds that path's length, not the
+unrestricted same-component pairwise infimum. If intrinsic speed is bounded by U>0,
 then its duration is at least `[F(d(x))+F(d(y))]/U`. More generally, for a
 duration T>0 and `K=|gamma'|_G^2/2`, Cauchy--Schwarz gives
 
@@ -354,13 +427,21 @@ orientation. Its zero-floor divergence off S is checked. The duration bound
 and kinetic-action consequence (17) are checked as well, with the explicit
 finite-action hypothesis for (17).
 
-The remaining formal gap is the general pairwise intrinsic metric and its
-properties: properness, minimizing curves between arbitrary endpoints, and
-the full componentwise limit. The now-checked Shore-path infimum does not
-itself settle that pairwise metric limit. A conventional classification of
-all nearest-Shore minimizers in Euclidean space is given separately in
-the [AC continuation](160-absolute-continuous-paths.md). The exact formal boundary is maintained in
-[formal/README.md](../../formal/README.md).
+The pairwise AC path infimum, reversal and concatenation, metric axioms,
+quantitative comparisons, topology identification, properness, completeness,
+and complete fixed-pair zero-floor classification are now checked. The
+[pairwise continuation](160-pairwise-metric-limit.md) records the precise
+statements and proof dependencies.
+
+The remaining formal work includes identifying metric curve length with the
+graph integral, establishing the length-space property, and proving
+minimizing-curve existence between arbitrary endpoints. Properness and
+completeness alone do not discharge those obligations. The conventional
+classification of all nearest-Shore minimizers remains in the
+[AC continuation](160-absolute-continuous-paths.md); curvature identification,
+cut-locus results, and curved-Shore bifurcation remain conventional as labeled
+in the [flat-Shore note](160-flat-shore.md). The exact formal boundary is
+maintained in [formal/README.md](../../formal/README.md).
 
 ## 7. Prior art and originality assessment
 

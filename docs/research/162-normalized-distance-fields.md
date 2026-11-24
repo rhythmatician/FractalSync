@@ -2,7 +2,7 @@
 
 Research progress for [FractalSync #162](https://github.com/rhythmatician/FractalSync/issues/162), 2026-11-24.
 
-This note derives mathematical contracts; it does not change `PlayerObservation`, the GeometryProvider, runtime authority, or the training schedule. Its analytic proofs are distinct from the smaller Lean-checked theorem subset listed in Section 8. None of the results below is claimed to be novel. The main useful contribution at this stage is an explicit error budget for the actual normalized query, together with limitations that rule out overly strong interpretation of a finite Map tensor.
+This note derives mathematical contracts; it does not change `PlayerObservation`, the GeometryProvider, runtime authority, or the training schedule. Section 8 distinguishes the Lean-checked algebra, local differential, and quadratic remainder results from the conventional proofs in this note. None of the results below is claimed to be novel. The main useful contribution at this stage is an explicit error budget for the actual normalized query, together with limitations that rule out overly strong interpretation of a finite Map tensor.
 
 ## 1. Definitions and assumptions
 
@@ -35,6 +35,55 @@ $$
 $$
 
 The following arguments keep the general physical scale `h` visible before specializing.
+
+### Checked local differential and quadratic residual
+
+The new calculus statements in
+[`NormalizedMapDifferential.lean`](../../formal/FractalSync/NormalizedMapDifferential.lean)
+hold in any real normed space. They do not require `D` to be an ideal signed
+distance or globally 1-Lipschitz. With the anchor `x` and scale `h≠0` held
+fixed, differentiability of `D` at the queried point gives
+
+$$
+\boxed{d_uM_{D,x,h}(u)=dD(x+hu).}
+$$
+
+At `u=0` this is exactly `dD(x)`. The affine query's factor `h` cancels the
+normalizing denominator. This is a derivative in the window coordinate,
+including when the fixed scale was chosen as `h=qρ(x)`; it does not
+differentiate the anchor-dependent ruler. The theorem
+`fderiv_normalizedMap` identifies the actual Fréchet differential fields.
+
+Let `K=[x,x+hu]` be the closed physical query segment. Suppose `D` is
+Fréchet differentiable at every point of `K`, the actual differential field
+`fderiv ℝ D` is Fréchet differentiable there, and its derivative `H(z)` has
+operator norm at most `L≥0` throughout `K`, including both endpoints. Then
+the checked theorem `normalizedMap_quadratic_remainder_of_hessian_bound`
+gives
+
+$$
+\boxed{|M_{D,x,h}(u)-dD(x)[u]|
+\le\frac{L|h|}{2}\|u\|^2.}
+$$
+
+These are ambient Fréchet derivatives at the segment points. In Euclidean
+space, `dD(x)[u]=∇D(x)·u`, and for the physical convention `h=qρ(x)>0` the
+bound is `Lqρ(x)‖u‖²/2`. The Lipschitz-differential version accepts
+`LipschitzOnWith L (fderiv ℝ D) K` instead of a Hessian field; the anchored
+variation version needs only
+`‖dD(x+thu)-dD(x)‖≤L‖thu‖`, together with differentiability on the segment.
+No global `C²` hypothesis is imposed. A uniform residual bound over a window
+requires these hypotheses with a common `L` on all its physical query
+segments.
+
+Separately, `normalizedMap_value_bound_on_segment` proves
+`|M(u)|≤L0‖u‖` when `D` is only `L0`-Lipschitz on `K`, without any
+differentiability assumption. The distinction matters at a cut locus: a
+normalized value can remain well-defined and controlled while the
+differential or Hessian hypotheses fail. None of these results certifies a
+numerical provider's gradient or Hessian. The
+[differential mechanics note](159-differential-mechanics.md) records the
+proof structure and its correspondence to #159 Phase A.
 
 ## 2. Exact recentering and rescaling are one identity
 
@@ -115,6 +164,10 @@ $$
 $$
 
 Indeed `M_{D,x,h}(u)=∫_0^1∇D(x+thu)·u\,dt`, so differentiation in `h` gives an integral bounded by `L|u|²∫_0^1t\,dt`. The region and Hessian hypothesis must hold throughout the swept segments. Equation (6) cannot be used across a cut locus. Where both bounds apply, take their minimum.
+
+Equation (6) compares two physical scales and remains a conventional proof
+here. The checked quadratic residual in Section 1 compares a fixed-scale
+query with its anchor linearization; it does not by itself prove (6).
 
 On a patch where `∇D` is `L`-Lipschitz, the same integral representation also gives the sharper center bound
 
@@ -303,11 +356,26 @@ Moving the center toward the Shore does not itself produce `h→0`. Any applicat
 
 The current results justify an engineering theorem package. They do not yet justify a standalone originality claim. The immediate useful contracts are the chart transition (1), the computed-location error budget (7), and the distinction between function-value and topology guarantees. The bias cancellation and crest estimate are useful specializations of elementary inequalities, rather than evidence of a new field of theory.
 
-The initial Lean subset below covers chart-transition algebra, constant-offset invariance, exact anchored-error decomposition, fixed-scale provider bounds, and ideal-field window bounds. Full Arzelà–Ascoli/Attouch–Wets formalization and topological reconstruction are separate, larger projects; they should not block training or be implied by checking those elementary lemmas.
+The Lean subset below now covers chart-transition algebra, constant-offset
+invariance, exact anchored-error decomposition, fixed-scale provider bounds,
+ideal-field window bounds, the actual fixed-anchor window differential, and
+the quadratic residual under segment differential/Hessian bounds. The next
+provider-error formalization would combine the computed-location decomposition
+with a certified ruler perturbation and the required scale-change bound.
+It must also distinguish supplied numerical derivatives from the actual
+`fderiv` fields. Full Arzelà–Ascoli/Attouch–Wets formalization and topological
+reconstruction remain separate, larger projects; they should not block
+training or be implied by the existing checked statements.
 
 ## 8. Checked Lean subset
 
-`formal/FractalSync/NormalizedDistanceFields.lean` contains eight checked theorems in namespace `FractalSync.NormalizedDistanceFields`:
+The two modules below contain sixteen checked theorems in namespace
+`FractalSync.NormalizedDistanceFields`.
+
+### Algebra, fixed-scale errors, and ideal-field bounds
+
+[`NormalizedDistanceFields.lean`](../../formal/FractalSync/NormalizedDistanceFields.lean)
+contains the original eight checked theorems:
 
 | Theorem identifier | Exact scope |
 | --- | --- |
@@ -316,11 +384,40 @@ The initial Lean subset below covers chart-transition algebra, constant-offset i
 | `normalizedDifference_anchored_error_bound` | Error at most `η/h` given a certified anchored error increment and `h>0`. |
 | `normalizedDifference_endpoint_error_bound` | Error at most `(eu+e0)/h` given separate endpoint bounds and `h>0`. |
 | `normalizedMap_add_constant` | Constant field offsets cancel at fixed scale. |
-| `normalizedMap_lipschitz_bound` | `|M(u)-M(v)|≤‖u-v‖` for `LipschitzWith 1 D` on a real normed space and `h>0`. |
+| `normalizedMap_lipschitz_bound` | `abs(M(u)-M(v))≤‖u-v‖` for `LipschitzWith 1 D` on a real normed space and `h>0`. |
 | `normalizedMap_zero` | Exact anchor `M(0)=0`. |
-| `normalizedMap_value_bound` | `|M(u)|≤‖u‖` under the same ideal-field assumptions. |
+| `normalizedMap_value_bound` | `abs(M(u))≤‖u‖` under the same ideal-field assumptions. |
 
-Checked with Lean 4.24.0 and Mathlib commit `f897ebcf72cd16f89ab4577d0c826cd14afaafc7`. Per-theorem axiom inspection reported only `propext`, `Classical.choice`, and `Quot.sound`; there are no admitted proofs or custom axioms. The combined recomputed-ruler bound (7), smooth bounds, finite-data envelopes, topology obstruction, and blow-up arguments have conventional proofs in this note and are not yet Lean-verified. No theorem equates a real-valued ideal field with the actual floating-point GeometryProvider.
+### Actual differentials and segment quadratic remainders
+
+[`NormalizedMapDifferential.lean`](../../formal/FractalSync/NormalizedMapDifferential.lean)
+adds eight checked theorems. All hold for a real normed space; finite
+dimension and an inner product are unnecessary.
+
+| Theorem identifier | Exact scope |
+| --- | --- |
+| `hasFDerivAt_normalizedMap` | At fixed anchor and `h≠0`, differentiability of `D` at `x+hu` gives the window derivative `dD(x+hu)`. |
+| `hasFDerivAt_normalizedMap_zero` | At the window origin the differential is exactly `dD(x)`. |
+| `fderiv_normalizedMap` | Equality of the actual window and physical `fderiv` values at a differentiable query. |
+| `normalizedMap_value_bound_on_segment` | `abs(M(u))≤L0‖u‖` from an `L0`-Lipschitz bound on just `[x,x+hu]`, for `h≠0`. |
+| `field_quadratic_remainder` | `abs(D(x+v)-D(x)-dD(x)[v])≤(L/2)‖v‖²` under differentiability and anchored differential variation on `[x,x+v]`. |
+| `normalizedMap_quadratic_remainder` | The corresponding normalized residual is at most `(L abs(h)/2)‖u‖²`. |
+| `normalizedMap_quadratic_remainder_of_lipschitz_fderiv` | The residual bound from differentiability of `D` and an `L`-Lipschitz actual differential on `[x,x+hu]`. |
+| `normalizedMap_quadratic_remainder_of_hessian_bound` | The residual bound from differentiability of `D` and an actual derivative of `fderiv ℝ D` with operator norm at most `L` on the entire closed segment. |
+
+Both modules compile with Lean 4.24.0 and Mathlib commit
+`f897ebcf72cd16f89ab4577d0c826cd14afaafc7`, with warnings treated as errors.
+The original module's per-theorem axiom inspection reported only `propext`,
+`Classical.choice`, and `Quot.sound`; the package-wide verification record is
+maintained in [verification.md](verification.md). Neither module contains
+admitted proofs or custom axioms.
+
+The combined recomputed-ruler bound (7), smooth cross-scale bound (6), smooth
+center-stability bound, finite-data envelopes, topology obstruction, and
+blow-up arguments still have conventional proofs in this note and are not
+yet Lean-verified. The checked differential and quadratic residual do not
+remove those separate obligations. No theorem equates a real-valued ideal
+field or its actual derivatives with the floating-point GeometryProvider.
 
 ## References and provenance
 

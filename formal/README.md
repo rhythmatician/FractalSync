@@ -1,9 +1,9 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**291 explicit proved theorem/lemma declarations**: 252 in seventeen result
-modules supporting #157, #159, and research issues #160--#163, plus 39 in eight
-analysis-support modules, largely attributed upstream backports. Definitions
+**400 explicit proved theorem/lemma declarations**: 357 in twenty-seven result
+modules supporting #157, #159, and research issues #160--#163, plus 43 in nine
+analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
 execution, Python training, the browser, and Aeneas/Charon.
 
@@ -50,11 +50,12 @@ it is not a training preflight requirement.
 
 ### Optional agent authoring tools
 
-The pinned server was installed in a separate Python environment and tested
-through an actual MCP stdio session. It exposed 22 tools; diagnostics for
+An earlier verification run installed the pinned server in a separate Python
+environment and tested it through an actual MCP stdio session. It exposed 22 tools; diagnostics for
 `DistanceToSet.lean` were clean and `lean_verify` accepted
 `FractalSync.DistanceGraph.exists_nearest_segment` with standard axioms only.
-The optional smoke check is reproducible from the repository root:
+The current continuation reinstalled Lean in a fresh environment; the optional
+server was not reinstalled or retested. Its smoke check is reproducible from the repository root:
 
 ```sh
 python -m pip install -r formal/tools/requirements-mcp.txt
@@ -95,20 +96,32 @@ by the separate transitive audit.
 | `PathCalibration` | 8 | Integrated calibration and a split-at-Shore bound |
 | `AbsolutelyContinuousPaths` | 14 | Unrestricted AC traces, a.e. calculus, integrability and calibration |
 | `IntrinsicShoreDistance` | 18 | Actual AC path infima in both orientations, attained minimum and zero-floor divergence |
+| `ComponentCrossing` | 3 | Topological Shore crossing and unrestricted AC component calibration |
+| `PairwiseDistance` | 13 | Actual pairwise path infimum, component divergence and floor monotonicity |
+| `PathOperations` | 16 | Actual AC reversal and concatenation with exact length laws |
+| `DisplacementBounds` | 13 | Logarithmic displacement bound, positive definiteness and Shore-endpoint divergence |
+| `IntrinsicMetric` | 7 | Symmetry, triangle inequality, bundled metric and endpoint divergence wrappers |
+| `IntrinsicTopology` | 10 | Original topology, compact balls, properness and intrinsic completeness |
+| `MetricComparison` | 6 | Scale-only versus anisotropic lengths and actual path infima |
+| `ACComponentPaths` | 8 | AC reachability throughout each component of an open domain |
+| `ZeroFloorLimit` | 21 | Actual zero-floor integrability, quantitative infimum sandwich and same-component limit |
 | `CrossingAction` | 5 | Integral Cauchy--Schwarz, crossing duration and kinetic action |
 | `FlatShore` | 32 | Scalar warp derivatives, curvature expressions, excursion integral |
 | `SensitivityBounds` | 4 | Sensitivity transfer and scalar shear |
 | `NormalizedDistanceFields` | 8 | Normalized-field algebra and Lipschitz bounds |
+| `NormalizedMapDifferential` | 8 | Actual window differential and quadratic remainder from segment Hessian bounds |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **252** | Includes supporting lemmas, not just independent research results |
-| `Analysis/*` (eight modules) | 39 | Attributed AC FTC backport and compatibility/finite-dimensional support |
-| **Total** | **291** | 119 more source declarations than the prior 172-theorem increment |
+| **Result-module subtotal** | **357** | Includes supporting lemmas, not just independent research results |
+| `Analysis/*` (nine modules) | 43 | Attributed AC FTC backport and compatibility/finite-dimensional support |
+| **Total** | **400** | 109 more source declarations than the prior 291-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
 1 (`FiniteDimensionalAC`), 3 (`FinsetGaps`), 3 (`IntervalSlope`), and
-12 (`OrderFinsetGaps`). The [support provenance](FractalSync/Analysis/README.md)
-records the exact upstream snapshot and retained Apache 2.0 attribution.
+12 (`OrderFinsetGaps`), plus 4 in the new `ACComposition` module. The
+[support provenance](FractalSync/Analysis/README.md) records the exact upstream
+snapshot and retained Apache 2.0 attribution. The four AC composition/gluing
+proofs are project compatibility work, not attributed upstream declarations.
 
 ### #157/#159: ruler and local metric foundations
 
@@ -171,9 +184,11 @@ gives the conventional formulas and the relationship to the field assumptions.
 | Full signed work integral, necessary potential-rise bound, geodesic and conservative zero derivatives | `integral_work_eq_energy_change`, `potential_increase_le_initial_kinetic_add_work`, `hasDerivAt_kinetic_geodesic`, `hasDerivAt_totalEnergy_conservative`. The integral theorem requires continuous endpoint energy and integrable power. |
 
 No bundled manifold connection, global solution existence, global distance-field
-smoothness or discrete energy conservation is claimed. Phase A's normalized
-Map differential/remainder, full potential-force catalog and remaining specific
-control contracts are still separate obligations.
+smoothness or discrete energy conservation is claimed. The normalized Map
+differential and quadratic remainder are now checked by
+[NormalizedMapDifferential.lean](FractalSync/NormalizedMapDifferential.lean),
+inventoried below. The full potential-force catalog and remaining specific
+control contracts are still separate Phase A obligations.
 
 ### #160: pointwise distance-graph algebra
 
@@ -271,12 +286,45 @@ additional hypotheses of the project path theorems.
 | Actual Shore-path infimum is zero exactly on S and diverges as epsilon decreases to zero off S | `intrinsicShoreDistance_eq_zero_iff`, `intrinsicShoreDistance_tendsto_zero_floor`; not the full pairwise componentwise limit. |
 | Crossing duration and integrated kinetic-action bounds | `ac_crossing_duration_bound`, `ac_crossing_kinetic_action_bound`; the former has an a.e. speed cap, the latter positive duration and integrable squared speed. Supporting actual integral results are `integral_affine_sq`, `sq_integral_le_duration_mul_integral_sq`, `kinetic_action_lower_bound`. |
 
-The pairwise intrinsic metric, its properness, minimizing curves between
-arbitrary endpoints, and the complete componentwise zero-floor limit remain
-conventional. The Euclidean classification of every nearest-Shore minimizer
-is also conventional, as explicitly labeled in the AC note. Restricted provider
-domains can exclude a nearest segment. Kinetic action is distinct from work
-and from a sufficient dynamical crossing criterion.
+The next modules establish the actual pairwise metric, properness, completeness,
+and complete pointwise componentwise zero-floor limit. Metric curve-length
+identification and minimizing curves between arbitrary endpoints remain
+separate formal obligations. The Euclidean classification of every
+nearest-Shore minimizer is conventional, as explicitly labeled in the AC note.
+Restricted provider domains can exclude a nearest segment. Kinetic action is
+distinct from work and from a sufficient dynamical crossing criterion.
+
+### #160: actual pairwise metric, topology and complete fixed-pair limit
+
+The [pairwise continuation](../docs/research/160-pairwise-metric-limit.md)
+develops the actual definitions and proofs. All modules below use namespace
+`FractalSync.DistanceGraph`. Unless a row says otherwise, E is a
+finite-dimensional real normed space, epsilon>0, and a is any real.
+
+| Module and checked scope | Principal declarations and exact boundary |
+| --- | --- |
+| [ComponentCrossing](FractalSync/ComponentCrossing.lean): a path leaving the complement component crosses S | `continuousOn_exists_shore_crossing` works in an arbitrary topological target; `ac_exists_shore_crossing` and `ac_distance_trace_component_bound` give the AC crossing and integrated radial sum. No minimizing path is assumed. |
+| [PairwiseDistance](FractalSync/PairwiseDistance.lean): the actual nonempty, bounded-below length class and its real infimum | `pairwisePathLengths_nonempty`, `pairwisePathLengths_bddBelow`, `intrinsicDistance_nonneg`, `intrinsicDistance_le_length`, `intrinsicDistance_self`. Positive floor supplies actual integrability for every AC candidate. |
+| Pairwise endpoint calibration and different-component divergence | `radialProfile_difference_le_intrinsicDistance`, `radialProfile_sum_le_intrinsicDistance_of_separated_components`, `intrinsicDistance_tendsto_zero_floor_of_separated_components`. The divergence theorem requires nonempty closed S and x outside S; y is outside x's complement component and may itself lie on Shore. |
+| Pairwise floor monotonicity and global comparison | `graphSpeed_antitone_floor`, `acGraphLength_antitone_floor`, `intrinsicDistance_antitone_floor`; `acGraphLength_le_global` and `intrinsicDistance_le_global` give the sqrt(1+a²)/epsilon comparison. |
+| [PathOperations](FractalSync/PathOperations.lean): AC reversal and concatenation | `ac_reversePath`, `ac_concatPath`, `acGraphLength_reversePath`, `acGraphLength_concatPath`. Exact length preservation/additivity, matching endpoints for concatenation, no derivative at the join. The reversal identity is more general than the positive-floor AC application. |
+| [DisplacementBounds](FractalSync/DisplacementBounds.lean): logarithmic displacement and positive definiteness | `ac_log_displacement_bound`, `log_displacement_le_intrinsicDistance`, `intrinsicDistance_pos`, `intrinsicDistance_eq_zero_iff`. The bound is log(1+dist(x,y)/rho(x)) <= D(x,y), obtained from actual AC logarithmic calculus. |
+| Shore endpoints, including two distinct points on S | `intrinsicDistance_tendsto_zero_floor_of_mem_left`, plus `intrinsicDistance_tendsto_zero_floor_of_mem_right` and `intrinsicDistance_tendsto_zero_floor_of_mem_or_mem` in IntrinsicMetric. Distinct endpoints and at least one on S imply divergence; no closedness premise is needed for this branch. |
+| [IntrinsicMetric](FractalSync/IntrinsicMetric.lean): actual metric axioms | `pairwisePathLengths_symm`, `intrinsicDistance_symm`, `exists_path_length_lt_intrinsicDistance_add`, `intrinsicDistance_triangle`, `intrinsicMetricSpace_dist`, and the explicit `intrinsicMetricSpace` definition. The triangle proof uses arbitrarily near-infimum paths, not attainment. |
+| [IntrinsicTopology](FractalSync/IntrinsicTopology.lean): topology, properness and completeness | `intrinsicDistance_abs_sub_le`, `intrinsicDistance_lipschitz_right`, `dist_le_ruler_mul_exp_intrinsicDistance`, `intrinsicSublevel_subset_closedBall`, `isClosed_intrinsicSublevel`, `isCompact_intrinsicSublevel`, `isOpen_iff_intrinsicBall`, `intrinsicMetricSpace_topology`, `intrinsicMetricSpace_proper`, `intrinsicMetricSpace_complete`. Completeness is for the intrinsic uniformity; only topologies are identified with the ambient structure. |
+| [MetricComparison](FractalSync/MetricComparison.lean): actual anisotropic/scale-only comparison | `graphSpeed_zero_le`, `graphSpeed_le_sqrt_mul_zero`, `acGraphLength_zero_le`, `acGraphLength_le_sqrt_mul_zero`, `intrinsicDistance_zero_le`, `intrinsicDistance_le_sqrt_mul_zero` prove D(epsilon,0) <= D(epsilon,a) <= sqrt(1+a²) D(epsilon,0). |
+| [ACComponentPaths](FractalSync/ACComponentPaths.lean): actual off-Shore reference paths | `acJoinedIn_of_mem_connectedComponentIn` and `exists_ac_path_avoiding_of_mem_connectedComponentIn`. The open reachable class and its open relative complement force an entire connected component into the AC class. This works in any real normed space, without finite dimensionality. |
+| [ZeroFloorLimit](FractalSync/ZeroFloorLimit.lean): actual zero-floor density and infimum | `ac_path_exists_positive_clearance`, `ac_graphSpeed_zero_intervalIntegrable`, `zeroFloorPathLengths_nonempty_of_mem_connectedComponentIn`. The zero-floor infimum uses paths avoiding S on the entire closed interval; its geometric theorems require a nonempty class. It is not an extended metric on empty classes or the unrestricted definition evaluated at epsilon=0. |
+| Quantitative comparison and same-component convergence | `ac_log_ruler_increment_bound`, `ac_ruler_lower_of_length_le`, `ac_path_avoids_of_length_le`, `intrinsicDistance_zero_floor_sandwich_of_reference`, `intrinsicDistance_tendsto_zero_floor_of_path_nonempty`, `intrinsicDistance_tendsto_zero_floor_of_mem_connectedComponentIn`. Nonempty closed S; the final limit needs only actual component membership, with no reference-path or integrability premise. |
+
+For a reference zero-floor length at most B, m=dist(x,S) exp(-B), and
+0<epsilon<m, the checked sandwich is
+`(1-epsilon²/m²) D0 <= D_epsilon <= D0`. It treats all regularized candidates
+in two cases according to whether their length is at most B, then takes the
+infimum. Together with the diagonal identity, different-component divergence,
+and distinct Shore-endpoint divergence, this covers every fixed pair when S
+is nonempty and closed. It does not claim uniform convergence over endpoint
+pairs or existence of a minimizing curve between arbitrary endpoints.
 
 ### #160: flat-Shore scalar geometry
 
@@ -337,10 +385,30 @@ Map specification #108, and provider error/validity contract #145.
 | `normalizedMap_zero` | Every normalized Map is anchored at zero. |
 | `normalizedMap_value_bound` | Under the same ideal Lipschitz hypothesis, `abs(M(u)) <= norm(u)`. |
 
+### #159/#162: actual normalized-Map differential and quadratic remainder
+
+[NormalizedMapDifferential.lean](FractalSync/NormalizedMapDifferential.lean)
+extends `FractalSync.NormalizedDistanceFields`. It works in any real normed
+space, without an inner-product or finite-dimensional assumption.
+For `M(D,c,h,u)=(D(c+h*u)-D(c))/h`, c and h are fixed when differentiating u.
+
+| Theorem | Verified mathematical content |
+| --- | --- |
+| `hasFDerivAt_normalizedMap` | For h nonzero and an actual derivative of D at c+h*u, the window derivative is exactly that differential of D. |
+| `hasFDerivAt_normalizedMap_zero` | The anchor derivative is dD(c), independent of the fixed nonzero window scale. |
+| `fderiv_normalizedMap` | The corresponding equality of actual `fderiv` fields under local differentiability. |
+| `normalizedMap_value_bound_on_segment` | A field L-Lipschitz on the physical query segment gives abs(M(u)) <= L*norm(u). |
+| `field_quadratic_remainder` | Actual field derivatives along the closed segment, with anchored linear differential variation, give the sharp factor 1/2 in the field residual. |
+| `normalizedMap_quadratic_remainder` | The normalized residual is bounded by L*abs(h)*norm(u)²/2 under the corresponding anchored variation hypothesis. |
+| `normalizedMap_quadratic_remainder_of_lipschitz_fderiv` | Segment-wise L-Lipschitz actual differential implies the same normalized residual. |
+| `normalizedMap_quadratic_remainder_of_hessian_bound` | Actual differentiation of D and its differential field on the entire physical segment, with Hessian operator norm <= L, implies the same residual. No ideal unit-gradient hypothesis. |
+
 **Not formalized here:** the full combined provider/recomputed-ruler error
-estimate, Hessian remainder bounds, optimal finite-sample envelopes, topology
-counterexamples, or blow-up limits. No ideal Lipschitz hypothesis is asserted for
-an arbitrary numerical provider.
+estimate, the cross-scale comparison assembled from these local residuals,
+optimal finite-sample envelopes, topology counterexamples, or blow-up limits.
+Actual local differentiability hypotheses do not certify numerical provider
+derivatives or imply distance-field smoothness at a cut locus. No ideal
+Lipschitz hypothesis is asserted for an arbitrary numerical provider.
 
 ### #163: finite transport algebra and an exact counterexample
 
@@ -387,7 +455,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 581 declarations, including the 291 stated theorem/lemma declarations,
+The current audit covers 741 declarations, including the 400 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
