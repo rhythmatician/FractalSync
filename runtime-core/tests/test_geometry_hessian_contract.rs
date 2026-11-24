@@ -4,6 +4,7 @@ use runtime_core::geometry_provider::{
     GEOMETRY_PROVIDER_VERSION,
 };
 use runtime_core::manifold::ManifoldConfig;
+use runtime_core::manifold::{christoffel_symbols_from_jet, induced_metric_from_jet};
 
 // Quadratic field D=b+n.x+1/2 x^T H x, giving exact coherent jets even
 // when it is not an ideal signed-distance field. This tests formulas only.
@@ -117,10 +118,14 @@ fn smooth_shore_has_rank_one_crest_independent_of_field_curvature() {
             let hr = hessian_rho_from_jet(&j, epsilon);
             let gs = grad_sigma_from_jet(&j, &cfg);
             let hs = hessian_sigma_from_jet(&j, &cfg);
+            let metric = induced_metric_from_jet(&j, &cfg).unwrap();
+            let gamma = christoffel_symbols_from_jet(&j, &cfg).unwrap();
             assert_eq!(gr, [0.0, 0.0]);
             assert_eq!(gs, [0.0, 0.0]);
             for i in 0..2 {
                 for k in 0..2 {
+                    close(metric[i][k], if i == k { 1.0 / epsilon.powi(2) } else { 0.0 }, 1.0 / epsilon.powi(2), "crest metric");
+                    for upper in 0..2 { close(gamma[upper][i][k], 0.0, 1.0 / epsilon, "crest connection"); }
                     let outer = j.grad_d[i] * j.grad_d[k];
                     close(hr[i][k], outer / epsilon, 1.0 / epsilon, "crest H rho");
                     close(
@@ -138,6 +143,60 @@ fn smooth_shore_has_rank_one_crest_independent_of_field_curvature() {
                 "rank one",
             );
         }
+    }
+}
+
+#[test]
+fn analytic_metric_differential_inverse_and_connection_agree() {
+    let n = [0.6, 0.8];
+    let h = [[0.3, -0.4], [-0.4, 0.7]];
+    let x = [0.21, -0.09];
+    let cfg = ManifoldConfig { epsilon: 0.2, lambda_sq: 0.7, ..Default::default() };
+    let j = jet(0.0, n, h, x);
+    let g = induced_metric_from_jet(&j, &cfg).unwrap();
+    let det = g[0][0] * g[1][1] - g[0][1] * g[1][0];
+    assert!(det > 0.0);
+    let inv = [[g[1][1]/det, -g[0][1]/det], [-g[1][0]/det, g[0][0]/det]];
+    for i in 0..2 { for k in 0..2 {
+        close((0..2).map(|m| g[i][m] * inv[m][k]).sum(), if i == k {1.0} else {0.0}, 1.0, "inverse");
+    }}
+    let rho = rho_from_jet(&j, cfg.epsilon);
+    let dr = grad_rho_from_jet(&j, cfg.epsilon);
+    let ds = grad_sigma_from_jet(&j, &cfg);
+    let hs = hessian_sigma_from_jet(&j, &cfg);
+    let mut dg = [[[0.0; 2]; 2]; 2];
+    let step = 1e-5;
+    for axis in 0..2 {
+        let mut plus = x; plus[axis] += step;
+        let mut minus = x; minus[axis] -= step;
+        let gp = induced_metric_from_jet(&jet(0.0, n, h, plus), &cfg).unwrap();
+        let gm = induced_metric_from_jet(&jet(0.0, n, h, minus), &cfg).unwrap();
+        for a in 0..2 { for b in 0..2 {
+            dg[axis][a][b] = -2.0 * dr[axis] / rho.powi(3) * if a == b {1.0} else {0.0}
+                + cfg.lambda_sq * (hs[a][axis]*ds[b] + ds[a]*hs[b][axis]);
+            let numerical = (gp[a][b] - gm[a][b]) / (2.0 * step);
+            assert!((numerical - dg[axis][a][b]).abs() < 1e-5, "metric differential");
+        }}
+    }
+    let gamma = christoffel_symbols_from_jet(&j, &cfg).unwrap();
+    for i in 0..2 { for a in 0..2 { for b in 0..2 {
+        let expected = (0..2).map(|m| 0.5 * inv[i][m] * (dg[a][b][m] + dg[b][a][m] - dg[m][a][b])).sum();
+        close(gamma[i][a][b], expected, 1.0 / rho, "connection");
+    }}}
+}
+
+#[test]
+fn mechanics_respect_jet_validity_and_bridge_degradation() {
+    let cfg = ManifoldConfig::default();
+    for (validity, singularity) in [(GeometryValidity::Unresolved, SingularityKind::HighCurvature), (GeometryValidity::Singular, SingularityKind::CutLocus), (GeometryValidity::OutsideDomain, SingularityKind::Boundary), (GeometryValidity::ProviderFailure, SingularityKind::None)] {
+        let mut j = jet(0.1, [1.0, 0.0], [[0.0; 2]; 2], [0.0; 2]);
+        j.validity = validity.clone(); j.singularity = singularity;
+        assert!(induced_metric_from_jet(&j, &cfg).is_err());
+        assert!(christoffel_symbols_from_jet(&j, &cfg).is_err());
+        j.is_bridge = true;
+        let allowed = validity != GeometryValidity::ProviderFailure;
+        assert_eq!(induced_metric_from_jet(&j, &cfg).is_ok(), allowed);
+        assert_eq!(christoffel_symbols_from_jet(&j, &cfg).is_ok(), allowed);
     }
 }
 
