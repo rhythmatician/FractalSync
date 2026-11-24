@@ -3,11 +3,14 @@
 Research progress for [#160](https://github.com/rhythmatician/FractalSync/issues/160),
 2026-11-24. These are exact mathematical results under the assumptions below.
 The accompanying Lean package now checks the scalar integral calculus, closed
-primitive, sharp additive constant, scalar asymptotics, nearest-point segments,
-and integrated calibration under explicit trace-derivative hypotheses. The
-unrestricted absolutely continuous length-space and componentwise metric-limit
-arguments remain conventional. No novelty claim is made. See the
+primitive, sharp additive constant, optimal Lipschitz constant, scalar
+asymptotics, unrestricted absolutely continuous calibration, and the exact
+attained Shore-distance path infimum in both orientations. Crossing-duration
+and kinetic-action bounds are also checked. The general pairwise metric,
+properness and full componentwise metric-limit arguments remain conventional.
+No novelty claim is made. See the
 [radial formalization](160-radial-profile.md),
+[AC path and infimum formalization](160-absolute-continuous-paths.md),
 [flat-Shore geometry](160-flat-shore.md), and
 [exact theorem inventory](../../formal/README.md).
 
@@ -343,19 +346,20 @@ or an executable travel-time prediction under the actual Controls.
 
 Lean now verifies the pointwise identity (5), the actual radial integral and
 its closed primitive, the sharp constant in (9) and its optimality, and the
-exact logarithmic scalar asymptotic. It also verifies nearest-point existence
-in proper real normed spaces, the distance trace along each nearest segment,
-and its calibrated length integral. Integrated endpoint and single-split
-Shore-crossing bounds are checked for continuous traces with explicitly
-integrable densities and pointwise derivatives on the relevant open intervals;
-the crossing theorem needs no derivative at the Shore hit.
+exact logarithmic scalar asymptotic. It also verifies nearest-point existence,
+the actual nearest-segment length, and unrestricted absolutely continuous
+endpoint/crossing bounds, deriving a.e. differentiation and integrability.
+The actual path infimum to S equals F(d(x)) and is attained in either path
+orientation. Its zero-floor divergence off S is checked. The duration bound
+and kinetic-action consequence (17) are checked as well, with the explicit
+finite-action hypothesis for (17).
 
-The remaining formal gap is the general absolutely continuous trace theorem
-with almost-everywhere derivatives, followed by the intrinsic path infimum and
-its metric properties. Properness, existence of minimizing curves, the full
-componentwise limit, and the time/energy consequences above remain conventional
-proofs. A scalar limit as epsilon tends to zero does not by itself establish a
-limit of the intrinsic metric. The exact formal boundary is maintained in
+The remaining formal gap is the general pairwise intrinsic metric and its
+properties: properness, minimizing curves between arbitrary endpoints, and
+the full componentwise limit. The now-checked Shore-path infimum does not
+itself settle that pairwise metric limit. A conventional classification of
+all nearest-Shore minimizers in Euclidean space is given separately in
+the [AC continuation](160-absolute-continuous-paths.md). The exact formal boundary is maintained in
 [formal/README.md](../../formal/README.md).
 
 ## 7. Prior art and originality assessment

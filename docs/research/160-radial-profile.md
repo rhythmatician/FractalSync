@@ -161,10 +161,12 @@ $$
 $$
 
 By the checked density dilation, the dimensional maximum is M(a)/epsilon.
-The mean value theorem then gives the sharp global Lipschitz constant
-M(a)/epsilon for F. This final Lipschitz corollary is conventional here;
-the explicit Lean results are the derivative, the pointwise bounds, their
-attainment, and dilation. No novelty claim is made for this elementary bound.
+The mean value theorem now gives a checked `LipschitzWith` result with sharp
+global constant M(a)/epsilon in `RadialLipschitz.lean`. Its optimality is also
+checked: any global Lipschitz constant bounds the derivative at an attaining
+radius and must therefore be at least M(a)/epsilon. The principal names are
+`radialProfile_lipschitz_sharp` and `radialProfile_lipschitz_constant_ge`.
+No novelty claim is made for this elementary bound.
 
 ## 5. Exact boundary of formal verification
 
@@ -176,6 +178,7 @@ attainment, and dilation. No novelty claim is made for this elementary bound.
 | Full closed primitive | `hasDerivAt_normalizedRadialPrimitive`, `radialProfile_closed_form`, `radialProfile_scale_only` |
 | Integrated comparison | `radialProfile_asinh_bounds` |
 | Sharp density bounds and attainment | `radialDensity_le_one`, `radialDensity_le_peak`, `radialDensity_peak_attained` |
+| Optimal global Lipschitz constant | `radialProfile_lipschitz_sharp`, `radialProfile_lipschitz_constant_ge` in `RadialLipschitz.lean` |
 | Scalar divergence | `radialProfile_tendsto_atTop`, `radialProfile_tendsto_zero_floor` |
 | Sharp additive constant and optimality | `radialDefect_tendsto`, `radialDefect_monotone`, `radialProfile_sharp_bounds`, `radialDefectLimit_le_of_uniform_bound` |
 | Exact logarithmic asymptotics | `radialProfile_log_asymptotic`, `radialProfile_zero_floor_log_asymptotic` |
@@ -187,10 +190,11 @@ segment. Its hypotheses are visible in the theorem statements. The distinction
 matters: the distance trace of a general absolutely continuous curve need not
 be differentiable at every interior point.
 
-The full unrestricted length-metric theorem for arbitrary closed sets still
-needs the almost-everywhere chain rule and its integration for general
-absolutely continuous traces, followed by the definition and infimum properties
-of the intrinsic metric. Properness, minimizing-curve existence and the complete
+The [AC continuation](160-absolute-continuous-paths.md) now supplies the
+almost-everywhere chain rule and integration for arbitrary absolutely continuous
+finite-dimensional curves, followed by the actual Shore-path infimum in both
+orientations and its attained minimum. General pairwise metric properties,
+properness, minimizing curves between arbitrary endpoints and the complete
 componentwise metric limit remain separate global obligations. The scalar
 proofs do not assert smoothness at cut loci, constant intrinsic curvature,
 controllability, or validity of a nearest-point segment in a restricted domain.

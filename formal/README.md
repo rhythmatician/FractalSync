@@ -1,8 +1,10 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**172 proved theorem/lemma declarations** supporting #157, #159, and research
-issues #160--#163, plus their definitions and a transitive axiom audit. It is independent of Rust
+**291 explicit proved theorem/lemma declarations**: 252 in seventeen result
+modules supporting #157, #159, and research issues #160--#163, plus 39 in eight
+analysis-support modules, largely attributed upstream backports. Definitions
+and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
 execution, Python training, the browser, and Aeneas/Charon.
 
 The conventional statements, proofs, counterexamples, and originality assessment
@@ -16,6 +18,7 @@ what was machine checked in this increment.
 | --- | --- |
 | Lean | `leanprover/lean4:v4.24.0` |
 | Mathlib | `f897ebcf72cd16f89ab4577d0c826cd14afaafc7` (v4.24.0) |
+| Source snapshot for the AC analysis backport | Mathlib `aad247f928b1eb7c58478742119fdd15a37f0ffd`; not a dependency-pin change |
 | Transitive Lean dependencies | `lake-manifest.json` |
 | Installer used in this environment | Elan 4.4.0 |
 | Authoring guidance consulted | `leanprover/skills`, commit `7d3da0282e7b724b07620e45cf212f2e05e19334`, especially `lean-proof` and `mathlib-build` |
@@ -68,9 +71,9 @@ are not dependencies of proof CI or part of the kernel's trusted foundation.
 
 The official Lean agent skills were consulted at the pin above. They are not
 vendored or registered in a persistent personal skill catalog by this package.
-Together with the static metric results below, this makes substantial progress
-on #157; client-specific integration and full differential kinetic identities
-still need their stated follow-up. Keep one shared proof package.
+Together with the metric and continuous mechanics results below, this makes
+substantial progress on #157; client-specific persistent authoring integration
+still needs its stated follow-up. Keep one shared proof package.
 
 ## Exact theorem inventory
 
@@ -81,17 +84,31 @@ by the separate transitive audit.
 | Module | Theorem/lemma declarations | Main scope |
 | --- | ---: | --- |
 | `Ruler` | 9 | Scalar ruler calculus and conditional field chain rule |
+| `RulerDifferential` | 20 | Actual field Hessians, scale derivatives, summit and reference origin |
 | `ScaleMetric` | 31 | Rank-one metric, inverse, determinant, eigen-directions, rotations |
 | `MetricImpulse` | 14 | Bilinear Cauchy--Schwarz and exact impulse energy |
+| `ContinuousMechanics` | 15 | Compact connection, actual work-energy calculus, signed work and dissipation |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
+| `RadialLipschitz` | 8 | Global and optimal Lipschitz constants |
 | `PathCalibration` | 8 | Integrated calibration and a split-at-Shore bound |
+| `AbsolutelyContinuousPaths` | 14 | Unrestricted AC traces, a.e. calculus, integrability and calibration |
+| `IntrinsicShoreDistance` | 18 | Actual AC path infima in both orientations, attained minimum and zero-floor divergence |
+| `CrossingAction` | 5 | Integral Cauchy--Schwarz, crossing duration and kinetic action |
 | `FlatShore` | 32 | Scalar warp derivatives, curvature expressions, excursion integral |
 | `SensitivityBounds` | 4 | Sensitivity transfer and scalar shear |
 | `NormalizedDistanceFields` | 8 | Normalized-field algebra and Lipschitz bounds |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Total** | **172** | |
+| **Result-module subtotal** | **252** | Includes supporting lemmas, not just independent research results |
+| `Analysis/*` (eight modules) | 39 | Attributed AC FTC backport and compatibility/finite-dimensional support |
+| **Total** | **291** | 119 more source declarations than the prior 172-theorem increment |
+
+The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
+6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
+1 (`FiniteDimensionalAC`), 3 (`FinsetGaps`), 3 (`IntervalSlope`), and
+12 (`OrderFinsetGaps`). The [support provenance](FractalSync/Analysis/README.md)
+records the exact upstream snapshot and retained Apache 2.0 attribution.
 
 ### #157/#159: ruler and local metric foundations
 
@@ -107,8 +124,8 @@ rule. `hasDerivAt_ruler_slope` proves the scalar second-derivative coefficient
 `regularizedDistance_lipschitz`.
 
 There is no inference of a smooth distance field from positive regularization.
-The full field Hessian, sigma derivatives, connection and continuous
-work-energy identities remain outstanding.
+The subsequent differential modules below prove full field Hessians and
+continuous mechanics under explicit local regularity hypotheses.
 
 [ScaleMetric.lean](FractalSync/ScaleMetric.lean) and
 [MetricImpulse.lean](FractalSync/MetricImpulse.lean) use
@@ -131,6 +148,32 @@ Traceability: `runtime-core/src/manifold.rs` (`induced_metric`, inverse,
 kinetic energy) and `runtime-core/src/geometry_provider.rs` (ruler jet),
 issues #120/#145. Exact positive definiteness does not certify an absolute
 floating-point determinant threshold or a provider's derivative consistency.
+
+### #159: actual field Hessians and continuous mechanics
+
+[RulerDifferential.lean](FractalSync/RulerDifferential.lean) uses namespace
+`FractalSync`; [ContinuousMechanics.lean](FractalSync/ContinuousMechanics.lean)
+extends `FractalSync.ScaleMetric`. The
+[differential mechanics note](../docs/research/159-differential-mechanics.md)
+gives the conventional formulas and the relationship to the field assumptions.
+
+| Checked result | Principal declarations and hypotheses |
+| --- | --- |
+| Scalar logarithmic scale, first/second scalar derivatives, reference shift and summit | `scaleCoordinate_eq_log_sub`, `hasDerivAt_scaleCoordinate`, `hasDerivAt_scaleSlope`, `scaleCoordinate_reference_shift`, `scaleCoordinate_le_iff`, `scaleCoordinate_ruler_le_summit`, `ruler_zero`, `scaleCoordinate_ruler_eq_summit_iff`; positive ruler/reference/floor where used. |
+| Scale differentiated directly through the regularized field | `hasDerivAt_scaleCoordinate_ruler`, `hasDerivAt_scaleRulerSlope`, `hasFDerivAt_scaleCoordinate_ruler_comp`, `hasFDerivAt_scale_ruler_differential`. |
+| Actual ruler Hessian `(D/rho) H_D + (epsilon²/rho³) dD tensor dD` | `hasFDerivAt_ruler_differential`, `hasFDerivAt_fderiv_ruler_comp`; local differentiability of D and an actual Fréchet derivative of its differential field. |
+| Actual scale Hessian for an arbitrary positive ruler and directly in D | `hasFDerivAt_scaleCoordinate_comp`, `hasFDerivAt_scale_differential`, `hasFDerivAt_fderiv_scaleCoordinate_comp`, `hasFDerivAt_fderiv_scaleCoordinate_ruler_comp`; the last gives `-D/(rho² log 2) H_D + (D²-epsilon²)/(rho⁴ log 2) dD tensor dD`. |
+| At D=0, the field Hessian drops out and the derived Hessians have rank at most one | `hasFDerivAt_fderiv_ruler_on_zero`, `hasFDerivAt_fderiv_scale_on_zero`; the same actual local derivative hypotheses, without an ideal unit-gradient assumption. |
+| Compact connection symmetry, metric compatibility, Koszul identity and uniqueness | `connection_symm`, `metric_connection`, `connection_metric_compatible`, `connection_koszul`, `connection_eq_of_koszul`; symmetric H for torsion/Koszul and positive rho for uniqueness. |
+| Actual varying metric and kinetic derivatives | `hasDerivAt_metric_pairing`, `hasDerivAt_kinetic`; derivatives of the ruler, gradient and velocity are explicit local jets. |
+| Actual continuous work-energy `d(K+U)/dt=inner(v,Q)` | `hasDerivAt_totalEnergy`, `hasDerivAt_totalEnergy_of_fields`; the latter derives trace jets from position and Fréchet field derivatives. Dynamics uses the existing inverse metric. |
+| Nonpositive PSD friction power and exact metric-friction power `-2 beta K` | `friction_power_nonpos`, `metric_friction_power`. The latter's sign additionally uses beta>=0. |
+| Full signed work integral, necessary potential-rise bound, geodesic and conservative zero derivatives | `integral_work_eq_energy_change`, `potential_increase_le_initial_kinetic_add_work`, `hasDerivAt_kinetic_geodesic`, `hasDerivAt_totalEnergy_conservative`. The integral theorem requires continuous endpoint energy and integrable power. |
+
+No bundled manifold connection, global solution existence, global distance-field
+smoothness or discrete energy conservation is claimed. Phase A's normalized
+Map differential/remainder, full potential-force catalog and remaining specific
+control contracts are still separate obligations.
 
 ### #160: pointwise distance-graph algebra
 
@@ -172,8 +215,15 @@ Unless a row says otherwise, epsilon>0 and a is any real number.
 
 The source also contains the explicit positivity, zero-value, compactification
 and derivative helper theorems used by these results. The density maximum is
-proved by upper bounds and attainment; a supremum object and the resulting
-optimal Lipschitz corollary are not separately packaged as Lean theorems.
+proved by upper bounds and attainment rather than a supremum wrapper.
+[RadialLipschitz.lean](FractalSync/RadialLipschitz.lean) now packages the global
+bound and the sharp Lipschitz theorem, with optimality:
+`radialDensity_normalize`, `radialDensity_uniform_bound`,
+`radialProfile_lipschitz`, `radialMaxSlope_pos`,
+`radialDensity_le_radialMaxSlope`, `radialMaxSlope_attained`,
+`radialProfile_lipschitz_sharp`, and `radialProfile_lipschitz_constant_ge`.
+Sharpness uses the physical convention a>=0; the convenient sqrt(1+a²)/epsilon
+bound is valid for every real a.
 
 ### #160: nearest segments and integrated path calibration
 
@@ -193,12 +243,40 @@ optimal Lipschitz corollary are not separately packaged as Lean theorems.
 | Integrated endpoint calibration | `radialProfile_endpoint_bound`, `distance_trace_endpoint_bound`; continuity on the closed interval, derivatives on its open interior and explicitly integrable densities. |
 | Shore-crossing lower bound F(d(start))+F(d(end)) | `distance_trace_crossing_bound` uses derivatives on the two open subintervals, continuity/integrability across the crossing, and a crossing point in S. No derivative at the crossing is required. |
 
-The unrestricted absolutely continuous curve theorem still requires its
-almost-everywhere chain rule and integral argument. The intrinsic path infimum,
-properness, existence of global minimizing curves, and the complete
-componentwise metric limit are conventional in the distance note. The scalar
-zero-floor limit alone does not prove convergence of a path infimum. Restricted
-provider domains can exclude a nearest-point segment.
+These pointwise contracts are retained. The unrestricted absolutely continuous
+theorems and actual Shore-path infimum are now established by the following
+modules, with their complete proof boundary in the
+[AC continuation](../docs/research/160-absolute-continuous-paths.md).
+
+### #160: unrestricted AC paths, path infima and crossing action
+
+[AbsolutelyContinuousPaths.lean](FractalSync/AbsolutelyContinuousPaths.lean),
+[IntrinsicShoreDistance.lean](FractalSync/IntrinsicShoreDistance.lean), and
+[CrossingAction.lean](FractalSync/CrossingAction.lean) share namespace
+`FractalSync.DistanceGraph`. They use actual Mathlib absolute continuity,
+actual derivatives and interval integrals. The AC FTC and vector derivative
+integrability are proved by the attributed support package; they are not
+additional hypotheses of the project path theorems.
+
+| Checked result | Principal declarations and hypotheses |
+| --- | --- |
+| Distance/ruler traces preserve AC; distance derivative is bounded a.e. by curve speed | `ac_distance_trace`, `ac_ruler_trace`, `ac_distance_trace_deriv_bound`; finite-dimensional real normed E for vector differentiation. No ambient distance differentiability. |
+| Calibrated composition is AC with actual a.e. derivative, integrability and FTC | `ac_radialProfile_trace`, `ac_radialProfile_deriv`, `ac_radialDensity_intervalIntegrable`, `ac_radialProfile_integral`; epsilon>0, a any real. |
+| Actual graph speed is integrable from AC alone | `graphSpeed_nonneg`, `graphSpeed_eq_rulerSpeed`, `graphSpeed_le_global`, `aestronglyMeasurable_graphSpeed`, `ac_graphSpeed_intervalIntegrable`. |
+| Unrestricted endpoint and arbitrary Shore-crossing lower bounds | `ac_distance_trace_endpoint_bound`, `ac_distance_trace_crossing_bound`; AC plus the endpoint order and stated crossing. No derivative at any specified time or extra density-integrability premise. |
+| Length equals the original ruler-derivative integral | `acGraphLength_eq_ruler_integral`; actual a.e. ruler chain rule, including cusp traces. |
+| Actual nearest and reversed-nearest segments are admissible and attain F(d(x)) | `absolutelyContinuousOnInterval_lineMap`, `acGraphLength_nearest_segment`, `hasDerivAt_infDist_reverse_nearest_segment`, `acGraphLength_reverse_nearest_segment`, `radialProfile_mem_shorePathLengths`. |
+| The path-length sets are nonempty/bounded, and F(d(x)) is their least element | `acGraphLength_nonneg`, `shorePathLengths_bddBelow`, `shorePathLengths_nonempty`, `intrinsicShoreDistance_le_radialProfile`, `radialProfile_le_of_mem_shorePathLengths`, `radialProfile_isLeast_shorePathLengths`, `radialProfile_isLeast_pointToShorePathLengths`; S closed and nonempty for attainment. |
+| Exact real infima in both path orientations | `intrinsicShoreDistance_eq_radialProfile`, `pointToShorePathLengths_sInf_eq`, `pointToShorePathLengths_sInf_eq_intrinsicShoreDistance`; finite-dimensional real normed E, positive epsilon. |
+| Actual Shore-path infimum is zero exactly on S and diverges as epsilon decreases to zero off S | `intrinsicShoreDistance_eq_zero_iff`, `intrinsicShoreDistance_tendsto_zero_floor`; not the full pairwise componentwise limit. |
+| Crossing duration and integrated kinetic-action bounds | `ac_crossing_duration_bound`, `ac_crossing_kinetic_action_bound`; the former has an a.e. speed cap, the latter positive duration and integrable squared speed. Supporting actual integral results are `integral_affine_sq`, `sq_integral_le_duration_mul_integral_sq`, `kinetic_action_lower_bound`. |
+
+The pairwise intrinsic metric, its properness, minimizing curves between
+arbitrary endpoints, and the complete componentwise zero-floor limit remain
+conventional. The Euclidean classification of every nearest-Shore minimizer
+is also conventional, as explicitly labeled in the AC note. Restricted provider
+domains can exclude a nearest segment. Kinetic action is distinct from work
+and from a sufficient dynamical crossing criterion.
 
 ### #160: flat-Shore scalar geometry
 
@@ -295,10 +373,12 @@ assumption; the gauge and magnitude theorems state their unit hypotheses.
 ## Trust boundary and audit
 
 `Audit.lean` imports the umbrella module and traverses the checked environment's
-transitive dependencies for every declaration in namespace `FractalSync`.
+transitive dependencies for every declaration in a `FractalSync` module, as
+well as every declaration in namespace `FractalSync`. Module provenance
+includes adopted upstream namespaces and generated/private helpers.
 It rejects every axiom except `propext`, `Classical.choice`, and `Quot.sound`,
 the standard classical Lean/Mathlib foundations used here. It also fails if the
-namespace is empty. This detects imported or indirect `sorryAx` and additional
+project root set is empty. This detects imported or indirect `sorryAx` and additional
 axioms, not merely source-text placeholders. Every proof module must be imported
 by `FractalSync.lean` so the audit sees it.
 
@@ -307,7 +387,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 310 declarations, including the 172 stated theorem/lemma declarations,
+The current audit covers 581 declarations, including the 291 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

@@ -174,9 +174,12 @@ the additional prefix `Plane.`.
 | `metric_cauchy_schwarz_sq`, `metric_inverse_pairing`, `dualSq_eq_metric`, `dualSq_nonneg`, `dualNorm_sq`, `impulse_pairing_sq`, `impulse_pairing_bound`, `impulse_energy_jump`, `impulse_energy_bound` | Primal/dual pairing, exact impulse energy jump, and the scale-independent budget bound. |
 
 The proofs contain no `sorry`, `admit`, or new axioms. The repository's umbrella
-audit checks transitive dependencies after integration. Establishing these static
-identities does not complete #159's connection, derivative, or continuous
-work-energy obligations.
+audit checks transitive dependencies after integration. The subsequent
+[differential mechanics extension](159-differential-mechanics.md) now checks
+the full ruler/scale Hessians, local connection and its Koszul uniqueness,
+actual continuous work-energy derivative and signed integral ledger. Those
+analytic results use explicit field/trajectory regularity assumptions in
+addition to the static identities recorded here.
 
 ## Relation to implementation
 
@@ -214,6 +217,7 @@ the impulse, and check the jump and dual-budget bound at fixed configuration.
 That tests the integration of existing operations rather than introducing a
 second mechanics implementation. For ruler derivatives, the appropriate seam
 is `rho_from_jet` and `grad_rho_from_jet` in `geometry_provider.rs` with analytic
-jet fixtures. The full Hessian, connection and continuous energy identities
-still require their own mathematical acceptance before being reported as
-verified invariants.
+jet fixtures. The full Hessian, local connection and continuous energy
+identities now have the mathematical proofs in
+[the differential extension](159-differential-mechanics.md); their numerical
+implementation correspondence remains a separate validation obligation.

@@ -6,9 +6,9 @@ import FractalSync.DistanceToSet
 
 This closes the integration step for traces with pointwise derivatives and
 integrable densities. It does not assume that distance to an arbitrary closed
-set is differentiable along every absolutely continuous curve. That remaining
-almost-everywhere chain rule is a separate obligation for the unrestricted
-length-space theorem in issue #160.
+set is differentiable along every absolutely continuous curve. The unrestricted
+almost-everywhere chain rule and calibration are now established separately in
+`AbsolutelyContinuousPaths`; these pointwise contracts remain reusable.
 -/
 
 namespace FractalSync.DistanceGraph

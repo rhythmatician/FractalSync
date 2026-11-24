@@ -10,9 +10,10 @@ import Mathlib.Topology.Order.MonotoneConvergence
 # Analysis of the regularized radial profile
 
 The profile is the actual interval integral appearing in Issue 160. These
-results concern this scalar function; identifying it with the distance to a
-closed subset still requires the curve/metric arguments stated in the research
-note. The definition extends to signed radii by the oriented interval integral.
+results concern this scalar function. `IntrinsicShoreDistance` proves its
+identification with the actual absolutely continuous Shore-path infimum;
+general pairwise metric properties remain separate. The definition extends
+to signed radii by the oriented interval integral.
 -/
 
 namespace FractalSync.DistanceGraph
