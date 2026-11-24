@@ -61,6 +61,13 @@ stop and add a Rust implementation and binding instead.  Rust should carry as mu
   `shared/golden_vectors.json` and updating all mirrors in the same commit.
   Bump `CONTROLLER_VERSION` or `FEATURE_VERSION` alongside.
 - **Issue tracker, triage, and domain context:** see `docs/agents/`.
+- **Mathematical proofs:** extend the shared, pinned Lean package in `formal/`.
+  Read `formal/README.md` for its exact scope and authoring setup. Import every
+  proof module in `formal/FractalSync.lean`, then run `lake build --wfail` and
+  `lake env lean Audit.lean` from `formal/`. No `sorry`, extra axioms, or native
+  evaluation axioms. Distinguish checked statements from conventional proofs
+  and provider assumptions. Lean is a development tool, not runtime authority
+  or a training preflight gate.
 
 ## What we don't do here
 

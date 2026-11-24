@@ -13,15 +13,18 @@ open Lean Elab Command
 run_cmd do
   let allowed : Array Name := #[`propext, `Classical.choice, `Quot.sound]
   let env ← getEnv
-  let mut count := 0
+  let mut names : Array Name := #[]
   for (name, _) in env.constants.toList do
     if (`FractalSync).isPrefixOf name then
-      count := count + 1
-      let axioms ← Lean.collectAxioms name
-      for axiomName in axioms do
-        unless allowed.contains axiomName do
-          throwError "Unapproved axiom {axiomName} in {name}"
-      logInfo m!"{name}: {axioms}"
-  if count == 0 then
+      names := names.push name
+  if names.isEmpty then
     throwError "No FractalSync declarations were imported; audit would be empty"
-  logInfo m!"Axiom audit passed for {count} FractalSync declarations"
+  -- Use Lean's own kernel-environment traversal with one shared visited set.
+  -- This computes the same union as separate `collectAxioms` calls while
+  -- avoiding repeated traversal of the large shared Mathlib dependency graph.
+  let (_, audit) := ((names.forM Lean.CollectAxioms.collect).run env).run {}
+  for axiomName in audit.axioms do
+    unless allowed.contains axiomName do
+      throwError "Unapproved axiom {axiomName} reachable from FractalSync declarations"
+  logInfo m!"Transitive axioms: {audit.axioms}"
+  logInfo m!"Axiom audit passed for {names.size} FractalSync declarations"
