@@ -783,6 +783,8 @@ pub fn integrate_motion_controls(
     info.ledger.end_energy = k_after + info.potential;
     info.ledger.residual = info.ledger.end_energy - info.ledger.start_energy
         - info.ledger.control_work - info.ledger.friction_work - info.ledger.impulse_work;
+    info.ledger.valid &= [v_new.0, v_new.1, info.ledger.end_energy,
+        info.ledger.impulse_work, info.ledger.residual].iter().all(|x| x.is_finite());
     Ok((
         c_new,
         v_new,
@@ -830,6 +832,22 @@ mod tests {
         let expected = crate::manifold::kinetic_energy(velocity, c, &config).unwrap();
         assert!((info.ledger.impulse_work - expected).abs() < 1e-12);
         assert!(info.ledger.residual.abs() < 1e-12);
+    }
+
+    #[test]
+    fn impulse_work_matches_independent_covector_identity() {
+        crate::geometry_provider::with_test_plane(|| {
+            let config = cfg();
+            let c = C::new(0.1, 0.2);
+            let v = (0.07, -0.04);
+            let controls = MotionControls { direction: [0.8, 0.6], impulse: 0.6, ..Default::default() };
+            let impulse = controls.impulse_covector(c, &config).unwrap();
+            let (_, after, info) = integrate_motion_controls(c, v, &controls, 0.0, &config).unwrap();
+            // Exact fixed-position identity: ΔK = J·(v_before + v_after)/2.
+            let expected = 0.5 * (impulse.0 * (v.0 + after.0) + impulse.1 * (v.1 + after.1));
+            assert!((info.ledger.impulse_work - expected).abs() < 1e-12);
+            assert!(info.ledger.residual.abs() < 1e-12);
+        });
     }
 
     #[test]    fn version_frozen() {

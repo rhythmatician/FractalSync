@@ -693,9 +693,15 @@ pub fn integrate_step(
     let k_new = kinetic_energy(v_new, c_new, config)?;
     let start_geometry = geometry_jet(c, config)?;
     let end_geometry = geometry_jet(c_new, config)?;
+    let control_power = v.0 * q_control.0 + v.1 * q_control.1;
+    let friction_power = v.0 * q_drag.0 + v.1 * q_drag.1;
+    let control_work = dt * control_power;
+    let friction_work = dt * friction_power;
+    let residual = e_new - e_old - control_work - friction_work;
     let valid = start_geometry.validity == crate::geometry_provider::GeometryValidity::Regular
         && end_geometry.validity == crate::geometry_provider::GeometryValidity::Regular
-        && [dt, e_old, e_new, q_control.0, q_control.1, q_drag.0, q_drag.1]
+        && [dt, e_old, e_new, q_control.0, q_control.1, q_drag.0, q_drag.1,
+            control_power, friction_power, control_work, friction_work, residual]
             .iter().all(|x| x.is_finite()) && dt >= 0.0;
 
     let energy_info = EnergyInfo {
@@ -715,12 +721,12 @@ pub fn integrate_step(
             end_velocity: [v_new.0, v_new.1],
             start_energy: e_old,
             end_energy: e_new,
-            control_power: v.0 * q_control.0 + v.1 * q_control.1,
-            friction_power: v.0 * q_drag.0 + v.1 * q_drag.1,
-            control_work: dt * (v.0 * q_control.0 + v.1 * q_control.1),
-            friction_work: dt * (v.0 * q_drag.0 + v.1 * q_drag.1),
+            control_power,
+            friction_power,
+            control_work,
+            friction_work,
             impulse_work: 0.0,
-            residual: e_new - e_old - dt * (v.0 * (q_control.0 + q_drag.0) + v.1 * (q_control.1 + q_drag.1)),
+            residual,
             start_geometry,
             end_geometry,
             d_ref: config.d_ref,
@@ -785,6 +791,45 @@ pub struct WorkEnergyLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn analytic_geometry_mixed_work_refines_with_shore_and_wall() {
+        crate::geometry_provider::with_test_plane(|| {
+            let config = ManifoldConfig { d_ref: 0.7, epsilon: 0.2, lambda_sq: 0.3, kappa: 0.4, mu: 0.8 };
+            let rollout = |steps: usize| {
+                let mut c = Complex64::new(1.4, 0.2);
+                let mut v = (0.08, -0.03);
+                let start_shore = potential_energy(c, &config).unwrap();
+                let start_wall = wall_potential(c, &config).unwrap();
+                let mut residual = 0.0;
+                for _ in 0..steps {
+                    let (next_c, next_v, info) = integrate_step(c, v, (0.3, -0.1), 0.2, 0.4 / steps as f64, &config).unwrap();
+                    assert!(info.ledger.valid);
+                    residual += info.ledger.residual;
+                    c = next_c;
+                    v = next_v;
+                }
+                assert!((potential_energy(c, &config).unwrap() - start_shore).abs() > 1e-5);
+                assert!((wall_potential(c, &config).unwrap() - start_wall).abs() > 1e-5);
+                residual.abs()
+            };
+            let coarse = rollout(20);
+            let medium = rollout(40);
+            let fine = rollout(80);
+            println!("analytic mixed residuals: {coarse:e}, {medium:e}, {fine:e}");
+            assert!(coarse < 0.01, "{coarse}");
+            assert!(medium < coarse * 0.6, "{coarse} -> {medium}");
+            assert!(fine < medium * 0.6, "{medium} -> {fine}");
+        });
+    }
+
+    #[test]
+    fn ledger_invalidates_nonfinite_power_even_when_endpoints_are_finite() {
+        crate::geometry_provider::with_test_plane(|| {
+            let (_, _, info) = integrate_step(Complex64::new(0.0, 0.0), (10.0, 0.0), (1e308, 0.0), 0.0, 0.0, &ManifoldConfig::default()).unwrap();
+            assert!(!info.ledger.valid);
+        });
+    }
 
     #[test]
     fn ledger_reports_signed_drive_and_passive_metric_drag() {

@@ -29,6 +29,15 @@ this is a diagnostic threshold, not an acceptance gate for the Physics.
 The bridge does not provide convergence everywhere: at c=(0.5,0.5) with the
 same rollout, signed residuals for 10, 20, 40 and 80 steps were approximately
 -1.46e-5, 1.61e-4, 2.48e-4 and 2.92e-4. The endpoint validity flag therefore
-must not be interpreted as proof of convergence. Analytic-provider rollout
-evidence, general anisotropic friction, and broader numerical acceptance remain
-open; this measurement does not close issue #120.
+must not be interpreted as proof of convergence. General anisotropic friction
+and broader numerical acceptance remain open; this measurement does not close
+issue #120.
+
+An independent test-only analytic plane D=x-0.25 supplies exact gradient and
+Hessian to the same Physics step. With c=(1.4,0.2), v=(0.08,-0.03),
+Q=(0.3,-0.1), beta=0.2, duration 0.4, and both Shore and wall potentials
+active and changing, absolute accumulated residuals for 20, 40, and 80 steps
+were 6.61613e-4, 3.33404e-4, and 1.67355e-4. The test requires a coarse
+absolute bound of 0.01 and at least 40% reduction at each refinement. This
+isolates integrator accounting from raster interpolation for this smooth field;
+it does not establish fidelity of the bridge or acceptance across the Map.

@@ -794,6 +794,9 @@ impl OrbitController {
                 accumulated.impulse_work += ledger.impulse_work;
                 accumulated.residual += ledger.residual;
                 accumulated.valid &= ledger.valid && contiguous && !self.energy_ledger_interrupted;
+                accumulated.valid &= [accumulated.duration, accumulated.control_work,
+                    accumulated.friction_work, accumulated.impulse_work, accumulated.residual]
+                    .iter().all(|value| value.is_finite());
                 self.last_energy_ledger = Some(ledger);
                 self.step_time_seconds += dt;
                 self.c = c_new;
