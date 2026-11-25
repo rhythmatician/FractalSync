@@ -139,8 +139,14 @@ All identities and inequalities above are exact-real results. The new module
 contains ten theorem/lemma declarations. It supplies the previously missing
 holding-policy residual as a function of regional and displacement data.
 
-It does not prove Runge–Kutta local truncation error, membership of actual
-runtime stages in the region, accepted-step or refusal behavior, compiled
-provider fidelity, or floating-point arithmetic. Changing commands, impulses,
+The subsequent [held-RK extension](159-held-runge-kutta.md) now supplies actual
+exact-real stage displacement, stage/endpoint region membership and first-order
+method residuals. It instantiates a complete finite-run certificate for the
+fixture's exact outer-sampled drive policy, including one and four internal
+substeps. That extension uses its own larger residual coefficients and does
+not treat the reference speed bound as a numerical-stage certificate.
+
+Neither extension proves accepted-step or refusal behavior, compiled provider
+fidelity, work quadrature, or floating-point arithmetic. Changing commands, impulses,
 combined steering, and continuation require their additional hypotheses and
 estimates. No runtime implementation or control policy is changed.

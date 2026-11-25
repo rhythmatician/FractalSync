@@ -2,9 +2,9 @@
 
 Verified 2026-11-25 (America/Chicago) in the supplied Linux environment. This
 continuation starts from draft PR #164 at
-`4b64913b9cf0f131beb9c29ae42214e28175dc1a`, whose reported main-branch base is
+`23d7624038e5616fe20cad86f6b5c831232ef9a1`, whose reported main-branch base is
 `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The preceding 1,364-declaration package and all earlier increments are retained.
+The preceding 1,479-declaration package and all earlier increments are retained.
 This record separates the new kernel-checked results, existing analysis support,
 conventional geometry, and earlier optional-tool/numerical observations.
 
@@ -32,36 +32,116 @@ From `formal/`, the complete command
 lake build --wfail
 ```
 
-completed successfully with **2,715 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,721 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing 107 result modules | 1,309 |
-| `ConcreteLocalFieldBounds` | 27 |
-| `LocalRulerBounds` | 12 |
-| `RankOneInverseBounds` | 10 |
-| `CancelledCatalogBounds` | 7 |
-| `LocalTrajectoryMesh` | 6 |
-| `ImprovedConcreteTrajectory` | 18 |
-| `HeldControlResidual` | 10 |
-| `ConcreteHeldControl` | 7 |
-| `ImprovedConcreteEnergy` | 18 |
+| Existing 116 result modules | 1,424 |
+| `RungeKuttaStages` | 18 |
+| `RungeKuttaPhase` | 14 |
+| `ConcreteRungeKuttaBounds` | 6 |
+| `RungeKuttaMesh` | 6 |
+| `ConcreteRungeKutta` | 7 |
+| `ConcreteRungeKuttaQueries` | 8 |
 | Existing fourteen analysis-support modules | 55 |
-| **Total across 130 source modules** | **1,479** |
+| **Total across 136 source modules** | **1,538** |
 
-This adds **115 explicit declarations in nine result modules**. The result
-subtotal is 1,424 across 116 modules; support remains 55 across fourteen
+This adds **59 explicit declarations in six result modules**. The result
+subtotal is 1,483 across 122 modules; support remains 55 across fourteen
 modules. Counts include supporting lemmas and private helpers, not independent
 research results. Proved certificate constructors written as definitions
 enter the audit separately. A comment/string-stripped inventory reproduced
-the preceding count of 1,364 before counting the increment. Every result-module
+the preceding count of 1,479 before counting the increment. Every result-module
 row in the [formal inventory](../../formal/README.md) is reconciled against
 its source count and umbrella import. No existing Lean theorem declaration
 changed.
 
 ## New checked scope
+
+### Actual Runge--Kutta stages and method residuals
+
+The [held-RK extension](159-held-runge-kutta.md) defines the actual classical
+four-stage formula and its weighted endpoint on a real normed space. Regional
+field boundedness and an enclosing-ball budget prove all stage and endpoint
+membership in construction order. Repeated-substep induction retains the
+original outer anchor and containing ball. The source-anchored consistency
+bound is LMh²/2 relative to Euler; no high-order derivative assumption or
+fourth-order error claim is introduced.
+
+The phase adapter telescopes the actual substep increments and averages the
+actual stage accelerations. Its second component agrees exactly with the
+existing velocity-first comparison step. With phase speed bound M and
+anchored acceleration-variation coefficient L, the actual averaged acceleration
+residual is at most LMh and the endpoint comparison residual is at most 2Mh².
+The theorem discharges stage membership from its enclosing-ball hypotheses
+and retains a single held field across any positive internal substep count.
+
+### Concrete stage closure and complete finite histories
+
+The fixture has target acceleration Lipschitz constant 400 and holding
+coefficient 680. The held acceleration's variation from the outer target
+anchor is therefore at most 1080 times phase displacement. The complete
+held phase vector is bounded by `8 + 1080 * displacement`. For an anchor
+inside the ball R/2, with R=1/16, its enclosing ball of radius 16h lies in
+the original phase region when 16h<=R/2. The actual field bound closes at
+16 when h<=1/2160, before constructing any numerical stage.
+
+The existing reference on T=1/576 has displacement<=1/72<R/4, so a closed
+tube R/4 fits inside the inner ball R/2. The literal recurrence reconstructs
+the exact fixture drive at each outer anchor and holds it through n>0
+equal RK substeps. Actual stage averages give residual coefficients 17280
+and 32 in the existing trajectory interface, with exact initial state.
+The coefficient at most 108 yields all-time outer-state interpolation error
+at most 3/(16m) for every m>=16. Every outer state and every interpolated
+time lies in the inner region. The same reference works for every positive
+internal count, including one and four. The 16384-outer-step corollary
+gives uniform phase error<=2^-16; quantified uniform convergence over time
+and all positive internal counts is also checked.
+
+Position and velocity norms are Euclidean; the phase norm is their maximum.
+The interpolant is affine through outer stored states, not RK dense output.
+The 32h² residual compares two exact-real formulas; it is not a machine
+rounding certificate despite occupying the existing stored-step-error slot.
+
+### Every actual stage and endpoint query
+
+The finite substep-query set explicitly contains the source, stages 2/3/4
+and weighted endpoint. For every executed outer and inner index, each point
+lies in the original certified phase region. Every reported coordinate query
+with maximum coordinate error<=1/64 therefore retains all 36 mathematical
+stencil addresses. Separate corollaries cover internal weighted endpoints
+and every stored outer endpoint, including the final state. The same query
+allowance is already included at every time of the outer-state interpolant.
+
+### Runtime correspondence and field replacement
+
+Source review checked one and four internal RK4 substeps, the single held
+covector across the entire outer step, and reevaluation of potential, wall,
+drag, metric and connection at every stage. The caller must supply the
+fixture's exact drive at each outer anchor; `FrozenRollout::attempt_step`
+itself accepts a supplied covector. The fixture parameters are epsilon=a=beta=1,
+kappa=log2, mu=1/pi and unit intrinsic drive. Their runtime mapping is
+lambda_sq=(log2)^2 and command magnitude 1/2 because MAX_DRIVE_FORCE=2.
+No default-profile or arbitrary-caller certification is inferred.
+
+The separate fifth RHS component accumulates power with RK weights and does
+not feed back into the mechanical stages. State-error bounds alone do not
+certify that work quadrature, provider acceptance/refusal or IEEE arithmetic.
+
+The [reuse boundary](157-field-replacement-boundary.md) records the proposed
+dynamics-derived field as future work without defining it or changing this
+formulation. The new stage, averaging and residual arguments depend on local
+regularity evidence rather than actual distance-to-set identities. Generic
+metric/mechanics results and conditional field calculus are distinguished
+from literal fixture evidence and distance-derived geometry. Value approximation
+or agreement of zero sets alone is not presented as a transfer theorem.
+
+## Retained local-horizon and energy results
+
+The following results were added by the preceding 1,479-declaration increment.
+They remain unchanged and supply the concrete data used by this continuation.
 
 ### Actual local field and ruler bounds
 
@@ -160,9 +240,11 @@ theorem's unit residual coefficient.
 Source inspection confirms `FrozenRollout::attempt_step` holds the supplied
 control covector through all RK stages; drag is recomputed at each stage.
 `Rk4FourSubsteps` keeps that covector across the entire outer step. The age of
-the held command is therefore measured from the outer-step start. Actual RK
-stage displacement, truncation, stored-step errors and IEEE evaluation remain
-unproved; speed 8 for the reference alone does not certify RK stage motion.
+the held command is therefore measured from the outer-step start. At that
+increment, actual RK stage containment and method residuals were unproved.
+The held-RK extension above now supplies those exact-real results; IEEE
+evaluation remains outside the certificate. The reference speed bound alone
+still does not certify numerical stage motion.
 
 ### Actual energy regularity and a finite Taylor ledger
 
@@ -196,9 +278,11 @@ reach or stronger singular-limit theorem is claimed in this increment.
 
 The concrete reference remains a quadratic test fixture. Production distance
 fidelity, compiled extraction, storage/mask/machine-index correspondence,
-query rounding and IEEE evaluation still need evidence. Runtime RK stage/domain
-and truncation certificates, changing commands, impulses, combined steering
-and continuation beyond the local interval remain open. Runtime behavior,
+query rounding and IEEE evaluation still need evidence. Actual control
+construction, operational acceptance/refusal and work quadrature, changing
+commands, impulses, combined steering and continuation beyond the local
+interval remain open. The new exact-real stage/domain and method-residual
+certificates are limited to the stated fixture caller policy. Runtime behavior,
 training, canonical parameters and provider contracts are unchanged.
 
 ## Attributed analysis backport and project support
@@ -246,12 +330,12 @@ analysis-support modules and 55 explicit support theorem/lemma declarations.
 lake env lean Audit.lean
 ```
 
-passed for **3,144 project declarations**, including definitions, generated
+passed for **3,290 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 3144 project declarations
+Axiom audit passed for 3290 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -352,13 +436,14 @@ formal error bounds.
 
 ## Proof review and publication status
 
-Independent review checked local quadratic cancellation across cells,
-Euclidean and phase norm distinctions, actual differential/Riesz transfer,
-resolvent contraction, catalog cancellation, the distinct speed/Lipschitz
-constants, interpolation and tube arithmetic, all-time query scope and finite
-Taylor interpretation. It also checked the held-control policy against the
-runtime source and corrected the method's type name to `FrozenRollout`.
-The unit numerical residual and larger holding coefficient remain separate.
+Independent review checked the actual RK recurrence and its stage averages,
+outer-anchor holding policy, enclosing-ball bootstrap, noncircular domain
+induction, common-reference quantifier order, mesh constants, Euclidean/max
+norm distinctions and full stage/endpoint query scope. Source review also
+checked the fixture-to-runtime parameter mapping, supplied-covector caller
+contract and separation of the mechanical state from the work quadrature.
+The earlier unit-residual velocity-first certificate is retained separately;
+the new RK history uses its actual larger residual coefficients.
 
 No blocking mathematical defect was found. Source/module inventories,
 relative documentation links, proof-placeholder scans and whitespace were
@@ -375,7 +460,7 @@ a draft.
 
 `lean-proofs.yml` builds the pinned formal package and runs the axiom audit for
 formal-package changes. The commands and counts above are the observed local
-results. The published workflow run for this increment is reported on
+results. Hosted workflow results for the published increment are tracked on
 [draft PR #164](https://github.com/rhythmatician/FractalSync/pull/164).
 No runtime or training code was changed, so the application test suite was
 not rerun locally. Automatically triggered GitHub workflows are tracked

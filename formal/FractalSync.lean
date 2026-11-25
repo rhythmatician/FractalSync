@@ -115,5 +115,11 @@ import FractalSync.ImprovedConcreteTrajectory
 import FractalSync.LocalRulerBounds
 import FractalSync.LocalTrajectoryMesh
 import FractalSync.RankOneInverseBounds
+import FractalSync.ConcreteRungeKutta
+import FractalSync.ConcreteRungeKuttaBounds
+import FractalSync.ConcreteRungeKuttaQueries
+import FractalSync.RungeKuttaMesh
+import FractalSync.RungeKuttaPhase
+import FractalSync.RungeKuttaStages
 
 /-! Development-time mathematical research for FractalSync. -/

@@ -199,14 +199,18 @@ defect alone.
 The [held-control residual](159-held-control-residual.md) separately bounds
 the acceleration discrepancy from holding the supplied normalized-drive
 covector. Drag, potential, ruler and inverse metric remain state dependent.
-The bound still requires stage displacement or an appropriate curve-speed
-certificate. It is not silently inserted into the unit-residual mesh theorem:
-its derived coefficient is larger than one.
+The bound requires stage displacement or an appropriate curve-speed
+certificate. The subsequent [held-RK extension](159-held-runge-kutta.md) now
+supplies actual stage displacement and endpoint containment, and derives
+the corresponding method residuals for one or four internal RK4 substeps.
+It uses a separate interpolation coefficient with all-time error<=3/(16m),
+rather than inserting the larger holding coefficient into the unit-residual
+mesh theorem above.
 
 The new horizon addresses the prior microscopic constant propagation on this
 fixture. It remains local and exact real. Production distance fidelity, actual
-machine query and arithmetic errors, runtime Runge--Kutta truncation and stage
-domain control, changing commands, impulses, combined steering, and certified
+machine query and arithmetic errors, operational acceptance and work quadrature,
+changing commands, impulses, combined steering, and certified
 continuation beyond this interval remain open. The previous smooth-minimizer,
 cut-locus, bifurcation, manifold/atlas, reach and stronger singular-limit
 boundaries are unchanged.

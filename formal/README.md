@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,479 explicit proved theorem/lemma declarations**: 1,424 in 116 result
+**1,538 explicit proved theorem/lemma declarations**: 1,483 in 122 result
 modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -208,9 +208,15 @@ by the separate transitive audit.
 | `HeldControlResidual` | 10 | Actual frozen-drive catalog comparison, sample-covector error and curve/stage displacement residual bounds |
 | `ConcreteHeldControl` | 7 | Fully instantiated frozen-drive acceleration and numerical residual coefficients for the literal fixture |
 | `ImprovedConcreteEnergy` | 18 | Actual energy differential pair (5,134), contained-step Taylor bound, finite-run remainder and accumulated Taylor ledger |
-| **Result-module subtotal** | **1,424** | Includes supporting lemmas, not just independent research results |
+| `RungeKuttaStages` | 18 | Actual classical RK4 stages, enclosing-ball bootstrap, repeated substep containment and first-order consistency |
+| `RungeKuttaPhase` | 14 | Exact telescoping stage averages and actual acceleration/stored-step residuals for any positive internal count |
+| `ConcreteRungeKuttaBounds` | 6 | Actual held-field anchor variation, stage-ball speed bootstrap and smaller reference tube |
+| `RungeKuttaMesh` | 6 | Held-RK error coefficient at most 108, stage/domain mesh budgets and explicit dyadic error target |
+| `ConcreteRungeKutta` | 7 | Actual held-control RK recurrence, all-time finite-run certificate, stored-state containment and uniform convergence |
+| `ConcreteRungeKuttaQueries` | 8 | All actual internal stages and weighted endpoints, plus final stored endpoints, retain safe mathematical query addresses |
+| **Result-module subtotal** | **1,483** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,479** | 115 more source declarations than the prior 1,364-theorem increment |
+| **Total** | **1,538** | 59 more source declarations in six modules than the prior 1,479-declaration increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -520,9 +526,10 @@ a practical runtime recommendation. The source extraction models separately roun
 non-fused binary64 operations; exact rational rounding cross-checks remain
 external evidence, while the literal/sample proofs use kernel reduction.
 No Rust execution or compiler-contraction equivalence is claimed. Production
-Mandelbrot fidelity, actual query/IEEE errors, masks/storage/machine casts,
-sample-and-hold control evolution and runtime Runge-Kutta correspondence remain
-open. The formal fixed-command force is reevaluated at each phase state.
+Mandelbrot fidelity, actual query/IEEE errors and masks/storage/machine casts
+remain open. The later held-RK extension below now connects an exact-real
+outer-sampled drive policy to the reevaluated-command reference, under the
+fixture's stated caller and parameter contract.
 
 ### #159/#162: local fixture bounds, a longer horizon and held control
 
@@ -569,8 +576,54 @@ differential terms account for actual energy changes.
 See [the local-horizon note](../docs/research/159-local-horizon.md),
 [the held-control note](../docs/research/159-held-control-residual.md), and
 [the local-energy note](../docs/research/159-local-energy-bounds.md).
-Production distance fidelity, runtime stage/domain and Runge--Kutta residual
-certificates, IEEE errors, hybrid controls and continuation remain separate.
+Production distance fidelity, IEEE errors, hybrid controls and continuation
+remain separate. The exact-real RK stage/domain and residual bridge is the
+next extension below.
+
+### #159: actual held-control Runge--Kutta histories
+
+The six modules listed above close the exact-real numerical bridge, using the
+same fixture and reference horizon T=1/576. Their full statements and source
+mapping are in [the held-RK note](../docs/research/159-held-runge-kutta.md).
+
+`RungeKuttaStages` defines actual classical RK4 stages, their weighted endpoint,
+and repeated equal substeps. A regional speed bound establishes every stage
+and endpoint's membership by induction. It also checks the source-anchored
+Euler-comparison bound LMh²/2. `RungeKuttaPhase` telescopes the actual increments
+and derives both residuals for any positive internal substep count, retaining
+one held field and one outer anchor.
+
+`ConcreteRungeKuttaBounds` derives the actual anchored phase/acceleration
+variation coefficient 1080=680+400. On a stage ball of radius 16h about an
+inner anchor, the held field is bounded by 16 when h<=1/2160. The original
+reference has a closed tube of radius R/4 inside the smaller open ball R/2,
+leaving room for all stage queries in the original ball R=1/16.
+
+`ConcreteRungeKutta` defines the literal outer recurrence: sample the exact
+unit drive at each outer anchor and hold it through n>0 internal RK substeps.
+Its actual averaged acceleration differs from the target by at most 17280h;
+the exact RK endpoint differs from the velocity-first comparison by at most
+32h². The latter is a method-comparison residual, not an IEEE error budget.
+`RungeKuttaMesh` gives interpolation coefficient<=108 and, for m>=16 outer
+steps, all-time phase error<=3/(16m). The phase norm is the maximum of the
+Euclidean position and velocity norms. The 16384-step target<=2^-16 and the
+quantified uniform-convergence corollary are checked for every positive n,
+including one and four, with the same reference solution.
+
+`ConcreteRungeKuttaQueries` explicitly covers the source, stages2/3/4 and
+weighted endpoint of every internal substep, plus every outer endpoint.
+Reported coordinates with maximum coordinate error<=1/64 retain all 36
+mathematical stencil addresses. The same allowance holds at every time of
+the piecewise-affine outer-state interpolant. This is not RK dense output.
+
+The caller must supply the fixture's exact drive at each outer anchor. The
+runtime accepts a supplied covector and does not enforce that policy. No
+default-profile, floating-point, provider-acceptance or work-quadrature
+equivalence is inferred. The checked convergence rate is first order for
+the held-policy comparison; there is no fourth-order or four-substep speedup
+claim. The [field-replacement note](../docs/research/157-field-replacement-boundary.md)
+separates these general-field numerical arguments from the actual
+distance-to-set calibration and geometry below.
 
 ### #160: pointwise distance-graph algebra
 
@@ -1344,7 +1397,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,144 declarations, including the 1,479 stated theorem/lemma declarations,
+The current audit covers 3,290 declarations, including the 1,538 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
