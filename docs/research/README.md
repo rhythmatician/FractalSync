@@ -19,7 +19,10 @@ contract, primary experiment, reward, or first-training prerequisites.
 | #159 | [Explicit potentials and controls](159-potential-controls.md), [discrete steps](159-discrete-mechanics.md) | Actual Shore and secant-wall forces, full crest budget, momentum derivative, intrinsic drive/drag and candidate control contracts; frozen-metric step energy and sharp explicit-drag condition | Continuous energy and fixed-configuration algebra have checked assumptions. The separate changing-metric extension now handles the exact-real ordered step; executable provider and floating-point correspondence remain open. |
 | #159 | [Changing-metric dynamics and covariant steering](159-moving-metric-dynamics.md), [accumulated dynamics](159-accumulated-dynamics.md), [trajectory error and refinement](159-trajectory-error.md) | Actual phase-energy differential and finite-history energy accounting; ordered-step stability and ODE defect; residual/rounding propagation, simultaneous position/velocity domain control, and actual fixed-horizon grid-trajectory convergence; discrete steering consistency | Numerical histories stay in a certified phase region from an exact-curve margin. Convergence requires the stated error scaling and regional constants; numerical values, actual IEEE certificates, impulsive-history and combined steering convergence remain open. |
 | #159 | [Local trajectories and continuous interpolation](159-local-trajectories.md), [quantitative existence](159-quantitative-dynamics.md) | Actual local solution, regional uniqueness and reference tube; explicit horizon R/[4(B+1)] from supplied phase-ball constants; sufficient mesh inequality for continuous interpolation | A local reference is constructed at a specified positive horizon. The same constants control every interpolated time, and the mesh inequality proves domain membership. |
-| #159/#162 | [Operational ruler bounds](159-operational-ruler-bounds.md), [mechanical bounds](159-operational-mechanical-bounds.md), [finite-asset trajectory certificate](159-operational-trajectory-certificates.md) | Finite coefficient evidence gives actual ruler/gradient/Hessian norm and variation bounds, explicit mechanical acceleration constants, and an integrated actual-solution/refinement certificate | Local trajectory bounds now use explicit real formulas and a physical halo margin. Concrete asset/force evidence, actual IEEE error budgets and hybrid evolution remain separate. |
+| #159/#162 | [Operational ruler bounds](159-operational-ruler-bounds.md), [mechanical bounds](159-operational-mechanical-bounds.md), [finite-asset trajectory certificate](159-operational-trajectory-certificates.md) | Finite coefficient evidence gives actual ruler/gradient/Hessian norm and variation bounds, explicit mechanical acceleration constants, and an integrated actual-solution/refinement certificate | Local trajectory bounds now use explicit real formulas and a physical halo margin. The concrete instance below discharges asset/force evidence for one fixture; actual IEEE error budgets and hybrid evolution remain separate. |
+| #159/#162 | [Concrete catalog and trajectory instance](159-concrete-trajectory-certificate.md), [potential bounds](159-potential-force-bounds.md), [control bounds](159-control-force-bounds.md) | Derived actual force constants, literal nonconstant finite asset, constructed reference at an explicit rational horizon, all-time mesh/query control and an unconditional exact-real 1024-step run | The asset and force premises are discharged for this fixture. The horizon is extremely conservative; production arithmetic, control evolution and integrator correspondence remain open. |
+| #159 | [Explicit phase-energy bounds](159-phase-energy-bounds.md) | Actual bundled energy differential, numerical norm/Lipschitz constants, and per-step Taylor remainder with domain premises discharged along the concrete finite run | The concrete energy remainder is at most 1/[400000000 m²] for m steps. The linear differential term remains, so this is not an energy-conservation or total-drift assertion. |
+| #162 | [Concrete asset and reference fidelity](162-concrete-asset-instance.md) | Kernel-checked literal dyadic table, all 256 quadratic sample errors, actual full-halo value/first/second derivative errors, exact margins and Euclidean-gradient transfer | Actual fixture fidelity is now instantiated, retaining the raw-sample bias P-h². Production distance assets, machine query/IEEE errors and compiled extraction correspondence remain separate. |
 | #160 | [Distance geometry](160-distance-geometry.md), [checked radial profile](160-radial-profile.md), [AC paths and exact infimum](160-absolute-continuous-paths.md) | Unrestricted AC calibration and integrability; attained Shore-distance path minimum in both orientations; sharp Lipschitz constant; duration and kinetic-action bounds | The exact nearest-Shore result uses the actual path infimum. Its full segment equality classification is now also checked in the intrinsic-length extension. |
 | #160 | [Pairwise metric and zero-floor limit](160-pairwise-metric-limit.md) | Actual AC path metric, reversal/concatenation, topology, properness and completeness; every fixed-pair zero-floor branch; quantitative same-component comparison | Different components and distinct Shore endpoints separate to infinite distance; same-component distances converge to the actual zero-floor infimum. |
 | #160 | [Zero-floor geodesics and selected minimizers](160-zero-floor-geodesics.md) | Actual zero-floor infimum attained by an AC constant-speed path; uniform subsequence convergence for every selected constant-speed regularized family; positive clearance; selected curves' actual zero-floor lengths converge without a speed premise | The fixed-pair limit now includes minimizing-path compactness and attainment. Whole-selection convergence, velocity convergence and uniform varying-endpoint limits are not asserted. |
@@ -68,17 +71,16 @@ claimed by the current proof files.
 
 ## Relationship to the existing Lean issues
 
-The pinned package under `formal/` now contains **1,256 explicit theorem/lemma
-declarations across 112 modules**: 1,201 in ninety-eight result modules and 55 in
-fourteen analysis-support modules. This adds 87 declarations in nine result
-modules and one support module to the preceding 1,169-declaration package.
-The count includes supporting lemmas; it is not a
-count of independent research discoveries.
+The pinned package under `formal/` now contains **1,364 explicit theorem/lemma
+declarations across 121 modules**: 1,309 in 107 result modules and 55 in
+fourteen analysis-support modules. This adds 108 declarations in nine result
+modules to the preceding 1,256-declaration package. The count includes
+supporting lemmas; it is not a count of independent research discoveries.
 Support includes attributed upstream AC infrastructure and separate project
-proofs for AC composition, vector FTC, derivative control, proper geodesics and
+proofs for AC composition, vector FTC, derivative control, proper geodesics,
 compact parametric integration and uniform path compactness.
-The complete Lean 4.24.0 build passed with **2,695 jobs**. The transitive-axiom
-audit passed for **2,697 project declarations**, including definitions and
+The complete Lean 4.24.0 build passed with **2,706 jobs**. The transitive-axiom
+audit passed for **2,961 project declarations**, including definitions and
 generated helpers, with only `propext`, `Classical.choice` and `Quot.sound`.
 The earlier 596-theorem increment installed the pinned optional LSP/MCP server and
 passed its actual stdio smoke test with 22 tools. The official proof/build
@@ -87,19 +89,23 @@ skills were installed then as well. The
 [verification record](verification.md) give the reproducible setup and exact
 trust boundary.
 
-The current explicit potential-force catalog and additional control contracts
-are checked for #159. The exact-real operational dynamics now have explicit
-regional norm and Lipschitz formulas, a constructed positive-time reference,
-a sufficient mesh criterion, and whole-interpolant/query domain control from
-finite stored coefficient evidence and a physical halo margin. Force bounds
-and mesh-scaled residual, rounding and initial-error contracts remain inputs.
-The global operational quintic field is C4, with actual Euclidean ruler jets,
-selected physical jets and ideal indices identified. Concrete sample and force
-evidence, machine query/evaluation error budgets and hybrid evolution remain
-separate. For #160, the actual zero-floor path infimum is now attained, every
-constant-speed regularized minimizing selection has a uniform subsequential
-limit, and every AC minimizing selection has convergent actual zero-floor
-lengths. No smoothness of arbitrary AC minimizers is inferred.
+The actual potential, normalized fixed-command drive, and viscous-drag
+catalog now supplies explicit force bounds for #159. The concrete nonconstant
+finite fixture discharges the asset and force premises and constructs an
+actual reference with horizon 1/2560000000000000000064. Its exact-real
+m-step interpolation has phase error at most 1/(64m), all-time phase/query
+validity, and a checked energy Taylor remainder at every actual step.
+The microscopic horizon is a conservative certificate, not a practical
+runtime timestep. The general perturbed-history theorem retains explicit
+initial, acceleration-residual and stored-step error budgets.
+The fixture's actual value/differential/Hessian fidelity is checked against
+P-h², and its Euclidean gradient error is also bounded. Production
+Mandelbrot fidelity, actual query/IEEE error evidence, sample-and-hold control
+and runtime integrator correspondence remain separate. For #160, the prior
+actual zero-floor attainment, uniform subsequential selected-path convergence
+and full-sequence selected-length convergence remain intact. This increment
+does not strengthen those geometric limits or infer smoothness of arbitrary
+AC minimizers.
 For #157, persistent Codex MCP registration was attempted and blocked by the
 read-only active client configuration; installed tools and passing stdio
 tests do not silently close that remaining integration step.
@@ -117,8 +123,8 @@ issues remain open for their explicitly stated remaining obligations.
 | Embedded curved Shore | Compute jet and separation constants for concrete Shore representations and extend reach results to other embedding hypotheses or weaker regularity. The actual ruler, ambient connection and curvature transfer are checked under the documented normal-patch, Frenet and higher-regularity conditions. |
 | Smooth minimizing geometry | Prove regularity and geodesic-ODE identification for arbitrary attained AC minimizers; develop general conjugacy/second-variation criteria, all-minimizer classification above the flat threshold and global cut-locus arguments. The exact flat threshold and every minimizing AC path at or below it are checked. |
 | Curved-Shore bifurcation | Formalize the functional-analytic reduction, local branch and minimum arguments. The coordinate curvature calculation alone does not prove the bifurcation. |
-| Actual providers and arithmetic | Supply sample-fidelity and reference-regularity evidence for concrete assets, certified stored coefficient/force values, actual query-rounding budgets, storage/mask and machine index correspondence, and IEEE evaluation certificates. Literal value/jet bounds, real-query margins and mathematical finite-halo address control are checked. |
-| Full discrete dynamics | Instantiate the explicit regional constants and mesh inequality with concrete asset/force/arithmetic evidence; extend refinement to impulse jumps, time-dependent controls and combined covariant steering. The actual local solution, regional uniqueness, finite-asset phase/query control and continuous-interpolant refinement are checked. Global continuation and derivative convergence remain separate. |
+| Actual providers and arithmetic | Extend the concrete quadratic-fixture fidelity to production distance assets; certify compiled extraction/storage/mask/index correspondence, actual query-rounding budgets and IEEE field/force evaluation. The literal fixture, its actual reference jets, catalog force constants and real-query address control are checked. |
+| Full discrete dynamics | Tighten the instantiated regional bounds enough to obtain a useful horizon; certify runtime sample-and-hold control and integrator residuals, impulses, time-dependent controls, combined steering and continuation beyond the local interval. A concrete actual solution, exact-real finite recurrence, all-time phase/query control and numerical energy remainder are checked. Derivative convergence remains separate. |
 | Zero-floor minimizing paths | Establish additional uniqueness or selection hypotheses for whole-family path convergence, convergence of velocities if needed, and uniform limits over varying endpoints. Actual componentwise zero-floor attainment, uniform subsequential path convergence and full-sequence unregularized length convergence are checked. |
 | Optional authoring integration | Register the installed MCP server in a writable persistent client configuration. The existing managed configuration is read-only. |
 

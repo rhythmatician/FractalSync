@@ -97,5 +97,14 @@ import FractalSync.OperationalTrajectoryCertificate
 import FractalSync.QuantitativeDynamics
 import FractalSync.RulerJetBounds
 import FractalSync.ZeroFloorGeodesics
+import FractalSync.ConcreteAssetFidelity
+import FractalSync.ConcreteEnergyCertificate
+import FractalSync.ConcreteOperationalAsset
+import FractalSync.ConcreteTrajectoryCertificate
+import FractalSync.ControlForceBounds
+import FractalSync.OperationalCatalogBounds
+import FractalSync.PhaseEnergyBounds
+import FractalSync.PotentialForceBounds
+import FractalSync.RationalTrajectoryMesh
 
 /-! Development-time mathematical research for FractalSync. -/

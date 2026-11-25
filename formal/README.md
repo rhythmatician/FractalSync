@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,256 explicit proved theorem/lemma declarations**: 1,201 in ninety-eight result
+**1,364 explicit proved theorem/lemma declarations**: 1,309 in 107 result
 modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -118,6 +118,15 @@ by the separate transitive audit.
 | `OperationalMechanicalBounds` | 7 | Explicit actual acceleration norm/Lipschitz constants on a phase ball from finite stored coefficient evidence |
 | `QuantitativeDynamics` | 5 | Actual Picard solution at an explicit horizon, fixed certificate constants, reference tube and mesh criterion |
 | `OperationalTrajectoryCertificate` | 4 | Actual finite-asset solution, explicit regional constants, full interpolation/refinement and every-time displaced-query address control |
+| `PotentialForceBounds` | 16 | Actual Shore/wall and total conservative norm/Lipschitz budgets, radius-derived cosine floors and rational unit-ball bounds |
+| `ControlForceBounds` | 10 | Actual metric action, drive and drag bounds; derived fixed-command metric-normalization regularity |
+| `OperationalCatalogBounds` | 4 | Combined actual conservative/normalized-drive/drag certificate and rational operational jet/force constants |
+| `ConcreteOperationalAsset` | 23 | Literal 256-coefficient dyadic fixture, kernel-checked sample bounds, exact spacing, phase/halo margins and all 36 addresses |
+| `ConcreteAssetFidelity` | 11 | Actual whole-halo value/differential/Hessian fidelity to the biased quadratic reference and Euclidean-gradient transfer |
+| `RationalTrajectoryMesh` | 8 | Explicit rational horizon, bounded interpolation coefficient, all-mesh tube fit and dyadic error threshold |
+| `ConcreteTrajectoryCertificate` | 17 | Actual fully instantiated force/acceleration, constructed reference, explicit horizon, perturbed and exact-real finite-run certificates |
+| `PhaseEnergyBounds` | 7 | Bundled actual phase-energy differential and explicit norm/Lipschitz budgets from field and potential jets |
+| `ConcreteEnergyCertificate` | 12 | Literal energy-regularity constants, contained-step Taylor bound and unconditional finite-run domain/remainder rates |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
@@ -190,9 +199,9 @@ by the separate transitive audit.
 | `OperationalFieldHessianError` | 9 | Concrete third-basis bounds and global Hessian query gain 32B/h³ |
 | `OperationalFieldComputedError` | 1 | Combined reference, actual-query and reported-evaluation value/gradient/Hessian errors |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **1,201** | Includes supporting lemmas, not just independent research results |
+| **Result-module subtotal** | **1,309** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,256** | 87 more source declarations than the prior 1,169-theorem increment |
+| **Total** | **1,364** | 108 more source declarations than the prior 1,256-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -451,10 +460,60 @@ The integrated finite-asset theorem supplies the acceleration constants to
 the quantitative construction, then controls every continuous interpolated
 state and every reported query satisfying the stated displacement budget.
 Mesh-scaled residual, stored-state rounding and initial-error hypotheses remain
-explicit. Concrete force bounds, certified sample/evaluation errors, machine
+explicit in these generic statements. The concrete fixture below discharges
+the finite coefficient and catalog-force premises. Machine evaluation,
 normalization/floor/casts/masks, impulse jumps, combined steering and long-time
 extension remain separate. No fixed error floor is asserted to vanish under
 refinement.
+
+### #159/#162: concrete catalog, reference fidelity, energy and trajectory certificates
+
+The [concrete trajectory note](../docs/research/159-concrete-trajectory-certificate.md)
+instantiates the preceding interfaces on the actual literal nonconstant
+16-by-16 quadratic test fixture. The
+[asset/fidelity note](../docs/research/162-concrete-asset-instance.md),
+[potential bounds](../docs/research/159-potential-force-bounds.md),
+[control bounds](../docs/research/159-control-force-bounds.md), and
+[energy bounds](../docs/research/159-phase-energy-bounds.md) provide the
+separate proof and correspondence boundaries.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Actual Shore and secant-wall constants | `shoreForce_bound`, `shoreForce_log_two_bound`, `wallForce_bound`, `wallForce_bound_of_radius`, `totalForce_bound`; the radius r<2 gives an explicit positive cosine denominator floor. `wallForce_default_unit_bound` gives (1/16,Lx/2) at mu=1/pi on the unit position ball. |
+| Actual normalized drive and drag | `metricAction_boundedLipschitz`, `driveForce_boundedLipschitz`, `dragForce_boundedLipschitz`; `metricNormalize_unit_formula`, `metricNormalize_pos_smul`, both normalization bounds and `normalizedDriveForce_boundedLipschitz` derive fixed-nonzero-command regularity from rho/u certificates. |
+| Combined actual catalog | `catalogForce_boundedLipschitz` supplies a symbolic regional pair for conservative force, normalized drive and viscous drag. `catalogForce_rational_bound` gives (400000,4000000000000) for the stated nonzero parameter instance. `rational_ruler_budget` and `rational_operational_jets` justify all numerical ruler inputs. |
+| Literal finite data and geometry | `numerator_bound`, `coefficient_bound`, `coefficients_bound`, `finite_coefficients_bound`, `coefficients_of_fin`, and `coefficients_values` certify the literal table and zero extension. Spacing, center/velocity norms, exact halo margin and `safe_reported_query` certify the phase/query region and all 36 mathematical addresses. |
+| Concrete sample and actual field fidelity | `sample_error_numerator_bound` and `coefficient_sample_error` discharge all 256 sample inequalities. `finite_sample_error`, `selected_sample_error`, the three physical field/query error statements, the actual `fderiv` wrappers and `actual_reference_errors` transfer them throughout the full half-open halo, including grid lines. `euclidean_gradient_reference_error` performs the actual contractive chart and Riesz transfer. |
+| Rational horizon and mesh | `refinementCoefficient_add_half_le`, the rational horizon/coefficient lemmas, `rationalTrajectoryMesh_fits`, `rationalTrajectoryMesh_error_le`, and `rationalTrajectoryMesh_error_le_65536`; B>=8 and T=1/[64(B+1)] give coefficient<=B, all-mesh tube fit and error<=1/[64(N+1)]. |
+| Concrete actual solution and numerical history | `regional_jets`, `position_bound`, `velocity_bound`, `rho_floor`, `heading_ne_zero`, `force_bound`, `acc_bound`, `phaseField_bound`, and the horizon lemmas discharge all coefficient premises. `exists_reference` constructs the actual solution/tube; `exists_certified_trajectory` includes regional uniqueness and all-time perturbed-mesh/query control. `exists_exact_scheme_certificate` and `exists_1024_step_certificate` instantiate the actual recursive exact-real update without numerical residual premises. |
+| Explicit actual energy differential | `fderiv_phaseEnergy_eq` identifies a bundled continuous linear covector. `innerSL_bound`, `covector_comp_bound`, `phase_precomp_bound`, `positionCovector_bound`, `energyCovector_bound`, and `fderiv_phaseEnergy_bound` propagate the norm/Lipschitz pair. `stepJetCertificate` is a proved constructor with the computed regularity constant. |
+| Concrete changing-metric energy | `ruler_jet`, `gradient_jet`, `potential_jet`, `potentialGradient_bound`, `energy_differential_bound`, and `phaseEnergy_differentiable` instantiate actual field and potential derivatives. `energyStepCertificate`, its literal-L theorem, and `energy_step_taylor_remainder` give a numerical Taylor remainder for contained actual updates. The finite-run corollaries discharge endpoint inclusion for the certified exact-real history. |
+
+The fixture spacing is the exact dyadic value of binary64 `0.1`, not exactly
+1/10. The field reference is P-h² for P(x,y)=x²+2xy-3y², retaining raw-sample
+quintic bias. On the full physical halo the actual value, differential and
+second derivative errors are at most 2^-48, 2^-43 and 2^-38. Differential/Hessian
+operator norms use the physical coordinate maximum norm. A separate checked
+corollary gives the same 2^-43 bound for the Euclidean gradient.
+
+The concrete dynamics use epsilon=a=F=beta=dref=1, kappa=log 2, mu=1/pi,
+x0=(1/2,1/2), v0=(1/4,0), R=1/16, and reported-query displacement delta=1/64.
+The force pair is (400000,4e12), actual acceleration pair (1.1e12,4e19), and
+shared speed/Lipschitz bound B=4e19. The checked horizon is exactly
+1/2560000000000000000064, approximately 3.90625e-22 in model time. Every admitted
+m-step interpolant has phase error at most 1/(64m); 1024 steps give 2^-16.
+The exact-real velocity-first recursion discharges its residuals by definition.
+The energy differential pair is (2e7,2.4e10), giving a contained-step quadratic
+remainder coefficient 1.2e10 times the squared phase-increment speed.
+
+The horizon is derived from coarse proof majorants, not measured stiffness or
+a practical runtime recommendation. The source extraction models separately rounded,
+non-fused binary64 operations; exact rational rounding cross-checks remain
+external evidence, while the literal/sample proofs use kernel reduction.
+No Rust execution or compiler-contraction equivalence is claimed. Production
+Mandelbrot fidelity, actual query/IEEE errors, masks/storage/machine casts,
+sample-and-hold control evolution and runtime Runge-Kutta correspondence remain
+open. The formal fixed-command force is reevaluated at each phase state.
 
 ### #160: pointwise distance-graph algebra
 
@@ -1150,8 +1209,10 @@ For positive spacing h and coefficient magnitudes <=B, the actual global
 operator bounds remain 8B/(3h) and 68B/(9h²) in the product maximum norm. The
 combined value budget is eta+8B/(3h)*norm(deltaQuery). The following extension
 supplies conditional reference-jet fidelity and the Hessian query bound.
-Evidence for actual asset/sample accuracy, machine floor/casts, validity masks,
-storage decoding, query-rounding bounds and IEEE evaluation remains separate.
+The concrete quadratic fixture above now supplies its sample and actual
+reference-jet accuracy. Evidence for production asset accuracy, machine
+floor/casts, validity masks, storage decoding, query-rounding bounds and IEEE
+evaluation remains separate.
 
 ### #162: concrete reference fidelity and combined actual-query jet budgets
 
@@ -1226,7 +1287,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 2,697 declarations, including the 1,256 stated theorem/lemma declarations,
+The current audit covers 2,961 declarations, including the 1,364 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

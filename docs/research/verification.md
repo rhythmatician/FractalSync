@@ -2,9 +2,9 @@
 
 Verified 2026-11-25 (America/Chicago) in the supplied Linux environment. This
 continuation starts from draft PR #164 at
-`57c23b158254b794d12b3a3d370a6af24a7358dd`, whose reported main-branch base is
+`57a1650fe5a2d8ce6254434252ecc0ce2e24cdd2`, whose reported main-branch base is
 `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The preceding 1,169-declaration package and all earlier increments are retained.
+The preceding 1,256-declaration package and all earlier increments are retained.
 This record separates the new kernel-checked results, existing analysis support,
 conventional geometry, and earlier optional-tool/numerical observations.
 
@@ -22,9 +22,9 @@ conventional geometry, and earlier optional-tool/numerical observations.
 | Previously installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
 The earlier increments installed Elan, Lean and the pinned Mathlib cache.
-This continuation reused that installation and obtained missing pinned cache
-entries for the bounded-continuous-function Arzelà–Ascoli import. No Mathlib
-source was changed. The toolchain, dependency sources, manifest, Lake
+This continuation reused that installation and working cache. The new
+trigonometric and exponential bound imports were built under the same pins.
+No Mathlib source was changed. The toolchain, dependency sources, manifest, Lake
 configuration, audit implementation/allowlist and workflow were unchanged.
 
 From `formal/`, the complete command
@@ -33,177 +33,171 @@ From `formal/`, the complete command
 lake build --wfail
 ```
 
-completed successfully with **2,695 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,706 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing eighty-nine result modules | 1,115 |
-| `BoundedLipschitz` | 14 |
-| `MechanicalBounds` | 1 |
-| `RulerJetBounds` | 10 |
-| `OperationalRulerBounds` | 23 |
-| `OperationalHalo` | 11 |
-| `OperationalMechanicalBounds` | 7 |
-| `QuantitativeDynamics` | 5 |
-| `OperationalTrajectoryCertificate` | 4 |
-| `ZeroFloorGeodesics` | 11 |
-| Existing thirteen analysis-support modules | 54 |
-| `Analysis/BoundedSpeedCompactness` | 1 |
-| **Total across 112 source modules** | **1,256** |
+| Existing ninety-eight result modules | 1,201 |
+| `PotentialForceBounds` | 16 |
+| `ControlForceBounds` | 10 |
+| `OperationalCatalogBounds` | 4 |
+| `ConcreteOperationalAsset` | 23 |
+| `ConcreteAssetFidelity` | 11 |
+| `RationalTrajectoryMesh` | 8 |
+| `ConcreteTrajectoryCertificate` | 17 |
+| `PhaseEnergyBounds` | 7 |
+| `ConcreteEnergyCertificate` | 12 |
+| Existing fourteen analysis-support modules | 55 |
+| **Total across 121 source modules** | **1,364** |
 
-This adds **87 explicit declarations in nine result modules and one support
-module**. The result subtotal is 1,201 across ninety-eight modules; support is
-55 across fourteen modules. The counts include supporting lemmas and are not
-counts of independent research results. A comment/string-stripped source
-inventory reproduced the preceding count of 1,169 before counting this
-increment. Every result-module row in the
+This adds **108 explicit declarations in nine result modules**. The result
+subtotal is 1,309 across 107 modules; support remains 55 across fourteen
+modules. The counts include supporting lemmas and are not counts of independent
+research results. Two additional proved energy-certificate constructors are
+`def` declarations, so they enter the audit but not the theorem/lemma count.
+A comment/string-stripped source inventory reproduced the preceding count
+of 1,256 before counting this increment. Every result-module row in the
 [formal inventory](../../formal/README.md) is reconciled against its source
 count and umbrella import. No existing Lean theorem declaration changed.
 
 ## New checked scope
 
-### Actual zero-floor attainment and selected minimizing paths
+### Derived actual potential and control bounds
 
-The [zero-floor geodesic extension](160-zero-floor-geodesics.md) works in any
-finite-dimensional real normed space with nonempty closed Shore S, real a,
-and fixed off-Shore endpoints x,y in the same component of its complement.
-The existing actual off-Shore AC infimum D0 is attained by an ordinary AC
-path gamma. Its entire image stays in that component, with the positive
-clearance d(x,S)*exp(-D0), and
+The [potential-force extension](159-potential-force-bounds.md) computes actual
+Shore, secant-wall and total conservative norm/Lipschitz pairs. The position
+radius r<2 supplies a positive cosine denominator floor. On the unit position
+ball, the actual default wall parameter mu=1/pi gives norm bound 1/16 and
+Lipschitz constant Lx/2. The Shore specialization kappa=log2 cancels the
+logarithmic constant without removing the nonzero conservative term.
 
-```text
-L0(gamma) = D0(x,y)
-D0(gamma(s),gamma(t)) = D0(x,y)*abs(s-t),  0<=s,t<=1.
-```
+The [control extension](159-control-force-bounds.md) bounds the actual metric
+lowering, drive and viscous covectors. It proves regularity of the actual
+metric normalization of every fixed nonzero command, including the unit
+formula and positive-scaling invariance. Heading regularity is derived from
+the ruler and its gradient, not supplied as a new premise.
 
-For every positive floor sequence tending to zero and every selection of
-constant-speed regularized geodesics between those endpoints, the proof
-extracts a strictly increasing subsequence converging uniformly in the
-original ambient metric to such a zero-floor minimizer. Floor monotonicity,
-smooth Shore, strict convexity and minimizer uniqueness are not required.
-Coincident endpoints are included.
+The combined [catalog certificate](159-concrete-trajectory-certificate.md)
+uses epsilon=a=F=beta=1, kappa=log2, mu=1/pi and fixed positive-first-axis
+command. The actual total force includes both conservative terms, normalized
+drive and viscous drag. Its concrete pair is (400000,4e12). The actual
+acceleration, including the changing-metric connection, has pair (1.1e12,4e19).
+The parameters define a research instance and do not change canonical values.
 
-The proof derives a common ambient Lipschitz bound and invokes the pinned
-bounded-continuous-function form of Arzelà–Ascoli. Joint continuity of each
-fixed positive-floor intrinsic distance passes the speed bound to the limit.
-The existing metric-length bridge makes the limit AC and bounds every
-positive-floor integral. Logarithmic ruler confinement gives actual positive
-clearance; the checked density comparison then bounds its original zero-floor
-integral. No weak derivative convergence or assumed lower semicontinuity of
-that integral is used.
+### Literal finite asset and actual reference fidelity
 
-A separate theorem applies to every selected family of actual AC
-positive-floor minimizers, without a constant-speed premise. It proves
-eventual Shore avoidance and convergence of their actual unregularized
-integrals to D0. With m=d(x,S)*exp(-D0), its eventual squeeze is
+The [concrete asset](162-concrete-asset-instance.md) materializes the existing
+16-by-16 quadratic test fixture in the runtime source at the recorded baseline.
+All 256 coefficients are literal dyadic rationals with common denominator 2^57.
+Ordinary kernel-reduced finite decisions prove the coefficient magnitude
+bound 7 and sample error at most 2^-48 against P(x,y)=x²+2xy-3y² at exact physical
+nodes. The spacing is the exact dyadic value of binary64 0.1. Explicit unequal
+entries certify that the fixture is neither constant nor zero.
 
-```text
-D0 <= L0(gamma_n) <= D0/(1-epsilon_n^2/m^2).
-```
-
-This is full-sequence length convergence. Path convergence is subsequential
-and has the explicit constant-speed selection hypothesis. No convergence of
-velocities, arbitrary entire selected path family, or varying endpoint pairs
-is asserted.
-
-### Explicit actual ruler and mechanical bounds
-
-The [ruler-bound extension](159-operational-ruler-bounds.md) concerns the
-literal floor-selected spline P on the actual Euclidean plane. For coefficient
-magnitude bound B>=0, spacing h>0 and floor epsilon>0, put
+The complete half-open physical halo has checked actual field fidelity:
 
 ```text
-G = 8B/(3h),  H = 68B/(9h^2),  J = 32B/h^3
-Hrho = H+G^2/epsilon
-Jrho = J+3GH/epsilon+3G^3/epsilon^2.
+|F(q) - (P(q)-h²)| <= 2^-48
+norm(DF(q) - D(P-h²)(q)) <= 2^-43
+norm(D²F(q) - D²(P-h²)(q)) <= 2^-38.
 ```
 
-For rho=sqrt(P^2+epsilon^2), the checked conclusions are
-epsilon<=rho<=sqrt(B^2+epsilon^2), norm(gradient rho)<=G, and
-norm(D(gradient rho))<=Hrho. The global Lipschitz constants of rho, its actual
-Riesz gradient and that gradient's actual derivative are G,Hrho,Jrho.
-The last field also has a genuine Frechet derivative bounded by Jrho;
-`HasFDerivAt` is included, so a totalized derivative supplies no shortcut.
-The L2-to-coordinate-max chart is proved contractive and both covector slots
-are transported before Euclidean Riesz dualization.
+The statements use actual first and iterated Frechet derivatives, including
+at grid lines and vertices. The raw-sample quintic bias -h² is retained.
+Differential/Hessian norms here use the coordinate maximum norm. A separate
+contractive-chart/Riesz theorem proves Euclidean gradient error<=2^-43.
+There is no remaining finite sample-fidelity or coefficient premise for this
+literal fixture. Its reference is a quadratic polynomial, not Mandelbrot
+distance or a production asset.
 
-The [mechanical-bound extension](159-operational-mechanical-bounds.md)
-propagates pairs (norm bound,Lipschitz constant) through actual sums,
-differences, bilinear operations, reciprocals, and composition. It unfolds the
-existing inverse-metric force minus connection(v,v), using rho>=epsilon and
-W=1+a^2*norm(u)^2>=1. No unit-gradient bound is assumed.
-`operationalAccelerationBudget` substitutes the actual ruler jets and the
-velocity pair (norm(p.velocity)+R,1) on a closed phase ball. The phase norm is
-the maximum of the two Euclidean norms. It produces explicit arithmetic
-acceleration norm and Lipschitz bounds; only force norm and variation are
-external coefficient hypotheses. The expressions are conservative exact-real
-bounds, not sharp estimates or measured runtime constants.
+The center x0=(1/2,1/2), initial velocity (1/4,0), phase radius 1/16, reported-query
+displacement 1/64, exact halo margin 1/2-2h>1/4, and all 36 mathematical stencil
+addresses are also checked. Euclidean position/velocity norms and the phase
+maximum norm are used by the dynamics; reported coordinate error uses its
+coordinate maximum norm.
 
-### Finite-asset locality and mathematical query addresses
+### A constructed actual reference and fully instantiated finite run
 
-The [physical-halo extension](162-operational-halo.md) defines the actual
-half-open normalized full-stencil halo and its strict interior. The minimum
-of the four signed physical face distances is a concrete halo margin.
-If phase-ball radius R and reported coordinate displacement delta satisfy
-R+delta<margin, every such query stays in the open halo. All 36 selected
-integer stencil indices, including row-major addresses, lie in the stored
-rectangle. Cell changes are allowed.
-
-Finite stored coefficient agreement gives equality of every physical query
-jet. On the open halo it gives equality of actual ruler germs, Riesz gradients,
-gradient derivatives and same-force mechanical acceleration germs. A zero
-extension is globally bounded from only finite stored coefficient evidence.
-The mechanical certificate is transferred back to the arbitrary original
-extension by actual acceleration equality on the whole phase ball. No bound
-on the original extension outside the asset is required.
-
-These are exact-real query and mathematical integer statements. Machine
-normalization, floor/casts, integer overflow, storage, masks and an actual
-query-displacement budget remain separate obligations.
-
-### Constructed quantitative trajectories and complete interpolation control
-
-The [quantitative construction](159-quantitative-dynamics.md) uses actual
-acceleration Lipschitz constant L and phase-speed bound B on a specified
-closed phase ball of radius R>0. It constructs an actual solution on the
-explicit horizon T=R/[4(B+1)]. The larger open Picard interval supplies
-ordinary derivatives at both endpoints of [0,T]. The proof gives
-norm(z(t)-p)<=B*t<R/4 and a radius-R/2 tube contained in the phase ball.
-Its ODE certificate records exactly the input L,B and supports regional
-uniqueness.
-
-The [finite-asset trajectory certificate](159-operational-trajectory-certificates.md)
-instantiates these constants from the actual operational acceleration budget,
-using phase speed max(norm(p.velocity)+R,A0). It constructs the reference
-without a preexisting solution or existential margin premise. With step
-tau=T/(N+1), residual norm<=tau*eta, stored-state step error<=tau^2*r and
-initial error<=tau*I, define
+The [concrete trajectory theorem](159-concrete-trajectory-certificate.md)
+constructs an actual reference from the literal field and catalog, with
+regional uniqueness, endpoint derivatives, a positive reference tube, and
+exact horizon
 
 ```text
-C = refinementCoefficient(T,L,B,eta,r,I)+B/2.
+T = 1 / 2560000000000000000064.
 ```
 
-The explicit mesh condition 2*T*C<=R*(N+1) gives continuity of the actual
-stored-state interpolant, error<=tau*C at every time, whole-interpolant
-phase-ball membership, and valid displaced reported queries with all 36
-mathematical addresses. The residual and rounding contracts remain conditional
-on a state already lying in the phase ball; the proof establishes that
-membership by the existing simultaneous induction. The uniform refinement
-theorem includes eventual query validity on the whole interval.
+The shared speed/Lipschitz bound B=4e19 gives this rational horizon through
+R/[4(B+1)] at R=1/16. It is approximately 3.90625e-22 in model time. This is a
+very conservative consequence of coefficient magnitude propagation, not
+measured stiffness or a practical runtime timestep recommendation.
 
-The results require concrete force bounds and the stated error scaling.
-They do not certify a particular asset, IEEE execution, a runtime interpolation
-policy, equality between interpolated velocity and the derivative of
-interpolated position, global continuation, impulses, or combined steering.
-Fixed machine precision does not automatically yield vanishing step-scaled
-budgets.
+For m=N+1 steps, tau=T/m, the perturbed-history theorem admits initial error
+<=tau, acceleration residual<=tau and stored-step error<=tau². Its continuous
+interpolant has phase error<=1/(64m) at every time, remains in the open phase
+ball, and supports every reported query within 1/64 with all 36 valid
+mathematical addresses. The numerical residual contracts are conditional on
+state membership; the theorem proves that membership by the checked bootstrap.
+No fixed-precision implementation is asserted to meet those scaled budgets.
 
-The prior flat threshold and all short-segment equality cases, actual ambient
-curved-Shore connection/curvature transfer, provider reference-fidelity results,
-metric-length/nearest-Shore classification and #161--#163 results remain
-unchanged. This increment does not assert publication-level novelty.
+`exactTrajectory` recursively uses the actual acceleration and velocity-first
+position update over exact reals. Its residual hypotheses vanish by definition.
+`exists_exact_scheme_certificate` therefore has no supplied numerical-error,
+asset, force or solution premise. `exists_1024_step_certificate` instantiates
+the uniform phase-error bound 2^-16 for the actual 1024-step recurrence.
+Interpolated velocity is not asserted to equal the derivative of interpolated
+position.
+
+### Explicit energy regularity and unconditional finite-run remainders
+
+The [energy extension](159-phase-energy-bounds.md) identifies the actual
+phase-energy Frechet derivative with a bundled continuous linear covector and
+computes its norm/Lipschitz pair from actual ruler, gradient, Hessian, velocity
+and conservative potential-gradient certificates. It requires no unspecified
+compactness constant or assumed phase-energy Hessian bound.
+
+On the concrete phase region, norm(DE)<=2e7 and Lip(DE)<=2.4e10. The actual
+potential-gradient identity and all regional field/force evidence are proved
+for the literal fixture. Convexity supplies the full segment for every update
+whose old/proposed states are in the region, giving the explicit Taylor
+coefficient 1.2e10 times the squared phase-increment speed.
+
+The finite-run theorem then derives every stored state's open-ball membership
+from the actual interpolant at grid times. It discharges both endpoint
+conditions at every recurrence step and proves
+
+```text
+|E(y[i+1])-E(y[i])-DE(y[i])[y[i+1]-y[i]]| <= 1/(400000000*m²),  i<m.
+```
+
+This is a per-step Taylor remainder relative to the retained differential
+term. It does not assert conservation or bound total driven/damped energy
+drift by the displayed quantity.
+
+### Retained results and precise implementation boundary
+
+All preceding #160 results, including zero-floor attainment, subsequential
+constant-speed selected-path convergence, full-sequence selected-length
+convergence, flat threshold/classification at and below threshold, and actual
+ambient curved-Shore connection/curvature transfer are unchanged. The earlier
+#161--#163 results are retained. This increment does not establish new smooth
+minimizer regularity, global cut locus, bifurcation, or stronger singular limits.
+
+The extractor models separately rounded, non-fused binary64 arithmetic and
+cross-checks every operation with exact rational round-to-nearest, ties-to-even.
+It is external reproducibility evidence, not Rust execution or a proof of
+compiler-contraction/FMA equivalence. The kernel certifies the literal table
+and its analytic properties independently of that extraction model.
+
+Production distance assets, actual query/IEEE error budgets, machine index and
+storage/mask correspondence remain open. The formal fixed-command drive is
+reevaluated at every phase point. The runtime operational engine accepts a
+constructed control covector and holds it through its Runge-Kutta stages;
+that policy and integrator correspondence remain separate residual obligations.
+No continuation beyond the local interval, impulse/time-dependent-control
+convergence or combined steering result is inferred.
 
 ## Attributed analysis backport and project support
 
@@ -238,7 +232,7 @@ local domination on a compact rectangle, then the pinned differentiation
 theorem applies to the actual interval integral. It supplies no new analytic
 axiom and is separate from the attributed upstream backport.
 
-The new `BoundedSpeedCompactness` module adds one project theorem using
+The preceding increment's `BoundedSpeedCompactness` module added one project theorem using
 the pinned bounded-continuous-function Arzelà–Ascoli and compact sequential
 extraction APIs. It preserves the original endpoint and speed bounds while
 producing actual uniform subsequence convergence. The package now has fourteen
@@ -250,12 +244,12 @@ analysis-support modules and 55 explicit support theorem/lemma declarations.
 lake env lean Audit.lean
 ```
 
-passed for **2,697 project declarations**, including definitions, generated
+passed for **2,961 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 2697 project declarations
+Axiom audit passed for 2961 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -315,6 +309,20 @@ proof-CI dependency.
 
 ## Independent numerical checks
 
+The new concrete-fixture extraction check was rerun in this continuation:
+
+```text
+python formal/fixtures/check_operational_quadratic.py
+```
+
+It passed for 256 coefficients, denominator 144115188075855872, magnitude bound 7,
+sample-error bound 2^-48 and the exact-rational rounding cross-check. The command
+also checks current source-function provenance, all recorded bit patterns,
+and correspondence with the literal Lean table. Its output explicitly says
+`rust_execution_claimed: false`. Rust/Cargo were unavailable; no executable
+Rust comparison is claimed. The literal/sample inequalities are also separate
+kernel proofs covered by the transitive audit.
+
 The initial 28-theorem increment ran each script using its repository Python
 environment, Python 3.12.14. These unchanged numerical scripts were not rerun
 for the subsequent analytic extensions.
@@ -341,25 +349,15 @@ formal error bounds.
 
 ## Proof review and publication status
 
-Independent review checked the reciprocal and bilinear budget arithmetic,
-all terms of the actual mechanical expression, Euclidean/coordinate norm
-transport, actual Riesz gradient/Hessian identities, and finite zero-extension
-locality. The explicit scalar and field derivative constants require no
-unit-gradient premise. Force regularity and sample/IEEE evidence remain
-separate inputs.
-
-The quantitative dynamics review checked the Picard interval and endpoint
-derivatives, actual reference displacement and tube, phase-speed bound,
-mesh inequality, conditional residual/domain induction and uniform
-interpolant convergence. Physical-halo margins are in physical units, and
-the address proof is about mathematical integer floor and full finite stencils.
-
-The zero-floor review checked sup-metric uniform compactness, the finite-prefix
-shift for arbitrary nonmonotone floors, ordinary AC admissibility, actual
-off-Shore integrability, clearance and attainment, and constant-speed equality
-without presupposing a zero-floor metric bundle. It separately checked the
-arbitrary-parameter unregularized length squeeze. No derivative convergence
-or whole-selection path convergence is inferred.
+Independent review checked the actual catalog formulas, fixed-command
+normalization, literal binary64 bit/rational correspondence, source provenance,
+row/column indexing, exact spacing and halo margins, quadratic bias, phase/domain
+bootstrap, and energy Taylor interpretation. It independently reproduced the
+maximum finite coefficient magnitude 27/4 and sample-error record. The source
+extraction is explicitly qualified as a separately rounded arithmetic model.
+The actual full-halo Frechet bounds and separate Euclidean-gradient transfer
+preserve their different norms. Runtime held-control/RK behavior is kept
+separate from the exact-real recursive scheme.
 
 No blocking mathematical defect was found. Source/module inventories,
 relative documentation links, proof-placeholder scans and whitespace were
