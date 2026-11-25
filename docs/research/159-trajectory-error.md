@@ -321,8 +321,11 @@ regularity, speed, and interior-margin certificates as inputs. The subsequent
 [local-trajectory package](159-local-trajectories.md) constructs such a
 solution and a positive tube from actual C1 acceleration, including for the
 regularized literal C4 operational spline with its actual gradient and
-Hessian and a C1 force. Concrete numerical regional constants, time horizons,
-and finite-asset halo margins still require separate certificates.
+Hessian and a C1 force. The subsequent
+[quantitative finite-asset construction](159-operational-trajectory-certificates.md)
+supplies explicit norm/variation, horizon and mesh formulas from finite
+coefficient and force bounds and a physical halo margin. Concrete numerical
+asset/force evidence and machine error budgets remain input certificates.
 
 The refinement scaling in (9) is substantive. A fixed nonzero acceleration
 residual or fixed absolute stored-state error is not covered by this

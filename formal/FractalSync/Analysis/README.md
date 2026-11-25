@@ -95,6 +95,22 @@ declarations. The new helper is not copied from the upstream snapshot above.
 These are formalizations of standard analysis and metric arguments; no
 mathematical novelty is claimed for them.
 
+## Project uniform compactness of bounded-speed paths
+
+`BoundedSpeedCompactness.lean` adds one project theorem:
+`MetricGeometry.exists_uniformly_convergent_subsequence`. In a proper metric
+space, a sequence of paths with fixed endpoints and a common Lipschitz bound
+has a uniformly convergent subsequence whose limit has the same endpoint and
+speed bounds. The proof uses the pinned bounded-continuous-function
+Arzelà–Ascoli theorem and compact sequential extraction, with the actual
+endpoint-family closedness from `ProperGeodesics`.
+
+The resulting fourteen support modules contain 55 explicit theorem/lemma
+declarations. This support is separate from the attributed upstream AC
+backport. The downstream `ZeroFloorGeodesics` module derives the required
+common ambient speed bound from the regularized distances; it does not assume
+compactness of a minimizing family.
+
 ## Trust boundary
 
 The backport proves that the derivative of an absolutely continuous real

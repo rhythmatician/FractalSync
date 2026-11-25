@@ -327,9 +327,17 @@ The package now has an actual local reference solution under C1 acceleration,
 an actual-metric-jet specialization for the regularized C4
 operational spline, and actual continuous-interpolant convergence under the
 stated numerical contracts. The next numerical obligations are concrete values for regional
-derivative, speed, time, and margin constants, together with actual provider
-and arithmetic error certificates. Fixed nonzero errors do not satisfy the
-vanishing mesh-scaled budgets automatically.
+derivative, speed, time, and margin constants for a particular asset and
+force, together with actual provider and arithmetic error certificates.
+The [quantitative operational continuation](159-operational-trajectory-certificates.md)
+now derives explicit real formulas for those regional mechanical constants
+from finite stored coefficient bounds, force norm/variation bounds, and an
+actual physical halo margin. It constructs an explicit positive horizon and
+gives a sufficient mesh inequality for whole-interpolant error and query
+validity. This replaces the existential constant selection for that
+specialization; it does not supply numerical evidence for a concrete asset
+or force. Fixed nonzero errors do not satisfy the vanishing mesh-scaled
+budgets automatically.
 
 Time-dependent controls, event detection, impulse-jump convergence, and a
 combined covariant-steering evolution remain separate. The interpolation

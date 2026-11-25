@@ -371,6 +371,18 @@ The same extension checks the full nearest-Shore minimizer classification
 in strictly convex finite-dimensional normed spaces, including monotone AC
 traversals with pauses and the zero-distance constant branch.
 
+The [zero-floor geodesic continuation](160-zero-floor-geodesics.md) now proves
+that the off-Shore AC infimum itself is attained for same-component endpoints.
+For any positive sequence of floors tending to zero, any selection of
+constant-speed regularized minimizers has an ambient-uniformly convergent
+subsequence. Its limit is a constant-speed minimizer of the actual zero-floor
+integral, stays in the original component, and has clearance at least
+\(d(x,S)\exp(-D_{0,a}(x,y))\). The actual zero-floor lengths of every selected
+AC minimizing family also converge to \(D_{0,a}(x,y)\), without a
+constant-speed requirement for that length statement. This does not give
+uniform endpoint convergence, convergence of every entire selected family,
+or convergence of velocities.
+
 The flat cut locus and curved-Shore bifurcation remain conventional results,
 with the precise curvature boundary recorded in the flat-Shore note.
 These formal additions make no

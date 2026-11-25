@@ -1,8 +1,8 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,169 explicit proved theorem/lemma declarations**: 1,115 in eighty-nine result
-modules supporting #157, #159, and research issues #160--#163, plus 54 in thirteen
+**1,256 explicit proved theorem/lemma declarations**: 1,201 in ninety-eight result
+modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
 execution, Python training, the browser, and Aeneas/Charon.
@@ -110,6 +110,14 @@ by the separate transitive audit.
 | `TrajectoryInterpolation` | 9 | Actual continuous stored-state interpolation, all-time error/domain bound and uniform convergence |
 | `LocalDynamics` | 6 | Actual local ODE solution, positive reference tube, regional uniqueness and mechanical coefficient adapter |
 | `OperationalDynamics` | 5 | Regularized literal physical spline, actual Riesz gradient/Hessian and local mechanical ODE existence |
+| `BoundedLipschitz` | 14 | Exact norm/Lipschitz certificates, bilinear operations, reciprocal floors and composition |
+| `MechanicalBounds` | 1 | Explicit arithmetic norm/Lipschitz budgets for the actual inverse-force and connection expression |
+| `RulerJetBounds` | 10 | Scalar regularizer gains, actual differential/Hessian chain rule and bilinear variation budgets |
+| `OperationalRulerBounds` | 23 | Literal Euclidean ruler/gradient/Hessian norm and variation bounds, including its actual third derivative |
+| `OperationalHalo` | 11 | Physical query margins, all 36 addresses, finite zero extension and actual metric-jet/acceleration germ independence |
+| `OperationalMechanicalBounds` | 7 | Explicit actual acceleration norm/Lipschitz constants on a phase ball from finite stored coefficient evidence |
+| `QuantitativeDynamics` | 5 | Actual Picard solution at an explicit horizon, fixed certificate constants, reference tube and mesh criterion |
+| `OperationalTrajectoryCertificate` | 4 | Actual finite-asset solution, explicit regional constants, full interpolation/refinement and every-time displaced-query address control |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
@@ -133,6 +141,7 @@ by the separate transitive audit.
 | `MetricComparison` | 6 | Scale-only versus anisotropic lengths and actual path infima |
 | `ACComponentPaths` | 8 | AC reachability throughout each component of an open domain |
 | `ZeroFloorLimit` | 21 | Actual zero-floor integrability, quantitative infimum sandwich and same-component limit |
+| `ZeroFloorGeodesics` | 11 | Attained actual zero-floor minimum, constant-speed geometry, selected-minimizer subsequential convergence and zero-floor length convergence |
 | `CrossingAction` | 5 | Integral Cauchy--Schwarz, crossing duration and kinetic action |
 | `FlatShore` | 32 | Scalar warp derivatives, curvature expressions, excursion integral |
 | `FlatShoreGeometry` | 25 | Actual coordinate connection, torsion/compatibility, curvature commutator and Gram ratio |
@@ -181,9 +190,9 @@ by the separate transitive audit.
 | `OperationalFieldHessianError` | 9 | Concrete third-basis bounds and global Hessian query gain 32B/h³ |
 | `OperationalFieldComputedError` | 1 | Combined reference, actual-query and reported-evaluation value/gradient/Hessian errors |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **1,115** | Includes supporting lemmas, not just independent research results |
-| `Analysis/*` (thirteen modules) | 54 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,169** | 126 more source declarations than the prior 1,043-theorem increment |
+| **Result-module subtotal** | **1,201** | Includes supporting lemmas, not just independent research results |
+| `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
+| **Total** | **1,256** | 87 more source declarations than the prior 1,169-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -195,6 +204,12 @@ The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 snapshot and retained Apache 2.0 attribution. The AC composition/gluing,
 vector FTC, derivative-control, proper-geodesic and compact parametric-integral
 proofs are separate project support work, not attributed upstream declarations.
+
+The additional `BoundedSpeedCompactness` module contributes one theorem using
+the pinned bounded-continuous-function Arzelà–Ascoli and compact sequential
+extraction APIs. It upgrades the existing bounded-speed endpoint family to
+uniform subsequence convergence. It is project support, not an upstream
+backport or a new compactness assumption.
 
 ### #157/#159: ruler and local metric foundations
 
@@ -405,6 +420,42 @@ place the existential phase ball inside a finite asset's halo or compute
 usable numerical constants. Positive physical spacing gives its intended
 provider interpretation.
 
+### #159/#162: explicit operational bounds and finite-asset local trajectories
+
+The [ruler-bound note](../docs/research/159-operational-ruler-bounds.md),
+[mechanical-bound note](../docs/research/159-operational-mechanical-bounds.md),
+[quantitative local-existence note](../docs/research/159-quantitative-dynamics.md),
+[physical-halo note](../docs/research/162-operational-halo.md), and
+[integrated trajectory certificate](../docs/research/159-operational-trajectory-certificates.md)
+connect literal finite coefficient evidence to actual local mechanics.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Uniform norm and Lipschitz arithmetic | `BoundedLipschitzOn.bilinear`, `inv`, `smul`, `inner`, `clm_apply`, `comp`; a pair `(M,L)` controls the actual function on a common region. Products give `(MN,MK+NL)` and reciprocal floors give `(1/epsilon,L/epsilon²)`. |
+| Actual mechanical expression | `MechanicalBounds.acceleration_bound`; `accelerationBudget` propagates the input pairs through `inverseAction - connection(v,v)`. It uses rho>=epsilon>0 and W>=1, without assuming a unit gradient or convex region. |
+| Actual Euclidean operational jets | `rulerField_bounds`, `norm_gradient_rulerField_le`, `norm_hessian_rulerField_le`, the three `*_sub_le` theorems, and `actual_third_rulerField_bound`; bounded literal coefficients, positive spacing and positive floor. The L2-to-coordinate-max contraction and Riesz isometry are explicit. |
+| Finite asset and physical margin | `zeroExtension_agrees`, `abs_zeroExtension_le`, `reportedQuery_mem_of_phaseBall`, `stencil_indices_of_mem_halo`; R+delta below the actual four-sided physical margin controls every selected address, including across cell changes. |
+| Actual derivative and acceleration locality | `rulerField_eventuallyEq`, `actual_metricJets_eq`, `acceleration_eventuallyEq`, `acceleration_zeroExtension_eqOn`; agreement of finite stored coefficients gives neighborhood equality of actual ruler jets and acceleration inside the open halo. |
+| Finite-asset mechanical bounds | `finiteAsset_acceleration_boundedLipschitz`; `operationalAccelerationBudget` supplies both actual acceleration bounds on the supplied closed phase ball. Only stored coefficients are bounded; force norm and variation remain explicit inputs. |
+| Constructed quantitative reference and mesh condition | `exists_quantitative_ODE_certificate`, `exists_quantitative_trajectory_control`; T=R/[4(B+1)], displacement <=Bt<R/4, a radius-R/2 reference tube, regional uniqueness, and whole-interpolant error/domain control when 2TC<=R(N+1). |
+| Complete finite-asset trajectory construction | `exists_finiteAsset_ODE_certificate`, `exists_finiteAsset_trajectory_control`, `exists_finiteAsset_interpolation_converges`; one actual reference from literal finite-asset data controls every admitted mesh, with explicit constants, uniform convergence and all-time displaced-query address bounds. |
+
+Writing G=8B/(3h), H=68B/(9h²), and J=32B/h³ for the raw spline gains,
+the actual ruler satisfies epsilon<=rho<=sqrt(B²+epsilon²), norm(u)<=G,
+norm(Du)<=H+G²/epsilon, and the Lipschitz constants of rho, u, and Du are
+G, H+G²/epsilon, and J+3GH/epsilon+3G³/epsilon² respectively.
+The actual derivative of Du has the last bound as well. These are conservative
+exact-real expressions, not numerical measurements or IEEE certificates.
+
+The integrated finite-asset theorem supplies the acceleration constants to
+the quantitative construction, then controls every continuous interpolated
+state and every reported query satisfying the stated displacement budget.
+Mesh-scaled residual, stored-state rounding and initial-error hypotheses remain
+explicit. Concrete force bounds, certified sample/evaluation errors, machine
+normalization/floor/casts/masks, impulse jumps, combined steering and long-time
+extension remain separate. No fixed error floor is asserted to vanish under
+refinement.
+
 ### #160: pointwise distance-graph algebra
 
 Module: [DistanceGraph.lean](FractalSync/DistanceGraph.lean).
@@ -541,6 +592,34 @@ and distinct Shore-endpoint divergence, this covers every fixed pair when S
 is nonempty and closed. It does not claim uniform convergence over endpoint
 pairs. Arbitrary-endpoint minimizing curves are supplied by the separate
 positive-floor construction below.
+
+### #160: attained zero-floor paths and convergence of regularized minimizers
+
+[ZeroFloorGeodesics.lean](FractalSync/ZeroFloorGeodesics.lean) and the
+[zero-floor geodesic note](../docs/research/160-zero-floor-geodesics.md)
+extend the fixed-pair distance limit to actual minimizing paths. The ambient
+space is finite-dimensional and real normed; S is nonempty and closed;
+x is off S and y lies in its complement component. The anisotropy parameter
+may be any real number. No smooth Shore, strict convexity or unique minimizer
+is assumed.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Uniform positive-floor length control gives actual zero-floor control | `infDist_lower_of_positive_floor_lengths`, `acGraphLength_zero_le_of_positive_floor_lengths`; the positive clearance is d(x,S) exp(-B), and the actual zero-floor integral is <=B. |
+| Compactness of selected constant-speed regularized geodesics | `exists_uniform_limit_of_small_floor_geodesics`, `exists_uniform_limit_of_geodesics`; any positive sequence of floors tending to zero, without monotonicity, has an ambient-uniformly convergent subsequence. |
+| Limit path is an actual zero-floor minimizer | `zeroFloor_minimizer_of_positive_floor_speed`, `zeroFloor_geodesic_of_positive_floor_speed`, `selected_geodesics_subsequence_zero_floor`; the limit is ordinary AC, remains in the initial component, has clearance d(x,S) exp(-D0), attains the actual integral, and satisfies D0(gamma(s),gamma(t))=D0(x,y) abs(s-t). |
+| Unconditional zero-floor attainment on each component | `exists_zeroFloor_minimizer`, `zeroFloorDistance_isLeast`; the original off-Shore AC candidate class has a minimum, with no selected-geodesic premise. |
+| Actual unregularized lengths of positive-floor minimizers converge | `selected_minimizer_lengths_tendsto_zero_floor`; every selected family of AC minimizers eventually avoids S and has L0(gamma_n) tending to D0. This statement needs no constant-speed parameterization. |
+
+The last proof supplies the eventual squeeze
+`D0 <= L0(gamma_n) <= D0/(1-epsilon_n²/m²)`, with
+`m=d(x,S) exp(-D0)>0`. Uniform convergence of paths is only asserted after
+subsequence extraction and requires the stated constant-speed selection.
+Convergence of velocities, convergence of an arbitrary entire selected path
+family, and uniform convergence over varying endpoint pairs are not asserted.
+The proof uses the already checked metric-length bridge; it does not assume
+lower semicontinuity of a derivative-dependent integral under uniform
+convergence.
 
 ### #160: actual metric length, geodesics, and all nearest-Shore minimizers
 
@@ -1147,7 +1226,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 2,461 declarations, including the 1,169 stated theorem/lemma declarations,
+The current audit covers 2,697 declarations, including the 1,256 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

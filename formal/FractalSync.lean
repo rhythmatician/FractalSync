@@ -88,5 +88,14 @@ import FractalSync.OperationalFieldFidelity
 import FractalSync.OperationalFieldHessianError
 import FractalSync.OperationalFieldReference
 import FractalSync.TrajectoryInterpolation
+import FractalSync.BoundedLipschitz
+import FractalSync.MechanicalBounds
+import FractalSync.OperationalHalo
+import FractalSync.OperationalMechanicalBounds
+import FractalSync.OperationalRulerBounds
+import FractalSync.OperationalTrajectoryCertificate
+import FractalSync.QuantitativeDynamics
+import FractalSync.RulerJetBounds
+import FractalSync.ZeroFloorGeodesics
 
 /-! Development-time mathematical research for FractalSync. -/
