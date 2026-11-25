@@ -1,6 +1,7 @@
 import FractalSync.AbsolutelyContinuousPaths
 import FractalSync.ACComponentPaths
 import FractalSync.ACSubpaths
+import FractalSync.AccumulatedDynamics
 import FractalSync.ComponentCrossing
 import FractalSync.ContinuousMechanics
 import FractalSync.ControlMechanics
@@ -9,15 +10,20 @@ import FractalSync.CovariantSteering
 import FractalSync.CovariantStatistics
 import FractalSync.CurvedShoreGeometry
 import FractalSync.CurvedShoreCurvature
+import FractalSync.CurvatureTensoriality
 import FractalSync.CrossingAction
 import FractalSync.DiscreteMechanics
+import FractalSync.DiscreteSteering
 import FractalSync.DistanceGraph
 import FractalSync.DistanceToSet
 import FractalSync.DisplacementBounds
+import FractalSync.EmbeddedShoreMetric
+import FractalSync.FlatCurvatureTensor
 import FractalSync.FlatShore
 import FractalSync.FlatShoreGeometry
 import FractalSync.FlatShoreGeodesics
 import FractalSync.FlatShoreIntrinsic
+import FractalSync.FlatShoreSecondVariation
 import FractalSync.GraphChord
 import FractalSync.IntrinsicCurveLength
 import FractalSync.IntrinsicGeodesics
@@ -29,12 +35,18 @@ import FractalSync.IntrinsicVariation
 import FractalSync.MetricComparison
 import FractalSync.MetricImpulse
 import FractalSync.MovingMetricMechanics
+import FractalSync.NonlinearCoordinates
 import FractalSync.NormalizedDistanceFields
 import FractalSync.NormalizedMapDifferential
 import FractalSync.NormalizedProviderError
+import FractalSync.OperationalField
+import FractalSync.OperationalFieldBounds
+import FractalSync.OperationalFieldJetError
+import FractalSync.OperationalFieldQueryError
 import FractalSync.PairwiseDistance
 import FractalSync.PathCalibration
 import FractalSync.PathOperations
+import FractalSync.PhaseEnergyRegularity
 import FractalSync.PotentialForces
 import FractalSync.ProviderCertificates
 import FractalSync.RadialProfile
@@ -44,6 +56,7 @@ import FractalSync.RulerDifferential
 import FractalSync.ScaleMetric
 import FractalSync.SensitivityBounds
 import FractalSync.ShoreMinimizers
+import FractalSync.TubularNeighborhood
 import FractalSync.ZeroFloorLimit
 
 /-! Development-time mathematical research for FractalSync. -/

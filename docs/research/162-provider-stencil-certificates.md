@@ -203,8 +203,12 @@ the unclamped request. The samples and regularity region must cover the queries
 at that step. The center used in the Hessian formula is the earlier center
 sample `d0`; the code does not use `vals[0]` in its derivative formulas.
 
-The theorem hypotheses have not been established for the actual raster or the
-experimental operational field. In particular:
+These stencil hypotheses are not established for the actual raster by this
+module. The separate [concrete operational-field proofs](162-concrete-provider-certificates.md)
+now identify the experimental quintic cell's actual real derivatives and
+bound its coefficient sensitivity. Those results concern the polynomial
+represented by stored coefficients, and do not certify its reference-distance
+fidelity. In particular:
 
 - The raster's interpolation error against true signed Shore distance is not
   certified. Raster interpolation need not have the required differentiability.

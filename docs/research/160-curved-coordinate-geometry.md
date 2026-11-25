@@ -200,12 +200,15 @@ the curved-Shore bifurcation or classify global minimizing paths.
 
 ## 5. Embedded Shore and regularity boundary
 
-The new formal objects are defined directly in a supplied normal-coordinate
-model. To apply them to a particular planar embedded Shore, one must still
-construct a tubular chart, prove that its signed coordinate is actual signed
-distance, identify the Euclidean metric factor \(1-k(y)r\), and transfer the
-geometry through that chart. The condition \(1-k(y)r\ne0\) alone does not prove
-chart injectivity, nearest-point uniqueness, or the distance identification.
+These formal objects are defined directly in a supplied normal-coordinate
+model. The subsequent [embedded normal-neighborhood extension](160-embedded-normal-neighborhoods.md)
+constructs an actual local chart, identifies absolute normal coordinate with
+actual distance, and proves the pullback of the actual ambient graph metric
+equals this model. It uses a global-over-Shore normal-chord certificate,
+actual local Frenet derivatives, a spanning planar frame, and the nonfocal
+condition. The condition \(1-k(y)r\ne0\) alone does not prove injectivity,
+nearest-point uniqueness, or the distance identity. A generic theorem deriving
+the radius from an embedded curve's regularity and separation remains open.
 
 The earlier [classical smooth-Shore argument](160-flat-shore.md#2-universal-curvature-at-a-smooth-shore)
 assumes a tubular neighborhood with a \(C^3\) signed-distance function and
@@ -216,11 +219,13 @@ local \(k,k'\) derivative hypotheses used by this coordinate proof. No
 statement extends to fractal Shore points or cut loci without the required
 geometry and regularity.
 
-The remaining obligations include a bundled curvature tensor and naturality
-under general nonlinear chart changes, the embedded tubular-chart construction,
-smooth-minimizer ODE identification, global cut-locus arguments, and the functional-analytic
-curved-Shore bifurcation proof. The new coordinate curvature calculation is
-independent of those unresolved steps.
+The [nonlinear tensor extension](160-nonlinear-geometry.md) supplies general
+connection/curvature covariance and a continuous trilinear coordinate tensor
+with field-extension independence. A named transfer from the embedded ambient
+connection to this curved-coordinate connection is still required, together
+with the appropriate higher regularity. Manifold-level bundle/atlas interfaces,
+smooth-minimizer ODE identification, global cut-locus arguments, and the
+functional-analytic curved-Shore bifurcation remain open.
 
 No runtime behavior, provider contract, canonical parameter, or training gate
 is changed. Package-wide verification is recorded in

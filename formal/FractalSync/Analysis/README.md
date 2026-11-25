@@ -1,4 +1,4 @@
-# Absolute-continuity support for the pinned proof environment
+# Analysis support for the pinned proof environment
 
 The package remains on Lean 4.24.0 and Mathlib
 `f897ebcf72cd16f89ab4577d0c826cd14afaafc7`. That Mathlib snapshot defines
@@ -75,10 +75,25 @@ Mathlib APIs, not copied declarations from the upstream snapshot:
   and reparameterization from a continuous scalar length control. It assumes
   properness and nearly optimal paths, not minimizing-path existence.
 
-The twelve support modules contain 53 explicit theorem/lemma declarations:
+Those twelve support modules contain 53 explicit theorem/lemma declarations:
 the earlier 43, plus 2 in `ACVectorFTC`, 1 in `DerivativeControl`, and 7 in
-`ProperGeodesics`. These are formalizations of standard analysis and metric
-arguments; no mathematical novelty is claimed for them.
+`ProperGeodesics`.
+
+## Project compact parametric integration
+
+`CompactParametricIntegral.lean` adds one project-authored theorem using the
+pinned parametric-integral API. From a jointly continuous integrand and its
+jointly continuous actual parameter derivative, it derives local integrable
+domination by bounding the derivative on a compact rectangle, then
+differentiates the actual finite interval integral. It does not assume a
+derivative of the integral. This helper
+supports the literal sine-family length second variation in
+`FlatShoreSecondVariation.lean`.
+
+The resulting thirteen support modules contain 54 explicit theorem/lemma
+declarations. The new helper is not copied from the upstream snapshot above.
+These are formalizations of standard analysis and metric arguments; no
+mathematical novelty is claimed for them.
 
 ## Trust boundary
 

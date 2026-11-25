@@ -148,12 +148,14 @@ coordinate.
 
 ## 6. Remaining boundary
 
-This establishes an affine coordinate interface for the actual calculations.
-It does not prove covariance under nonlinear charts, where the derivative of
-the coordinate map varies and its second derivative contributes to the
-connection transformation. It also does not prove arbitrary smooth-frame
-changes, independence of vector-field extensions, a bundled manifold
-curvature tensor, or minimizer regularity.
+This module establishes the affine interface. The subsequent
+[nonlinear covariance and tensor extension](160-nonlinear-geometry.md) now
+checks the chart-Hessian contribution, actual nonlinear connection and
+curvature covariance, field-extension independence, and an actual continuous
+trilinear coordinate tensor. The flat specialization also proves the same
+curvature ratio in every regular nondegenerate frame after nonlinear
+pullback. A manifold bundle/atlas construction, moving-frame connection-form
+laws, and minimizer regularity remain separate.
 
 `lake build --wfail FractalSync.CoordinateCovariance` passes under the pinned
 Lean 4.24.0 / Mathlib environment. No proof placeholders, extra axioms, runtime

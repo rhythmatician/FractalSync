@@ -104,8 +104,12 @@ connection terms. The factor \(\epsilon^2\) from the two unit tangent inputs
 cancels the coordinate curvature coefficient \(\epsilon^{-2}\).
 
 This supplies the curvature term in the coordinate Jacobi equation. The
-formal definition chooses constant coordinate extensions explicitly; it does
-not assert an arbitrary-extension tensoriality theorem.
+definition in this module chooses constant coordinate extensions explicitly.
+The later [tensoriality extension](160-nonlinear-geometry.md) proves that the
+actual flat curvature commutator is independent of the regular field
+extensions and identifies its full continuous trilinear tensor. It therefore
+justifies this choice without restricting the resulting curvature tensor to
+constant fields.
 
 ## 4. The normal Jacobi equation and its first zero
 
@@ -146,7 +150,11 @@ intrinsic arclength. The actual Shore curve has tangential displacement
 This checks the field-level origin of the familiar scale in the conventional
 shortcut argument. It does not yet constitute a formal theorem about the
 first conjugate point, the index form, global minimality up to that point,
-or the appearance of two minimizing excursions beyond it.
+or the appearance of two minimizing excursions beyond it. The separate
+[actual length second variation](160-flat-second-variation.md) now proves
+strict shortening by every sufficiently small positive sine amplitude for
+normalized span greater than pi, with actual AC and fixed endpoints. That
+concrete family result does not classify global minimizers.
 
 ## 5. Verification and remaining interfaces
 
@@ -155,7 +163,9 @@ pinned Lean 4.24.0 and Mathlib environment. No placeholders or custom axioms
 are used; package-wide verification is recorded in [verification.md](verification.md).
 
 Remaining formal steps include smooth regularity of the AC minimizers,
-ODE existence and endpoint analysis, general curvature tensor interfaces,
-Jacobi/conjugacy and second-variation criteria, and the global cut-locus
-classification. No runtime, provider, training, or canonical-parameter change
-is made by these proofs.
+ODE existence and endpoint analysis, manifold-level tensor interfaces,
+Jacobi/conjugacy and general second-variation criteria, and the global cut-locus
+classification. The coordinate tensor and nonlinear covariance are now checked
+in the extension linked above, and the sine-family second variation/shortening
+is checked separately. No runtime, provider, training, or
+canonical-parameter change is made by these proofs.

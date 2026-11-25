@@ -322,9 +322,16 @@ checks these modules under the unchanged Lean/Mathlib pins. Package-wide build,
 inventory, and transitive axiom verification are recorded in
 [verification.md](verification.md).
 
-Remaining implementation obligations include provider correspondence for the
-actual fields and their derivatives, a usable certificate for the phase-energy
-Hessian bound, floating-point error propagation, and control of repeated steps.
-Continuous solution existence and a discrete realization of covariant steering
-are also separate. No canonical parameter, integrator, runtime behavior, or
-training preflight has been changed.
+The [accumulated-dynamics extension](159-accumulated-dynamics.md) now derives
+uniform differential regularity on compact smooth phase regions, handles
+residual forces in the local estimate, and proves a finite-history energy/work
+bound with updated-position impulses and whole-segment domain budgets. It also
+constructs a discrete covariant-steering candidate with exact endpoint metric
+norm and an actual first-order consistency proof.
+
+Remaining implementation obligations include concrete numerical values for
+the regional regularity constants, actual provider and IEEE certificates,
+phase-region membership including velocity bounds, and global trajectory-error
+control. Continuous solution existence and an executable steering realization
+with numerical guarantees are separate. No canonical parameter, integrator,
+runtime behavior, or training preflight has been changed.

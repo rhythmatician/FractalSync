@@ -403,6 +403,13 @@ denominator-perturbation budgets. These conditional theorems identify what
 the numerical provider must certify; its raster and validity flags do not
 establish those hypotheses automatically.
 
+The [concrete operational-field continuation](162-concrete-provider-certificates.md)
+now checks the actual quintic coefficient lists, simultaneous Horner jets,
+physical-coordinate derivatives, raw-quadratic sampling bias, and
+coefficient-to-value/jet stability. Its exact-real fixed-cell results do not
+supply Shore-distance fidelity, cell-selection correspondence, or IEEE
+evaluation certificates.
+
 The bridge in
 [`geometry_provider.rs`](../../runtime-core/src/geometry_provider.rs)
 uses a derivative stencil whose step is clamped between configured minimum

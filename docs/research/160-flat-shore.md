@@ -8,10 +8,16 @@ covariant-derivative commutator. The [Euclidean flat bridge](160-flat-intrinsic.
 now identifies its coordinate integral with the unrestricted AC path metric.
 [Smooth solution contracts](160-flat-geodesics.md) check energy and momentum
 conservation and the actual Shore Jacobi field with first positive zero pi.
+The [actual sine-family second variation](160-flat-second-variation.md) now
+checks the length derivative and strict shortening beyond normalized span pi.
 The [curved normal-coordinate extension](160-curved-coordinate-geometry.md)
-checks curvature for a supplied varying-curvature chart metric. The global
-cut-locus/minimizer arguments, construction of a chart for an embedded Shore,
-and Banach-space bifurcation reduction below remain conventional. No bundled
+checks curvature for a supplied varying-curvature chart metric. The
+[nonlinear tensor extension](160-nonlinear-geometry.md) proves flat curvature
+independent of regular fields, frames, and nonlinear coordinates. The
+[embedded extension](160-embedded-normal-neighborhoods.md) constructs actual
+normal charts and identifies their metric under an explicit chord certificate.
+The global cut-locus/minimizer arguments and Banach-space bifurcation
+reduction below remain conventional. No bundled
 manifold curvature tensor, cut locus, or Lyapunov–Schmidt theorem is claimed.
 No runtime or training contract changes.
 
@@ -151,9 +157,12 @@ This is a checked curvature calculation in the specified global plane
 chart. The [affine-coordinate extension](160-affine-covariance.md) now
 recomputes the actual connection, bracket and curvature commutator under
 every invertible affine chart and proves the same curvature Gram ratio.
-Nonlinear-chart and variable-frame naturality, arbitrary-extension
-tensoriality, a bundled Levi-Civita object, higher-dimensional identification
-of (3), and the embedded-Shore argument below remain separate.
+The [nonlinear extension](160-nonlinear-geometry.md) now proves actual
+curvature covariance, arbitrary regular-field extension independence, a
+continuous trilinear coordinate tensor, and the same ratio in every regular
+nondegenerate flat frame. A manifold-level Levi-Civita object, moving-frame
+connection-form laws, higher-dimensional identification of (3), and the
+embedded-Shore curvature transfer below remain separate.
 The separate [Euclidean flat bridge](160-flat-intrinsic.md) now proves the
 coordinate integral, graph integral, actual endpoint infima and metric curve
 length agree on the full AC path class. Its ambient space is `WithLp 2 (ℝ × ℝ)`;
@@ -161,7 +170,11 @@ the global coordinate chart preserves absolute continuity without being
 misidentified as an isometry for the coordinate product's default norm.
 The [geodesic extension](160-flat-geodesics.md) supplies actual solution-level
 conservation laws and the Shore Jacobi equation. Those results do not yet
-prove smoothness of every AC minimizer or the global cut locus.
+prove smoothness of every AC minimizer or the global cut locus. The
+[second-variation extension](160-flat-second-variation.md) separately proves
+the actual sine-family length integral and strict shortening for every
+sufficiently small positive amplitude when the normalized span exceeds pi.
+It does not establish the equality-case minimum or count all minimizers.
 
 ## 2. Universal curvature at a smooth Shore
 
@@ -169,8 +182,11 @@ The following embedded-Shore and higher-dimensional argument remains
 conventional. A separate [checked coordinate calculation](160-curved-coordinate-geometry.md)
 now establishes the planar result for the explicit normal-chart metric
 with a varying curvature profile, under its stated local derivative hypotheses.
-The construction of that chart from an arbitrary embedded Shore has not
-been formalized.
+The [normal-neighborhood construction](160-embedded-normal-neighborhoods.md)
+now supplies an actual chart and metric identification under a quadratic
+normal-chord certificate and actual Frenet data. Deriving that certificate
+for arbitrary embedded Shores and transferring the ambient connection's
+curvature have not yet been formalized.
 
 For a general Shore assume a tubular neighborhood with a **C³ signed-distance
 function** `D`; this is a sufficient classical regularity hypothesis, not a
