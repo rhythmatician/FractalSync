@@ -292,10 +292,29 @@ pub fn sigma_dot(
 /// Derived from the embedding Jacobian and ambient metric
 /// H = diag(rho^-2, rho^-2, lambda^2).
 /// Returns 2x2 symmetric positive-definite matrix as [[g11, g12], [g12, g22]]
+fn validate_mechanics_jet(jet: &crate::geometry_provider::GeometryJet) -> Result<(), String> {
+    use crate::geometry_provider::GeometryValidity;
+    if jet.validity == GeometryValidity::ProviderFailure
+        || (!jet.is_bridge && jet.validity != GeometryValidity::Regular)
+    {
+        return Err(format!("geometry not regular: {:?} (singularity={:?})", jet.validity, jet.singularity));
+    }
+    Ok(())
+}
+
 pub fn induced_metric(c: Complex64, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
-    let (gx, gy) = scale_gradient(c, config)?;
-    let sigma = mandelbrot_scale(c, config)?;
-    let rho = config.d_ref * 2.0_f64.powf(-sigma);
+    let jet = geometry_jet(c, config)?;
+    induced_metric_from_jet(&jet, config)
+}
+
+/// Evaluate the metric from one coherent provider sample.
+pub fn induced_metric_from_jet(jet: &crate::geometry_provider::GeometryJet, config: &ManifoldConfig) -> Result<[[f64; 2]; 2], String> {
+    validate_mechanics_jet(jet)?;
+    let [gx, gy] = crate::geometry_provider::grad_sigma_from_jet(jet, config);
+    let rho = crate::geometry_provider::rho_from_jet(jet, config.epsilon);
+    if !rho.is_finite() || rho <= 0.0 || !gx.is_finite() || !gy.is_finite() {
+        return Err("scale-relative metric is singular".to_string());
+    }
     let rho_inv_sq = 1.0 / (rho * rho);
     let lsq = config.lambda_sq;
     
@@ -400,19 +419,19 @@ pub fn total_energy(
 /// where `a^2 = lambda^2 / ln(2)^2` and
 /// `W = 1 + a^2 |grad(rho)|^2`.
 pub fn christoffel_symbols(c: Complex64, config: &ManifoldConfig) -> Result<[[[f64; 2]; 2]; 2], String> {
-    let (gx, gy) = scale_gradient(c, config)?;
-    let hess = scale_hessian(c, config)?;
-    let sigma = mandelbrot_scale(c, config)?;
-    let rho = config.d_ref * 2.0_f64.powf(-sigma);
+    let jet = geometry_jet(c, config)?;
+    christoffel_symbols_from_jet(&jet, config)
+}
+
+/// Evaluate the connection from one coherent provider sample.
+pub fn christoffel_symbols_from_jet(jet: &crate::geometry_provider::GeometryJet, config: &ManifoldConfig) -> Result<[[[f64; 2]; 2]; 2], String> {
+    validate_mechanics_jet(jet)?;
+    let rho = crate::geometry_provider::rho_from_jet(jet, config.epsilon);
     let ln2 = std::f64::consts::LN_2;
-    let rho_grad = [-ln2 * rho * gx, -ln2 * rho * gy];
-    let sigma_grad = [gx, gy];
-    let mut rho_hess = [[0.0; 2]; 2];
-    for j in 0..2 {
-        for k in 0..2 {
-            rho_hess[j][k] = rho
-                * (ln2 * ln2 * sigma_grad[j] * sigma_grad[k] - ln2 * hess[j][k]);
-        }
+    let rho_grad = crate::geometry_provider::grad_rho_from_jet(jet, config.epsilon);
+    let rho_hess = crate::geometry_provider::hessian_rho_from_jet(jet, config.epsilon);
+    if rho_grad.iter().any(|x| !x.is_finite()) || rho_hess.iter().flatten().any(|x| !x.is_finite()) {
+        return Err("scale-relative connection is singular".to_string());
     }
     let a_sq = config.lambda_sq / (ln2 * ln2);
     let w = 1.0 + a_sq * (rho_grad[0] * rho_grad[0] + rho_grad[1] * rho_grad[1]);
