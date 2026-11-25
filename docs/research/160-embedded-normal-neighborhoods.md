@@ -233,7 +233,17 @@ These results establish embedded distance and metric correspondence under
 explicit sufficient hypotheses. The [derived-radius continuation](160-derived-normal-radii.md)
 now supplies R=min(m²/L,d/2), with m=v-L*delta/2>0, from actual curve-jet and
 remote-separation estimates, and derives the latter separation for compact
-injective parameterizations. The following are still separate:
+injective parameterizations.
+
+The [ambient-connection continuation](160-ambient-shore-connection.md) also
+identifies the connection formed from the actual regularized distance ruler
+and its Riesz gradient with the curved-coordinate connection. It derives
+ruler smoothness from the local inverse chart and transfers the curvature
+formula, including curvature \(+1\) on Shore. Its sufficient hypotheses
+include the normal-patch and Frenet data, a \(C^2\) normal map with a
+differentiable curvature function for connection identification, and a
+\(C^3\) normal map with a \(C^2\) curvature function for the curvature formula.
+The following are still separate:
 
 - Compute usable numerical jet and separation bounds for a particular Shore
   representation, and extend reach results to other embedding hypotheses.
@@ -241,15 +251,11 @@ injective parameterizations. The following are still separate:
 - Package charts and overlaps into a manifold-level construction. The current
   object is an actual local open partial homeomorphism with an inverse
   derivative, plus the optional injectivity result on a supplied strip.
-- Identify an ambient connection with the transformed curved-coordinate
-  connection, at the regularity needed for curvature. The metric equality
-  here is checked; a named theorem transferring the curved model's curvature
-  to that ambient connection has not yet been supplied.
 - Prove smooth regularity of attained AC minimizers and the functional-analytic
   curved-Shore bifurcation. Neither follows just from a pointwise metric
   correspondence.
 
 The separate [nonlinear covariance and tensor note](160-nonlinear-geometry.md)
 provides general connection/curvature transformation and extension-independence
-tools for that next transfer. Runtime behavior, provider contracts, canonical
+tools used in that transfer. Runtime behavior, provider contracts, canonical
 parameters, and the status of draft PR #164 are unchanged by these proofs.

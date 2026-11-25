@@ -295,11 +295,15 @@ not change that contract.
 | Asset decoding, masks, machine indices, availability and query success | Not formalized |
 | Numerical coefficient fidelity to true signed Shore distance | Not established |
 | Query-rounding, subnormal, overflow and IEEE evaluation certificates | Not established |
-| Hessian variation under query displacement | A third-derivative bound is still needed |
+| Hessian variation under query displacement | Checked globally with gain `32 B/h^3` in the [reference-fidelity continuation](162-operational-reference-fidelity.md) |
+| Value/gradient/Hessian comparison with a reference field | Checked in that continuation from actual local reference jets, Hessian variation, and local sampled-value accuracy |
 
 The [global join and indexing interface](162-global-operational-field.md) is
 now checked for the literal mathematical floor-selected evaluator. It derives
 the joins from these concrete coefficients and yields cross-cell query bounds.
-The next numerical obligations are reference-field fidelity, actual query
-rounding, finite-asset/mask semantics and IEEE evaluation. Runtime behavior,
+The [reference-fidelity continuation](162-operational-reference-fidelity.md)
+now derives concrete jet-error bounds from local sampled-value accuracy and
+actual reference-field regularity, retaining the raw quadratic bias. The next
+numerical obligations are evidence for those sample/regularity bounds for an
+actual asset, actual query rounding, finite-asset/mask semantics and IEEE evaluation. Runtime behavior,
 asset formats, training, canonical parameters and provider contracts are unchanged.

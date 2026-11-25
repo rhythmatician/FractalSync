@@ -10,14 +10,20 @@ now identifies its coordinate integral with the unrestricted AC path metric.
 conservation and the actual Shore Jacobi field with first positive zero pi.
 The [actual sine-family second variation](160-flat-second-variation.md) now
 checks the length derivative and strict shortening beyond normalized span pi.
+The [global calibration and equality classification](160-flat-global-minimum.md)
+prove the actual minimum and all monotone Shore-segment minimizers at and below
+the threshold, including equality.
 The [curved normal-coordinate extension](160-curved-coordinate-geometry.md)
 checks curvature for a supplied varying-curvature chart metric. The
 [nonlinear tensor extension](160-nonlinear-geometry.md) proves flat curvature
 independent of regular fields, frames, and nonlinear coordinates. The
 [embedded extension](160-embedded-normal-neighborhoods.md) constructs actual
 normal charts and identifies their metric under an explicit chord certificate.
-The global cut-locus/minimizer arguments and Banach-space bifurcation
-reduction below remain conventional. No bundled
+The [ambient continuation](160-ambient-shore-connection.md) derives actual
+gradient/Hessian regularity and transfers the connection and curvature under
+the stated smooth local normal-patch hypotheses. The global cut locus,
+above-threshold all-minimizer argument, and Banach-space bifurcation reduction
+below remain conventional. No bundled
 manifold curvature tensor, cut locus, or Lyapunov–Schmidt theorem is claimed.
 No runtime or training contract changes.
 
@@ -160,9 +166,10 @@ every invertible affine chart and proves the same curvature Gram ratio.
 The [nonlinear extension](160-nonlinear-geometry.md) now proves actual
 curvature covariance, arbitrary regular-field extension independence, a
 continuous trilinear coordinate tensor, and the same ratio in every regular
-nondegenerate flat frame. A manifold-level Levi-Civita object, moving-frame
-connection-form laws, higher-dimensional identification of (3), and the
-embedded-Shore curvature transfer below remain separate.
+nondegenerate flat frame. The [moving-frame laws](160-moving-frames.md) and
+[embedded planar curvature transfer](160-ambient-shore-connection.md) are now
+checked. A manifold-level Levi-Civita object and higher-dimensional
+identification of (3) remain separate.
 The separate [Euclidean flat bridge](160-flat-intrinsic.md) now proves the
 coordinate integral, graph integral, actual endpoint infima and metric curve
 length agree on the full AC path class. Its ambient space is `WithLp 2 (ℝ × ℝ)`;
@@ -174,19 +181,24 @@ prove smoothness of every AC minimizer or the global cut locus. The
 [second-variation extension](160-flat-second-variation.md) separately proves
 the actual sine-family length integral and strict shortening for every
 sufficiently small positive amplitude when the normalized span exceeds pi.
-It does not establish the equality-case minimum or count all minimizers.
+The separate [global calibration](160-flat-global-minimum.md) establishes the
+minimum and all AC equality cases at and below the threshold. Counting all
+minimizers above the threshold remains separate.
 
 ## 2. Universal curvature at a smooth Shore
 
-The following embedded-Shore and higher-dimensional argument remains
-conventional. A separate [checked coordinate calculation](160-curved-coordinate-geometry.md)
+The higher-dimensional argument below remains conventional. A separate
+[checked coordinate calculation](160-curved-coordinate-geometry.md)
 now establishes the planar result for the explicit normal-chart metric
 with a varying curvature profile, under its stated local derivative hypotheses.
 The [normal-neighborhood construction](160-embedded-normal-neighborhoods.md)
 now supplies an actual chart and metric identification under a quadratic
-normal-chord certificate and actual Frenet data. Deriving that certificate
-for arbitrary embedded Shores and transferring the ambient connection's
-curvature have not yet been formalized.
+normal-chord certificate and actual Frenet data. The certificate can now be
+[derived from local curve jets and remote separation](160-derived-normal-radii.md).
+The [actual ambient connection and curvature](160-ambient-shore-connection.md)
+are identified under the stated smooth local normal-patch hypotheses, including
+the planar Shore value `+1`. This does not assert the same smooth hypotheses
+for an arbitrary Shore representation.
 
 For a general Shore assume a tubular neighborhood with a **C³ signed-distance
 function** `D`; this is a sufficient classical regularity hypothesis, not a
@@ -260,7 +272,11 @@ tangential separation is `L>0`:
   reparameterization. They are reflected one-excursion geodesics, with the
   unique radius `R>0` satisfying `mathcal L(R)=L`.
 
-**Proof.** The unrestricted metric is proper by the distance note, so a
+The first branch, including equality, now has an independent
+[kernel-checked AC calibration proof](160-flat-global-minimum.md). The second
+branch's complete classification still uses the conventional argument below.
+
+**Conventional geometric proof.** The unrestricted metric is proper by the distance note, so a
 minimizer exists. Smoothness makes it a geodesic. A nonconstant radial
 component cannot touch Shore tangentially, because uniqueness for the smooth
 geodesic ODE would then force it to remain in Shore. Every excursion has
@@ -497,8 +513,11 @@ The flat AC coordinate/path-metric correspondence, smooth-solution first
 integrals, actual Shore Jacobi equation and first positive field zero are
 checked in the linked extensions. Actual affine covariance is also checked.
 The supplied curved normal-chart metric has a checked connection, full
-off-Shore curvature and actual normal curvature derivative at Shore. The further
-arguments invoking embedded-chart construction, general Jacobi/conjugacy
+off-Shore curvature and actual normal curvature derivative at Shore. The actual
+embedded normal chart, ambient connection, and curvature transfer are now
+checked under the local normal-patch and smoothness hypotheses. The exact flat
+shortcut threshold and all AC equality cases at and below it are also checked.
+The further arguments invoking general Jacobi/conjugacy
 theory, smooth minimizing-curve regularity, the cut-locus theorem, Sobolev
 spaces, or the analytic implicit function theorem are **not** reported as
 Lean formalizations. Existing theorem reuse is a

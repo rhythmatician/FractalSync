@@ -176,11 +176,10 @@ The formal frame theorem requires `X` differentiable and `Y` `C²` at the point.
 
 These counts include supporting lemmas and exclude definitions and generated declarations. All three modules are checked with the repository's existing Lean/Mathlib pins and warnings treated as errors. The central verification inventory records the combined build and transitive axiom audit for the research increment.
 
-The geometric interface now contains actual nonlinear derivative, connection, bracket, and curvature covariance; general pointwise extension independence; a continuous trilinear coordinate curvature object; and full flat curvature/frame independence. The following remain distinct obligations:
+The geometric interface now contains actual nonlinear derivative, connection, bracket, and curvature covariance; general pointwise extension independence; a continuous trilinear coordinate curvature object; and full flat curvature/frame independence. The subsequent [ambient-connection continuation](160-ambient-shore-connection.md) uses these interfaces to identify the actual regularized distance ruler's ambient connection with the curved-coordinate connection and transfer its curvature formula. This requires a certified normal patch and local Frenet data, with a \(C^2\) normal map and differentiable curvature function for connection identification, and a \(C^3\) normal map with a \(C^2\) curvature function for the curvature formula. The following remain distinct obligations:
 
 - A manifold-level bundled connection/curvature interface with atlas compatibility. Actual coefficient regularity under a `C³` chart is now checked in the [moving-frame continuation](160-moving-frames.md).
 - A globally glued frame-bundle construction. Actual coordinate connection-form gauge laws, gauge composition and fiber-valued curvature conjugacy are now checked in that continuation.
-- Transfer from an embedded Shore's actual tubular metric to its ambient connection and curvature. Tubular and embedded-metric constructions are tracked separately.
 - Regularity and geodesic-ODE identification for attained AC minimizers, general second variation and conjugacy, global cut-locus theorems, and the curved-Shore functional-analytic bifurcation proof.
 
 No statement here establishes convergence of selected minimizers or a numerical derivative certificate. The research issues remain open.

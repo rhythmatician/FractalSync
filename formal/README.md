@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,043 explicit proved theorem/lemma declarations**: 989 in seventy-four result
+**1,169 explicit proved theorem/lemma declarations**: 1,115 in eighty-nine result
 modules supporting #157, #159, and research issues #160--#163, plus 54 in thirteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -107,6 +107,9 @@ by the separate transitive audit.
 | `DiscreteSteering` | 8 | Endpoint-metric normalized steering candidate, unit norm and actual first-order consistency |
 | `TrajectoryError` | 18 | Actual ordered-step stability and ODE defect, residual/rounding recurrence, simultaneous phase-domain and error control |
 | `TrajectoryRefinement` | 7 | Explicit exponential O(h) envelope, actual fixed-horizon grid convergence and eventual domain membership |
+| `TrajectoryInterpolation` | 9 | Actual continuous stored-state interpolation, all-time error/domain bound and uniform convergence |
+| `LocalDynamics` | 6 | Actual local ODE solution, positive reference tube, regional uniqueness and mechanical coefficient adapter |
+| `OperationalDynamics` | 5 | Regularized literal physical spline, actual Riesz gradient/Hessian and local mechanical ODE existence |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
@@ -137,6 +140,11 @@ by the separate transitive audit.
 | `FlatShoreGeodesics` | 25 | Actual solution conservation laws, Shore geodesic and normal Jacobi equation/first zero |
 | `FlatShoreSecondVariation` | 24 | Actual sine-curve length integral, second variation, AC fixed endpoints and strict shortening beyond normalized span pi |
 | `FlatShoreShortcuts` | 11 | Unit-interval Euclidean competitor, exact graph length, physical dilation and actual pairwise shortcut above pi times epsilon |
+| `ACScalarVariation` | 3 | Actual AC total variation equals signed increment exactly for monotone traces |
+| `FlatShoreCalibration` | 13 | Actual regularized arccos calibration and global AC lower bound through normalized span pi |
+| `FlatShoreMinimizers` | 6 | Actual normalized path infimum and all AC equality cases at and below the threshold |
+| `FlatShoreIsometries` | 9 | Full AC candidate-length set and distance invariance under dilation and tangential translation |
+| `FlatShoreThreshold` | 5 | Exact physical shortcut threshold and all AC equality cases, for arbitrary tangential source |
 | `CoordinateCovariance` | 15 | Actual affine derivative, connection, bracket and curvature covariance; flat Gram-ratio specialization |
 | `NonlinearCoordinates` | 14 | Actual inverse-Jacobian calculus, nonlinear connection/bracket/curvature covariance and metric transport |
 | `CurvatureTensoriality` | 7 | Actual coefficient expansion, continuous trilinear curvature tensor and field-extension independence |
@@ -150,6 +158,9 @@ by the separate transitive audit.
 | `EmbeddedShoreMetric` | 18 | Actual Frenet map/IFT chart, ambient distance and ruler derivative, actual metric pullback |
 | `NormalRadius` | 12 | Derived normal-chord radii from actual curve jets, tangent/chord separation, compact remote separation and injectivity |
 | `EmbeddedNormalPatch` | 12 | Derived local normal patch, compact-injective curve instance, actual distance/unique foot and localized IFT metric bridge |
+| `MetricConnectionUniqueness` | 3 | Koszul identity and uniqueness from torsion freedom, compatibility and a positive metric |
+| `EmbeddedShoreConnection` | 17 | Actual ambient regularized-distance jets and derived nonlinear normal-coordinate connection identity |
+| `EmbeddedShoreCurvature` | 10 | Actual ambient curvature transport, positive normal Gram ratio, full curved formula and Shore value +1 |
 | `SensitivityBounds` | 4 | Sensitivity transfer and scalar shear |
 | `NormalizedDistanceFields` | 8 | Normalized-field algebra and Lipschitz bounds |
 | `NormalizedMapDifferential` | 8 | Actual window differential and quadratic remainder from segment Hessian bounds |
@@ -165,10 +176,14 @@ by the separate transitive audit.
 | `GlobalOperationalField` | 11 | Actual floor-selected global jets, gradient/Hessian identification and C4 regularity |
 | `OperationalFieldQueryCorrespondence` | 17 | Physical normalization, selected query correspondence, ideal full-halo addresses and finite-asset extension independence |
 | `OperationalFieldGlobalError` | 7 | Global coefficient-derived derivative bounds and cross-cell real-query error propagation |
+| `OperationalFieldFidelity` | 21 | Actual Taylor/sample remainder, quadratic value bias and concrete reference jet error bounds |
+| `OperationalFieldReference` | 9 | Selected physical sample accuracy and literal global value/first/second derivative fidelity |
+| `OperationalFieldHessianError` | 9 | Concrete third-basis bounds and global Hessian query gain 32B/h³ |
+| `OperationalFieldComputedError` | 1 | Combined reference, actual-query and reported-evaluation value/gradient/Hessian errors |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **989** | Includes supporting lemmas, not just independent research results |
+| **Result-module subtotal** | **1,115** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (thirteen modules) | 54 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,043** | 137 more source declarations than the prior 906-theorem increment |
+| **Total** | **1,169** | 126 more source declarations than the prior 1,043-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -359,8 +374,36 @@ actual ODE and conditional provider/rounding contracts.
 The final convergence statement quantifies over every grid point in each
 refinement. It does not assume numerical domain membership. It does assume
 existence and regularity of the reference ODE solution and certified regional
-constants. No fixed-precision IEEE guarantee, impulsive-history convergence,
-continuous interpolant convergence or combined steering convergence is asserted.
+constants. The following continuation constructs local reference solutions and
+handles continuous interpolants. Fixed-precision IEEE, impulsive-history and
+combined steering convergence remain separate.
+
+### #159: actual local solutions and continuous numerical trajectories
+
+[TrajectoryInterpolation.lean](FractalSync/TrajectoryInterpolation.lean),
+[LocalDynamics.lean](FractalSync/LocalDynamics.lean), and
+[OperationalDynamics.lean](FractalSync/OperationalDynamics.lean) connect actual
+local existence with all-time numerical error bounds. The
+[local-trajectory note](../docs/research/159-local-trajectories.md) states the
+phase norm, refinement contracts, and scope of the reference solution.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Actual stored-state interpolation | `trajectoryInterpolant_grid`, `continuous_trajectoryInterpolant`; a finite piecewise-affine function, including both grid endpoints. |
+| All-time interpolation error | `trajectoryInterpolant_error`, `UniformODECertificate.reference_lipschitz`; grid error e becomes e+B*h/2, with reference Lipschitz regularity derived from the ODE. |
+| Explicit all-time domain/error bound and limit | `UniformODECertificate.interpolation_error_bound`, `interpolation_converges`; h*(refinementCoefficient+B/2) within the actual reference tube gives error and membership throughout [0,T], and uniform convergence under the mesh-scaled contracts. |
+| Actual local existence and regional uniqueness | `exists_local_ODE_certificate`, `UniformODECertificate.solution_unique`; actual C1 acceleration yields T,R>0, a solution, a uniform certificate on the phase ball and a positive reference tube. |
+| Actual mechanical coefficient adapter | `contDiffAt_mechanicalAcceleration`, `exists_local_mechanical_certificate`; C1 ruler/gradient/Hessian/force coefficients and a nonzero ruler. |
+| Literal operational metric specialization | `OperationalDynamics.contDiff_rulerField`, `actual_jet_regularity`, `hasFDerivAt_rulerField`, `contDiffAt_acceleration`, `exists_local_certificate`; actual C4 spline, C3 Riesz gradient, C2 gradient derivative and actual local mechanics. |
+
+The interpolant is a specified analysis function; no renderer interpolation or
+position-derivative/velocity identity is inferred between nodes. The all-time
+theorems require T>0; the earlier grid theorem retains T=0. The local ODE
+constants are existential. The operational specialization uses its actual
+derivatives and needs no signed-distance fidelity premise, but it does not
+place the existential phase ball inside a finite asset's halo or compute
+usable numerical constants. Positive physical spacing gives its intended
+provider interpretation.
 
 ### #160: pointwise distance-graph algebra
 
@@ -642,8 +685,37 @@ is bounded by this competitor. `metric_dilation`, `coordinateLength_dilation`
 and `acGraphLength_dilation` check physical scaling. The resulting
 `intrinsicDistance_lt_shore_length` proves, for epsilon>0 and L>pi*epsilon,
 that actual D_epsilon,a((0,0),(0,L))<L/epsilon. This requires no attainment or
-geodesic identification. General second variation, equality-case minimality,
-and all-minimizer/cut-locus classification remain separate.
+geodesic identification. The next extension supplies the global converse and
+equality case. General second variation, all minimizers above the threshold,
+and global cut-locus classification remain separate.
+
+### #160: global flat minimum, exact threshold, and all short-segment equality cases
+
+[FlatShoreCalibration.lean](FractalSync/FlatShoreCalibration.lean),
+[FlatShoreMinimizers.lean](FractalSync/FlatShoreMinimizers.lean),
+[FlatShoreIsometries.lean](FractalSync/FlatShoreIsometries.lean), and
+[FlatShoreThreshold.lean](FractalSync/FlatShoreThreshold.lean) prove the global
+AC result described in [the flat-minimum note](../docs/research/160-flat-global-minimum.md).
+[ACScalarVariation.lean](FractalSync/ACScalarVariation.lean) supplies its generic
+scalar equality criterion.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Actual regularized arccos calibration | `hasFDerivAt_calibration`, `calibrationDifferential_le_sphericalSpeed`, `calibration_lipschitz`; the argument lies in (-1,1) for 0<c<1 and a sum-of-squares certificate bounds its actual derivative. |
+| Unrestricted AC global lower bound | `calibration_endpoint_bound`, `shore_span_le_sphericalLength`, `shore_span_le_acGraphLength`; actual a.e. chain rule, integration and the c→1 continuity limit for 0<=ell<=pi. |
+| Actual normalized path minimum | `FlatShoreMinimizers.intrinsicDistance_eq_shore_span`; the lower bound passes through the full path infimum and the Shore segment attains it. |
+| Equality rigidity and complete short-segment classification | `ae_normal_mul_velocity_eq_zero`, `minimizing_path_on_shore`, `acGraphLength_on_shore`, `minimizing_path_iff`; AC square-radius constancy forces the whole path onto Shore, and its tangent trace is monotone exactly in the equality case. |
+| Generic scalar AC equality theorem | `ACScalarVariation.integral_abs_deriv_eq_sub_iff_monotoneOn`; actual total variation equals the signed endpoint increment exactly for monotone AC traces, including degenerate intervals. |
+| Full path-infimum isometries | `pairwisePathLengths_dilation`, `intrinsicDistance_dilation`, `pairwisePathLengths_tangentialTranslate`, `intrinsicDistance_tangentialTranslate`; explicit inverse AC witnesses give equality of candidate-length sets. |
+| Exact physical threshold and all short-segment minimizers | `FlatShoreThreshold.intrinsicDistance_eq_shore_length`, `minimizing_path_iff`, `intrinsicDistance_lt_shore_length_iff`, `exists_shorter_path_iff`; arbitrary tangential source, positive epsilon and all real a. |
+
+The dimensional result is D_epsilon,a((0,0),(0,L))=L/epsilon for
+0<=L<=pi*epsilon, with the same all-AC equality classification under positive
+dilation. Combined with the previous strict competitor, a shorter path exists
+exactly when L>pi*epsilon. All real a are allowed. At the threshold there is
+one minimizing image, the Shore segment, with monotone AC parameterizations
+and pauses allowed. The proof does not need a regularity theorem for arbitrary
+AC minimizers or a general conjugate-point theorem.
 
 ### #160: actual affine coordinate covariance
 
@@ -778,8 +850,8 @@ gives the geometric certificate and its limitations.
 `NormalTube` supplies its chord certificate at every parameter and against the
 entire Shore set. The next extension derives a radius under quantitative jet
 and separation hypotheses and replaces this global-parameter requirement with
-a local patch. Identifying the ambient connection and transferring curved-model
-curvature still require a separate theorem with higher regularity.
+a local patch. The subsequent ambient-connection extension identifies the
+connection and transfers curved-model curvature under higher local regularity.
 
 ### #160: derived normal radii and a local patch interface
 
@@ -803,6 +875,32 @@ not merely a within-set derivative assertion at endpoints. A planar spanning
 frame, actual Frenet derivatives, C¹ curve/normal regularity and the nonfocal
 factor remain explicit in the local inverse chart. No general reach or ambient
 connection/curvature theorem is inferred.
+
+### #160: actual ambient connection and curved-Shore curvature transfer
+
+[MetricConnectionUniqueness.lean](FractalSync/MetricConnectionUniqueness.lean),
+[EmbeddedShoreConnection.lean](FractalSync/EmbeddedShoreConnection.lean), and
+[EmbeddedShoreCurvature.lean](FractalSync/EmbeddedShoreCurvature.lean) identify
+the actual ambient regularized-distance connection. The
+[ambient-connection note](../docs/research/160-ambient-shore-connection.md)
+states the local normal-patch, Frenet and smoothness hypotheses.
+
+| Checked statement | Principal identifiers and scope |
+| --- | --- |
+| Positive metric determines a compatible torsion-free connection | `MetricConnectionUniqueness.koszul`, `eq_of_compatible`, `CurvedShoreGeometry.christoffel_eq_of_compatible`. |
+| Actual ambient ruler/gradient/Hessian regularity | `contDiffAt_ambientRuler_of_normalMap`, `contDiffAt_gradient`, `hasFDerivAt_inner_gradient`, `gradient_derivative_symm`; IFT and local distance identity give actual regularity through Shore. |
+| Derived nonlinear connection identification | `hasDerivAt_pullback_pairing`, `pullbackConnection_eq_curved_of_metric_germ`, `ambientConnection_normalMap`, `ambientConnection_normalFrame`; both coordinate-Hessian terms are retained and the final theorem assumes no ambient jet or connection identity. |
+| Actual curvature germ and ambient covariance | `curvature_congr_connection`, `eventually_ambientConnection_normalMap`, `curvature_normalMap`, `ambient_curvature_pullback`, `ambient_gramRatio_pullback`; actual inverse-Jacobian field pullback and intermediate regularity derived from the ruler. |
+| Nondegenerate normal-frame curvature and explicit formula | `normalGram_pos`, `ambientNormalCurvature_eq_flat_correction`, `ambientNormalCurvature_on_shore`; the full curved correction and Shore value +1 follow for the actual ambient connection. |
+
+Connection identification uses a C2 normal map and differentiable curvature
+profile; the full curvature specialization uses a C3 normal map and locally
+C2 curvature profile. The final objects use Mathlib's actual Riesz gradient
+of sqrt(epsilon²+infDist²) and its actual derivative. A local `NormalPatch`,
+Frenet identities, parameter neighborhood and nonfocal invertible differential
+remain geometric inputs. This does not assert smoothness at fractal or
+distance-cut-locus points. Atlas/bundle gluing, concrete numerical normal
+radii, and arbitrary AC minimizer regularity remain separate.
 
 ### #161: sensitivity transfer and scalar shear
 
@@ -971,9 +1069,38 @@ records the definitions, index convention and exact implementation boundary.
 
 For positive spacing h and coefficient magnitudes <=B, the actual global
 operator bounds remain 8B/(3h) and 68B/(9h²) in the product maximum norm. The
-combined value budget is eta+8B/(3h)*norm(deltaQuery). Reference-distance
-fidelity, machine floor/casts, validity masks, storage decoding, query-rounding
-bounds and IEEE evaluation certificates remain explicit open obligations.
+combined value budget is eta+8B/(3h)*norm(deltaQuery). The following extension
+supplies conditional reference-jet fidelity and the Hessian query bound.
+Evidence for actual asset/sample accuracy, machine floor/casts, validity masks,
+storage decoding, query-rounding bounds and IEEE evaluation remains separate.
+
+### #162: concrete reference fidelity and combined actual-query jet budgets
+
+[OperationalFieldFidelity.lean](FractalSync/OperationalFieldFidelity.lean),
+[OperationalFieldReference.lean](FractalSync/OperationalFieldReference.lean),
+[OperationalFieldHessianError.lean](FractalSync/OperationalFieldHessianError.lean),
+and [OperationalFieldComputedError.lean](FractalSync/OperationalFieldComputedError.lean)
+derive concrete estimates for the literal global physical field. The
+[reference-fidelity note](../docs/research/162-operational-reference-fidelity.md)
+states the local sample, actual reference-jet, and induced product-norm contracts.
+
+For spacing h>0, local sample error eta, and actual reference Hessian variation
+L on a convex region containing the query and its 36 selected nodes, the
+value error after subtracting h²*trace(Hf)/4 is <=eta+9Lh³/2. If the region
+is also a neighborhood of the query, differential error is
+<=8eta/(3h)+12Lh² and Hessian error is <=68eta/(9h²)+34Lh.
+The uncorrected value error retains the quadratic bias. Hessian symmetry and
+literal `fderiv` identities are derived from the actual reference derivatives.
+
+`SampleAccuracyAt` requires only the 36 selected samples. The literal-global
+result `physicalField_reference_actual_jet_error` compares actual first and
+iterated derivatives. The concrete third-order basis certificate yields
+global Hessian query gain 32B/h³ under a uniform lattice magnitude bound B.
+`reported_reference_jet_error` combines each reference error with the actual
+query displacement times its gain and the separately supplied reported-result
+evaluation error. These are conditional error theorems; they do not certify
+an asset's true-distance samples, machine floor/casts/masks, query rounding,
+storage decoding or IEEE evaluation.
 
 ### #163: finite transport algebra and an exact counterexample
 
@@ -1020,7 +1147,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 2,225 declarations, including the 1,043 stated theorem/lemma declarations,
+The current audit covers 2,461 declarations, including the 1,169 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

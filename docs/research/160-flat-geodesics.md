@@ -14,7 +14,9 @@ now connected to the unrestricted AC path infimum by
 
 These results do not yet show that arbitrary minimizing AC paths are smooth,
 identify a bundled conjugate point, or prove the global cut locus. The
-conventional threshold and cut-locus arguments remain in the flat-Shore note.
+global cut-locus argument remains conventional in the flat-Shore note. The
+[actual threshold and short-segment equality classification](160-flat-global-minimum.md)
+are now checked through a separate AC calibration argument.
 
 ## 1. Actual solution hypotheses
 
@@ -163,9 +165,11 @@ pinned Lean 4.24.0 and Mathlib environment. No placeholders or custom axioms
 are used; package-wide verification is recorded in [verification.md](verification.md).
 
 Remaining formal steps include smooth regularity of the AC minimizers,
-ODE existence and endpoint analysis, manifold-level tensor interfaces,
+endpoint analysis, manifold-level tensor interfaces,
 Jacobi/conjugacy and general second-variation criteria, and the global cut-locus
 classification. The coordinate tensor and nonlinear covariance are now checked
 in the extension linked above, and the sine-family second variation/shortening
-is checked separately. No runtime, provider, training, or
+is checked separately. [Local mechanical ODE existence](159-local-trajectories.md)
+is now available for actual C1 acceleration fields; identifying arbitrary AC
+minimizers with those smooth solutions is still required. No runtime, provider, training, or
 canonical-parameter change is made by these proofs.

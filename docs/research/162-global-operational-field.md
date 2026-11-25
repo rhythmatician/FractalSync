@@ -12,6 +12,12 @@ the previous same-cell restriction from real-query stability bounds under a
 uniform coefficient bound. Machine floor, casts, masks, and IEEE arithmetic
 remain outside these statements.
 
+The [reference-fidelity continuation](162-operational-reference-fidelity.md)
+now adds local reference value/gradient/Hessian error bounds, an explicit global
+Hessian query gain, and combined reference/query/reported-evaluation budgets.
+Its sample-accuracy and reference-regularity premises require separate evidence
+for a concrete asset.
+
 ## 1. Sources and verification
 
 The source algorithm is
@@ -341,6 +347,8 @@ availability mask remains a separate condition for query success.
 | Ideal halo, coordinate indices and row-major address range | Checked under (12) |
 | Finite-table independence from off-asset extension | Checked |
 | Global real value/differential query stability under a uniform coefficient bound | Checked |
+| Global Hessian query stability | Checked with gain `32 B/h^3` in the reference-fidelity continuation |
+| Concrete reference value/gradient/Hessian bounds | Checked in that continuation from local sampled-value accuracy and actual reference jet regularity |
 | Rust floating division, floor and casts agree with ideal selection | Not established |
 | IEEE Horner, accumulation, spacing division and finite-value checks | Not established |
 | Availability-mask and asset-decoding correctness | Not established |
@@ -348,6 +356,7 @@ availability mask remains a separate condition for query success.
 
 The operational field is still the field represented by its stored
 coefficients. Its `reference-distance-unknown` contract remains appropriate.
-The new result verifies the smoothness and exact-real calculus of that field;
-it supplies no reference-distance or IEEE error certificate. Research issues
+The results verify the smoothness and exact-real calculus of that field.
+Conditional reference-error theorems are now available, but numerical evidence
+for true-distance sample fidelity and IEEE evaluation remains separate. Research issues
 remain open, and runtime behavior and provider contracts are unchanged.

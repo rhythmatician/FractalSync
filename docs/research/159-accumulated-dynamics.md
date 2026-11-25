@@ -397,13 +397,18 @@ position-domain condition, and a concrete consistent discrete steering
 construction are checked here. The [trajectory continuation](159-trajectory-error.md)
 now derives actual ODE truncation and stability, simultaneous error and
 position/velocity domain control from reference margins, and uniform grid-point
-convergence under the stated refinement scaling. The following remain distinct obligations:
+convergence under the stated refinement scaling. The later
+[local-trajectory package](159-local-trajectories.md) constructs actual local
+autonomous reference solutions and positive tubes from C1 acceleration,
+specializes this to the literal regularized operational spline with actual
+metric jets, and proves continuous-interpolant convergence at every time.
+The following remain distinct obligations:
 
 | Area | Remaining work |
 | --- | --- |
 | Quantitative regularity | Concrete upper bounds for phase-energy Hessians, acceleration derivatives and reference speeds from an actual field/provider, with usable phase-region margins. |
 | Provider and arithmetic correspondence | Fidelity of actual force and connection evaluations, query rounding, IEEE arithmetic, rounded stored-state errors, and numerical impulse errors. |
-| Rollout control | Reference-solution existence and numerical margin certificates for specific fields; continuous-interpolant, time-dependent-control and impulsive-history convergence. Conditional domain control and uniform grid-state convergence for autonomous continuous force steps are now checked. |
+| Rollout control | Numerical horizon and margin certificates for specific fields, finite-asset halo control, and convergence for time-dependent controls, impulsive histories, and combined hybrid evolution. |
 | Discrete steering | Frame construction and transport, solution existence and quantitative convergence, and a runtime realization with floating-point norm/error guarantees. |
 
 No minimum-curve convergence, global cut-locus theorem, integrator energy

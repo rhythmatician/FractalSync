@@ -207,23 +207,30 @@ actual distance, and proves the pullback of the actual ambient graph metric
 equals this model. It uses a global-over-Shore normal-chord certificate,
 actual local Frenet derivatives, a spanning planar frame, and the nonfocal
 condition. The condition \(1-k(y)r\ne0\) alone does not prove injectivity,
-nearest-point uniqueness, or the distance identity. A generic theorem deriving
-the radius from an embedded curve's regularity and separation remains open.
+nearest-point uniqueness, or the distance identity. The
+[derived-radius continuation](160-derived-normal-radii.md) now constructs a
+sufficient radius from actual curve-jet and remote-separation estimates;
+usable constants for a particular Shore and broader reach theorems remain
+separate.
 
 The earlier [classical smooth-Shore argument](160-flat-shore.md#2-universal-curvature-at-a-smooth-shore)
 assumes a tubular neighborhood with a \(C^3\) signed-distance function and
 proves curvature \(+1\) at Shore through graph and conformal curvature
-formulas. That embedded statement remains conventional. Its sufficient
-regularity assumption should not be silently equated with the particular
-local \(k,k'\) derivative hypotheses used by this coordinate proof. No
+formulas. The [ambient-connection continuation](160-ambient-shore-connection.md)
+now proves the embedded curvature formula, including curvature \(+1\) at
+Shore, from a certified normal patch, actual Frenet derivatives, a \(C^3\)
+normal map, and a \(C^2\) curvature function. It derives smoothness of the
+actual regularized distance ruler and identifies the connection before
+transporting curvature. These explicit sufficient hypotheses should not be
+silently equated with either the classical signed-distance assumption or
+the weaker local \(k,k'\) hypotheses of the coordinate calculation. No
 statement extends to fractal Shore points or cut loci without the required
 geometry and regularity.
 
 The [nonlinear tensor extension](160-nonlinear-geometry.md) supplies general
 connection/curvature covariance and a continuous trilinear coordinate tensor
-with field-extension independence. A named transfer from the embedded ambient
-connection to this curved-coordinate connection is still required, together
-with the appropriate higher regularity. Manifold-level bundle/atlas interfaces,
+with field-extension independence, used in the ambient transfer.
+Manifold-level bundle/atlas interfaces,
 smooth-minimizer ODE identification, global cut-locus arguments, and the
 functional-analytic curved-Shore bifurcation remain open.
 

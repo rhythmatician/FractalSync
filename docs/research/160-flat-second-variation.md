@@ -245,8 +245,9 @@ D_{\epsilon,a}((0,0),(0,L))<\frac L\epsilon.
 
 The quantity \(L/\epsilon\) is the intrinsic length of the straight Shore
 segment. All real \(a\) are allowed. The new result proves the strict
-shortcut above the threshold for these endpoints; it does not prove the
-converse or the equality-case classification.
+shortcut above the threshold for these endpoints. The separate
+[global calibration continuation](160-flat-global-minimum.md) now proves the
+converse, the exact threshold, and all AC equality cases at and below it.
 
 ## 6. Verification and remaining scope
 
@@ -275,8 +276,9 @@ This is a second-variation and shortening result for one explicit sine
 family. It does not prove the general second-variation theorem, identify
 arbitrary AC minimizers with smooth geodesics, classify all minimizers, or
 establish the global cut locus. At `ell = pi` the proved second derivative
-vanishes; equality-case minimality and uniqueness are not consequences of
-this calculation. The unit-interval path-infimum wrapper and physical
+vanishes; equality-case minimality and uniqueness require the separate global
+calibration argument, which is now checked in the continuation linked above.
+The unit-interval path-infimum wrapper and physical
 positive-floor shortcut are now checked by the continuation above.
 
 The earlier [Jacobi calculations](160-flat-geodesics.md) and the conventional

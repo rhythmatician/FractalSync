@@ -270,17 +270,23 @@ with the source of one inverse-function chart.
 ## 6. Remaining embedded-geometry work
 
 The normal radius is now derived under explicit jet and separation hypotheses,
-and the metric/chart bridge accepts a genuinely local curve patch. What
-remains includes the following.
+and the metric/chart bridge accepts a genuinely local curve patch. The
+[ambient-connection continuation](160-ambient-shore-connection.md) now derives
+the actual regularized distance ruler's local smoothness, identifies its
+ambient connection with the curved-coordinate connection, and transfers the
+curvature formula. These results use the certified normal patch and local
+Frenet data, with a \(C^2\) normal map and differentiable curvature function
+for connection identification, and a \(C^3\) normal map and \(C^2\) curvature
+function for the curvature formula.
+The following remain separate.
 
 * Establishing usable numerical jet and separation constants for a specific
   embedded Shore representation, or a general reach theorem under a chosen
   class of embedding hypotheses.
-* Identifying the ambient Levi-Civita connection with the transformed curved
-  coordinate connection and transporting its curvature calculation. Metric
-  pullback alone is not presented as that connection/curvature theorem.
+* Gluing the local chart, connection, and curvature constructions into
+  manifold-level bundle and atlas interfaces.
 * Regularity and the geodesic ODE for attained AC minimizers, general second
-  variation and conjugacy, and the global cut-locus and equality-case results.
+  variation and conjugacy, and global cut-locus results.
 * The functional-analytic curved-Shore bifurcation reduction and its local
   branch/minimum theorem.
 

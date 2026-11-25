@@ -316,12 +316,13 @@ command `lake build --wfail FractalSync.TrajectoryRefinement` passed with
 `TrajectoryError`. The repository-wide build, inventory, and axiom audit are
 recorded separately in [verification.md](verification.md).
 
-The present result requires an actual autonomous ODE solution and its stated
-regularity, speed, and interior-margin certificates. It does not construct
-that solution. The derivative-to-Lipschitz adapter is checked, but explicit
-uniform acceleration and acceleration-derivative bounds from all physical
-ruler, gradient, Hessian, potential, and force data remain to be assembled
-for concrete regions.
+The grid theorems above take an actual autonomous ODE solution and its stated
+regularity, speed, and interior-margin certificates as inputs. The subsequent
+[local-trajectory package](159-local-trajectories.md) constructs such a
+solution and a positive tube from actual C1 acceleration, including for the
+regularized literal C4 operational spline with its actual gradient and
+Hessian and a C1 force. Concrete numerical regional constants, time horizons,
+and finite-asset halo margins still require separate certificates.
 
 The refinement scaling in (9) is substantive. A fixed nonzero acceleration
 residual or fixed absolute stored-state error is not covered by this
@@ -330,9 +331,12 @@ supply \(O(h^2)\) stored-state rounding as \(h\) decreases. The finite-step
 bound (5) still exposes those errors, but an implementation convergence claim
 requires the appropriate fidelity and arithmetic certificates.
 
-The formal convergence statement concerns grid points. It does not yet
-package a continuous interpolation theorem, time-dependent controls, impulse
-jump trajectories, event detection, or a complete hybrid integrator
-convergence theorem. The earlier exact impulse energy ledger and discrete
-covariant-steering consistency results remain separate. Runtime behavior,
-canonical parameters, provider contracts, and training were not changed.
+The convergence statements in this note concern grid points; the same
+local-trajectory continuation now proves uniform convergence of actual
+continuous piecewise-affine interpolants at every time, with explicit
+off-grid error and domain control. Time-dependent controls, impulse-jump
+trajectories, event detection, and complete hybrid integrator convergence
+remain separate. The earlier exact impulse energy ledger and discrete
+covariant-steering consistency results do not by themselves prove these
+combined evolution results. Runtime behavior, canonical parameters,
+provider contracts, and training were not changed.

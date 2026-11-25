@@ -73,4 +73,20 @@ import FractalSync.TrajectoryRefinement
 import FractalSync.TubularNeighborhood
 import FractalSync.ZeroFloorLimit
 
+import FractalSync.ACScalarVariation
+import FractalSync.EmbeddedShoreConnection
+import FractalSync.EmbeddedShoreCurvature
+import FractalSync.FlatShoreCalibration
+import FractalSync.FlatShoreIsometries
+import FractalSync.FlatShoreMinimizers
+import FractalSync.FlatShoreThreshold
+import FractalSync.LocalDynamics
+import FractalSync.MetricConnectionUniqueness
+import FractalSync.OperationalDynamics
+import FractalSync.OperationalFieldComputedError
+import FractalSync.OperationalFieldFidelity
+import FractalSync.OperationalFieldHessianError
+import FractalSync.OperationalFieldReference
+import FractalSync.TrajectoryInterpolation
+
 /-! Development-time mathematical research for FractalSync. -/
