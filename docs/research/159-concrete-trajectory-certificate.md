@@ -1,5 +1,10 @@
 # A concrete catalog, finite asset, horizon, and mesh certificate
 
+This note retains the first fully instantiated certificate and its constants.
+The subsequent [local-horizon certificate](159-local-horizon.md) uses the same
+asset and actual dynamics with much tighter bounds, horizon \(1/576\), and a
+2048-step error certificate.
+
 This increment discharges the asset and regional force premises of the earlier
 [finite-asset trajectory theorem](159-operational-trajectory-certificates.md)
 for a specific nonconstant fixture. It also constructs an exact-real numerical
@@ -266,16 +271,17 @@ integer conversions, storage and masks, and IEEE field/force evaluation still
 need their own evidence.
 
 The formal force reevaluates the normalized fixed-command drive at each phase
-point. The current operational engine accepts an already constructed control
-covector and holds it fixed through its Runge-Kutta stages. This work checks
-pointwise force formulas, not that control evolution policy or the runtime
-integrator. Their discrepancy would need to enter the numerical residual
-budget. Changing commands, impulses, combined steering, and continuation
-beyond the local interval remain separate.
+point. The operational engine accepts an already constructed control covector
+and holds it fixed through its Runge-Kutta stages. Drag is recomputed from each
+stage's state. The subsequent [holding residual](159-held-control-residual.md)
+proves the exact-real acceleration discrepancy under explicit displacement
+and covector-error bounds. Runtime stage displacement, Runge-Kutta truncation,
+and machine errors still require certificates. Changing commands, impulses,
+combined steering, and continuation beyond the local interval remain separate.
 
-The next useful numerical improvement is to propagate the new polynomial
-reference jet bounds through the ruler and metric locally, retaining the
-rank-one inverse's cancellations. That would address the conservative horizon
-directly instead of increasing the step count on the present tiny interval.
+The [local extension](159-local-horizon.md) now propagates the polynomial
+reference jet bounds through the ruler and metric while retaining the
+rank-one inverse's cancellations. It replaces the microscopic horizon for
+this same fixture, while the present theorem remains a valid older bound.
 No runtime behavior, training policy, canonical parameter, provider contract,
 dependency pin, or audit rule changes in this increment.

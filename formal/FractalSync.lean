@@ -106,5 +106,14 @@ import FractalSync.OperationalCatalogBounds
 import FractalSync.PhaseEnergyBounds
 import FractalSync.PotentialForceBounds
 import FractalSync.RationalTrajectoryMesh
+import FractalSync.CancelledCatalogBounds
+import FractalSync.ConcreteHeldControl
+import FractalSync.ConcreteLocalFieldBounds
+import FractalSync.HeldControlResidual
+import FractalSync.ImprovedConcreteEnergy
+import FractalSync.ImprovedConcreteTrajectory
+import FractalSync.LocalRulerBounds
+import FractalSync.LocalTrajectoryMesh
+import FractalSync.RankOneInverseBounds
 
 /-! Development-time mathematical research for FractalSync. -/

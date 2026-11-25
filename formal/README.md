@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,364 explicit proved theorem/lemma declarations**: 1,309 in 107 result
+**1,479 explicit proved theorem/lemma declarations**: 1,424 in 116 result
 modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -199,9 +199,18 @@ by the separate transitive audit.
 | `OperationalFieldHessianError` | 9 | Concrete third-basis bounds and global Hessian query gain 32B/h³ |
 | `OperationalFieldComputedError` | 1 | Combined reference, actual-query and reported-evaluation value/gradient/Hessian errors |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **1,309** | Includes supporting lemmas, not just independent research results |
+| `ConcreteLocalFieldBounds` | 27 | Actual local Euclidean field jets and cross-cell Hessian variation from quadratic-reference cancellation |
+| `LocalRulerBounds` | 12 | Local scalar regularizer coefficients, actual Hessian variation and convex mean-value ruler/gradient bounds |
+| `RankOneInverseBounds` | 10 | Inverse rank-one contraction, exact resolvent identity and sharp regional inverse-action budgets |
+| `CancelledCatalogBounds` | 7 | Actual raised-catalog cancellation, separate connection budget and local force/acceleration constants |
+| `LocalTrajectoryMesh` | 6 | Separate speed/Lipschitz constants, horizon 1/576, explicit interpolation coefficient and 2048-step target |
+| `ImprovedConcreteTrajectory` | 18 | Actual local jets, force and acceleration; constructed reference, all-mesh/query control and unconditional longer exact-real run |
+| `HeldControlResidual` | 10 | Actual frozen-drive catalog comparison, sample-covector error and curve/stage displacement residual bounds |
+| `ConcreteHeldControl` | 7 | Fully instantiated frozen-drive acceleration and numerical residual coefficients for the literal fixture |
+| `ImprovedConcreteEnergy` | 18 | Actual energy differential pair (5,134), contained-step Taylor bound, finite-run remainder and accumulated Taylor ledger |
+| **Result-module subtotal** | **1,424** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,364** | 108 more source declarations than the prior 1,256-theorem increment |
+| **Total** | **1,479** | 115 more source declarations than the prior 1,364-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -514,6 +523,54 @@ No Rust execution or compiler-contraction equivalence is claimed. Production
 Mandelbrot fidelity, actual query/IEEE errors, masks/storage/machine casts,
 sample-and-hold control evolution and runtime Runge-Kutta correspondence remain
 open. The formal fixed-command force is reevaluated at each phase state.
+
+### #159/#162: local fixture bounds, a longer horizon and held control
+
+`ConcreteLocalFieldBounds` subtracts the ideal quadratic Hessian before
+estimating the finite fixture's variation. A globally bounded zero extension
+of the sample errors gives actual cross-cell Hessian variation at most
+32*2^-48/h³. On the closed Euclidean position ball of radius 1/16, the actual
+field, differential, Hessian and Hessian Lipschitz bounds are respectively
+1/4, 4, 12 and 1. These bounds retain the raw-sample reference bias P-h².
+
+`LocalRulerBounds` uses the small field interval in the scalar regularizer's
+third derivative. Its actual chain rule and Riesz transfer give local pairs
+rho=(2,1), grad rho=(1,20), D grad rho=(20,200), with rho>=1. The gradient and
+ruler Lipschitz bounds use convex mean-value estimates on the same region.
+
+`RankOneInverseBounds` proves the inverse rank-one contraction and its exact
+resolvent variation identity. `CancelledCatalogBounds` raises the Shore,
+normalized drive and drag terms before estimating them. The actual unraised
+catalog has pair (6,210); the actual changing-metric acceleration has pair
+(8,400). The norm and Lipschitz constants are propagated separately.
+
+`LocalTrajectoryMesh` and `ImprovedConcreteTrajectory` construct the reference
+at **T=1/576**, retain regional uniqueness and the interior tube, and prove
+all-time phase error<=1/(36m) for m steps under the explicit unit numerical
+error coefficients. The actual exact-real velocity-first recursion supplies
+an unconditional 2048-step certificate with uniform phase error<=2^-16.
+Every admitted query within 1/64 of the interpolated position retains all
+36 valid mathematical stencil addresses throughout the interval.
+
+`HeldControlResidual` and `ConcreteHeldControl` quantify the acceleration
+discrepancy when the supplied normalized-drive covector is frozen at a sample
+state while potential, drag and connection are reevaluated. The concrete bound
+is 680 times phase displacement, plus 4 times any admitted initial covector
+error. Displacement<=8*tau gives the holding term 5440*tau. This needs a
+stage/curve displacement certificate and is separate from the unit-residual
+mesh specialization; it is not a runtime RK4 or floating-point error proof.
+
+`ImprovedConcreteEnergy` uses the same actual potential and new local jets to
+bound the actual phase-energy differential by (5,134). The Taylor coefficient
+is 67 for contained steps. The longer exact-real run supplies the endpoint
+conditions needed by the finite-run energy statements; the retained linear
+differential terms account for actual energy changes.
+
+See [the local-horizon note](../docs/research/159-local-horizon.md),
+[the held-control note](../docs/research/159-held-control-residual.md), and
+[the local-energy note](../docs/research/159-local-energy-bounds.md).
+Production distance fidelity, runtime stage/domain and Runge--Kutta residual
+certificates, IEEE errors, hybrid controls and continuation remain separate.
 
 ### #160: pointwise distance-graph algebra
 
@@ -1287,7 +1344,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 2,961 declarations, including the 1,364 stated theorem/lemma declarations,
+The current audit covers 3,144 declarations, including the 1,479 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
