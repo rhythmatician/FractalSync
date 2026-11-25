@@ -38,7 +38,30 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/3");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/4");
+}
+
+#[test]
+fn replay_snapshot_accumulates_signed_step_ledger_and_marks_failure() {
+    let _g = lock();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let first = ctrl.debug_snapshot().unwrap();
+    let first_ledger = first.energy_ledger.unwrap();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let second = ctrl.debug_snapshot().unwrap();
+    let second_ledger = second.energy_ledger.as_ref().unwrap();
+    let accumulated = second.accumulated_energy_ledger.as_ref().unwrap();
+    assert_eq!(accumulated.steps, 2);
+    assert!((accumulated.residual - first_ledger.residual - second_ledger.residual).abs() < 1e-14);
+    assert!((accumulated.control_work - first_ledger.control_work - second_ledger.control_work).abs() < 1e-14);
+    let wire = serde_json::to_value(&second).unwrap();
+    assert_eq!(wire["energyLedger"]["version"], "work-energy-ledger/1");
+    assert!(wire["energyLedger"]["startGeometry"]["provider_version"].is_string());
+    ctrl.c = Complex64::new(2.1, 0.0);
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    assert!(ctrl.last_energy_ledger.is_none());
+    assert!(!ctrl.accumulated_energy_ledger.unwrap().valid);
 }
 
 #[test]
@@ -309,10 +332,12 @@ fn standalone_snapshot_matches_controller_snapshot() {
     )
     .expect("standalone snapshot");
 
-    // The step clock is controller-owned (the pure builder has no clock);
+    // The step clock and ledger are controller-owned (the pure builder has no history);
     // every state-derived field must match exactly.
     let mut from_ctrl_no_clock = from_ctrl.clone();
     from_ctrl_no_clock.time_seconds = 0.0;
+    from_ctrl_no_clock.energy_ledger = None;
+    from_ctrl_no_clock.accumulated_energy_ledger = None;
     assert_eq!(from_ctrl_no_clock, from_state);
     assert!(from_ctrl.time_seconds > 0.0);
 }

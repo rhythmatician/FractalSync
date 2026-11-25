@@ -118,7 +118,7 @@ impl SingularityKind {
 /// The invariant is that D, grad_D, and hessian_D come from one coherent
 /// local representation (scale-aware local stencil), not independent heuristics
 /// or nested finite differences of sigma.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GeometryJet {
     /// Signed distance D(c): <0 inside M, >0 outside, 0 on the Shore.
     #[serde(rename = "D")]

@@ -768,7 +768,7 @@ pub fn integrate_motion_controls(
     // We call `manifold::integrate_step` for the continuous-force portion and
     // then layer the impulse as Δv.
     let beta = m.friction_beta();
-    let (c_new, mut v_new, info) =
+    let (c_new, mut v_new, mut info) =
         crate::manifold::integrate_step(c, v, q_drive, beta, dt, config)?;
     // Bounded impulse layered on persistent momentum.
     let dv = m.impulse_delta_v(c_new, config)?;
@@ -778,6 +778,11 @@ pub fn integrate_motion_controls(
     // Recompute energy after impulse for reporting; kinetic changes attributable
     // to explicit impulse.
     let k_after = crate::manifold::kinetic_energy(v_new, c_new, config)?;
+    info.ledger.impulse_work = k_after - info.kinetic;
+    info.ledger.end_velocity = [v_new.0, v_new.1];
+    info.ledger.end_energy = k_after + info.potential;
+    info.ledger.residual = info.ledger.end_energy - info.ledger.start_energy
+        - info.ledger.control_work - info.ledger.friction_work - info.ledger.impulse_work;
     Ok((
         c_new,
         v_new,
@@ -787,6 +792,7 @@ pub fn integrate_motion_controls(
             total: k_after + info.potential,
             delta_total: k_after + info.potential - info.total + info.delta_total, // approximate keep
             delta_kinetic: k_after - crate::manifold::kinetic_energy(v, c, config)?,
+            ledger: info.ledger,
         },
     ))
 }
@@ -815,7 +821,18 @@ mod tests {
     }
 
     #[test]
-    fn version_frozen() {
+    fn impulse_work_is_the_fixed_configuration_kinetic_energy_change() {
+        let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = cfg();
+        let c = C::new(0.0, 0.0);
+        let controls = MotionControls { direction: [1.0, 0.0], impulse: 1.0, ..Default::default() };
+        let (_, velocity, info) = integrate_motion_controls(c, (0.0, 0.0), &controls, 0.0, &config).unwrap();
+        let expected = crate::manifold::kinetic_energy(velocity, c, &config).unwrap();
+        assert!((info.ledger.impulse_work - expected).abs() < 1e-12);
+        assert!(info.ledger.residual.abs() < 1e-12);
+    }
+
+    #[test]    fn version_frozen() {
         assert_eq!(CONTROLS_VERSION, "controls/2");
     }
 

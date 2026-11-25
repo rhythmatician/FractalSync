@@ -691,6 +691,12 @@ pub fn integrate_step(
     let e_new = total_energy(v_new, c_new, config)?;
     let k_old = kinetic_energy(v, c, config)?;
     let k_new = kinetic_energy(v_new, c_new, config)?;
+    let start_geometry = geometry_jet(c, config)?;
+    let end_geometry = geometry_jet(c_new, config)?;
+    let valid = start_geometry.validity == crate::geometry_provider::GeometryValidity::Regular
+        && end_geometry.validity == crate::geometry_provider::GeometryValidity::Regular
+        && [dt, e_old, e_new, q_control.0, q_control.1, q_drag.0, q_drag.1]
+            .iter().all(|x| x.is_finite()) && dt >= 0.0;
 
     let energy_info = EnergyInfo {
         kinetic: k_new,
@@ -698,24 +704,140 @@ pub fn integrate_step(
         total: e_new,
         delta_total: e_new - e_old,
         delta_kinetic: k_new - k_old,
+        ledger: WorkEnergyLedger {
+            version: "work-energy-ledger/1".to_string(),
+            geometry_contract_version: crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string(),
+            controls_version: crate::controls::CONTROLS_VERSION.to_string(),
+            dt,
+            start_position: [c.re, c.im],
+            end_position: [c_new.re, c_new.im],
+            start_velocity: [v.0, v.1],
+            end_velocity: [v_new.0, v_new.1],
+            start_energy: e_old,
+            end_energy: e_new,
+            control_power: v.0 * q_control.0 + v.1 * q_control.1,
+            friction_power: v.0 * q_drag.0 + v.1 * q_drag.1,
+            control_work: dt * (v.0 * q_control.0 + v.1 * q_control.1),
+            friction_work: dt * (v.0 * q_drag.0 + v.1 * q_drag.1),
+            impulse_work: 0.0,
+            residual: e_new - e_old - dt * (v.0 * (q_control.0 + q_drag.0) + v.1 * (q_control.1 + q_drag.1)),
+            start_geometry,
+            end_geometry,
+            d_ref: config.d_ref,
+            epsilon: config.epsilon,
+            lambda_sq: config.lambda_sq,
+            kappa: config.kappa,
+            mu: config.mu,
+            control_covector: [q_control.0, q_control.1],
+            friction_beta: beta,
+            valid,
+        },
     };
 
     Ok((c_new, v_new, energy_info))
 }
 
 /// Energy diagnostic information
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct EnergyInfo {
     pub kinetic: f64,
     pub potential: f64,
     pub total: f64,
     pub delta_total: f64,
     pub delta_kinetic: f64,
+    pub ledger: WorkEnergyLedger,
+}
+
+/// Diagnostic work-energy balance. Continuous work uses left endpoint power
+/// times dt; the semi-implicit step precedes any fixed-position impulse.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkEnergyLedger {
+    pub version: String,
+    pub geometry_contract_version: String,
+    pub controls_version: String,
+    pub dt: f64,
+    pub start_position: [f64; 2],
+    pub end_position: [f64; 2],
+    pub start_velocity: [f64; 2],
+    pub end_velocity: [f64; 2],
+    pub start_energy: f64,
+    pub end_energy: f64,
+    pub control_power: f64,
+    pub friction_power: f64,
+    pub control_work: f64,
+    pub friction_work: f64,
+    pub impulse_work: f64,
+    pub residual: f64,
+    pub start_geometry: crate::geometry_provider::GeometryJet,
+    pub end_geometry: crate::geometry_provider::GeometryJet,
+    pub d_ref: f64,
+    pub epsilon: f64,
+    pub lambda_sq: f64,
+    pub kappa: f64,
+    pub mu: f64,
+    pub control_covector: [f64; 2],
+    pub friction_beta: f64,
+    /// Endpoint samples are regular; this does not certify the intervening path.
+    pub valid: bool,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ledger_reports_signed_drive_and_passive_metric_drag() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = ManifoldConfig::default();
+        let c = Complex64::new(0.0, 0.0);
+        let v = (0.02, 0.0);
+        let dt = 0.001;
+        let (_, _, aligned) = integrate_step(c, v, (2.0, 0.0), 0.5, dt, &config).unwrap();
+        let (_, _, opposing) = integrate_step(c, v, (-2.0, 0.0), 0.5, dt, &config).unwrap();
+        assert!((aligned.ledger.control_work - 0.00004).abs() < 1e-15);
+        assert!((opposing.ledger.control_work + 0.00004).abs() < 1e-15);
+        let k = kinetic_energy(v, c, &config).unwrap();
+        assert!((aligned.ledger.friction_power + 2.0 * 0.5 * k).abs() < 1e-12);
+        assert!(aligned.ledger.friction_work < 0.0);
+        assert_eq!(aligned.ledger.impulse_work, 0.0);
+        assert!((aligned.ledger.residual - (aligned.delta_total
+            - aligned.ledger.control_work - aligned.ledger.friction_work)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stationary_unforced_step_has_zero_work() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let (_, _, info) = integrate_step(Complex64::new(0.0, 0.0), (0.0, 0.0), (0.0, 0.0), 0.5, 0.0, &ManifoldConfig::default()).unwrap();
+        assert_eq!(info.ledger.control_work, 0.0);
+        assert_eq!(info.ledger.friction_work, 0.0);
+        assert_eq!(info.ledger.residual, 0.0);
+    }
+
+    #[test]
+    fn resolved_bridge_sample_shows_first_order_residual_refinement() {
+        let _lock = crate::distance_field::global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        let config = ManifoldConfig::default();
+        let rollout = |steps: usize| {
+            let mut c = Complex64::new(0.0, 0.0);
+            let mut v = (0.005, 0.003);
+            let mut residual = 0.0;
+            for _ in 0..steps {
+                let (next_c, next_v, info) = integrate_step(c, v, (0.1, 0.03), 0.2, 0.1 / steps as f64, &config).unwrap();
+                assert!(info.ledger.valid, "refinement evidence requires regular endpoint samples");
+                residual += info.ledger.residual;
+                c = next_c;
+                v = next_v;
+            }
+            residual.abs()
+        };
+        let coarse = rollout(10);
+        let medium = rollout(20);
+        let fine = rollout(40);
+        assert!(coarse < 5e-4, "coarse residual {coarse}");
+        assert!(medium < coarse * 0.6, "{coarse} -> {medium}");
+        assert!(fine < medium * 0.6, "{medium} -> {fine}");
+    }
     
     #[test]
     fn test_scale_at_shore() {

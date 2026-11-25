@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/3";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/4";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -207,6 +207,9 @@ pub struct DebugSnapshot {
     pub version: &'static str,
     /// Authoritative step time in seconds (destination step clock).
     pub time_seconds: f64,
+    /// Last successful step's accounting, absent before a step or after failure.
+    pub energy_ledger: Option<crate::manifold::WorkEnergyLedger>,
+    pub accumulated_energy_ledger: Option<AccumulatedEnergyLedger>,
     /// Action section (None before the first step).
     pub action: Option<ActionSnapshot>,
     /// Map section (canonical minimap state).
@@ -215,6 +218,20 @@ pub struct DebugSnapshot {
     pub physics: PhysicsSnapshot,
     /// Diagnostics section.
     pub diagnostics: DiagnosticsSnapshot,
+}
+
+/// Signed sums across successful destination steps. `valid` remains false
+/// after an unresolved sample or failed step until the controller is reset.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccumulatedEnergyLedger {
+    pub steps: u64,
+    pub duration: f64,
+    pub control_work: f64,
+    pub friction_work: f64,
+    pub impulse_work: f64,
+    pub residual: f64,
+    pub valid: bool,
 }
 
 /// Inputs to [`snapshot_from_state`] describing the last applied action.
@@ -410,6 +427,8 @@ pub fn snapshot_from_state(
     Ok(DebugSnapshot {
         version: DEBUG_SNAPSHOT_VERSION,
         time_seconds: 0.0,
+        energy_ledger: None,
+        accumulated_energy_ledger: None,
         action,
         map,
         physics,
