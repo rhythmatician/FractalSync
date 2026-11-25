@@ -1,8 +1,8 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**400 explicit proved theorem/lemma declarations**: 357 in twenty-seven result
-modules supporting #157, #159, and research issues #160--#163, plus 43 in nine
+**596 explicit proved theorem/lemma declarations**: 543 in thirty-nine result
+modules supporting #157, #159, and research issues #160--#163, plus 53 in twelve
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
 execution, Python training, the browser, and Aeneas/Charon.
@@ -50,12 +50,13 @@ it is not a training preflight requirement.
 
 ### Optional agent authoring tools
 
-An earlier verification run installed the pinned server in a separate Python
+This continuation installed the pinned server in a separate Python
 environment and tested it through an actual MCP stdio session. It exposed 22 tools; diagnostics for
 `DistanceToSet.lean` were clean and `lean_verify` accepted
 `FractalSync.DistanceGraph.exists_nearest_segment` with standard axioms only.
-The current continuation reinstalled Lean in a fresh environment; the optional
-server was not reinstalled or retested. Its smoke check is reproducible from the repository root:
+The check exited successfully. The server still emitted the previously
+observed ignored asyncio cleanup warning after successful diagnostics and
+verification. Its smoke check is reproducible from the repository root:
 
 ```sh
 python -m pip install -r formal/tools/requirements-mcp.txt
@@ -66,15 +67,22 @@ Use the interpreter belonging to the environment where the server is installed.
 The server also needs Elan's binaries on PATH and the Lean package built.
 [tools/vscode-mcp.json](tools/vscode-mcp.json) is a pinned VS Code MCP
 configuration template; merge its `servers` entry into the local
-`.vscode/mcp.json` when using that client. This template does not silently
-register the server in other agent clients. Python/MCP are authoring aids and
+`.vscode/mcp.json` when using that client.
+[tools/codex-mcp.toml](tools/codex-mcp.toml) supplies the matching pinned Codex
+entry. Replace its absolute project-path placeholder and make Elan's binaries
+available on the client's PATH before use. The installed Codex CLI's actual
+`mcp add` command was attempted in this environment but could not persist its
+entry because the active client configuration is read-only. Thus local stdio
+operation is verified, but persistent client registration remains blocked.
+These templates do not claim that a client has registered the server.
+Python/MCP are authoring aids and
 are not dependencies of proof CI or part of the kernel's trusted foundation.
 
-The official Lean agent skills were consulted at the pin above. They are not
-vendored or registered in a persistent personal skill catalog by this package.
-Together with the metric and continuous mechanics results below, this makes
-substantial progress on #157; client-specific persistent authoring integration
-still needs its stated follow-up. Keep one shared proof package.
+The official `lean-proof` and `mathlib-build` skills at the pin above were
+installed and their presence in the personal skill catalog was verified.
+They are not vendored into the runtime repository. This closes the skill
+installation part of #157; the specific read-only client configuration is
+the remaining MCP-registration blocker. Keep one shared proof package.
 
 ## Exact theorem inventory
 
@@ -89,6 +97,9 @@ by the separate transitive audit.
 | `ScaleMetric` | 31 | Rank-one metric, inverse, determinant, eigen-directions, rotations |
 | `MetricImpulse` | 14 | Bilinear Cauchy--Schwarz and exact impulse energy |
 | `ContinuousMechanics` | 15 | Compact connection, actual work-energy calculus, signed work and dissipation |
+| `PotentialForces` | 29 | Actual Shore/secant-wall derivatives, raised forces, wall limit and full crest energy budget |
+| `ControlMechanics` | 28 | Momentum derivative, intrinsic drive/drag, candidate board/carve and fixed-metric steering |
+| `DiscreteMechanics` | 11 | Frozen-metric step energy, work defect and sharp explicit-drag criterion |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
@@ -99,29 +110,40 @@ by the separate transitive audit.
 | `ComponentCrossing` | 3 | Topological Shore crossing and unrestricted AC component calibration |
 | `PairwiseDistance` | 13 | Actual pairwise path infimum, component divergence and floor monotonicity |
 | `PathOperations` | 16 | Actual AC reversal and concatenation with exact length laws |
+| `ACSubpaths` | 8 | Actual affine subpaths, derivatives and exact subinterval length |
 | `DisplacementBounds` | 13 | Logarithmic displacement bound, positive definiteness and Shore-endpoint divergence |
 | `IntrinsicMetric` | 7 | Symmetry, triangle inequality, bundled metric and endpoint divergence wrappers |
-| `IntrinsicTopology` | 10 | Original topology, compact balls, properness and intrinsic completeness |
+| `IntrinsicTopology` | 11 | Original topology, compact balls, properness, completeness and ruler distance control |
+| `IntrinsicLength` | 6 | Cumulative actual graph length and intrinsic increment control |
+| `GraphChord` | 10 | Lifted graph derivative/chord bounds and recovery of the full density |
+| `IntrinsicVariation` | 20 | Actual intrinsic variation, partition bounds, AC and monotonicity |
+| `IntrinsicGeodesics` | 5 | Constant-speed intrinsic geodesics and ordinary AC admissibility |
+| `IntrinsicCurveLength` | 8 | Metric curve-length equality, length-space property and attained pairwise minimum |
+| `ShoreMinimizers` | 17 | Complete nearest-Shore equality classification with pauses and zero branch |
 | `MetricComparison` | 6 | Scale-only versus anisotropic lengths and actual path infima |
 | `ACComponentPaths` | 8 | AC reachability throughout each component of an open domain |
 | `ZeroFloorLimit` | 21 | Actual zero-floor integrability, quantitative infimum sandwich and same-component limit |
 | `CrossingAction` | 5 | Integral Cauchy--Schwarz, crossing duration and kinetic action |
 | `FlatShore` | 32 | Scalar warp derivatives, curvature expressions, excursion integral |
+| `FlatShoreGeometry` | 25 | Actual coordinate connection, torsion/compatibility, curvature commutator and Gram ratio |
 | `SensitivityBounds` | 4 | Sensitivity transfer and scalar shear |
 | `NormalizedDistanceFields` | 8 | Normalized-field algebra and Lipschitz bounds |
 | `NormalizedMapDifferential` | 8 | Actual window differential and quadratic remainder from segment Hessian bounds |
+| `NormalizedProviderError` | 18 | Actual computed-query error, recomputed ruler, scale/center stability and crest bias |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **357** | Includes supporting lemmas, not just independent research results |
-| `Analysis/*` (nine modules) | 43 | Attributed AC FTC backport and compatibility/finite-dimensional support |
-| **Total** | **400** | 109 more source declarations than the prior 291-theorem increment |
+| **Result-module subtotal** | **543** | Includes supporting lemmas, not just independent research results |
+| `Analysis/*` (twelve modules) | 53 | Attributed AC FTC backport and project analysis/metric support |
+| **Total** | **596** | 196 more source declarations than the prior 400-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
 1 (`FiniteDimensionalAC`), 3 (`FinsetGaps`), 3 (`IntervalSlope`), and
-12 (`OrderFinsetGaps`), plus 4 in the new `ACComposition` module. The
+12 (`OrderFinsetGaps`), 4 (`ACComposition`), 2 (`ACVectorFTC`),
+1 (`DerivativeControl`), and 7 (`ProperGeodesics`). The
 [support provenance](FractalSync/Analysis/README.md) records the exact upstream
-snapshot and retained Apache 2.0 attribution. The four AC composition/gluing
-proofs are project compatibility work, not attributed upstream declarations.
+snapshot and retained Apache 2.0 attribution. The AC composition/gluing,
+vector FTC, derivative-control and proper-geodesic proofs are separate
+project support work, not attributed upstream declarations.
 
 ### #157/#159: ruler and local metric foundations
 
@@ -187,8 +209,45 @@ No bundled manifold connection, global solution existence, global distance-field
 smoothness or discrete energy conservation is claimed. The normalized Map
 differential and quadratic remainder are now checked by
 [NormalizedMapDifferential.lean](FractalSync/NormalizedMapDifferential.lean),
-inventoried below. The full potential-force catalog and remaining specific
-control contracts are still separate Phase A obligations.
+inventoried below. The explicit potential-force and additional control
+contracts are now checked by the following extension.
+
+### #159: explicit potentials, controls, and discrete step contracts
+
+[PotentialForces.lean](FractalSync/PotentialForces.lean) uses namespace
+`FractalSync.PotentialForces`; [ControlMechanics.lean](FractalSync/ControlMechanics.lean)
+uses `FractalSync.ControlMechanics`. The full formulas and implementation
+boundary are in [the potential/control note](../docs/research/159-potential-controls.md).
+
+| Checked result | Principal declarations and scope |
+| --- | --- |
+| Actual Shore potential differential and inverse-metric acceleration | `hasDerivAt_shorePotential`, `hasFDerivAt_shorePotential`, `shore_acceleration`; positive ruler/reference, actual ruler derivative, arbitrary real a and gradient. The acceleration is kappa*rho*u/(log 2*W). |
+| Reference origin and exact crest potential change | `shorePotential_reference_shift`, `shorePotential_difference`, `totalPotential_reference_shift`, `totalPotential_fderiv_reference_invariant`, `totalPotential_crest_difference`; the full wall difference is retained. |
+| Actual p=8 secant-wall differential and physical domain | `hasFDerivAt_wallCoordinate`, `hasFDerivAt_wallPhase`, `hasFDerivAt_wallPotential_of_cos_ne_zero`, `hasFDerivAt_wallPotential`, `wallPhase_mem`, `cos_wallPhase_pos`; norm(x)<2 ensures the cosine denominator is positive. |
+| Wall sign, default strength, metric raising and boundary limit | `wallPotential_nonneg`, `wallCoefficient_nonneg`, `wallForce_radial_nonpos`, `wallForce_default`, `wall_acceleration`, `wallPotential_tendsto_atTop`. Nonnegative mu for signs and strictly positive mu for divergence; inward covector does not mean radial raised acceleration. |
+| Actual total conservative force and continuous energy ledger | `hasFDerivAt_totalPotential`, `hasDerivAt_canonicalEnergy`, `canonical_work_energy`, `crest_budget_of_work_energy`, `canonical_crest_budget`. The last derives the necessary crest budget directly from trajectory derivatives and dynamics, with signed work, wall change and friction integral explicit. |
+| Actual momentum differential and impulse momentum jump | `hasFDerivAt_kinetic`, `hasFDerivAt_lagrangian_velocity`, `momentum_impulse_jump`; the velocity derivative is the existing metric action Gv. |
+| Metric normalization, drive and drag | `metricNormalize_unit`, `drive_acceleration`, `drive_power`, `drive_dualSq`, `drive_dualNorm_unit`, `drive_power_bound`, `metric_drag_acceleration`, `metric_drag_power_nonpos`; unit heading, nonzero vector and metric-scale conditions are explicit where needed. |
+| Candidate board friction and PSD dissipation | `boardFriction_apply`, `boardFriction_quadratic`, `boardFriction_nonneg`, `board_friction_power_nonpos`, `board_friction_acceleration`, `friction_integral_nonneg`. Nonnegative coefficients suffice even for degenerate frames. |
+| Candidate projection, carve and fixed-metric steering | `headingProjection_idempotent`, `headingProjection_residual_orthogonal`, `headingProjection_tangent`, `carveBias_ne_zero`, `normalized_carveBias_unit`, `hasDerivAt_steering_angle`, `hasDerivAt_steering`, `steering_preserves_unit`, `redirection_impulse_energy_jump`; 0<=alpha<1 keeps carve bias nonzero. |
+
+The continuous ledger requires actual field/trajectory derivatives on the
+open time interval, endpoint energy continuity and integrable work terms.
+PSD is separate from the ledger identity. Candidate board/carve formulas
+do not change the runtime's isotropic controls path. Fixed-metric steering
+does not prove covariant heading transport in a varying metric.
+
+[DiscreteMechanics.lean](FractalSync/DiscreteMechanics.lean), in
+`FractalSync.ScaleMetric`, proves the actual frozen-metric velocity-step
+identities `velocityEulerStep_energy_change`, `frozenForceStep_energy_change`,
+`frozenForceStep_work_defect_nonneg` and `frozenForceStep_average_velocity_work`.
+The drag theorems `explicitDragStep_eq_smul`, `explicitDragStep_kinetic`,
+`explicitDragStep_kinetic_le`, `explicitDragStep_kinetic_le_iff_of_ne_zero`,
+and `explicitDragStep_kinetic_le_iff` give the exact factor (1-beta*dt)^2
+and sharp nonincrease condition v=0 or 0<=beta*dt<=2, with rho>0.
+See [the discrete note](../docs/research/159-discrete-mechanics.md).
+These are not changing-configuration, floating-point or full-integrator
+conservation theorems.
 
 ### #160: pointwise distance-graph algebra
 
@@ -287,10 +346,10 @@ additional hypotheses of the project path theorems.
 | Crossing duration and integrated kinetic-action bounds | `ac_crossing_duration_bound`, `ac_crossing_kinetic_action_bound`; the former has an a.e. speed cap, the latter positive duration and integrable squared speed. Supporting actual integral results are `integral_affine_sq`, `sq_integral_le_duration_mul_integral_sq`, `kinetic_action_lower_bound`. |
 
 The next modules establish the actual pairwise metric, properness, completeness,
-and complete pointwise componentwise zero-floor limit. Metric curve-length
-identification and minimizing curves between arbitrary endpoints remain
-separate formal obligations. The Euclidean classification of every
-nearest-Shore minimizer is conventional, as explicitly labeled in the AC note.
+and complete pointwise componentwise zero-floor limit. The subsequent
+intrinsic-length extension identifies actual metric curve length, constructs
+minimizing AC paths between arbitrary endpoints, and classifies every
+nearest-Shore minimizer in strictly convex finite-dimensional normed spaces.
 Restricted provider domains can exclude a nearest segment. Kinetic action is
 distinct from work and from a sufficient dynamical crossing criterion.
 
@@ -324,15 +383,48 @@ in two cases according to whether their length is at most B, then takes the
 infimum. Together with the diagonal identity, different-component divergence,
 and distinct Shore-endpoint divergence, this covers every fixed pair when S
 is nonempty and closed. It does not claim uniform convergence over endpoint
-pairs or existence of a minimizing curve between arbitrary endpoints.
+pairs. Arbitrary-endpoint minimizing curves are supplied by the separate
+positive-floor construction below.
 
-### #160: flat-Shore scalar geometry
+### #160: actual metric length, geodesics, and all nearest-Shore minimizers
+
+These modules share `FractalSync.DistanceGraph`. The
+[intrinsic-length note](../docs/research/160-intrinsic-length.md) develops
+their proof dependencies and exact hypotheses.
+
+| Module and checked result | Principal declarations and scope |
+| --- | --- |
+| [ACSubpaths](FractalSync/ACSubpaths.lean): actual affine subpaths | `ac_affineSubpath`, `deriv_affineSubpath`, `graphSpeed_affineSubpath`, `acGraphLength_affineSubpath`, `intrinsicDistance_le_subpath_integral`; includes zero-length parameter intervals. |
+| [IntrinsicLength](FractalSync/IntrinsicLength.lean): cumulative actual graph integral | `acCumulativeLength`, endpoint identities, `continuousOn_acCumulativeLength`, `acCumulativeLength_sub`, `intrinsicDistance_le_acCumulativeLength_sub`, `intrinsicDistance_le_abs_acCumulativeLength_sub`. |
+| [GraphChord](FractalSync/GraphChord.lean): lifted displacement retaining ruler change | `rulerGraphLift`, `ae_norm_deriv_rulerGraphLift`, `rulerGraphChord_le_length`, `rulerGraphChord_le_intrinsicDistance`, `norm_deriv_rulerGraphLift_le_of_control`, `ac_graphSpeed_le_control_deriv`. The chord inequality is norm(Phi(y)-Phi(x))<=rho(x)*exp(D(x,y))*D(x,y); no ambient distance-field derivative is assumed. |
+| [IntrinsicVariation](FractalSync/IntrinsicVariation.lean): actual partition-supremum variation | `eVariationOn_intrinsic_le_acGraphLength`, `boundedVariationOn_intrinsic`, `intrinsicVariation_zero`, `intrinsicVariation_one`, `monotoneOn_intrinsicVariation`, `intrinsicDistance_le_intrinsicVariation_abs_sub`, `intrinsicVariation_abs_sub_le_acCumulativeLength_sub`, `absolutelyContinuousOnInterval_intrinsicVariation`; also AC and monotonicity of the cumulative integral. |
+| [IntrinsicCurveLength](FractalSync/IntrinsicCurveLength.lean): full length identity and attainment | `absolutelyContinuousOnInterval_intrinsic`, `ac_graphSpeed_le_deriv_intrinsicVariation`, `acGraphLength_eq_intrinsicVariation`, `eVariationOn_intrinsic_eq_acGraphLength`, `exists_metric_length_lt_intrinsicDistance_add`, `acGraphLength_le_of_intrinsic_boundedSpeed`, `exists_acGraphLength_minimizer`, `intrinsicDistance_isLeast_pairwisePathLengths`. |
+| [IntrinsicGeodesics](FractalSync/IntrinsicGeodesics.lean): constant-speed metric paths | `exists_intrinsic_boundedSpeedPath`, `exists_intrinsic_metricGeodesic`, `lipschitz_of_intrinsic_boundedSpeed`, `exists_intrinsic_ac_metricGeodesic`; properness yields compact bounded-speed families, and an explicit ordinary Lipschitz bound gives AC admissibility. |
+| [ShoreMinimizers](FractalSync/ShoreMinimizers.lean): complete equality classification | `ae_speed_eq_radial_of_minimizing`, `dist_eq_distance_trace_sub`, `minimizing_shore_endpoint_is_nearest`, `minimizing_path_eq_lineMap`, `minimizing_shore_path_constant_of_zero`, `acGraphLength_eq_radial_of_monotone_nearest_segment`, `minimizing_shore_path_iff`, `minimizing_path_to_shore_classification`. |
+
+Metric variation uses the explicit `intrinsicMetricSpace`, not the ordinary
+norm metric. Finite-dimensional real normed E, positive epsilon and arbitrary
+real a suffice for the length identity and arbitrary-endpoint minimizers;
+S is arbitrary. The length-space property is an explicit witness theorem,
+not an asserted Mathlib class instance. No smooth geodesic ODE or uniqueness
+is concluded.
+
+The Shore iff theorem assumes strict convexity only for its segment
+classification. A path from Shore has radial minimum length exactly when it
+is constant at zero endpoint distance, or traverses a nearest segment with
+an AC nondecreasing parameter from zero to one. The converse allows pauses;
+the reverse orientation has a nonincreasing parameter. No convexity of S or
+unique nearest point is required. The existing nonempty-closed-set Shore
+infimum theorem identifies this equality with the actual minimum.
+
+### #160: flat-Shore scalar analysis and coordinate curvature
 
 [FlatShore.lean](FractalSync/FlatShore.lean) uses `FractalSync.FlatShore` and
 reuses the shared ruler. Its geometric interpretation is developed in
 [the flat-Shore note](../docs/research/160-flat-shore.md). The scalar formulas
-are checked; identifying them with Riemannian curvature or a global cut locus
-is a conventional proof step.
+are checked. The following coordinate extension now identifies the planar
+curvature formula through actual derivatives; the global cut locus remains
+conventional.
 
 | Checked statement | Principal identifiers |
 | --- | --- |
@@ -346,6 +438,26 @@ Four helper lemmas establish denominator positivity and integrand continuity.
 No Riemannian curvature tensor, conjugate-point or cut-locus theorem,
 Banach-space implicit function theorem, or local minimizer theorem is
 formalized in this module.
+
+[FlatShoreGeometry.lean](FractalSync/FlatShoreGeometry.lean) uses namespace
+`FractalSync.FlatShoreGeometry`. It defines the explicit diagonal plane
+metric and the covariant derivative `fderiv Y x (X x) + Gamma(X,Y)`.
+The derivative in the curvature definition is the actual nested covariant
+derivative, including Mathlib's Lie-bracket term.
+
+| Checked coordinate-geometric statement | Principal identifiers |
+| --- | --- |
+| Positive diagonal metric and actual coefficient derivatives | `radialMetric_pos`, `tangentialMetric_pos`, `metric_symm`, `metric_self_pos`, `hasDerivAt_radialMetric`, `hasDerivAt_tangentialMetric`, `hasDerivAt_gammaYY`, `hasDerivAt_gammaRY` |
+| Connection laws, torsion and actual differentiated metric compatibility | `christoffel_symm`, `christoffel_metric_compatible`, `hasDerivAt_metric_pairing`, `covariantDerivative_torsion`, `covariantDerivative_first_linear`, `covariantDerivative_second_add`, `covariantDerivative_leibniz`, `covariantDerivative_metric_pairing` |
+| Actual curvature commutator on coordinate fields | `curvature_normal_tangent_tangent`, `curvature_normal_tangent_tangent_eq`; both nonconstant intermediate fields are differentiated, and `lieBracket_normal_tangent` checks their coordinate bracket. |
+| Metric Gram-determinant quotient equals the rational flat curvature and is +1 on Shore | `sectionalCurvature_eq_radialCurvature`, `sectionalCurvature_on_shore`; epsilon>0, every real a and signed normal coordinate. |
+
+This is a global-coordinate connection and curvature identification. It does
+not construct a bundled Riemannian tensor, establish coordinate/frame
+invariance, or identify this coordinate metric's distance with the Euclidean
+flat-Shore specialization of `DistanceGraph.intrinsicDistance`. The
+higher-dimensional tangential interpretation, general curved-Shore curvature,
+Jacobi fields, cut locus, smooth-minimizer ODE and bifurcation remain separate.
 
 ### #161: sensitivity transfer and scalar shear
 
@@ -403,12 +515,36 @@ For `M(D,c,h,u)=(D(c+h*u)-D(c))/h`, c and h are fixed when differentiating u.
 | `normalizedMap_quadratic_remainder_of_lipschitz_fderiv` | Segment-wise L-Lipschitz actual differential implies the same normalized residual. |
 | `normalizedMap_quadratic_remainder_of_hessian_bound` | Actual differentiation of D and its differential field on the entire physical segment, with Hessian operator norm <= L, implies the same residual. No ideal unit-gradient hypothesis. |
 
-**Not formalized here:** the full combined provider/recomputed-ruler error
-estimate, the cross-scale comparison assembled from these local residuals,
+**Not formalized by this differential module:** the smooth cross-scale comparison
+assembled from these local residuals,
 optimal finite-sample envelopes, topology counterexamples, or blow-up limits.
 Actual local differentiability hypotheses do not certify numerical provider
 derivatives or imply distance-field smoothness at a cut locus. No ideal
 Lipschitz hypothesis is asserted for an arbitrary numerical provider.
+
+### #162: combined provider and recomputed-ruler errors
+
+[NormalizedProviderError.lean](FractalSync/NormalizedProviderError.lean)
+checks the actual error decomposition at the computed query location.
+`normalizedMap_scale_change_bound` gives the symmetric signed-scale bound
+with denominator max(abs(h),abs(k)); `normalizedMap_center_change_bound`
+gives center stability. `normalizedMap_provider_scale_error_bound` accepts
+independent nonzero nominal and computed scales.
+
+`normalizedMap_recomputed_ruler_error_bound` specializes to h=q*rho and
+k=q*rhoHat, for q>0 and epsilon>0. Its correlated-error certificate is
+evaluated at x+k*u, where the provider actually queries. The companion
+endpoint and uniform-budget versions, exact rationalized ruler perturbation,
+and `normalizedMap_crest_bias_bound` are also checked. At an ideal crest,
+constant bias b gives the bound (b/epsilon)^2*norm(u).
+
+Only the ideal field is assumed one-Lipschitz. No Lipschitz assumption is
+imposed on the provider D+e, and no value/derivative error certificate is
+inferred from a stencil's self-consistency checks. The runtime clamps its
+stencil scale; it is not always q*rhoHat. The general h/k theorem can
+accommodate an actual clamped scale with the corresponding actual-query
+certificates. Coordinate/ruler/division floating errors remain separate.
+See [the full error note](../docs/research/162-normalized-distance-fields.md).
 
 ### #163: finite transport algebra and an exact counterexample
 
@@ -455,7 +591,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 741 declarations, including the 400 stated theorem/lemma declarations,
+The current audit covers 1,094 declarations, including the 596 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

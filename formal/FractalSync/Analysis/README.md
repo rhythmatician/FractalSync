@@ -59,8 +59,26 @@ proves the corresponding actual integral-length identities. AC preservation
 alone is not a claim of length invariance under every nonlinear
 reparameterization.
 
-The nine support modules now contain 43 explicit theorem/lemma declarations:
-39 in the earlier support files and 4 in `ACComposition`.
+## Project vector calculus and metric compactness
+
+Three further support modules are original project proofs using the pinned
+Mathlib APIs, not copied declarations from the upstream snapshot:
+
+- `ACVectorFTC.lean` proves AC of a product curve and the finite-dimensional
+  vector-valued AC fundamental theorem, using the existing scalar FTC and
+  separation by continuous linear functionals.
+- `DerivativeControl.lean` proves a norm-derivative bound from an exponential
+  scalar control of increments. Its proof takes actual punctured slope limits.
+- `ProperGeodesics.lean` proves closedness and compactness of bounded-speed
+  endpoint-path families, existence of an optimal-speed path by a nonempty
+  compact intersection, the resulting constant-speed distance equality,
+  and reparameterization from a continuous scalar length control. It assumes
+  properness and nearly optimal paths, not minimizing-path existence.
+
+The twelve support modules contain 53 explicit theorem/lemma declarations:
+the earlier 43, plus 2 in `ACVectorFTC`, 1 in `DerivativeControl`, and 7 in
+`ProperGeodesics`. These are formalizations of standard analysis and metric
+arguments; no mathematical novelty is claimed for them.
 
 ## Trust boundary
 

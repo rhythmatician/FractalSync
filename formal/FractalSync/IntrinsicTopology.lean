@@ -142,4 +142,13 @@ theorem intrinsicMetricSpace_complete (S : Set E) (epsilon a : ℝ) (he : 0 < ep
     (intrinsicMetricSpace S epsilon a he).toPseudoMetricSpace
     (intrinsicMetricSpace_proper S epsilon a he)
 
+/-- The ruler grows at most exponentially in the actual intrinsic distance. -/
+theorem ruler_le_exp_intrinsicDistance (S : Set E) (epsilon a : ℝ) (x y : E)
+    (he : 0 < epsilon) :
+    ruler epsilon (Metric.infDist y S) ≤
+      ruler epsilon (Metric.infDist x S) * Real.exp (intrinsicDistance S epsilon a x y) := by
+  have h := ruler_le_anchor_add_distance S epsilon x y he
+  rw [Metric.infDist_singleton, dist_comm y x] at h
+  nlinarith [dist_le_ruler_mul_exp_intrinsicDistance S epsilon a x y he]
+
 end FractalSync.DistanceGraph

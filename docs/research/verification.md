@@ -1,9 +1,9 @@
 # Verification record: Lean geometry and mathematical research
 
-Verified 2026-11-24 in the supplied Linux environment. This continuation starts
-from draft PR #164 at `39d8614c07cf41ac3ddec30adedbc147585c724e`, whose
+Verified 2026-11-24 (America/Chicago) in the supplied Linux environment. This continuation starts
+from draft PR #164 at `d16288d2e223fc2b3efefbedf3e43510d30cb1b5`, whose
 main-branch base is `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The earlier 172- and 291-theorem increments are retained. This record
+The earlier 172-, 291-, and 400-theorem increments are retained. This record
 distinguishes new kernel-checked results, attributed analysis support, project
 compatibility proofs, conventional geometry, and earlier optional-tool/numerical
 observations.
@@ -19,15 +19,13 @@ observations.
 | Transitive dependencies | Committed `formal/lake-manifest.json`, unchanged |
 | AC backport source snapshot | Mathlib `aad247f928b1eb7c58478742119fdd15a37f0ffd` |
 | Official proof guidance | `leanprover/skills` at `7d3da0282e7b724b07620e45cf212f2e05e19334` |
-| Previously exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
+| Installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
-The earlier local checkout and Lean installation were absent in this fresh
-workspace. Elan 4.4.0 and the repository's Lean 4.24.0 toolchain were installed
-again, the draft branch was restored, and the unchanged baseline built
-successfully with 2,582 Lake jobs. The Mathlib cache restored all 2,540 requested
-files. An initial batch encountered HTTP 429 responses; a serial retry using
-a temporary curl configuration completed the remaining downloads. The
-committed toolchain, dependency source and manifest pins were not changed.
+The preceding 400-theorem increment restored the checkout, Elan 4.4.0,
+Lean 4.24.0, and the pinned Mathlib cache in this workspace. This continuation
+reused that installation and fetched the small additional cache set needed
+for strict-convexity geometry. The committed toolchain, dependency sources,
+manifest, Lake configuration and Lean workflow were not changed.
 
 From `formal/`, the complete continuation command
 
@@ -35,62 +33,79 @@ From `formal/`, the complete continuation command
 lake build --wfail
 ```
 
-completed successfully with **2,593 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,619 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing seventeen result modules | 252 |
-| Ten new result modules | 105 |
-| Existing eight analysis-support modules | 39 |
-| New AC composition/gluing support module | 4 |
-| **Total across thirty-six source modules** | **400** |
+| Existing twenty-seven result modules, before this continuation | 357 |
+| New ruler-distance lemma in `IntrinsicTopology` | 1 |
+| Twelve new result modules | 185 |
+| Existing nine analysis-support modules | 43 |
+| Three new analysis-support modules | 10 |
+| **Total across fifty-one source modules** | **596** |
 
-The new result modules are `ComponentCrossing` (3), `PairwiseDistance` (13),
-`PathOperations` (16), `DisplacementBounds` (13), `IntrinsicMetric` (7),
-`IntrinsicTopology` (10), `MetricComparison` (6), `ACComponentPaths` (8),
-`ZeroFloorLimit` (21), and `NormalizedMapDifferential` (8).
+The new result modules are `ACSubpaths` (8), `IntrinsicLength` (6),
+`GraphChord` (10), `IntrinsicVariation` (20), `IntrinsicGeodesics` (5),
+`IntrinsicCurveLength` (8), `ShoreMinimizers` (17), `FlatShoreGeometry` (25),
+`PotentialForces` (29), `ControlMechanics` (28), `DiscreteMechanics` (11),
+and `NormalizedProviderError` (18). The result subtotal is 543 across
+thirty-nine modules; support contributes 53 across twelve modules.
 Counts include explicit supporting lemmas and are not counts of independent
 research results. The analysis-support declarations are separated because
-many are attributed upstream infrastructure. The four new `ACComposition`
-declarations are original project compatibility proofs, not upstream copies.
+many are attributed upstream infrastructure. The new `ACVectorFTC` (2),
+`DerivativeControl` (1), and `ProperGeodesics` (7) declarations are original
+project support proofs, not upstream copies.
 The [formal inventory](../../formal/README.md) gives the complete module counts
 and statement boundaries.
 
-The requested different-component result is checked for the actual pairwise
-AC path infimum. A continuous path joining different complement components
-must cross Shore; the existing integrated crossing calibration therefore
-passes uniformly through the infimum and proves divergence as the floor
-decreases to zero.
+For #160, the actual AC graph integral now equals Mathlib's actual intrinsic
+metric variation. The proof uses AC subpaths, cumulative graph length,
+the actual AC variation trace and a lifted-chord derivative estimate.
+The length-space property is stated as an explicit near-optimal-path witness,
+not a new Mathlib class instance. Proper compactness then produces an exact
+constant-speed metric geodesic, an explicit ordinary Lipschitz estimate makes
+it AC in the original norm, and its graph length attains the original path
+infimum. These positive-floor theorems hold in finite-dimensional real normed
+spaces for arbitrary S and real a; arbitrary S uses Mathlib's real `infDist`
+convention, including zero for the empty set.
 
-The same continuation proves actual AC reversal and concatenation with exact
-length identities, metric axioms, a logarithmic displacement lower bound,
-the original normed-space topology, properness and completeness. Completeness
-uses the intrinsic metric's own uniform structure; no equality of ambient
-and intrinsic uniformities is asserted.
+Every nearest-Shore minimizer is now classified in a strictly convex
+finite-dimensional normed space. The complete iff includes a constant
+zero-distance branch and all monotone AC traversals of nearest segments,
+including pauses. A checked reversal wrapper covers paths toward Shore.
+The equality-case theorem requires an actual endpoint in S; the existing
+nonempty-closed-set infimum theorem supplies its physical minimum interpretation.
 
-For nonempty closed Shore, fixed endpoints and real a, all pointwise
-zero-floor branches are covered: zero on the diagonal; divergence across
-components; divergence for distinct endpoints with at least one on Shore;
-and convergence to the actual off-Shore zero-floor path infimum within one
-component. The last theorem derives path existence from actual component
-membership and derives zero-floor integrability from compact path clearance.
-Its quantitative sandwich splits all regularized candidates at an actual
-reference-length bound B, without assuming a minimizing curve.
+The planar flat metric's coordinate curvature is identified using an actual
+`fderiv` covariant derivative, the Mathlib Lie bracket, connection laws,
+actual metric compatibility, the full curvature commutator and its metric
+Gram determinant. It gives the previous rational curvature formula and +1
+on flat Shore. It does not construct a bundled Riemannian tensor or prove
+coordinate/frame invariance, nor formally identify this coordinate metric's
+distance with the flat-Shore specialization of the general path infimum.
 
-For #159/#162 the new normalized Map theorem differentiates the actual window
-query at fixed anchor and nonzero scale. The residual bound
-L*abs(h)*norm(u)^2/2 follows from an actual segment Hessian operator bound,
-with weaker Lipschitz-differential and anchored-variation versions also proved.
-No ideal signed-distance or numerical-provider derivative guarantee is inferred.
+For #159, the explicit Shore and secant-wall potentials now have actual
+Fréchet derivatives, exact raised forces and wall divergence. The full
+signed continuous energy ledger gives a necessary crest budget retaining
+wall change and friction. Momentum differentiation, drive, drag, candidate
+board friction/carve and planar fixed-metric steering are checked.
+Frozen-metric discrete energy identities give the exact explicit-drag factor
+(1-beta*dt)^2 and sharp nonincrease condition v=0 or 0<=beta*dt<=2 for rho>0.
 
-The earlier AC Shore-distance minimum, actual ruler/scale Hessians, local
-connection and continuous work-energy results remain included. Metric
-curve-length identification, the length-space property, arbitrary-endpoint
-minimizing-curve existence, the all-nearest-Shore-minimizer classification,
-Riemannian curvature identification, cut locus, and the local curved-Shore
-Lyapunov--Schmidt argument remain outside the checked boundary.
+For #162, combined provider/recomputed-ruler bounds now use certificates at
+the actual computed query. Center/scale stability, endpoint and relative
+budgets, rationalized ruler error and quadratic crest-bias bounds are checked.
+The numerical stencil clamps its scale, so the specialized proportional-scale
+theorem does not directly certify that stencil; the general h/k theorem
+requires actual scale and query-error data. No provider certificate is inferred.
+
+The earlier complete fixed-pair zero-floor classification, radial analysis,
+AC calibration, ruler/scale Hessians and metric foundations remain included.
+The flat cut locus, curved-Shore curvature and Lyapunov--Schmidt argument,
+numerical derivative/floating-point correspondence, and full changing-metric
+integrator properties remain outside the checked boundary.
 
 ## Attributed analysis backport and new compatibility support
 
@@ -107,11 +122,17 @@ and the original zero-derivative constancy proof. Finite-dimensional derivative
 integrability is obtained by continuous linear coordinates. No `.lake/packages`
 source was edited and no dependency pin was upgraded.
 
-The new `ACComposition` module is separate project work. It checks the
+The earlier `ACComposition` module is separate project work. It checks the
 disjoint-interval condition under monotone/antitone maps, preserves AC under
 Lipschitz precomposition with the stated interval-image premise, and glues
 matching AC pieces by constant extension. These four declarations use the
 actual pinned Mathlib AC definition and enter the same transitive audit.
+
+The new support adds the vector-valued AC FTC by dual separation, a
+derivative estimate from actual punctured slope limits, and a proper-metric
+geodesic construction using compact endpoint-path families. The latter
+proves its compactness and reparameterization arguments directly; it does
+not assume a minimizing curve or import an extra geometric axiom.
 
 ## Transitive axiom audit and negative controls
 
@@ -119,12 +140,12 @@ actual pinned Mathlib AC definition and enter the same transitive audit.
 lake env lean Audit.lean
 ```
 
-passed for **741 project declarations**, including definitions, generated
+passed for **1,094 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 741 project declarations
+Axiom audit passed for 1094 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -153,16 +174,14 @@ contains no `sorry`, `admit`, new axiom or
 native-evaluation axiom. These are checks of the kernel environment rather
 than only source-text scans.
 
-## Previously checked optional MCP integration
+## Optional MCP and official skill installation
 
-The earlier increment ran `formal/tools/check_mcp.py` in a real MCP stdio session using the separately
-installed pinned server. It discovered **22 tools**, obtained clean diagnostics
+This continuation installed the pinned 0.33.0 server in a separate Python
+3.12 environment and ran `formal/tools/check_mcp.py` in a real MCP stdio
+session. It discovered **22 tools**, obtained clean diagnostics
 for `DistanceToSet.lean`, and used `lean_verify` to inspect
 `FractalSync.DistanceGraph.exists_nearest_segment`. The result reported only
 standard axioms. The check exited successfully.
-
-The optional server was not reinstalled and its smoke check was not rerun for
-this continuation.
 
 The server emitted an ignored Python asyncio subprocess-finalizer warning,
 `RuntimeError: Event loop is closed`, during shutdown. Diagnostics and theorem
@@ -170,8 +189,17 @@ verification had succeeded; clean server process teardown is a remaining
 upstream integration issue, not a Lean proof failure. The optional server is
 not a proof-CI dependency or a trusted axiom source. The checked-in VS Code
 configuration is a template, not a claim that every agent client has registered
-this MCP server. Official Lean agent skills were consulted at the documented
-source pin; this increment did not install them in a personal skill catalog.
+this MCP server. The new Codex TOML template parses successfully. An actual
+`codex mcp add` attempt failed because the active client configuration is on
+a read-only filesystem; no server entry was registered. This is the concrete
+remaining client-registration blocker, distinct from the successful server
+installation and stdio test.
+
+The official `lean-proof` and `mathlib-build` skills were installed from the
+documented source pin and their presence in the personal catalog was verified.
+Their instruction text matches the pinned upstream guidance, with the
+source license retained. Neither skill is a runtime or
+proof-CI dependency.
 
 ## Independent numerical checks
 
@@ -202,25 +230,41 @@ formal error bounds.
 ## Proof review and publication status
 
 The earlier increments reviewed the radial formula, sharp additive constant,
-AC infimum, Hessian and mechanics signatures, and the conventional
-nearest-Shore minimizer classification. That classification remains a
-conventional equality argument, not a Lean theorem.
+AC infimum, field calculus and complete fixed-pair zero-floor classification.
+Those results remain unchanged. The formerly conventional nearest-Shore
+minimizer classification is now a checked iff theorem with its zero branch
+and converse included.
 
-This continuation independently reviewed the actual zero-floor path class,
-clearance and integrability proof, quantitative factor and signs, all
-candidate-length cases, the one-sided limit filter, positive definiteness,
-and the topology/uniformity distinction. No mathematical gap was found in
-the reviewed modules. The complete fixed-pair classification was checked
-case by case, including the diagonal and two distinct Shore endpoints.
-The notes explicitly exclude empty-Shore and empty-admissible-class
-interpretations from the zero-floor theorem.
+Independent review of this continuation checked the length proof's dependency
+order, actual metric instance, finite variation, lifted derivative limit,
+compact path families and ordinary AC admissibility. It found no circular
+assumption of attainment. The equality-case proof was reviewed against
+strict convexity, actual trace derivatives and segment traversal with pauses.
 
-The normalized Map note was checked against the actual `fderiv` signatures.
-It differentiates only the window coordinate at fixed anchor and scale, and
-retains actual ambient derivative hypotheses on the entire physical segment.
-The general minimizing-curve existence argument remains outside the formal
-boundary. Its use in the earlier conventional same-component proof has been
-replaced by the checked split over all candidates.
+The flat coordinate curvature review independently checked the Christoffel
+signs, actual field derivatives, Lie-bracket convention and Gram determinant.
+It confirmed the positive-one Shore convention and identified the still
+separate Euclidean path-metric specialization and tensor/frame interfaces.
+
+The mechanics review checked actual potential derivatives, signs and wall
+coefficients, the distinction between covector and raised acceleration,
+PSD and integrability hypotheses, and the exact explicit-drag interval.
+The provider review checked the computed query location, signed-scale
+denominator and zero-scale totalization. One overstatement in the conventional
+note was corrected: a correlated increment certificate can be tighter than
+an endpoint-error sum, but is not necessarily strictly tighter.
+
+Read-only runtime inspection confirmed that the numerical stencil clamps
+its scale, the integration step changes configuration before reporting new
+energy, and the controls wrapper applies its impulse at the new position.
+The notes preserve those distinctions. They do not certify the runtime's
+broader energy-drift comments, sampled derivatives or floating evaluation.
+
+The new mathematical notes were independently checked against actual
+signatures. The final prose states the unit parameter interval, the real
+empty-set infDist convention, the planar steering scope and the positive
+floor, ordered interval and valid-domain hypotheses needed by the relevant
+contracts. No blocking mathematical issue was found in the reviewed modules.
 
 The earlier prior-art search was targeted. It found exact prior art for the requested
 phase-harmonic Lipschitz bound and strong prior art for the location-scale
@@ -237,4 +281,5 @@ counts above are the observed local results. The published workflow run for
 this increment is reported on
 [draft PR #164](https://github.com/rhythmatician/FractalSync/pull/164).
 No runtime or training code was changed, so the application test suite was not
-run for this research-only increment.
+rerun locally for this research-only increment. Automatically triggered
+GitHub workflows are tracked separately on the draft PR.

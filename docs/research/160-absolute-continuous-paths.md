@@ -2,9 +2,9 @@
 
 This continuation closes the absolutely continuous calibration and
 Shore-distance path-infimum gaps in #160. The primary results in Sections 1--5
-and the pairwise continuation in Section 8 are checked in Lean. Section 7
-gives an additional conventional classification of all nearest-Shore minimizing
-paths and labels its different proof status explicitly.
+and the pairwise continuation in Section 8 are checked in Lean. The later
+intrinsic-length extension also checks the complete nearest-Shore minimizer
+classification in Section 7, including the converse and stationary case.
 
 The source modules are
 [`AbsolutelyContinuousPaths.lean`](../../formal/FractalSync/AbsolutelyContinuousPaths.lean),
@@ -253,10 +253,13 @@ integrability follows by continuous linear coordinates and the scalar theorem.
 These analysis results are attributed infrastructure, not a novelty claim
 for FractalSync. They are kernel checked together with the project results.
 
-## 7. Conventional strengthening: all minimizing paths
+## 7. Checked strengthening: all minimizing paths
 
-The following classification has a conventional proof, independently reviewed
-in this increment, but is **not a Lean theorem in this package**.
+The following classification is now checked in
+[`ShoreMinimizers.lean`](../../formal/FractalSync/ShoreMinimizers.lean).
+`minimizing_shore_path_iff` packages both directions and the zero-distance
+branch. The [intrinsic-length note](160-intrinsic-length.md) records the
+precise signatures and proof dependencies.
 
 For Euclidean E and x outside S, every minimizing admissible path is
 
@@ -294,8 +297,9 @@ forces gamma'=0 almost everywhere, and absolute continuity makes gamma constant.
 Consequently the geometric minimizing path is unique precisely when the
 Euclidean nearest point is unique. Parameterized minimizers need not be unique:
 they may pause or traverse the segment at different nonnegative speeds.
-This classification requires Euclidean or suitable strictly convex norm
-geometry; it is not asserted for arbitrary norms. S itself need not be convex.
+The formal segment classification assumes a finite-dimensional real normed
+space with `StrictConvexSpace`; Euclidean spaces satisfy that hypothesis.
+It is not asserted for arbitrary norms. S itself need not be convex.
 
 The closest-Shore minimizing images are therefore independent of epsilon
 and a, even though their intrinsic lengths change with both parameters.
@@ -431,16 +435,15 @@ The detailed proof and declaration mapping are in the
 
 ## 9. Remaining formal boundary
 
-The remaining pairwise geometric work is the identification of metric curve
-length with the graph-length integral, the resulting length-space property,
-and minimizing-curve existence between arbitrary endpoints. Formal properness
-and completeness do not by themselves establish those statements. The
-conventional continuation is retained in the
-[distance-geometry note](160-distance-geometry.md).
+The metric curve-length identity, length-space approximation property, and
+existence of minimizing AC curves between arbitrary endpoints are now checked
+in [the intrinsic-length extension](160-intrinsic-length.md), together with
+the all-nearest-Shore-minimizer classification above. The length bridge uses
+actual AC variation and a lifted-chord estimate; properness is used only
+after the required path constructions are available.
 
-The minimizer classification in Section 7, the smooth curvature interpretation,
-the flat cut locus, and the curved-Shore bifurcation remain conventional.
-The exact Shore-path minimum proved here does not silently establish those
-different claims. Restricted GeometryProvider validity domains can exclude
+The flat cut locus and curved-Shore bifurcation remain conventional, with
+the current coordinate-curvature boundary recorded in
+[the flat-Shore note](160-flat-shore.md). Restricted GeometryProvider validity domains can exclude
 the nearest segment; no unrestricted theorem is transferred to such a domain
 without an admissibility premise.

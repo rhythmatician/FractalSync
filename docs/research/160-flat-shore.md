@@ -1,10 +1,14 @@
 # Flat-Shore curvature, the cut locus, and curved-Shore bifurcation
 
 Status: mathematical research for #160, with scalar Lean support from
-`formal/FractalSync/FlatShore.lean`. The Riemannian identification, global
-minimizer arguments, and Banach-space reduction below are conventional proofs.
-The Lean file does not formalize a Riemannian curvature tensor, cut locus, or
-Lyapunov–Schmidt theorem. No runtime or training contract changes.
+`formal/FractalSync/FlatShore.lean` and an actual global-coordinate connection
+and curvature calculation in `formal/FractalSync/FlatShoreGeometry.lean`.
+The planar flat curvature identification is now checked through the actual
+covariant-derivative commutator. The global cut-locus/minimizer arguments,
+general curved-Shore curvature argument, and Banach-space bifurcation
+reduction below remain conventional. No bundled manifold curvature tensor,
+coordinate-change theorem, cut locus, or Lyapunov–Schmidt theorem is claimed.
+No runtime or training contract changes.
 
 The unrestricted flat model is exactly tractable. Its global cut-locus structure
 is a specialization of existing results for reflective warped-product surfaces,
@@ -88,6 +92,65 @@ unit Euclidean tangential length, is `2/[epsilon(1+b)]`. Indeed `K f=-f_tt`,
 and `-f_t` reaches its maximum `1/[epsilon(1+b)]` at its edge. The signed
 curvature-area integral across the whole normal line is zero because `f_t`
 tends to zero at both ends. These are area integrals, not trajectory integrals.
+
+### Checked planar connection and curvature identification
+
+The new coordinate module works on `Coord = R x R`, with the displayed
+bilinear metric (1). Its product norm is used only for ordinary Fréchet
+calculus; the geometric pairings are always made with (1). Lean checks
+positive definiteness for every \(\epsilon>0\), every real \(a\), and every
+signed normal coordinate \(r\).
+
+The nonzero coordinate Christoffel coefficients are
+\[
+\Gamma^r_{rr}=\frac{b^2r}{Q^2}-\frac{2r}{\rho^2},\qquad
+\Gamma^r_{yy}=\frac r{Q^2},\qquad
+\Gamma^y_{ry}=\Gamma^y_{yr}=-\frac r{\rho^2}.
+\]
+They are connected to actual metric derivatives, not only to an algebraic
+array named a connection. For actual coordinate fields define
+\[
+\nabla_XY(x)=dY_x[X(x)]+\Gamma_x(X(x),Y(x)).
+\]
+`covariantDerivative` uses Lean's actual `fderiv`. The module checks
+zero torsion against Mathlib's `VectorField.lieBracket`, linearity in the
+first direction, additivity and the Leibniz rule in the differentiated field
+under their actual differentiability premises, and genuine metric compatibility: differentiating the
+pairing of differentiable vector fields along a curve tangent to \(X\)
+gives the sum of the two covariant-derivative pairings.
+
+The curvature definition is the actual commutator
+\[
+R(X,Y)Z=\nabla_X\nabla_YZ-\nabla_Y\nabla_XZ-\nabla_{[X,Y]}Z.
+\]
+For the constant coordinate fields \(e_r,e_y\), the checked computation is
+\[
+R(e_r,e_y)e_y=\frac{K_{\rm rad}(r)}{\rho^2}\,e_r.
+\]
+The module then uses the actual metric Gram determinant to prove
+\[
+\boxed{
+\frac{g(R(e_r,e_y)e_y,e_r)}
+     {g(e_r,e_r)g(e_y,e_y)-g(e_r,e_y)^2}
+=\frac{\epsilon^4-b^2r^4}{(\epsilon^2+b^2r^2)^2}.
+}
+\]
+`sectionalCurvature_eq_radialCurvature` is this identification. The
+commutator proof differentiates both nonconstant first covariant derivatives
+and checks the zero bracket. Thus the sign convention gives curvature
+\(+1\) at \(r=0\), consistent with (2); `sectionalCurvature_on_shore`
+packages that specialization explicitly.
+
+Source: [FlatShoreGeometry.lean](../../formal/FractalSync/FlatShoreGeometry.lean).
+This is a checked curvature calculation in the specified global plane
+chart. Tensoriality under arbitrary frame or coordinate changes, a bundled
+Levi-Civita object, higher-dimensional identification of (3), and the
+curved-Shore argument below remain outside this module's formal boundary.
+There is also no theorem yet identifying this coordinate metric's path
+length with `DistanceGraph.intrinsicDistance` specialized to a Euclidean
+flat Shore. Their displayed densities agree mathematically, but that
+particular formal bridge must use the Euclidean plane, not the default
+norm on the coordinate product used for derivative calculus here.
 
 ## 2. Universal curvature at a smooth Shore
 
@@ -388,9 +451,13 @@ before interpreting this local bifurcation as a curved-Shore cut locus.
    one-sided notation in the displayed Proposition 5.4; its reflection
    argument and [1, Theorem B] give the two-sided form used here.
 
-The scalar identities and inequalities whose exact Lean names appear in
-`formal/README.md` are kernel checked. The conventional arguments that invoke
-warped-product curvature, Jacobi fields, minimizing-curve regularity, the
-cut-locus theorem, Sobolev spaces, or the analytic implicit function theorem
-are **not** reported as Lean formalizations. Existing theorem reuse is a
+The scalar identities and inequalities and the planar coordinate connection
+and curvature identification whose exact Lean names appear in
+`formal/README.md` are kernel checked. Arbitrary-endpoint AC minimizing
+curves and the complete nearest-Shore segment classification are also now
+checked in [the intrinsic-length extension](160-intrinsic-length.md).
+The further arguments invoking general warped-product geometry, Jacobi
+fields, smooth minimizing-curve regularity, the cut-locus theorem, Sobolev
+spaces, or the analytic implicit function theorem are **not** reported as
+Lean formalizations. Existing theorem reuse is a
 mathematical proof step, not a machine-checked dependency until formalized.

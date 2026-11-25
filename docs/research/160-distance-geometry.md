@@ -9,12 +9,15 @@ attained Shore-distance path infimum in both orientations. Crossing-duration
 and kinetic-action bounds are also checked. The package now constructs the
 actual pairwise AC path infimum as a metric, identifies its topology, proves
 properness and completeness, and checks every branch of its pointwise zero-floor
-limit. Identifying metric curve length with the graph integral and proving
-minimizing-curve existence between arbitrary endpoints remain conventional.
+limit. Metric curve length is now identified with the graph integral, every
+pair has an attained AC minimum, and all nearest-Shore minimizers are
+classified in the strictly convex setting. The flat coordinate curvature
+formula is also derived from an actual covariant-derivative commutator.
 No novelty claim is made. See the
 [radial formalization](160-radial-profile.md),
 [AC path and infimum formalization](160-absolute-continuous-paths.md),
 [pairwise metric and limit formalization](160-pairwise-metric-limit.md),
+[intrinsic curve length and minimizers](160-intrinsic-length.md),
 [flat-Shore geometry](160-flat-shore.md), and
 [exact theorem inventory](../../formal/README.md).
 
@@ -241,22 +244,22 @@ Equality of the two topologies does not assert equality of their uniformities
 at infinity. These positive-floor results also hold in finite-dimensional real
 normed spaces and for every real a.
 
-**Conventional continuation: minimizing curves.** Applying the length-space
-Hopf--Rinow theorem still requires identifying metric curve length with the
-functional (1) and establishing the length-space property. Those steps have
-not been formalized. The conventional Euclidean argument embeds the graph,
-for a>0, by `x -> (x,a rho(x))` in scaled hyperbolic upper half-space. Ambient
-distance is bounded above by d_epsilon,a, whereas each d_epsilon,a increment
-is bounded above by the corresponding subpath's ambient length. Taking
-partition suprema identifies the two curve lengths. For a=0 this is the
-standard continuous positive weighted-length construction. The resulting
-proper length space has a minimizing curve between any two points
-[2, Theorem 2.5.23]. Local equivalence with Euclidean length makes the curve
-Euclidean absolutely continuous after arclength parameterization, and the
-length identification makes it admissible for (1). This minimizing-curve
-existence argument remains conventional despite the now-formal properness
-and completeness. Neither uniqueness nor a classical geodesic ODE at a cut
-locus follows.
+**Checked continuation: minimizing curves.** The
+[intrinsic-length extension](160-intrinsic-length.md) now identifies metric
+curve length with (1) and proves the length-space approximation property.
+It uses the ordinary product lift `x -> (x,a rho(x))`, a checked chord bound,
+and the AC intrinsic-variation trace to recover the full graph-speed density.
+This single proof handles every real a, including zero, without importing
+a smooth hyperbolic embedding argument.
+
+Nearly optimal paths are reparameterized using cumulative length. Their
+bounded-speed families are compact in the pointwise product topology, so
+properness yields an exact constant-speed metric geodesic. An explicit
+ordinary Lipschitz bound makes it AC in the original norm, and the graph
+length equals the endpoint intrinsic distance. This is the standard
+proper-length-space principle [2, Theorem 2.5.23], now proved directly for
+the actual definitions. Neither uniqueness nor a classical geodesic ODE
+at a cut locus follows.
 
 Simultaneously scaling S, x, y, and epsilon by any beta>0 preserves every
 length in (1). Hence
@@ -433,14 +436,13 @@ and complete fixed-pair zero-floor classification are now checked. The
 [pairwise continuation](160-pairwise-metric-limit.md) records the precise
 statements and proof dependencies.
 
-The remaining formal work includes identifying metric curve length with the
-graph integral, establishing the length-space property, and proving
-minimizing-curve existence between arbitrary endpoints. Properness and
-completeness alone do not discharge those obligations. The conventional
-classification of all nearest-Shore minimizers remains in the
-[AC continuation](160-absolute-continuous-paths.md); curvature identification,
-cut-locus results, and curved-Shore bifurcation remain conventional as labeled
-in the [flat-Shore note](160-flat-shore.md). The exact formal boundary is
+The [intrinsic-length extension](160-intrinsic-length.md) now checks metric
+curve-length equality, the length-space property, arbitrary-endpoint
+minimizing AC paths, and the full nearest-Shore segment classification in
+strictly convex finite-dimensional normed spaces. Cut-locus results and the
+curved-Shore bifurcation remain conventional, with the precise
+coordinate-curvature boundary labeled in the
+[flat-Shore note](160-flat-shore.md). The exact formal boundary is
 maintained in [formal/README.md](../../formal/README.md).
 
 ## 7. Prior art and originality assessment

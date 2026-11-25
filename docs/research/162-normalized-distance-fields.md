@@ -1,8 +1,8 @@
 # Normalized distance fields: exact charts, error propagation, and sampling limits
 
-Research progress for [FractalSync #162](https://github.com/rhythmatician/FractalSync/issues/162), 2026-11-24.
+Research progress for [FractalSync #162](https://github.com/rhythmatician/FractalSync/issues/162), updated 2026-11-25.
 
-This note derives mathematical contracts; it does not change `PlayerObservation`, the GeometryProvider, runtime authority, or the training schedule. Section 8 distinguishes the Lean-checked algebra, local differential, and quadratic remainder results from the conventional proofs in this note. None of the results below is claimed to be novel. The main useful contribution at this stage is an explicit error budget for the actual normalized query, together with limitations that rule out overly strong interpretation of a finite Map tensor.
+This note derives mathematical contracts; it does not change `PlayerObservation`, the GeometryProvider, runtime authority, or the training schedule. Section 8 distinguishes the Lean-checked algebra, local differential, quadratic remainder, and combined provider/ruler bounds from the conventional proofs in this note. None of the results below is claimed to be novel. The main useful contribution at this stage is an explicit error budget for the actual normalized query, together with limitations that rule out overly strong interpretation of a finite Map tensor.
 
 ## 1. Definitions and assumptions
 
@@ -141,6 +141,14 @@ $$
 
 The pointwise ceiling `2|u|` also holds, so (4) can be replaced by its minimum with that ceiling.
 
+The upper bounds (4) and (5) are checked by
+`normalizedMap_center_change_bound` and `normalizedMap_scale_change_bound`
+in [`NormalizedProviderError.lean`](../../formal/FractalSync/NormalizedProviderError.lean).
+The latter allows arbitrary nonzero signed scales, with denominator
+`max(abs(h),abs(k))` and numerator `2‖u‖ abs(h-k)`. Equation (5) is its
+positive-scale specialization. These statements need only a real normed
+space and `LipschitzWith 1 D`.
+
 **Proof of (4).** Apply the triangle inequality separately to the two translated queries and the two center values; each difference is bounded by `|x-y|`.
 
 **Proof of (5).** Suppose `k≥h`. Write `A_h=D(x+hu)-D(x)`. Then
@@ -152,7 +160,7 @@ $$
 
 Use `|A_k-A_h|≤(k-h)|u|` and `|A_h|≤h|u|`. Both resulting terms are `(k-h)|u|/k`. Exchange `h,k` for the other case.
 
-Both factors of two are necessary even for genuine signed-distance fields. In one dimension take the closed interval `[0,2a]`, whose signed distance is `D(t)=|t-a|-a`. For (5), use `x=0,u=1,h=a,k>a`. The difference is exactly `2(k-h)/k`. For (4), take `x=0,y=δ`, with `0<δ<a`, and `h>a`. The difference is exactly `2δ/h`.
+Both factors of two are necessary even for genuine signed-distance fields. In one dimension take the closed interval `[0,2a]`, whose signed distance is `D(t)=|t-a|-a`. For (5), use `x=0,u=1,h=a,k>a`. The difference is exactly `2(k-h)/k`. For (4), take `x=0,y=δ`, with `0<δ<a`, and `h>a`. The difference is exactly `2δ/h`. These sharpness examples remain conventional calculations; the new Lean statements prove the upper bounds.
 
 For a smooth local patch with `|H_D|op≤L` on all rays from `x` to the queried points, there is a different bound:
 
@@ -220,7 +228,15 @@ $$
 
 Apply (5) to the second term and cancel `q`. This also explains why the error must be evaluated at the *computed* query point `x+hhat u`, not the nominal one.
 
-If the available guarantees are merely `|e(x)|≤e0` and `|e(x+hhat u)|≤eu`, replace `η` by `e0+eu`. If a certified increment bound is available, it is strictly better than discarding error correlation. Consecutive-level estimates supplied by #145 are not automatically such certificates.
+The exact decomposition is checked by
+`normalizedMap_provider_scale_error_identity`. The theorem
+`normalizedMap_recomputed_ruler_error_bound` proves (7) using the actual
+definition `ruler epsilon s = sqrt(s²+epsilon²)`, with `ε>0`, `q>0`, and an
+assumption bounding `abs(e(x+q rhoHat u)-e(x))` by a supplied `η`. Taking
+that bound to be the exact increment gives the displayed formula. The
+provider `D+e` needs no Lipschitz or differentiability assumption.
+
+If the available guarantees are merely `|e(x)|≤e0` and `|e(x+hhat u)|≤eu`, replace `η` by `e0+eu`; this is `normalizedMap_recomputed_ruler_endpoint_bound`. A certified increment bound can be sharper because it retains error correlation. Consecutive-level estimates supplied by #145 are not automatically such certificates.
 
 The map `s↦sqrt(s²+ε²)` is 1-Lipschitz, hence
 
@@ -237,6 +253,9 @@ $$
 \tag{9}
 $$
 
+Equations (8) and (9) are checked by `ruler_perturbation_le` and
+`ruler_perturbation_identity`. They hold for every real `s,b` when `ε>0`.
+
 If `e0≤κρ` with `0≤κ<1`, then `ρhat≥(1-κ)ρ`. Thus (7) implies the simple uniform budget
 
 $$
@@ -244,6 +263,13 @@ $$
 \le \frac{e0+eu}{q(1-\kappa)\rho}+2\kappa|u|.
 \tag{10}
 $$
+
+This is `normalizedMap_recomputed_ruler_uniform_bound`. Its assumptions
+include both endpoint error bounds and `e0≤κρ`, with `0≤κ<1`.
+The correlated version `normalizedMap_recomputed_ruler_relative_bound`
+uses `η` in place of `e0+eu` and only requires `abs(e(x))≤κρ` at the
+center. The lower bound on `rhoHat` and the relative ruler-error estimate
+are separately checked lemmas, rather than assumptions on the conclusion.
 
 The first term improves as the window scale `q` increases. The rough ruler-error term has no such `1/q` improvement. With a certified Hessian bound the latter can instead be bounded by `Lq|ρhat-ρ||u|²/2` using (6).
 
@@ -266,6 +292,11 @@ $$
 \boxed{|\widehat M-M|\le (b/\epsilon)^2|u|.}
 \tag{11}
 $$
+
+The scalar inequality is `ruler_crest_relative_bound`, and (11) is
+`normalizedMap_crest_bias_bound`, for `ε,q>0`, `D(x)=0`, and any real
+constant bias `b`. The proof uses the zero anchored error increment in
+the combined provider theorem.
 
 The effect is second order in `b/ε` at the crest, not the first-order `2|b|/h` suggested by a correlation-blind field-error bound. This is a bound, not a claim that every field attains it; affine fields are exactly independent of `h`.
 
@@ -356,20 +387,36 @@ Moving the center toward the Shore does not itself produce `h→0`. Any applicat
 
 The current results justify an engineering theorem package. They do not yet justify a standalone originality claim. The immediate useful contracts are the chart transition (1), the computed-location error budget (7), and the distinction between function-value and topology guarantees. The bias cancellation and crest estimate are useful specializations of elementary inequalities, rather than evidence of a new field of theory.
 
-The Lean subset below now covers chart-transition algebra, constant-offset
-invariance, exact anchored-error decomposition, fixed-scale provider bounds,
-ideal-field window bounds, the actual fixed-anchor window differential, and
-the quadratic residual under segment differential/Hessian bounds. The next
-provider-error formalization would combine the computed-location decomposition
-with a certified ruler perturbation and the required scale-change bound.
-It must also distinguish supplied numerical derivatives from the actual
-`fderiv` fields. Full Arzelà–Ascoli/Attouch–Wets formalization and topological
-reconstruction remain separate, larger projects; they should not block
-training or be implied by the existing checked statements.
+The Lean subset now includes the combined computed-location provider/ruler
+budget (7), its relative and endpoint versions (10), and the crest bias
+bound (11), supported by the actual scale-change and ruler-perturbation
+lemmas. These are conditional certificates: a numerical provider must still
+justify its error at the center and at the query its computed scale selects.
+Its supplied gradient and Hessian must also be distinguished from the actual
+`fderiv` fields used in Section 1.
+
+The bridge in
+[`geometry_provider.rs`](../../runtime-core/src/geometry_provider.rs)
+uses a derivative stencil whose step is clamped between configured minimum
+and maximum values. The specialized recomputed-ruler theorem applies when
+the scale is exactly `q rhoHat`. For an actual clamped scale `k`, the more
+general `normalizedMap_provider_scale_error_bound` accepts arbitrary
+nonzero nominal and computed scales `h,k`; its certificate must bound
+`abs(e(x+k u)-e(x))` at that actual query, and its scale term uses the
+actual `abs(k-h)/max(abs(h),abs(k))`. Clamping does not inherit the
+proportional-scale specialization automatically. Floating-point query
+locations and arithmetic require their own correspondence estimates.
+
+The smooth cross-scale bound (6), smooth center bound, residual transition
+(2), ruler chart identity (3), and propagation of supplied gradient error
+remain separate formal targets. The finite-sample envelopes, topology
+obstruction, and Arzelà–Ascoli/Attouch–Wets arguments in Sections 5–6 retain
+conventional proofs. They are not implied by the checked value-error
+contracts and should not block training.
 
 ## 8. Checked Lean subset
 
-The two modules below contain sixteen checked theorems in namespace
+The three modules below contain thirty-four checked theorems in namespace
 `FractalSync.NormalizedDistanceFields`.
 
 ### Algebra, fixed-scale errors, and ideal-field bounds
@@ -405,19 +452,51 @@ dimension and an inner product are unnecessary.
 | `normalizedMap_quadratic_remainder_of_lipschitz_fderiv` | The residual bound from differentiability of `D` and an `L`-Lipschitz actual differential on `[x,x+hu]`. |
 | `normalizedMap_quadratic_remainder_of_hessian_bound` | The residual bound from differentiability of `D` and an actual derivative of `fderiv ℝ D` with operator norm at most `L` on the entire closed segment. |
 
-Both modules compile with Lean 4.24.0 and Mathlib commit
+### Combined provider errors, recomputed rulers, and scale changes
+
+[`NormalizedProviderError.lean`](../../formal/FractalSync/NormalizedProviderError.lean)
+adds eighteen checked theorems, again for arbitrary real normed spaces.
+The ideal field is 1-Lipschitz where a Map bound requires it; the provider
+error field is unrestricted except for the stated value certificates.
+
+| Theorem identifier | Exact scope |
+| --- | --- |
+| `normalizedMap_value_bound_signed` | `abs(M(u))≤‖u‖` for every nonzero signed scale. |
+| `normalizedMap_scale_difference_identity` | Exact two-scale difference decomposition for nonzero `h,k`. |
+| `normalizedMap_scale_change_bound_right` | Scale error at most `2‖u‖ abs(h-k)/abs(k)`. |
+| `normalizedMap_scale_change_bound` | Symmetric scale bound (5), with `max(abs(h),abs(k))` for signed scales. |
+| `normalizedMap_provider_scale_error_identity` | Exact provider increment at the computed query, plus the ideal-field scale difference. |
+| `normalizedMap_provider_scale_error_bound` | Combined increment and scale bound for arbitrary nonzero `h,k`. |
+| `normalizedMap_provider_scaled_error_bound` | Specialization to `h=q rho`, `k=q rhoHat` for positive supplied scales. |
+| `normalizedMap_recomputed_ruler_error_bound` | Equation (7) with both actual ruler definitions and a certified anchored error increment. |
+| `normalizedMap_recomputed_ruler_endpoint_bound` | Equation (7) with separate center and computed-query error bounds. |
+| `ruler_perturbation_le` | Equation (8): absolute ruler change at most the center field error. |
+| `ruler_perturbation_identity` | Exact rationalized ruler change (9). |
+| `ruler_perturbation_relative_lower` | `rhoHat≥(1-κ)rho` from `abs(b)≤κrho`. |
+| `ruler_perturbation_relative_bound` | `abs(rhoHat-rho)/max(rho,rhoHat)≤κ` when `κ≥0` and `abs(b)≤κrho`. |
+| `normalizedMap_recomputed_ruler_relative_bound` | Correlated error budget `η/[q(1-κ)rho]+2κ‖u‖`, for `0≤κ<1`. |
+| `normalizedMap_recomputed_ruler_uniform_bound` | Endpoint budget (10), for `0≤κ<1`. |
+| `ruler_crest_relative_bound` | Relative ruler error at zero center field at most `b²/(2ε²)`. |
+| `normalizedMap_crest_bias_bound` | Constant-bias crest estimate (11), including cancellation of the anchored provider error. |
+| `normalizedMap_center_change_bound` | Center bound (4); the signed-scale statement uses `abs(h)`. |
+
+The physical statements use positive scales. The center-change theorem
+also holds at `h=0` under Lean's totalized division, where both Maps vanish;
+this algebraic endpoint does not define a physical zero-size query.
+
+All three modules compile with Lean 4.24.0 and Mathlib commit
 `f897ebcf72cd16f89ab4577d0c826cd14afaafc7`, with warnings treated as errors.
 The original module's per-theorem axiom inspection reported only `propext`,
 `Classical.choice`, and `Quot.sound`; the package-wide verification record is
-maintained in [verification.md](verification.md). Neither module contains
+maintained in [verification.md](verification.md). None of these modules contains
 admitted proofs or custom axioms.
 
-The combined recomputed-ruler bound (7), smooth cross-scale bound (6), smooth
-center-stability bound, finite-data envelopes, topology obstruction, and
-blow-up arguments still have conventional proofs in this note and are not
-yet Lean-verified. The checked differential and quadratic residual do not
-remove those separate obligations. No theorem equates a real-valued ideal
-field or its actual derivatives with the floating-point GeometryProvider.
+The smooth cross-scale bound (6), smooth center-stability bound, finite-data
+envelopes, topology obstruction, and blow-up arguments still have
+conventional proofs in this note and are not yet Lean-verified. The checked
+differential, quadratic residual, and combined provider bounds do not remove
+those separate obligations. No theorem equates a real-valued ideal field or
+its actual derivatives with the floating-point GeometryProvider.
 
 ## References and provenance
 

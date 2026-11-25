@@ -347,14 +347,18 @@ The companion [normalized-field note](162-normalized-distance-fields.md)
 records the chart identities and provider-error boundaries alongside these
 new differential contracts.
 
-## 6. Remaining Phase A work
+## 6. Explicit potential/control continuation and remaining Phase A boundary
 
 This increment supplies the full ruler/scale Hessians, scale-origin and
 summit identities, local connection identification, and continuous work-energy
 contracts. The normalized Map differential and its segment Hessian-bound
-quadratic remainder are now checked as well. The full catalog of explicit
-potential/force formulas including the outer wall, and additional specific
-control contracts remain separate obligations.
+quadratic remainder are now checked as well. The subsequent
+[potential and control extension](159-potential-controls.md) checks the
+explicit Shore and secant-wall potential/force catalog, the full signed
+crest-energy budget, momentum differentiation, intrinsic drive and drag,
+candidate board friction and carve normalization, and fixed-metric steering.
+The [discrete mechanics note](159-discrete-mechanics.md) adds exact
+frozen-metric step identities and a sharp explicit-drag timestep criterion.
 
 The local hypotheses do not certify a numerical GeometryProvider's sampled
 derivatives. Rust remains the runtime authority; these exact-real proofs do
@@ -363,5 +367,9 @@ stability, solution existence, or global smoothness of a regularized signed
 distance field. In particular, an arbitrary sampled gradient or Hessian is
 not identified with `fderiv` by these statements, and no error certificate is
 derived for that approximation. The combined recomputed-ruler provider-error
-bound in the #162 note remains a conventional proof. No runtime or training
+bound in the [#162 note](162-normalized-distance-fields.md) is now checked
+under explicit query-error certificates. It does not manufacture those
+certificates for the numerical provider. Covariant steering along a varying
+configuration and full changing-metric numerical-step bounds remain separate.
+No runtime or training
 contract changes follow from this development-time extension.

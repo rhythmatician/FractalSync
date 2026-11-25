@@ -1,0 +1,15 @@
+# Merge this entry into the active Codex client's configuration after replacing
+# LEAN_PROJECT_PATH with the absolute path of this checkout's formal directory.
+# uvx and Elan's lean/lake binaries must be available on the client's PATH.
+# This is an optional authoring service, not a proof-build dependency.
+[mcp_servers.fractalsync-lean]
+command = "uvx"
+args = [
+  "--from",
+  "git+https://github.com/oOo0oOo/lean-lsp-mcp.git@7932203d79db213852db215835bd79c943bb99b0",
+  "lean-lsp-mcp",
+]
+
+[mcp_servers.fractalsync-lean.env]
+LEAN_PROJECT_PATH = "/absolute/path/to/FractalSync/formal"
+LEAN_LOG_LEVEL = "NONE"

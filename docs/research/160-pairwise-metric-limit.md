@@ -356,25 +356,24 @@ single bundled extended metric. No uniform convergence over varying endpoint
 pairs is claimed. The estimate (14) depends on the chosen reference bound
 and the initial endpoint's positive clearance.
 
-## 7. Remaining boundary and the next formal step
+## 7. Checked length-space continuation and remaining boundary
 
-The new results prove a proper, complete positive-floor metric and all
-fixed-pair branches of its zero-floor limit. They do not yet identify the
-integral (1) with the metric length of every admissible curve. Consequently,
-the length-space construction and existence of minimizing curves between
-arbitrary endpoints remain separate formal work. Properness alone is not
-being used as a substitute for that missing bridge.
+The later [intrinsic-length extension](160-intrinsic-length.md) now identifies
+the integral (1) with Mathlib's actual intrinsic metric variation for every
+AC path. It proves the length-space approximation property, constructs a
+constant-speed intrinsic geodesic by compactness, and proves that this curve
+is an ordinary AC path attaining the original integral infimum. The proof
+retains the almost-everywhere treatment of nonsmooth distance traces and
+does not assume minimizing-path existence in the earlier metric or limit
+arguments.
 
-The next focused geometry step is to prove the needed metric-length
-comparison or length-space property from the actual AC functional, then use
-properness to obtain minimizing curves. The proof must retain the
-almost-everywhere treatment of distance traces at nonsmooth points.
-The earlier nearest-Shore minimum is already attained by the checked
-nearest segment, independently of this general pairwise obligation.
+The same extension checks the full nearest-Shore minimizer classification
+in strictly convex finite-dimensional normed spaces, including monotone AC
+traversals with pauses and the zero-distance constant branch.
 
-Riemannian curvature identification, the flat cut locus, the curved-Shore
-bifurcation, and the classification of all nearest-Shore minimizers remain
-conventional results in the other notes. These formal additions make no
+The flat cut locus and curved-Shore bifurcation remain conventional results,
+with the precise curvature boundary recorded in the flat-Shore note.
+These formal additions make no
 publication-level novelty claim: the topology and metric arguments use
 standard methods, while the exact regularized family and its quantitative
 comparison are recorded with their actual definitions and hypotheses.

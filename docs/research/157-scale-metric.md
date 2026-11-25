@@ -181,6 +181,15 @@ actual continuous work-energy derivative and signed integral ledger. Those
 analytic results use explicit field/trajectory regularity assumptions in
 addition to the static identities recorded here.
 
+The [potential/control continuation](159-potential-controls.md) now checks
+the actual Shore and secant-wall derivatives, their metric-raised forces,
+full continuous energy and crest budget, momentum differentiation, intrinsic
+drive/drag and additional candidate control formulas. The
+[discrete note](159-discrete-mechanics.md) proves frozen-metric step identities,
+including the exact explicit-drag energy factor and its sharp timestep
+condition. Those statements preserve the changing-configuration numerical
+boundary rather than treating continuous identities as integrator proofs.
+
 ## Relation to implementation
 
 The definitions correspond to `induced_metric`, `kinetic_energy`, and the
@@ -193,6 +202,14 @@ exact metric passes that threshold.
 
 The accepted Lean declarations and their precise verification boundary are
 listed in [the formal inventory](../../formal/README.md).
+
+For the authoring setup in #157, Lean and the pinned optional LSP/MCP server
+were installed and the real stdio diagnostics/theorem smoke test passed.
+The official `lean-proof` and `mathlib-build` skills were installed in the
+personal catalog. A persistent Codex MCP registration was attempted but the
+active client configuration is read-only; that concrete client-registration
+step remains blocked. The formal README provides pinned Codex and VS Code
+configuration templates and records the scope of the successful checks.
 
 ### Existing numerical seams and proposed follow-up checks
 
