@@ -14,7 +14,10 @@ They reuse the definitions in
 [the shared metric package](157-scale-metric.md) and the actual local calculus
 in [the differential mechanics note](159-differential-mechanics.md).
 The [discrete step note](159-discrete-mechanics.md) treats a separate,
-explicitly frozen-metric calculation.
+explicitly frozen-metric calculation. The subsequent
+[moving-metric note](159-moving-metric-dynamics.md) checks conditional local
+energy defects for the complete position update and continuous covariant
+steering along a moving configuration.
 
 ## 1. Shared metric and the covector convention
 
@@ -111,9 +114,13 @@ U_{\rm wall}(x)\longrightarrow+\infty
 \quad\text{whenever }\|x\|\to2\text{ from inside the domain}.
 \tag{7}
 \]
-This is an actual filter limit. It does not prove that a finite numerical
-step stays inside the disk. The totalized Lean trigonometric expression
-outside the stated domain is not given a physical interpretation.
+This is an actual filter limit. A separate checked condition in the
+[moving-metric continuation](159-moving-metric-dynamics.md),
+`norm(x)+abs(dt)*norm(v)+dt²*norm(A)<2`, keeps the proposed affine position
+segment inside the disk. That conditional geometric result does not prove
+unconditional step acceptance or floating-point safety. The totalized Lean
+trigonometric expression outside the stated domain is not given a physical
+interpretation.
 
 ## 4. Full continuous energy and the crest budget
 
@@ -223,9 +230,17 @@ the board, carve, and steering primitives above remain candidate contracts
 where the runtime has not adopted them. No new control policy, parameter
 value, or runtime behavior is introduced by these Lean modules.
 
-The fixed-metric steering calculation does not prove covariant transport
-of a heading along a moving configuration. The continuous potential and
-friction identities do not establish a changing-metric numerical energy
-bound, finite-step wall safety, provider derivative accuracy, normalization
-tolerance behavior, or floating-point fidelity. Those obligations remain
-separate from the exact-real catalog proved here.
+The moving-metric continuation now proves the actual norm derivative and
+integrated preservation for the covariant steering equation, including its
+connection term. Its metric-skew frame operator is the oriented quarter-turn
+on an orthonormal frame plane; arbitrary-dimensional vectors outside that
+plane are not assigned a quarter-turn by this construction. Existence of
+solutions, a frame-construction algorithm, and discrete norm preservation
+remain separate.
+
+The same continuation proves conditional local energy and domain estimates
+for the complete real-arithmetic step. A usable bound on the actual
+phase-energy Hessian, potentially requiring higher ruler-field regularity,
+must still be certified. Provider derivative accuracy, normalization
+tolerance behavior, floating-point fidelity, unconditional multi-step safety,
+and global rollout estimates are not established by the exact-real catalog.

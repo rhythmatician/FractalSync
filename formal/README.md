@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**596 explicit proved theorem/lemma declarations**: 543 in thirty-nine result
+**726 explicit proved theorem/lemma declarations**: 673 in forty-seven result
 modules supporting #157, #159, and research issues #160--#163, plus 53 in twelve
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -50,7 +50,7 @@ it is not a training preflight requirement.
 
 ### Optional agent authoring tools
 
-This continuation installed the pinned server in a separate Python
+The preceding increment installed the pinned server in a separate Python
 environment and tested it through an actual MCP stdio session. It exposed 22 tools; diagnostics for
 `DistanceToSet.lean` were clean and `lean_verify` accepted
 `FractalSync.DistanceGraph.exists_nearest_segment` with standard axioms only.
@@ -100,6 +100,8 @@ by the separate transitive audit.
 | `PotentialForces` | 29 | Actual Shore/secant-wall derivatives, raised forces, wall limit and full crest energy budget |
 | `ControlMechanics` | 28 | Momentum derivative, intrinsic drive/drag, candidate board/carve and fixed-metric steering |
 | `DiscreteMechanics` | 11 | Frozen-metric step energy, work defect and sharp explicit-drag criterion |
+| `MovingMetricMechanics` | 18 | Actual phase-energy differential, changing-position local defect, new-position impulse and segment safety |
+| `CovariantSteering` | 8 | Actual moving-metric pairing derivative and covariant steering norm preservation |
 | `DistanceGraph` | 4 | Squared-density algebra |
 | `DistanceToSet` | 6 | Actual distance field and nearest-point segments |
 | `RadialProfile` | 44 | Integral calculus, sharp constant, logarithmic limits |
@@ -126,14 +128,20 @@ by the separate transitive audit.
 | `CrossingAction` | 5 | Integral Cauchy--Schwarz, crossing duration and kinetic action |
 | `FlatShore` | 32 | Scalar warp derivatives, curvature expressions, excursion integral |
 | `FlatShoreGeometry` | 25 | Actual coordinate connection, torsion/compatibility, curvature commutator and Gram ratio |
+| `FlatShoreIntrinsic` | 15 | Euclidean flat Shore, full AC coordinate/graph integral and path-infimum equality |
+| `FlatShoreGeodesics` | 25 | Actual solution conservation laws, Shore geodesic and normal Jacobi equation/first zero |
+| `CoordinateCovariance` | 15 | Actual affine derivative, connection, bracket and curvature covariance; flat Gram-ratio specialization |
+| `CurvedShoreGeometry` | 19 | Curved normal-chart metric, connection laws, actual compatibility and Shore curvature |
+| `CurvedShoreCurvature` | 5 | Full off-Shore commutator curvature and actual normal curvature derivative at Shore |
 | `SensitivityBounds` | 4 | Sensitivity transfer and scalar shear |
 | `NormalizedDistanceFields` | 8 | Normalized-field algebra and Lipschitz bounds |
 | `NormalizedMapDifferential` | 8 | Actual window differential and quadratic remainder from segment Hessian bounds |
 | `NormalizedProviderError` | 18 | Actual computed-query error, recomputed ruler, scale/center stability and crest bias |
+| `ProviderCertificates` | 25 | Actual Taylor and central-stencil error bounds, query/denominator perturbations and Euclidean aggregation |
 | `CovariantStatistics` | 12 | Finite transport algebra and a PSD counterexample |
-| **Result-module subtotal** | **543** | Includes supporting lemmas, not just independent research results |
+| **Result-module subtotal** | **673** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (twelve modules) | 53 | Attributed AC FTC backport and project analysis/metric support |
-| **Total** | **596** | 196 more source declarations than the prior 400-theorem increment |
+| **Total** | **726** | 130 more source declarations than the prior 596-theorem increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -248,6 +256,31 @@ and sharp nonincrease condition v=0 or 0<=beta*dt<=2, with rho>0.
 See [the discrete note](../docs/research/159-discrete-mechanics.md).
 These are not changing-configuration, floating-point or full-integrator
 conservation theorems.
+
+### #159: changing-configuration steps and covariant steering
+
+[MovingMetricMechanics.lean](FractalSync/MovingMetricMechanics.lean) and
+[CovariantSteering.lean](FractalSync/CovariantSteering.lean) extend
+`FractalSync.ScaleMetric`. The full hypotheses and runtime ordering are in
+[the moving-metric note](../docs/research/159-moving-metric-dynamics.md).
+
+| Checked statement | Principal identifiers and conditions |
+| --- | --- |
+| Actual phase-energy differential and physical work cancellation | `differentiableAt_phaseEnergy`, `hasDerivAt_phaseEnergy_line`, `fderiv_phaseEnergy_apply`, `fderiv_phaseEnergy_motion`; actual ruler, gradient-field and potential derivatives, nonzero ruler, and the stated dynamics. |
+| Exact velocity-then-position increment and its first-order energy | `positionVelocityStep_eq_add`, `positionVelocityStep_increment`, `fderiv_phaseEnergy_step_increment`; the extra position increment is dt² times acceleration. |
+| Quadratic local defect for energy at the new configuration | `positionVelocityStep_energy_defect`, `positionVelocityStep_energy_defect_of_hessian_bound`; actual phase-energy differential variation or Hessian certificate on the entire proposed segment. The phase product uses the max norm. |
+| Explicit coefficient and exact metric/potential decomposition | `positionEnergyRate_eq_connection`, `positionEnergyRate_expanded`, `abs_positionEnergyRate_le`, `positionVelocityStep_energy_decomposition`; the coefficient bound uses positive ruler and actual operator norms. |
+| Whole proposed position segment stays in an open ball | `affine_segment_norm_lt`, `positionVelocityStep_segment_norm_lt`, `positionVelocityStep_segment_norm_lt_of_acceleration_bound`; strict margin norm(x)+abs(dt)*norm(v)+dt²*norm(acc)<R suffices. |
+| Impulse ledger at the new position | `impulseAtPhase_energy_change`, `positionVelocityImpulse_energy_ledger`; the impulse inverse metric is evaluated at the updated configuration. |
+| Metric-skew frame action and actual moving pairing derivative | `frameTurn_orthogonal`, `frameTurn_first`, `frameTurn_second`, `frameTurn_mix`, `hasDerivAt_metric_pairing_covariant`; orthonormal-frame interpretation is confined to its two-plane. |
+| Conditional continuous steering preserves metric norm | `hasDerivAt_metric_self_steering`, `metric_self_steering_eq`, `hasDerivAt_metric_self_steering_of_fields`; actual trace/field derivatives, the covariant ODE and endpoint continuity. Frames and turn rates may vary. |
+
+These are exact-real results. The phase-Hessian certificate may require
+higher field regularity than the ruler Hessian alone. Neither a numerical
+provider flag nor positive regularization supplies it. The segment condition
+covers the proposed affine interpolation, not an exact ODE trajectory or an
+unconditional rollout. Solution existence, global integrator error, IEEE
+correspondence and a discrete covariant-steering realization remain separate.
 
 ### #160: pointwise distance-graph algebra
 
@@ -432,7 +465,7 @@ conventional.
 | Rational curvature expressions: Shore values, exact derivative, strict decrease, ranges and positive radial/tangential gap | `radialCurvature_zero`, `tangentialCurvature_zero`, `hasDerivAt_radialCurvature`, `radialCurvature_deriv_neg`, `radialCurvature_strictAntiOn`, `curvature_gap`, `tangentialCurvature_lower`, `tangentialCurvature_lt_radialCurvature`, `radialCurvature_le_one`, `radialCurvature_bounds`, `tangentialCurvature_nonpos` |
 | Actual excursion integral: continuity, strict monotonicity, threshold, unbounded lower bound, unique positive turning radius for every L>pi epsilon and dilation | `continuous_excursionSpan`, `excursionSpan_strictMonoOn`, `excursionSpan_zero`, `excursionSpan_gt_threshold`, `excursionSpan_eq_threshold_iff`, `excursionSpan_linear_lower`, `excursionSpan_existsUnique_radius`, `excursionSpan_scale` |
 | Specified quartic density integrates to pi(1+a²)/16>0 | `quarticDensity_eq`, `integral_quarticDensity`, `integral_quarticDensity_pos`. Identification as a Taylor coefficient remains conventional. |
-| Unit speed plus specified tangential momentum imply the radial first-integral formula | `radial_first_integral`; conservation of that momentum along geodesics remains conventional. |
+| Unit speed plus specified tangential momentum imply the radial first-integral formula | `radial_first_integral`; actual momentum conservation is proved in the separate `FlatShoreGeodesics` extension below. |
 
 Four helper lemmas establish denominator positivity and integrand continuity.
 No Riemannian curvature tensor, conjugate-point or cut-locus theorem,
@@ -452,12 +485,104 @@ derivative, including Mathlib's Lie-bracket term.
 | Actual curvature commutator on coordinate fields | `curvature_normal_tangent_tangent`, `curvature_normal_tangent_tangent_eq`; both nonconstant intermediate fields are differentiated, and `lieBracket_normal_tangent` checks their coordinate bracket. |
 | Metric Gram-determinant quotient equals the rational flat curvature and is +1 on Shore | `sectionalCurvature_eq_radialCurvature`, `sectionalCurvature_on_shore`; epsilon>0, every real a and signed normal coordinate. |
 
-This is a global-coordinate connection and curvature identification. It does
-not construct a bundled Riemannian tensor, establish coordinate/frame
-invariance, or identify this coordinate metric's distance with the Euclidean
-flat-Shore specialization of `DistanceGraph.intrinsicDistance`. The
-higher-dimensional tangential interpretation, general curved-Shore curvature,
-Jacobi fields, cut locus, smooth-minimizer ODE and bifurcation remain separate.
+This module establishes global-coordinate connection and curvature. The
+following extensions connect it to the actual Euclidean path metric and
+prove smooth-solution and curved normal-chart results. A bundled Riemannian
+tensor, arbitrary nonlinear-chart theory, general embedded-Shore chart
+construction, higher-dimensional curvature identification, smoothness of all
+minimizers, conjugacy/cut-locus theory and bifurcation remain separate.
+
+### #160: Euclidean flat correspondence and smooth geodesic contracts
+
+[FlatShoreIntrinsic.lean](FractalSync/FlatShoreIntrinsic.lean) uses the actual
+Euclidean plane `WithLp 2 (ℝ × ℝ)`, not the coordinate product's default norm.
+It checks actual `infDist` to `{r=0}` and the full AC path correspondence.
+The [flat bridge note](../docs/research/160-flat-intrinsic.md) states the exact
+integral and infimum definitions.
+
+| Checked statement | Principal identifiers |
+| --- | --- |
+| Actual flat distance and cusp-safe derivative identity | `infDist_shore`, `hasDerivAt_normal`, `distance_weighted_deriv_eq`; differentiating d²=r² yields d*d'=r*r' without division by either trace. |
+| Actual density, integrability and integral equality | `graphSpeed_eq_coordinateSpeed`, `ae_graphSpeed_eq_coordinateSpeed`, `coordinateSpeed_intervalIntegrable`, `coordinateLength_eq_acGraphLength`; full AC class, positive epsilon, arbitrary real a. |
+| Candidate sets, infima and metric length | `coordinatePathLengths_eq`, `coordinateDistance_eq_intrinsicDistance`, `eVariationOn_eq_coordinateLength`, `exists_coordinateLength_minimizer`. |
+| Actual coordinate chart and both AC directions | `absolutelyContinuous_chart_iff`, `coordinateLength_eq_chartLength`, `coordinatePathLengths_eq_chartPathLengths`, `intrinsicDistance_eq_coordinate_path_infimum`. |
+
+[FlatShoreGeodesics.lean](FractalSync/FlatShoreGeodesics.lean) works with actual
+`HasDerivAt` solution data for the coordinate geodesic ODE. It does not assume
+that every minimizing AC path supplies such data.
+
+| Checked statement | Principal identifiers |
+| --- | --- |
+| Actual energy and tangential momentum derivatives and interval conservation | `hasDerivAt_energy`, `hasDerivAt_momentum`, `energy_constant`, `momentum_constant`; conservation is derived from the ODE. |
+| Radial first integrals | `tangent_velocity_eq_momentum`, `radial_first_integral`; existing metric and actual energy/momentum definitions. |
+| Actual Shore geodesic, unit frame and parallel normal | `christoffel_on_shore`, `hasDerivAt_shoreCurve`, `geodesicAt_shoreCurve`, `shore_frame_orthonormal`, `alongDerivative_shore`, `shoreNormal_parallel`. |
+| Actual curvature action and normal Jacobi residual | `fderiv_normalProfile`, `fderiv_tangentProfile`, `covariantDerivative_const`, `curvature_shore_normal_tangent`, `normal_profile_jacobiResidual`, `normal_profile_jacobiResidual_eq_zero_iff`; the commutator uses explicit constant coordinate extensions. |
+| Explicit sine field, actual derivatives, initial data and first positive zero | `hasDerivAt_shoreJacobi`, `deriv_shoreJacobi`, `deriv_deriv_shoreJacobi`, `shoreJacobi_equation`, `shoreJacobi_initial_data`, `shoreJacobi_first_positive_zero`, `shoreCurve_pi_span`; epsilon>0 gives a unit normal and first positive zero pi. |
+
+The [geodesic note](../docs/research/160-flat-geodesics.md) distinguishes the
+actual Jacobi equation/field zero from an unproved bundled conjugate-point or
+index-form/minimality theorem.
+
+### #160: actual affine coordinate covariance
+
+[CoordinateCovariance.lean](FractalSync/CoordinateCovariance.lean) uses an
+arbitrary continuous linear equivalence A and translation b. New coordinates
+x represent the old point A*x+b; vector fields are transported by A inverse.
+The [affine-covariance note](../docs/research/160-affine-covariance.md) records
+the actual derivative hypotheses and the remaining nonlinear-chart boundary.
+
+| Checked statement | Principal identifiers |
+| --- | --- |
+| Actual affine and transported-field derivatives | `hasFDerivAt_affineMap`, `hasFDerivAt_pullbackField`, `fderiv_pullbackField`; the derivative is A⁻¹*(dY)*A. |
+| Actual connection and Lie-bracket covariance | `covariantDerivative_pullback`, `lieBracket_pullback`, `covariantDerivative_lieBracket_pullback`. |
+| Full curvature commutator covariance | `curvature_pullback`; X and Y differentiable at the old point, Z differentiable everywhere, both intermediate covariant-derivative fields differentiable at that point. |
+| Metric, Gram and ratio transport | `pullbackMetric_fields`, `pullbackMetric_pos`, `gram_pullback`, `gramRatio_pullback`; the general ratio is a totalized real expression, while its geometric interpretation requires nonzero Gram denominator. |
+| Fully discharged flat specialization | `flat_covariantDerivative_eq`, `flat_curvature_eq`, `flat_gram_pullback_pos`, `flat_gramRatio_pullback`; positive epsilon, actual intermediate-field derivatives and strictly positive transformed Gram denominator. |
+
+The general coefficient operations are unbundled; geometric connection and
+metric laws are supplied by the flat specialization. Nonlinear charts,
+variable-frame naturality and independence of arbitrary vector-field
+extensions are not inferred from affine covariance.
+
+### #160: curved normal-coordinate metric and curvature
+
+[CurvedShoreGeometry.lean](FractalSync/CurvedShoreGeometry.lean) uses the supplied
+metric A(r)dr²+B(r)(1-k(y)r)²dy². `metric_eq_flat_pullback`, `metric_self_pos`,
+`metric_symm`, `metric_gram_determinant`, and `metric_zero_curvature` check its
+pointwise metric/frame algebra. Positivity requires epsilon>0 and 1-k*r nonzero.
+
+`christoffel_symm`, `christoffel_on_shore`, `christoffel_metric_compatible`,
+`covariantDerivative_torsion`, `covariantDerivative_first_linear`,
+`covariantDerivative_second_add`, and `covariantDerivative_leibniz` check its
+connection laws. `hasDerivAt_metric_pairing` and
+`covariantDerivative_metric_pairing` differentiate the actual varying pairing.
+
+The two actual `fderiv` helpers, `covariantDerivative_const`,
+`curvature_normal_tangent_tangent_on_shore`, and `sectionalCurvature_on_shore`
+evaluate the commutator and Gram ratio at Shore. The result is +1 for every
+curvature profile with the stated local derivatives of k and deriv k.
+
+[CurvedShoreCurvature.lean](FractalSync/CurvedShoreCurvature.lean) checks the
+two full intermediate field derivatives, `fderiv_gammaYY_pair_normal` and
+`fderiv_gammaRY_tangent`, then `curvature_normal_tangent_tangent` evaluates
+the actual off-Shore commutator. `sectionalCurvature_eq_flat_correction`
+identifies its metric Gram ratio with
+
+\[
+K(r,y)=\frac{\epsilon^4-(1+a^2)r^4}
+ {(\epsilon^2+(1+a^2)r^2)^2}
+-\frac{k(y)(1+a^2)r(\epsilon^2+r^2)^2}
+ {(1-k(y)r)(\epsilon^2+(1+a^2)r^2)^2}.
+\]
+
+The k' terms cancel. `hasDerivAt_sectionalCurvature_normal_on_shore`
+proves the actual normal derivative of the commutator-defined curvature
+is -(1+a²)*k(y) at r=0, using eventual equality on a nonfocal neighborhood.
+The explicit sufficient hypotheses include epsilon>0, 1-k(y)*r nonzero
+for the off-Shore formula, and actual derivatives of k and deriv k at y.
+Constructing a normal chart from an arbitrary embedded Shore remains
+separate. The [curved-coordinate note](../docs/research/160-curved-coordinate-geometry.md)
+records that distinction and the local regularity assumptions.
 
 ### #161: sensitivity transfer and scalar shear
 
@@ -546,6 +671,32 @@ accommodate an actual clamped scale with the corresponding actual-query
 certificates. Coordinate/ruler/division floating errors remain separate.
 See [the full error note](../docs/research/162-normalized-distance-fields.md).
 
+### #159/#162: actual numerical stencil error contracts
+
+[ProviderCertificates.lean](FractalSync/ProviderCertificates.lean) uses
+`FractalSync.ProviderCertificates`. `first_order_remainder_bound` and
+`second_order_remainder_bound` derive vector first-order and scalar cubic
+Taylor remainders from actual differential fields. `LocalJetControl.remainder`
+packages convex query-region hypotheses; `LocalJetControl.hessian_symm`
+derives actual Hessian symmetry on a neighborhood.
+
+`centralFirst_remainder_identity`, `centralSecond_remainder_identity`,
+`centralMixed_remainder_identity`, and the corresponding
+`LocalJetControl.*_error` theorems give quadratic gradient and linear Hessian
+truncation bounds under anchored Lipschitz Hessian control. Each stencil also
+has checked `*_add`, `*_provider_error`, `*_provider_endpoint_error`, and
+`LocalJetControl.*_total_error` declarations. The total budgets retain a
+separately supplied arithmetic error.
+
+`sampled_value_error` accounts for query displacement under an actual field
+Lipschitz bound; `euclidean_error_bound` aggregates component budgets in the
+Euclidean norm (and Frobenius norm using a product index);
+`division_perturbation_bound` controls positive-denominator uncertainty.
+See [the stencil note](../docs/research/162-provider-stencil-certificates.md)
+for exact constants and the runtime's clamped nine-point stencil. These
+contracts do not certify actual raster values, `Regular` flags or IEEE
+operations without additional evidence.
+
 ### #163: finite transport algebra and an exact counterexample
 
 Module: [CovariantStatistics.lean](FractalSync/CovariantStatistics.lean).
@@ -591,7 +742,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 1,094 declarations, including the 596 stated theorem/lemma declarations,
+The current audit covers 1,375 declarations, including the 726 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

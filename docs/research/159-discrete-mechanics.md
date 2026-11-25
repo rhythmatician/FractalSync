@@ -6,8 +6,10 @@ held fixed. It proves an exact force-work correction and the sharp
 nonincrease condition for explicit metric-proportional drag. These are
 discrete algebraic contracts relevant to
 [#159](https://github.com/rhythmatician/FractalSync/issues/159) and the
-[current mechanics equations](../equations.md); the runtime's position
-update and changing metric require additional estimates.
+[current mechanics equations](../equations.md). The subsequent
+[changing-metric continuation](159-moving-metric-dynamics.md) supplies an
+actual phase-energy local defect bound, ordered impulse accounting, and
+sufficient whole-segment domain conditions for the position update.
 
 The module contains eleven proved theorems and three definitions. It reuses
 [`MetricImpulse.lean`](../../formal/FractalSync/MetricImpulse.lean), including
@@ -180,10 +182,16 @@ E(c_1,v_1)-E(c_0,v_0)
 
 The first bracket is covered by (1) for the chosen `A`. The second
 measures the change of metric, and the third the change of potential.
-Equation (6) is conventional algebraic bookkeeping here; it is not a
-new checked convergence or energy-conservation theorem for the runtime.
-The continuous connection cancellation proved elsewhere does not make
-these finite-step remainders vanish.
+Equation (6) is now checked as `positionVelocityStep_energy_decomposition`
+in [MovingMetricMechanics.lean](../../formal/FractalSync/MovingMetricMechanics.lean).
+The same module proves a quadratic local total-energy defect relative to
+initial nonconservative work, using actual field jets, the connection
+cancellation, and a certificate on the actual phase-energy differential or
+Hessian over the entire proposed phase segment. It also proves the exact
+subsequent impulse ledger with the metric evaluated at `c1`.
+The [continuation note](159-moving-metric-dynamics.md) gives the coefficient
+and precise hypotheses. These finite-step remainders need not vanish, and
+the result is not a global convergence or energy-conservation theorem.
 
 ## 5. Checked inventory and remaining correspondence work
 
@@ -218,16 +226,19 @@ The remaining runtime obligations are concrete:
   a cut locus. The bridge's finite differences and operational field's
   derivative self-consistency checks are not such correspondence proofs;
   see [the provider-error note](162-normalized-distance-fields.md).
-- A varying-metric step needs estimates for the second and third brackets
-  in (6), together with timestep and regularity hypotheses. The frozen
-  drag interval cannot establish total-energy nonincrease for that full
-  update, or global convergence of a rollout.
+- The checked varying-metric local defect bound needs a usable certificate
+  for the actual phase-energy differential variation or Hessian. This is
+  stronger than a bound on the ruler Hessian alone and can require higher
+  field regularity. The frozen drag interval cannot establish total-energy
+  nonincrease for the full update or global convergence of a rollout.
 - Floating-point evaluation needs bounds for metric inversion, force
   summation, the updates, and energy reporting. The exact Lean identities
-  currently concern real arithmetic. Rejecting an invalid proposed
-  position is a runtime guard; this proof does not show that every step
-  will be accepted or that every intermediate continuous path stays in
-  the domain.
+  currently concern real arithmetic. The new sufficient condition
+  `norm(c0)+abs(dt)*norm(v0)+dt²*norm(A)<2` keeps the proposed affine position
+  interpolation inside the wall disk, including every intermediate point.
+  It does not enclose the exact ODE trajectory, establish unconditional
+  multi-step safety, or discharge the runtime's finite-value and force-
+  conditioning checks. Rejecting an invalid proposal remains a runtime guard.
 
 Existing Rust tests provide numerical seams: `drive_covector_metric_consistent_norm`,
 `drift_grip_controls_cannot_inject_energy`,

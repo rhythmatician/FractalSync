@@ -445,6 +445,13 @@ coordinate-curvature boundary labeled in the
 [flat-Shore note](160-flat-shore.md). The exact formal boundary is
 maintained in [formal/README.md](../../formal/README.md).
 
+The [flat Euclidean bridge](160-flat-intrinsic.md) now connects that explicit
+coordinate metric to this AC path-infimum construction. The subsequent
+[geodesic solution contracts](160-flat-geodesics.md) check conserved energy
+and momentum and an actual Shore Jacobi field. The
+[curved normal-coordinate calculation](160-curved-coordinate-geometry.md)
+is separate from construction of a chart for a general embedded Shore.
+
 ## 7. Prior art and originality assessment
 
 The inverse-distance conformal length is classical quasihyperbolic geometry

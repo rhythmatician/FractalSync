@@ -3,11 +3,16 @@
 Status: mathematical research for #160, with scalar Lean support from
 `formal/FractalSync/FlatShore.lean` and an actual global-coordinate connection
 and curvature calculation in `formal/FractalSync/FlatShoreGeometry.lean`.
-The planar flat curvature identification is now checked through the actual
-covariant-derivative commutator. The global cut-locus/minimizer arguments,
-general curved-Shore curvature argument, and Banach-space bifurcation
-reduction below remain conventional. No bundled manifold curvature tensor,
-coordinate-change theorem, cut locus, or Lyapunov–Schmidt theorem is claimed.
+The planar flat curvature identification is checked through the actual
+covariant-derivative commutator. The [Euclidean flat bridge](160-flat-intrinsic.md)
+now identifies its coordinate integral with the unrestricted AC path metric.
+[Smooth solution contracts](160-flat-geodesics.md) check energy and momentum
+conservation and the actual Shore Jacobi field with first positive zero pi.
+The [curved normal-coordinate extension](160-curved-coordinate-geometry.md)
+checks curvature for a supplied varying-curvature chart metric. The global
+cut-locus/minimizer arguments, construction of a chart for an embedded Shore,
+and Banach-space bifurcation reduction below remain conventional. No bundled
+manifold curvature tensor, cut locus, or Lyapunov–Schmidt theorem is claimed.
 No runtime or training contract changes.
 
 The unrestricted flat model is exactly tractable. Its global cut-locus structure
@@ -143,16 +148,29 @@ packages that specialization explicitly.
 
 Source: [FlatShoreGeometry.lean](../../formal/FractalSync/FlatShoreGeometry.lean).
 This is a checked curvature calculation in the specified global plane
-chart. Tensoriality under arbitrary frame or coordinate changes, a bundled
-Levi-Civita object, higher-dimensional identification of (3), and the
-curved-Shore argument below remain outside this module's formal boundary.
-There is also no theorem yet identifying this coordinate metric's path
-length with `DistanceGraph.intrinsicDistance` specialized to a Euclidean
-flat Shore. Their displayed densities agree mathematically, but that
-particular formal bridge must use the Euclidean plane, not the default
-norm on the coordinate product used for derivative calculus here.
+chart. The [affine-coordinate extension](160-affine-covariance.md) now
+recomputes the actual connection, bracket and curvature commutator under
+every invertible affine chart and proves the same curvature Gram ratio.
+Nonlinear-chart and variable-frame naturality, arbitrary-extension
+tensoriality, a bundled Levi-Civita object, higher-dimensional identification
+of (3), and the embedded-Shore argument below remain separate.
+The separate [Euclidean flat bridge](160-flat-intrinsic.md) now proves the
+coordinate integral, graph integral, actual endpoint infima and metric curve
+length agree on the full AC path class. Its ambient space is `WithLp 2 (ℝ × ℝ)`;
+the global coordinate chart preserves absolute continuity without being
+misidentified as an isometry for the coordinate product's default norm.
+The [geodesic extension](160-flat-geodesics.md) supplies actual solution-level
+conservation laws and the Shore Jacobi equation. Those results do not yet
+prove smoothness of every AC minimizer or the global cut locus.
 
 ## 2. Universal curvature at a smooth Shore
+
+The following embedded-Shore and higher-dimensional argument remains
+conventional. A separate [checked coordinate calculation](160-curved-coordinate-geometry.md)
+now establishes the planar result for the explicit normal-chart metric
+with a varying curvature profile, under its stated local derivative hypotheses.
+The construction of that chart from an arbitrary embedded Shore has not
+been formalized.
 
 For a general Shore assume a tubular neighborhood with a **C³ signed-distance
 function** `D`; this is a sufficient classical regularity hypothesis, not a
@@ -233,8 +251,11 @@ geodesic ODE would then force it to remain in Shore. Every excursion has
 displacement (7), strictly exceeding `pi epsilon`. This rules out an
 alternative geodesic below or at the threshold.
 
-The straight unit-speed Shore geodesic has a parallel normal Jacobi field
-`sin(s)N`. Its first conjugate point is at intrinsic length pi. For a segment
+The straight unit-speed Shore geodesic has a parallel unit normal `N` and
+the normal Jacobi field `sin(s)N`. Its actual Jacobi equation and first positive field zero pi are
+now [Lean checked](160-flat-geodesics.md). The identification of this zero
+with the first conjugate point and the following index-form/minimality
+arguments remain conventional. Its first conjugate point is at intrinsic length pi. For a segment
 of length `ell=L/epsilon>pi`, the normal test variation
 `sin(pi s/ell)N` has index form
 `(ell/2)[(pi/ell)²-1]<0`, so the straight segment cannot minimize.
@@ -456,8 +477,13 @@ and curvature identification whose exact Lean names appear in
 `formal/README.md` are kernel checked. Arbitrary-endpoint AC minimizing
 curves and the complete nearest-Shore segment classification are also now
 checked in [the intrinsic-length extension](160-intrinsic-length.md).
-The further arguments invoking general warped-product geometry, Jacobi
-fields, smooth minimizing-curve regularity, the cut-locus theorem, Sobolev
+The flat AC coordinate/path-metric correspondence, smooth-solution first
+integrals, actual Shore Jacobi equation and first positive field zero are
+checked in the linked extensions. Actual affine covariance is also checked.
+The supplied curved normal-chart metric has a checked connection, full
+off-Shore curvature and actual normal curvature derivative at Shore. The further
+arguments invoking embedded-chart construction, general Jacobi/conjugacy
+theory, smooth minimizing-curve regularity, the cut-locus theorem, Sobolev
 spaces, or the analytic implicit function theorem are **not** reported as
 Lean formalizations. Existing theorem reuse is a
 mathematical proof step, not a machine-checked dependency until formalized.

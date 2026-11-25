@@ -293,3 +293,10 @@ geometric arguments. Properness and attainment do not establish a cut
 locus, smooth geodesic classification, conjugate points, or the
 Lyapunov--Schmidt reduction. These distinctions are maintained in
 [the flat-Shore note](160-flat-shore.md).
+
+The [Euclidean flat continuation](160-flat-intrinsic.md) now identifies the
+explicit coordinate metric's integral and path infimum with this general
+construction, including arbitrary AC Shore crossings. The
+[smooth-solution continuation](160-flat-geodesics.md) checks conservation laws
+and the actual normal Shore Jacobi equation, with first positive field zero
+pi. It does not infer smooth regularity of the AC minimizers from attainment.

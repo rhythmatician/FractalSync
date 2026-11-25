@@ -4,7 +4,11 @@ import FractalSync.ACSubpaths
 import FractalSync.ComponentCrossing
 import FractalSync.ContinuousMechanics
 import FractalSync.ControlMechanics
+import FractalSync.CoordinateCovariance
+import FractalSync.CovariantSteering
 import FractalSync.CovariantStatistics
+import FractalSync.CurvedShoreGeometry
+import FractalSync.CurvedShoreCurvature
 import FractalSync.CrossingAction
 import FractalSync.DiscreteMechanics
 import FractalSync.DistanceGraph
@@ -12,6 +16,8 @@ import FractalSync.DistanceToSet
 import FractalSync.DisplacementBounds
 import FractalSync.FlatShore
 import FractalSync.FlatShoreGeometry
+import FractalSync.FlatShoreGeodesics
+import FractalSync.FlatShoreIntrinsic
 import FractalSync.GraphChord
 import FractalSync.IntrinsicCurveLength
 import FractalSync.IntrinsicGeodesics
@@ -22,6 +28,7 @@ import FractalSync.IntrinsicTopology
 import FractalSync.IntrinsicVariation
 import FractalSync.MetricComparison
 import FractalSync.MetricImpulse
+import FractalSync.MovingMetricMechanics
 import FractalSync.NormalizedDistanceFields
 import FractalSync.NormalizedMapDifferential
 import FractalSync.NormalizedProviderError
@@ -29,6 +36,7 @@ import FractalSync.PairwiseDistance
 import FractalSync.PathCalibration
 import FractalSync.PathOperations
 import FractalSync.PotentialForces
+import FractalSync.ProviderCertificates
 import FractalSync.RadialProfile
 import FractalSync.RadialLipschitz
 import FractalSync.Ruler

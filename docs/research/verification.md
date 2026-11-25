@@ -1,12 +1,12 @@
 # Verification record: Lean geometry and mathematical research
 
 Verified 2026-11-24 (America/Chicago) in the supplied Linux environment. This continuation starts
-from draft PR #164 at `d16288d2e223fc2b3efefbedf3e43510d30cb1b5`, whose
+from draft PR #164 at `ac4ab10ca4049f071dd84565fe7f5686696808ee`, whose
 main-branch base is `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The earlier 172-, 291-, and 400-theorem increments are retained. This record
-distinguishes new kernel-checked results, attributed analysis support, project
-compatibility proofs, conventional geometry, and earlier optional-tool/numerical
-observations.
+The earlier 172-, 291-, 400-, and 596-theorem increments are retained. This
+record distinguishes new kernel-checked results, attributed analysis support,
+project compatibility proofs, conventional geometry, and earlier optional-tool
+and numerical observations.
 
 ## Environment and full Lean build
 
@@ -19,13 +19,12 @@ observations.
 | Transitive dependencies | Committed `formal/lake-manifest.json`, unchanged |
 | AC backport source snapshot | Mathlib `aad247f928b1eb7c58478742119fdd15a37f0ffd` |
 | Official proof guidance | `leanprover/skills` at `7d3da0282e7b724b07620e45cf212f2e05e19334` |
-| Installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
+| Previously installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
-The preceding 400-theorem increment restored the checkout, Elan 4.4.0,
-Lean 4.24.0, and the pinned Mathlib cache in this workspace. This continuation
-reused that installation and fetched the small additional cache set needed
-for strict-convexity geometry. The committed toolchain, dependency sources,
-manifest, Lake configuration and Lean workflow were not changed.
+The earlier increments restored the checkout, Elan 4.4.0, Lean 4.24.0, and
+the pinned Mathlib cache in this workspace. This continuation reused that
+installation and cache. The committed toolchain, dependency sources, manifest,
+Lake configuration and Lean workflow were not changed.
 
 From `formal/`, the complete continuation command
 
@@ -33,81 +32,100 @@ From `formal/`, the complete continuation command
 lake build --wfail
 ```
 
-completed successfully with **2,619 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,627 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing twenty-seven result modules, before this continuation | 357 |
-| New ruler-distance lemma in `IntrinsicTopology` | 1 |
-| Twelve new result modules | 185 |
-| Existing nine analysis-support modules | 43 |
-| Three new analysis-support modules | 10 |
-| **Total across fifty-one source modules** | **596** |
+| Existing thirty-nine result modules | 543 |
+| `FlatShoreIntrinsic` | 15 |
+| `FlatShoreGeodesics` | 25 |
+| `CoordinateCovariance` | 15 |
+| `CurvedShoreGeometry` | 19 |
+| `CurvedShoreCurvature` | 5 |
+| `ProviderCertificates` | 25 |
+| `MovingMetricMechanics` | 18 |
+| `CovariantSteering` | 8 |
+| Existing twelve analysis-support modules | 53 |
+| **Total across fifty-nine source modules** | **726** |
 
-The new result modules are `ACSubpaths` (8), `IntrinsicLength` (6),
-`GraphChord` (10), `IntrinsicVariation` (20), `IntrinsicGeodesics` (5),
-`IntrinsicCurveLength` (8), `ShoreMinimizers` (17), `FlatShoreGeometry` (25),
-`PotentialForces` (29), `ControlMechanics` (28), `DiscreteMechanics` (11),
-and `NormalizedProviderError` (18). The result subtotal is 543 across
-thirty-nine modules; support contributes 53 across twelve modules.
-Counts include explicit supporting lemmas and are not counts of independent
-research results. The analysis-support declarations are separated because
-many are attributed upstream infrastructure. The new `ACVectorFTC` (2),
-`DerivativeControl` (1), and `ProperGeodesics` (7) declarations are original
-project support proofs, not upstream copies.
-The [formal inventory](../../formal/README.md) gives the complete module counts
-and statement boundaries.
+This adds **130 explicit declarations in eight result modules**. The result
+subtotal is 673 across forty-seven modules; support remains 53 across twelve
+modules. Counts include explicit supporting lemmas and are not counts of
+independent research results. A comment/string-stripped source inventory
+reproduced the preceding count of 596 before counting this increment. Every
+result-module row in the [formal inventory](../../formal/README.md) is
+reconciled against its source count. Attributed analysis infrastructure is
+separated from the result subtotal and retains its provenance.
 
-For #160, the actual AC graph integral now equals Mathlib's actual intrinsic
-metric variation. The proof uses AC subpaths, cumulative graph length,
-the actual AC variation trace and a lifted-chord derivative estimate.
-The length-space property is stated as an explicit near-optimal-path witness,
-not a new Mathlib class instance. Proper compactness then produces an exact
-constant-speed metric geodesic, an explicit ordinary Lipschitz estimate makes
-it AC in the original norm, and its graph length attains the original path
-infimum. These positive-floor theorems hold in finite-dimensional real normed
-spaces for arbitrary S and real a; arbitrary S uses Mathlib's real `infDist`
-convention, including zero for the empty set.
+For #160, the Euclidean flat-Shore bridge uses `WithLp 2 (ℝ × ℝ)` and the
+actual distance to `{r=0}`. Differentiating the squared trace identity avoids
+assuming differentiability of absolute value at a Shore crossing. It proves
+the graph and coordinate densities agree almost everywhere for the full AC
+class, identifies the actual coordinate integral and complete candidate
+length sets, and transfers the path infimum, metric variation and attained
+AC minimizers. Both directions of the global coordinate chart preserve AC;
+the default coordinate product norm is not treated as Euclidean.
 
-Every nearest-Shore minimizer is now classified in a strictly convex
-finite-dimensional normed space. The complete iff includes a constant
-zero-distance branch and all monotone AC traversals of nearest segments,
-including pauses. A checked reversal wrapper covers paths toward Shore.
-The equality-case theorem requires an actual endpoint in S; the existing
-nonempty-closed-set infimum theorem supplies its physical minimum interpretation.
+The smooth flat extension assumes actual first and second curve derivative
+data satisfying the coordinate geodesic ODE. It differentiates the energy
+and momentum, proves interval conservation and the radial first integral,
+and verifies the unit-speed Shore solution with its parallel normal. An
+actual iterated along-curve derivative and curvature commutator give the
+normal Jacobi residual. The sine field has a checked first positive field
+zero at pi. This does not establish smoothness of all AC minimizers, bundled
+conjugacy, an index-form theorem or the global cut locus.
 
-The planar flat metric's coordinate curvature is identified using an actual
-`fderiv` covariant derivative, the Mathlib Lie bracket, connection laws,
-actual metric compatibility, the full curvature commutator and its metric
-Gram determinant. It gives the previous rational curvature formula and +1
-on flat Shore. It does not construct a bundled Riemannian tensor or prove
-coordinate/frame invariance, nor formally identify this coordinate metric's
-distance with the flat-Shore specialization of the general path infimum.
+The affine-coordinate extension recomputes actual transported field
+derivatives, the connection, Mathlib's Lie bracket and the full curvature
+commutator. It proves their affine covariance and metric Gram-ratio
+invariance. Its flat specialization discharges both intermediate-field
+derivative hypotheses and proves a positive transformed Gram denominator.
+The general theorem states the sufficient global differentiability of the
+third field explicitly. Nonlinear charts, variable-frame naturality,
+arbitrary-extension tensoriality and bundled manifold objects remain separate.
 
-For #159, the explicit Shore and secant-wall potentials now have actual
-Fréchet derivatives, exact raised forces and wall divergence. The full
-signed continuous energy ledger gives a necessary crest budget retaining
-wall change and friction. Momentum differentiation, drive, drag, candidate
-board friction/carve and planar fixed-metric steering are checked.
-Frozen-metric discrete energy identities give the exact explicit-drag factor
-(1-beta*dt)^2 and sharp nonincrease condition v=0 or 0<=beta*dt<=2 for rho>0.
+The curved normal-chart metric now has checked pointwise metric algebra,
+actual compatibility, connection laws and its full off-Shore curvature.
+The commutator calculation differentiates both intermediate fields and
+cancels the curvature-profile derivative terms. It recovers curvature +1
+at Shore and proves the actual normal derivative of the commutator-defined
+curvature is -(1+a²)*k(y), using eventual equality in a nonfocal neighborhood.
+These theorems take the normal-coordinate metric as supplied; construction
+of a tubular chart for an embedded Shore and the functional-analytic
+bifurcation remain outside the formal boundary.
 
-For #162, combined provider/recomputed-ruler bounds now use certificates at
-the actual computed query. Center/scale stability, endpoint and relative
-budgets, rationalized ruler error and quadratic crest-bias bounds are checked.
-The numerical stencil clamps its scale, so the specialized proportional-scale
-theorem does not directly certify that stencil; the general h/k theorem
-requires actual scale and query-error data. No provider certificate is inferred.
+For #162, actual first and second Fréchet derivatives and anchored Hessian
+variation imply a third-order Taylor remainder. This gives central-gradient,
+diagonal-Hessian and four-corner mixed-Hessian truncation bounds, with actual
+Hessian symmetry discharged under a neighborhood hypothesis. The module
+then composes signed or uniform sampled-value errors, query-coordinate
+errors, explicit arithmetic and denominator errors, and Euclidean/Frobenius
+component aggregation. The O(h) Hessian bound uses the stated Hessian
+variation assumption; it does not silently assume fourth derivatives for
+an O(h²) bound. Actual provider data and IEEE arithmetic certificates are
+still premises to be supplied, not inferred from runtime flags.
 
-The earlier complete fixed-pair zero-floor classification, radial analysis,
-AC calibration, ruler/scale Hessians and metric foundations remain included.
-The flat cut locus, curved-Shore curvature and Lyapunov--Schmidt argument,
-numerical derivative/floating-point correspondence, and full changing-metric
-integrator properties remain outside the checked boundary.
+For #159, the changing-configuration step uses the executable ordering
+v1=v+dt*A, x1=x+dt*v1. The actual phase-energy differential, connection/potential
+cancellation and a segment Taylor bound give a local dt² energy-defect
+certificate. Its sufficient Hessian assumption is on actual phase energy,
+which may require higher field regularity than a ruler Hessian alone.
+An explicit coefficient estimate, the impulse ledger at the new position,
+and safety of the entire proposed affine position segment are checked.
+Moving-metric steering now has an actual covariant pairing derivative and
+interval metric-norm preservation for solutions of the stated covariant ODE.
+These results do not supply ODE existence, a discrete norm-preserving
+steering algorithm, or a global floating-point rollout guarantee.
 
-## Attributed analysis backport and new compatibility support
+The earlier complete fixed-pair zero-floor classification, AC metric-length
+identity, arbitrary-endpoint attainment, all-nearest-Shore-minimizer
+classification, radial analysis, potential/control catalog, and #161--#163
+contracts remain included. This increment does not add convergence of
+selected minimizing curves or a publication-level novelty claim.
+
+## Attributed analysis backport and retained compatibility support
 
 The pinned Mathlib has the AC definition but lacks its fundamental theorem.
 Selected upstream proofs were adapted without replacing the definition or
@@ -128,7 +146,7 @@ Lipschitz precomposition with the stated interval-image premise, and glues
 matching AC pieces by constant extension. These four declarations use the
 actual pinned Mathlib AC definition and enter the same transitive audit.
 
-The new support adds the vector-valued AC FTC by dual separation, a
+The preceding increment added the vector-valued AC FTC by dual separation, a
 derivative estimate from actual punctured slope limits, and a proper-metric
 geodesic construction using compact endpoint-path families. The latter
 proves its compactness and reparameterization arguments directly; it does
@@ -140,12 +158,12 @@ not assume a minimizing curve or import an extra geometric axiom.
 lake env lean Audit.lean
 ```
 
-passed for **1,094 project declarations**, including definitions, generated
+passed for **1,375 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 1094 project declarations
+Axiom audit passed for 1375 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -176,7 +194,7 @@ than only source-text scans.
 
 ## Optional MCP and official skill installation
 
-This continuation installed the pinned 0.33.0 server in a separate Python
+The preceding 596-theorem increment installed the pinned 0.33.0 server in a separate Python
 3.12 environment and ran `formal/tools/check_mcp.py` in a real MCP stdio
 session. It discovered **22 tools**, obtained clean diagnostics
 for `DistanceToSet.lean`, and used `lean_verify` to inspect
@@ -189,11 +207,13 @@ verification had succeeded; clean server process teardown is a remaining
 upstream integration issue, not a Lean proof failure. The optional server is
 not a proof-CI dependency or a trusted axiom source. The checked-in VS Code
 configuration is a template, not a claim that every agent client has registered
-this MCP server. The new Codex TOML template parses successfully. An actual
+this MCP server. The checked-in Codex TOML template parsed successfully. An actual
 `codex mcp add` attempt failed because the active client configuration is on
 a read-only filesystem; no server entry was registered. This is the concrete
 remaining client-registration blocker, distinct from the successful server
-installation and stdio test.
+installation and stdio test. This continuation confirmed the configuration
+mount is still read-only; it did not repeat the server smoke test or attempt
+to bypass that mount.
 
 The official `lean-proof` and `mathlib-build` skills were installed from the
 documented source pin and their presence in the personal catalog was verified.
@@ -230,47 +250,52 @@ formal error bounds.
 ## Proof review and publication status
 
 The earlier increments reviewed the radial formula, sharp additive constant,
-AC infimum, field calculus and complete fixed-pair zero-floor classification.
-Those results remain unchanged. The formerly conventional nearest-Shore
-minimizer classification is now a checked iff theorem with its zero branch
-and converse included.
+AC infimum, field calculus, complete fixed-pair zero-floor classification,
+metric-length identity and attained/nearest-Shore minimizing paths. Those
+results remain unchanged.
 
-Independent review of this continuation checked the length proof's dependency
-order, actual metric instance, finite variation, lifted derivative limit,
-compact path families and ordinary AC admissibility. It found no circular
-assumption of attainment. The equality-case proof was reviewed against
-strict convexity, actual trace derivatives and segment traversal with pauses.
+Independent review of this continuation checked the flat correspondence's
+Euclidean norm, bidirectional AC chart transfer, cusp-safe trace identity,
+complete candidate-set equality and noncircular use of existing attainment.
+The smooth geodesic and Jacobi review checked the actual solution derivatives,
+epsilon scaling, curvature sign, constant-extension convention, first positive
+field zero, and the explicit boundary before bundled conjugacy or minimality.
 
-The flat coordinate curvature review independently checked the Christoffel
-signs, actual field derivatives, Lie-bracket convention and Gram determinant.
-It confirmed the positive-one Shore convention and identified the still
-separate Euclidean path-metric specialization and tensor/frame interfaces.
+The affine covariance review checked the A inverse / derivative / A chain
+rule, the transported bracket and full commutator, the actual intermediate
+regularity hypotheses, and the positive-Gram flat specialization. The curved
+normal-chart review checked every Christoffel coefficient, the actual metric
+compatibility, curvature-profile derivative cancellation, the nonfocal
+denominators and the transfer of the normal derivative to actual curvature.
 
-The mechanics review checked actual potential derivatives, signs and wall
-coefficients, the distinction between covector and raised acceleration,
-PSD and integrability hypotheses, and the exact explicit-drag interval.
-The provider review checked the computed query location, signed-scale
-denominator and zero-scale totalization. One overstatement in the conventional
-note was corrected: a correlated increment certificate can be tighter than
-an endpoint-error sum, but is not necessarily strictly tighter.
+The provider review checked Taylor's 1/6 coefficient, the diagonal and mixed
+stencil constants, the Hessian symmetry premise, correlated signed errors,
+Euclidean component norms, positive denominators and the distinction between
+real-arithmetic error premises and IEEE certificates. Read-only runtime
+inspection confirmed the clamped stencil step, sample conversions and prior
+center sample used in diagonal Hessians.
 
-Read-only runtime inspection confirmed that the numerical stencil clamps
-its scale, the integration step changes configuration before reporting new
-energy, and the controls wrapper applies its impulse at the new position.
-The notes preserve those distinctions. They do not certify the runtime's
-broader energy-drift comments, sampled derivatives or floating evaluation.
+The mechanics review checked the actual phase differential, first-order
+work cancellation, the phase max norm, phase-energy Hessian hypotheses,
+new-position impulse and whole-segment domain certificate. The moving-metric
+steering review checked the metric-skew action and interval derivative
+argument, including the two-plane scope of the quarter-turn interpretation.
+The proposed position interpolation is not asserted to enclose the exact ODE
+trajectory. A uniform O(dt²) claim requires uniformly bounded coefficients
+as the step changes.
 
 The new mathematical notes were independently checked against actual
-signatures. The final prose states the unit parameter interval, the real
-empty-set infDist convention, the planar steering scope and the positive
-floor, ordered interval and valid-domain hypotheses needed by the relevant
-contracts. No blocking mathematical issue was found in the reviewed modules.
+signatures. No blocking mathematical defect was found. Relative documentation
+links, module counts and the staged whitespace check were also checked before
+publication. Runtime, training, canonical parameters, provider contracts,
+dependency pins, audit implementation and workflow configuration are unchanged.
 
-The earlier prior-art search was targeted. It found exact prior art for the requested
+The earlier prior-art search was targeted. It found exact prior art for the
 phase-harmonic Lipschitz bound and strong prior art for the location-scale
 hyperbolic structure and Lipschitz extension envelopes. It did not establish
-publication-level novelty of this package. Issues #160--#163 remain research
-issues; successful Lean verification is not a novelty certificate.
+publication-level novelty of this package. Issues #157, #159 and #160--#163
+remain open; successful Lean verification is not a novelty certificate.
+PR #164 remains a draft.
 
 ## CI scope
 

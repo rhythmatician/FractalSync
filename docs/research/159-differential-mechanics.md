@@ -359,6 +359,12 @@ crest-energy budget, momentum differentiation, intrinsic drive and drag,
 candidate board friction and carve normalization, and fixed-metric steering.
 The [discrete mechanics note](159-discrete-mechanics.md) adds exact
 frozen-metric step identities and a sharp explicit-drag timestep criterion.
+The [changing-metric continuation](159-moving-metric-dynamics.md) now proves
+the actual phase-energy differential, a quadratic local defect bound for
+the full velocity-then-position update, exact impulse accounting at the new
+position, and sufficient domain conditions for the proposed position segment.
+It also checks the moving-metric pairing derivative and integrated norm
+preservation for headings satisfying a covariant steering equation.
 
 The local hypotheses do not certify a numerical GeometryProvider's sampled
 derivatives. Rust remains the runtime authority; these exact-real proofs do
@@ -369,7 +375,11 @@ not identified with `fderiv` by these statements, and no error certificate is
 derived for that approximation. The combined recomputed-ruler provider-error
 bound in the [#162 note](162-normalized-distance-fields.md) is now checked
 under explicit query-error certificates. It does not manufacture those
-certificates for the numerical provider. Covariant steering along a varying
-configuration and full changing-metric numerical-step bounds remain separate.
-No runtime or training
+certificates for the numerical provider. The new local step estimate needs
+an actual phase-energy Hessian or differential-variation certificate over
+the entire step segment; such a certificate can require higher ruler-field
+regularity than the Hessian formulas in this note. Steering preservation
+assumes an actual solution of its covariant ODE. ODE existence, a discrete
+steering implementation, floating-point guarantees, and global rollout
+estimates remain separate. No runtime or training
 contract changes follow from this development-time extension.

@@ -395,6 +395,14 @@ justify its error at the center and at the query its computed scale selects.
 Its supplied gradient and Hessian must also be distinguished from the actual
 `fderiv` fields used in Section 1.
 
+The [stencil-certificate continuation](162-provider-stencil-certificates.md)
+now derives actual central-gradient and nine-point Hessian error bounds from
+actual local jets, anchored Lipschitz Hessian variation, sampled-value bounds
+and separate arithmetic certificates. It also checks query-displacement and
+denominator-perturbation budgets. These conditional theorems identify what
+the numerical provider must certify; its raster and validity flags do not
+establish those hypotheses automatically.
+
 The bridge in
 [`geometry_provider.rs`](../../runtime-core/src/geometry_provider.rs)
 uses a derivative stencil whose step is clamped between configured minimum
@@ -416,8 +424,10 @@ contracts and should not block training.
 
 ## 8. Checked Lean subset
 
-The three modules below contain thirty-four checked theorems in namespace
-`FractalSync.NormalizedDistanceFields`.
+The first three modules below contain thirty-four checked theorems in namespace
+`FractalSync.NormalizedDistanceFields`. The stencil continuation contributes
+twenty-five in `FractalSync.ProviderCertificates`, for fifty-nine declarations
+across these four modules.
 
 ### Algebra, fixed-scale errors, and ideal-field bounds
 
@@ -497,6 +507,28 @@ conventional proofs in this note and are not yet Lean-verified. The checked
 differential, quadratic residual, and combined provider bounds do not remove
 those separate obligations. No theorem equates a real-valued ideal field or
 its actual derivatives with the floating-point GeometryProvider.
+
+### Actual finite-difference stencils and arithmetic certificates
+
+[`ProviderCertificates.lean`](../../formal/FractalSync/ProviderCertificates.lean)
+derives a cubic Taylor remainder with coefficient `L/6` from actual first and
+second differential fields and anchored Hessian variation on query segments.
+`LocalJetControl` packages the common convex-region assumptions. Actual
+Hessian symmetry is derived when that region is a neighborhood of the center.
+
+The actual central first, diagonal second and mixed four-corner stencils have
+truncation bounds `L*h^2*norm(u)^3/6`, `L*h*norm(u)^3/3` and
+`L*h*(norm(u+v)^3+norm(u-v)^3)/12`. Correlated and endpoint sample-error
+theorems add the corresponding signed numerator errors divided by `2*h`,
+`h^2` and `4*h^2`. The total-error results also retain an explicit arithmetic
+budget. They accept any actual positive `h`, including a clamped choice.
+`sampled_value_error`, `euclidean_error_bound` and
+`division_perturbation_bound` supply query displacement, vector/Frobenius
+aggregation and positive-denominator perturbation contracts.
+
+The [complete stencil note](162-provider-stencil-certificates.md) states every
+assumption and the Rust correspondence. No exact IEEE error, raster accuracy,
+ideal SDF property or topology certificate is inferred from these theorems.
 
 ## References and provenance
 

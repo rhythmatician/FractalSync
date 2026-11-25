@@ -189,6 +189,12 @@ drive/drag and additional candidate control formulas. The
 including the exact explicit-drag energy factor and its sharp timestep
 condition. Those statements preserve the changing-configuration numerical
 boundary rather than treating continuous identities as integrator proofs.
+The [moving-metric continuation](159-moving-metric-dynamics.md) now proves
+a conditional quadratic local energy defect for the full exact-real ordered
+step, the impulse ledger at the new position, a sufficient whole-segment
+wall-domain condition, and continuous covariant steering norm preservation.
+Actual provider/phase-Hessian certificates, floating execution, global rollout
+control and a discrete steering realization remain separate.
 
 ## Relation to implementation
 
