@@ -77,7 +77,7 @@ The package proves positive-definiteness transfer, equality of pairings of trans
 
 The inner transformed covariant derivatives are identified with differentiable pullbacks before they are differentiated. This gives an actual commutator identity at `x` under the regularity hypotheses above, without separately differentiating every summand of `D²f`.
 
-This does not assert that the transformed coefficient field is `C¹` whenever `f` is merely `C²`. The transformed coefficients contain `D²f`; general coefficient-level `C¹` regularity needs additional smoothness, conventionally a `C³` chart and an appropriately regular original connection. The present generic tensor-expansion theorem assumes actual differentiability of its coefficient field. It must not be applied to a merely `C²` transformed coefficient field without discharging that premise.
+This does not assert that the transformed coefficient field is `C¹` whenever `f` is merely `C²`. The transformed coefficients contain `D²f`. The [moving-frame continuation](160-moving-frames.md) now proves actual `C¹` coefficient regularity from a `C³` chart and `C¹` original connection, with invertibility on a derived positive-radius neighborhood. The generic tensor-expansion theorem here assumes actual differentiability of its coefficient field; a merely `C²` chart does not discharge that premise.
 
 ## 3. Field-extension independence is proved from actual derivatives
 
@@ -178,8 +178,8 @@ These counts include supporting lemmas and exclude definitions and generated dec
 
 The geometric interface now contains actual nonlinear derivative, connection, bracket, and curvature covariance; general pointwise extension independence; a continuous trilinear coordinate curvature object; and full flat curvature/frame independence. The following remain distinct obligations:
 
-- A manifold-level bundled connection/curvature interface with atlas compatibility, and explicit coefficient regularity after sufficiently smooth coordinate changes.
-- General moving-frame connection forms and their gauge transformation laws. Tensor evaluation in arbitrary regular frames is checked here; a separate frame-bundle construction is not.
+- A manifold-level bundled connection/curvature interface with atlas compatibility. Actual coefficient regularity under a `C³` chart is now checked in the [moving-frame continuation](160-moving-frames.md).
+- A globally glued frame-bundle construction. Actual coordinate connection-form gauge laws, gauge composition and fiber-valued curvature conjugacy are now checked in that continuation.
 - Transfer from an embedded Shore's actual tubular metric to its ambient connection and curvature. Tubular and embedded-metric constructions are tracked separately.
 - Regularity and geodesic-ODE identification for attained AC minimizers, general second variation and conjugacy, global cut-locus theorems, and the curved-Shore functional-analytic bifurcation proof.
 

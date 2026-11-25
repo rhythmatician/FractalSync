@@ -3,8 +3,10 @@ import FractalSync.ACComponentPaths
 import FractalSync.ACSubpaths
 import FractalSync.AccumulatedDynamics
 import FractalSync.ComponentCrossing
+import FractalSync.ConnectionFormCurvature
 import FractalSync.ContinuousMechanics
 import FractalSync.ControlMechanics
+import FractalSync.CoordinateConnectionRegularity
 import FractalSync.CoordinateCovariance
 import FractalSync.CovariantSteering
 import FractalSync.CovariantStatistics
@@ -17,6 +19,7 @@ import FractalSync.DiscreteSteering
 import FractalSync.DistanceGraph
 import FractalSync.DistanceToSet
 import FractalSync.DisplacementBounds
+import FractalSync.EmbeddedNormalPatch
 import FractalSync.EmbeddedShoreMetric
 import FractalSync.FlatCurvatureTensor
 import FractalSync.FlatShore
@@ -24,6 +27,8 @@ import FractalSync.FlatShoreGeometry
 import FractalSync.FlatShoreGeodesics
 import FractalSync.FlatShoreIntrinsic
 import FractalSync.FlatShoreSecondVariation
+import FractalSync.FlatShoreShortcuts
+import FractalSync.GlobalOperationalField
 import FractalSync.GraphChord
 import FractalSync.IntrinsicCurveLength
 import FractalSync.IntrinsicGeodesics
@@ -34,14 +39,21 @@ import FractalSync.IntrinsicTopology
 import FractalSync.IntrinsicVariation
 import FractalSync.MetricComparison
 import FractalSync.MetricImpulse
+import FractalSync.MovingFrames
 import FractalSync.MovingMetricMechanics
 import FractalSync.NonlinearCoordinates
+import FractalSync.NormalRadius
 import FractalSync.NormalizedDistanceFields
 import FractalSync.NormalizedMapDifferential
 import FractalSync.NormalizedProviderError
 import FractalSync.OperationalField
 import FractalSync.OperationalFieldBounds
+import FractalSync.OperationalFieldGlobalError
+import FractalSync.OperationalFieldGluing
 import FractalSync.OperationalFieldJetError
+import FractalSync.OperationalFieldJoins
+import FractalSync.OperationalFieldLattice
+import FractalSync.OperationalFieldQueryCorrespondence
 import FractalSync.OperationalFieldQueryError
 import FractalSync.PairwiseDistance
 import FractalSync.PathCalibration
@@ -56,6 +68,8 @@ import FractalSync.RulerDifferential
 import FractalSync.ScaleMetric
 import FractalSync.SensitivityBounds
 import FractalSync.ShoreMinimizers
+import FractalSync.TrajectoryError
+import FractalSync.TrajectoryRefinement
 import FractalSync.TubularNeighborhood
 import FractalSync.ZeroFloorLimit
 

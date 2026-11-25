@@ -394,13 +394,16 @@ declaration inventory, and transitive axiom audit are recorded in
 
 The finite accumulated energy/work theorem, sufficient finite-history
 position-domain condition, and a concrete consistent discrete steering
-construction are now checked. The following remain distinct obligations:
+construction are checked here. The [trajectory continuation](159-trajectory-error.md)
+now derives actual ODE truncation and stability, simultaneous error and
+position/velocity domain control from reference margins, and uniform grid-point
+convergence under the stated refinement scaling. The following remain distinct obligations:
 
 | Area | Remaining work |
 | --- | --- |
-| Quantitative regularity | Concrete upper bounds for the uniform phase-energy Hessian constant from an actual field/provider, and region certificates covering velocities as well as positions. |
+| Quantitative regularity | Concrete upper bounds for phase-energy Hessians, acceleration derivatives and reference speeds from an actual field/provider, with usable phase-region margins. |
 | Provider and arithmetic correspondence | Fidelity of actual force and connection evaluations, query rounding, IEEE arithmetic, rounded stored-state errors, and numerical impulse errors. |
-| Rollout control | A priori bounds ensuring the required compact phase region and displacement budget persist over a desired horizon; state-error convergence to an actual ODE solution. |
+| Rollout control | Reference-solution existence and numerical margin certificates for specific fields; continuous-interpolant, time-dependent-control and impulsive-history convergence. Conditional domain control and uniform grid-state convergence for autonomous continuous force steps are now checked. |
 | Discrete steering | Frame construction and transport, solution existence and quantitative convergence, and a runtime realization with floating-point norm/error guarantees. |
 
 No minimum-curve convergence, global cut-locus theorem, integrator energy

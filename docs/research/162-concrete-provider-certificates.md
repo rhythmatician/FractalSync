@@ -289,16 +289,17 @@ not change that contract.
 | Actual physical first and second Fréchet derivatives | Checked |
 | Raw quadratic sample bias and exact quadratic jets | Checked under the explicit sampling premise |
 | Coefficient perturbation gains for values and jets | Checked from the actual basis |
-| Same-cell real-query value and differential variation | Checked from stored coefficient magnitudes |
-| Global floor selection, cell joins and the asserted global smoothness class | Not formalized here |
-| Asset decoding, masks, halo availability and query success | Not formalized here |
+| Real-query value and differential variation | Checked here on a fixed cell; the [global continuation](162-global-operational-field.md) removes that restriction under a uniform lattice bound |
+| Mathematical floor selection, coherent cell joins and global smoothness | Checked as global C4, with actual physical jets, in the continuation |
+| Ideal full-halo integer indices, row-major bounds and off-asset extension independence | Checked in the continuation |
+| Asset decoding, masks, machine indices, availability and query success | Not formalized |
 | Numerical coefficient fidelity to true signed Shore distance | Not established |
 | Query-rounding, subnormal, overflow and IEEE evaluation certificates | Not established |
 | Hessian variation under query displacement | A third-derivative bound is still needed |
 
-The natural next concrete step is the global join and indexing interface for
-adjacent tensor patches. Once that interface identifies the selected patch
-throughout a region, the local certificates above can be assembled into
-regional certificates. Actual IEEE arithmetic remains a separate refinement
-obligation. Runtime behavior, asset formats, training, canonical parameters,
-and provider contracts were not changed by this proof increment.
+The [global join and indexing interface](162-global-operational-field.md) is
+now checked for the literal mathematical floor-selected evaluator. It derives
+the joins from these concrete coefficients and yields cross-cell query bounds.
+The next numerical obligations are reference-field fidelity, actual query
+rounding, finite-asset/mask semantics and IEEE evaluation. Runtime behavior,
+asset formats, training, canonical parameters and provider contracts are unchanged.

@@ -1,12 +1,11 @@
 # Verification record: Lean geometry and mathematical research
 
 Verified 2026-11-24 (America/Chicago) in the supplied Linux environment. This continuation starts
-from draft PR #164 at `9bdecaf264ea0374797087344664a726d5ef5c52`, whose
+from draft PR #164 at `072dd12465c7cee08cae8aa5b60cff8d872d45b7`, whose
 main-branch base is `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The earlier 172-, 291-, 400-, 596-, and 726-theorem increments are retained. This
-record distinguishes new kernel-checked results, attributed analysis support,
-project compatibility proofs, conventional geometry, and earlier optional-tool
-and numerical observations.
+The earlier 172-, 291-, 400-, 596-, 726-, and 906-theorem increments are retained.
+This record distinguishes new kernel-checked results, retained analysis support,
+conventional geometry, and earlier optional-tool and numerical observations.
 
 ## Environment and full Lean build
 
@@ -21,119 +20,153 @@ and numerical observations.
 | Official proof guidance | `leanprover/skills` at `7d3da0282e7b724b07620e45cf212f2e05e19334` |
 | Previously installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
-The earlier increments restored the checkout, Elan 4.4.0, Lean 4.24.0, and
-the pinned Mathlib cache in this workspace. This continuation reused that
-installation and cache. One missing precompiled file for the pinned inverse
-function theorem dependency was fetched through Mathlib's cache tool. The
-committed toolchain, dependency sources, manifest,
-Lake configuration and Lean workflow were not changed.
+The earlier increments installed Elan, Lean and the pinned Mathlib cache.
+This continuation reused that working installation. The committed toolchain,
+dependency sources, manifest, Lake configuration, audit and Lean workflow were
+not changed. Integration exposed a generated-name collision between anonymous
+local product-norm instances; the new dynamics instances now have explicit,
+unique names. No theorem hypotheses or mathematical norms changed to resolve it.
 
-From `formal/`, the complete continuation command
+From `formal/`, the complete command
 
 ```text
 lake build --wfail
 ```
 
-completed successfully with **2,643 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,657 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing forty-seven result modules | 673 |
-| `NonlinearCoordinates` | 14 |
-| `CurvatureTensoriality` | 7 |
-| `FlatCurvatureTensor` | 24 |
-| `TubularNeighborhood` | 9 |
-| `EmbeddedShoreMetric` | 18 |
-| `FlatShoreSecondVariation` | 24 |
-| `OperationalField` | 22 |
-| `OperationalFieldBounds` | 9 |
-| `OperationalFieldJetError` | 16 |
-| `OperationalFieldQueryError` | 11 |
-| `AccumulatedDynamics` | 14 |
-| `PhaseEnergyRegularity` | 3 |
-| `DiscreteSteering` | 8 |
-| Existing twelve analysis-support modules | 53 |
-| `Analysis/CompactParametricIntegral` | 1 |
-| **Total across seventy-three source modules** | **906** |
+| Existing sixty result modules | 852 |
+| `MovingFrames` | 13 |
+| `CoordinateConnectionRegularity` | 5 |
+| `ConnectionFormCurvature` | 8 |
+| `NormalRadius` | 12 |
+| `EmbeddedNormalPatch` | 12 |
+| `FlatShoreShortcuts` | 11 |
+| `OperationalFieldGluing` | 5 |
+| `OperationalFieldJoins` | 7 |
+| `OperationalFieldLattice` | 4 |
+| `GlobalOperationalField` | 11 |
+| `OperationalFieldQueryCorrespondence` | 17 |
+| `OperationalFieldGlobalError` | 7 |
+| `TrajectoryError` | 18 |
+| `TrajectoryRefinement` | 7 |
+| Existing thirteen analysis-support modules | 54 |
+| **Total across eighty-seven source modules** | **1,043** |
 
-This adds **180 explicit declarations in thirteen result modules and one
-support module**. The result subtotal is 852 across sixty modules; support
-is 54 across thirteen modules. Counts include explicit supporting lemmas and are not counts of
-independent research results. A comment/string-stripped source inventory
-reproduced the preceding count of 726 before counting this increment. Every
-result-module row in the [formal inventory](../../formal/README.md) is
-reconciled against its source count. Attributed analysis infrastructure is
-separated from the result subtotal and retains its provenance.
+This adds **137 explicit declarations in fourteen result modules**. The result
+subtotal is 989 across seventy-four modules; support remains 54 across thirteen
+modules. Counts include supporting lemmas and are not counts of independent
+research results. A comment/string-stripped source inventory reproduced the
+preceding count of 906 before counting this increment. Every result-module row
+in the [formal inventory](../../formal/README.md) is reconciled against its
+source count. No new analysis-support module was added.
 
-For #160, the nonlinear coordinate extension differentiates the actual
-inverse-Jacobian pullback and includes the actual chart Hessian in the
-connection transformation. It proves covariant-derivative, bracket and full
-curvature covariance using neighborhood equality before differentiating the
-inner covariant fields. A separate actual commutator expansion establishes
-field-extension independence and identifies a bundled continuous trilinear
-coordinate tensor. The flat connection is proved smooth, its complete tensor
-is reconstructed, and the curvature ratio is checked in every regular
-nondegenerate frame, including after nonlinear pullback. A C² chart suffices
-for this local commutator theorem; it does not by itself make the transformed
-coefficient field C¹. Manifold-level bundle and atlas interfaces remain open.
+## New checked scope
 
-The embedded extension derives actual distance and unique nearest points from
-a full-set normal-chord certificate, verifies a concrete sphere instance,
-and proves normal-strip injectivity on an injective curve patch. Actual Frenet
-derivatives, local C¹ regularity, a spanning planar linear equivalence and a
-nonfocal factor allow the inverse function theorem to construct a genuine
-local normal chart. Its inverse coordinate has absolute value equal to actual
-distance throughout an ambient neighborhood. The proof differentiates the
-actual ambient regularized distance, including at Shore, and identifies the
-ambient graph metric pullback at the selected point for all tangent vectors.
-Generic reach from smooth embedded data and ambient connection/curvature
-transfer are still separate obligations.
+### Moving frames and nonlinear coefficient regularity
 
-The sine-family extension differentiates its actual normalized flat length
-integral twice. It proves the actual curve derivative, fixed endpoints and
-absolute continuity, identifies the integral with the existing metric's
-curve length, and obtains the second derivative
-ell/2*((pi/ell)²-1) at zero amplitude. When ell>pi, the actual derivative's
-right slope limit and a strict monotonicity argument prove that every
-sufficiently small positive amplitude has length less than ell. The actual
-parameter interval is [0,pi]; no new wrapper into the existing [0,1]
-path-infimum definition or all-minimizer classification is asserted.
+The [moving-frame extension](160-moving-frames.md) differentiates the actual
+inverse-frame field, proves the inhomogeneous connection-form gauge law,
+actual covariant-derivative and curvature-commutator covariance, and composition
+of successive frame changes. Base directions and their Lie bracket remain
+unchanged when only section coordinates change. A C2 frame with C1 coefficients
+gives an actual C1 transformed coefficient field. The nonlinear specialization
+is definitionally the earlier chart-Hessian law; a C3 chart, C1 original
+coefficients and an invertible actual Jacobian give a derived positive ball of
+invertibility and C1 transformed coefficients.
 
-For #162, the actual coefficient arrays and simultaneous Horner jet recurrence
-of the experimental operational field now define a checked exact-real fixed
-cell polynomial. Its returned physical-coordinate gradient and Hessian are
-the actual Fréchet derivatives. Nonnegative Bernstein coefficients establish
-the concrete weight positivity and stability. Raw quadratic samples give the
-quadratic plus h²*(a+c)/2, with its exact differential and Hessian. Uniform
-coefficient error eta gives value error at most eta, gradient-component error
-4eta/(3h), pure-Hessian error 2eta/h², and mixed-Hessian error 16eta/(9h²).
-Coefficient magnitudes also give actual same-cell differential and Hessian
-operator bounds 8B/(3h) and 68B/(9h²), in the coordinate product maximum norm,
-and corresponding real-query variation and combined value-error bounds.
-These results do not identify stored coefficients with exact Shore samples,
-prove global cell selection/join correspondence, or certify IEEE evaluation.
+A continuous trilinear curvature tensor allows distinct base and fiber spaces.
+Actual section derivatives cancel from the commutator; C2 frame and C1 coefficient
+hypotheses discharge the regularity needed for tensor gauge conjugacy. Compatibility
+lemmas identify the base-equals-fiber specialization with the existing tangent
+objects. These are coordinate/trivial-fiber constructions, not atlas-glued
+manifold or vector-bundle connections.
 
-For #159, an actual residual is included in the phase-energy differential,
-and the local changing-position defect is propagated through an actual finite
-velocity/position/impulse recurrence. The exact impulse is evaluated at the
-updated position. Explicit force/connection residual estimates and step-size
-bounds give a summed energy/work budget; a strict total-displacement bound
-controls every proposed position segment. Actual smooth fields on a compact
-phase region yield a finite uniform phase-Hessian bound, with convexity giving
-Lipschitz differential control and a constructor for local step certificates.
-This establishes existence of constants, not their numerical values or
-a priori phase-region persistence. A concrete endpoint-metric-normalized
-covariant Euler steering candidate has checked unit norm and an actual
-first-order consistency proof. These statements do not assert trajectory
-convergence, exact parallel transport, or an executable IEEE guarantee.
+### Derived normal radii and a genuinely local chart interface
 
-The earlier complete fixed-pair zero-floor classification, AC metric-length
-identity, arbitrary-endpoint attainment, all-nearest-Shore-minimizer
-classification, radial analysis, potential/control catalog, and #161--#163
-contracts remain included. This increment does not add convergence of
-selected minimizing curves or a publication-level novelty claim.
+The [normal-radius extension](160-derived-normal-radii.md) derives the actual
+Taylor normal projection and the chord lower bound m=v-L*delta/2 from a tangent
+speed lower bound v and actual derivative variation L on a parameter patch.
+Together with remote Shore distance at least d, it proves the positive uniform
+radius R=min(m²/L,d/2) when L,m,d are positive. Actual second derivatives supply
+the variation estimate; actual C2 neighborhood regularity on a compact convex
+patch supplies an existential finite positive L.
+
+Compactness of the base image and disjointness from the closed remote Shore
+supply d. For an injectively parameterized compact curve, the latter disjointness
+is derived for a compact base patch inside an open parameter patch. The same
+jet bounds derive curve injectivity, a normal-patch certificate, and injectivity
+of the open normal strip. The localized interface proves actual distance for
+abs(r)<=R, unique foot for abs(r)<R, and an IFT chart with ambient signed-distance,
+ruler derivative and metric pullback. The chart needs a parameter neighborhood,
+actual local Frenet/C1 data, a planar spanning equivalence and a nonfocal factor.
+Numerical constants, more general reach, and ambient connection/curvature
+identification remain separate.
+
+### Actual physical pairwise shortcut
+
+The [flat shortcut extension](160-flat-second-variation.md) lifts the earlier
+sine competitor to the actual Euclidean plane and reparameterizes it to [0,1].
+Its Euclidean AC property, endpoints and graph length are checked. The length
+is exactly the previously differentiated amplitude functional, so the actual
+pairwise path infimum is bounded by this competitor. Actual metric, coordinate
+length and AC graph-length dilation then prove, for epsilon>0 and L>pi*epsilon,
+D_epsilon,a((0,0),(0,L))<L/epsilon. No attainment or geodesic regularity is assumed.
+The equality case, converse below threshold and full minimizer/cut-locus
+classification remain separate.
+
+### Global operational evaluator and real query errors
+
+The [global provider extension](162-global-operational-field.md) calculates the
+coherent adjacent-cell joins through order four from the six actual quintic
+coefficient rows and an arbitrary integer coefficient lattice. A generic
+floor-selection lemma glues actual derivatives on neighboring closed cells;
+two coordinate applications cover grid edges and vertices. The literal global
+floor-selected evaluator is proved C4. Its physical first and iterated Frechet
+derivatives equal the selected value/gradient/Hessian formulas, with the actual
+spacing factors and cell origin.
+
+Ideal full-halo inequalities imply every six-by-six index and row-major integer
+address is in range. Arbitrary lattice extensions agreeing on the finite asset
+select the same jets under those inequalities. A uniform lattice magnitude B
+supplies global operator bounds 8B/(3h), 68B/(9h²), and corresponding value and
+differential query bounds across arbitrary cell boundaries, in the coordinate
+product maximum norm. Combined coefficient/query value error is bounded by
+eta+8B/(3h)*norm(deltaQuery). Reference-distance fidelity, machine floor/casts,
+validity masks, storage decoding, actual query-rounding and IEEE arithmetic
+certificates remain open.
+
+### Actual trajectory convergence and phase-region persistence
+
+The [trajectory extension](159-trajectory-error.md) derives stability of the
+existing velocity-then-position update and a local defect against an actual
+autonomous ODE solution. Acceleration Lipschitz constant L and reference phase
+speed bound B give amplification 1+abs(h)*max(1,L)+h²*L and defect at most
+h²*(B+max(1,L)*B/2). Actual acceleration and stored-state discrepancies enter
+separately. A finite geometric-sum envelope controls the numerical history;
+actual reference-tube margins support simultaneous induction of error and
+domain membership. Conditional residual/rounding bounds are used only after
+membership of the current state is proved. Separate position and velocity
+margins and the whole exact proposed affine phase segment are covered.
+
+For h=T/(N+1), acceleration discrepancy O(h), stored-state discrepancy O(h²),
+and initial error O(h), the checked finite envelope has an explicit exponential
+O(h) bound and tends to zero. `UniformODECertificate.refinement_converges`
+transfers this limit to actual histories uniformly at every grid point,
+including both endpoints, while proving eventual numerical domain membership
+from one fixed positive reference-tube margin. T=0 is included. Actual ODE
+existence, usable numerical regional constants, IEEE certificates, impulsive or
+time-dependent-control convergence and continuous interpolants remain separate.
+
+The earlier fixed-pair zero-floor classification, AC metric-length bridge,
+arbitrary-endpoint attainment, nearest-Shore classification, radial analysis,
+mechanical contracts and #161--#163 results remain intact. This increment does
+not add convergence of selected minimizing curves or a publication-level
+novelty claim.
 
 ## Attributed analysis backport and retained compatibility support
 
@@ -162,7 +195,7 @@ geodesic construction using compact endpoint-path families. The latter
 proves its compactness and reparameterization arguments directly; it does
 not assume a minimizing curve or import an extra geometric axiom.
 
-This continuation adds one project-authored compact parametric-integral
+The preceding 906-theorem increment added one project-authored compact parametric-integral
 helper. Joint continuity and actual parameter derivatives yield uniform
 local domination on a compact rectangle, then the pinned differentiation
 theorem applies to the actual interval integral. It supplies no new analytic
@@ -174,12 +207,12 @@ axiom and is separate from the attributed upstream backport.
 lake env lean Audit.lean
 ```
 
-passed for **1,844 project declarations**, including definitions, generated
+passed for **2,225 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 1844 project declarations
+Axiom audit passed for 2225 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -270,47 +303,41 @@ AC infimum, field calculus, complete fixed-pair zero-floor classification,
 metric-length identity and attained/nearest-Shore minimizing paths. Those
 results remain unchanged.
 
-Independent review of this continuation checked the inverse-Jacobian Hessian
-sign, actual neighborhood covariance, and the distinction between a C² chart's
-commutator identity and the higher regularity of transformed coefficients.
-The tensor review checked the actual derivative expansion, second-derivative
-symmetry cancellation, full flat tensor reconstruction and positive arbitrary
-frame Gram denominator.
+Independent review checked the actual inverse-frame derivative, separation of
+base and fiber coordinates, gauge composition, C2-frame/C1-coefficient and
+C3-chart/C1-coefficient regularity, and the actual fiber-valued curvature tensor.
+The local constructions are not presented as manifold-bundle gluing.
 
-The embedded review checked the full-set chord inequality, strict versus
-non-strict normal radius, sphere-center endpoint, and strip injectivity. It
-also checked that the inverse-function proof actually constructs the chart,
-that the spanning planar frame is explicit, and that the ambient ruler
-derivative is valid at Shore. The final wrapper gives a neighborhood distance
-identity and a metric equality for all tangent vectors at its selected point;
-it does not quantify the metric equality throughout that neighborhood without
-corresponding Frenet data there.
+The embedded review checked the actual Taylor and chord bounds, full-Shore
+remote separation, compact injective-curve argument, strict versus non-strict
+radii and derived strip injectivity. It checked the neighborhood requirement
+on the local parameter patch, actual IFT construction, spanning planar frame,
+nonfocal scale, ambient ruler derivative at Shore and exact scope of metric
+pullback. The compactness constants are existential, not numerical certificates.
 
-Read-only provider review matched the six coefficient arrays, simultaneous
-Horner recurrence, tensor-sum indexing, spacing factors and mixed-Hessian
-orientation against the actual Rust source. The formal object models a fixed
-real polynomial. The review distinguishes arbitrary stored coefficients from
-raw samples used in the conditional quadratic reproduction theorem, and
-coefficient perturbation from arithmetic error in the evaluator.
+The shortcut review checked the Euclidean norm, use of the chart only as a
+continuous linear equivalence, exact affine reparameterization, cusp-safe a.e.
+density identity, path-infimum bound, physical dilation and L/epsilon endpoint
+comparison. No converse, equality-case classification or hidden attainment
+hypothesis was found.
 
-The dynamics review checked that residual power is derived from actual
-Fréchet differentiation and that the finite recurrence uses the updated
-configuration and proposed pre-impulse velocity in its impulse ledger. The
-compact-region theorem bounds the actual phase Hessian under actual C² field
-regularity; position control alone does not establish its velocity-region
-hypotheses. The steering review verified the actual square-root normalization
-derivative and its zero first-order correction from metric compatibility.
-Endpoint norm preservation alone was not used as a substitute for consistency.
+Read-only provider review checked the concrete Horner derivative recurrence,
+coherent coefficient shifts, both coordinate joins, closed-cell floor gluing,
+C4 induction, physical normalization and actual derivative identities. Ideal
+halo bounds and row-major addresses were compared with the unchanged Rust
+source. The review distinguishes real global field correspondence from machine
+index/cast/mask behavior, reference fidelity and IEEE error.
 
-The second-variation review checked compact domination, actual twice-integrated
-derivatives, all pi/ell scaling factors, the metric speed identity and the
-fixed endpoints. Strict shortening follows from a negative actual first
-derivative on a small positive amplitude interval, not from a weak local
-maximum statement alone. The explicit sine curves also have checked AC.
+The dynamics review checked the velocity-then-position order, h² position
+correction, actual derivative-based local defect, acceleration residual factor,
+closed envelope and noncircular conditional-domain induction. The final theorem
+uses actual histories and one fixed reference-tube margin to prove uniform grid
+convergence and eventual membership. Horizon/scaling factors, endpoints and
+T=0 were checked. The note retains the exact-solution and regional-bound premises
+and excludes off-grid, hybrid-impulse and fixed-precision IEEE conclusions.
 
-The new mathematical notes were independently checked against actual
-signatures. No blocking mathematical defect was found. Relative documentation
-links, module counts and the staged whitespace check were also checked before
+No blocking mathematical defect was found. Relative documentation links,
+source/module inventories and the staged whitespace check were checked before
 publication. Runtime, training, canonical parameters, provider contracts,
 dependency pins, audit implementation and workflow configuration are unchanged.
 

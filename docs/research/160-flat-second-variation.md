@@ -6,9 +6,12 @@ it also constructs a positive interval of sine amplitudes whose curves are
 absolutely continuous, have the same two endpoints, and are strictly shorter
 than the Shore segment.
 
-The result module is
+The second-variation module is
 [FlatShoreSecondVariation.lean](../../formal/FractalSync/FlatShoreSecondVariation.lean)
-(24 explicit theorem declarations). One generic integration theorem is in
+(24 explicit theorem declarations). The continuation adds
+[FlatShoreShortcuts.lean](../../formal/FractalSync/FlatShoreShortcuts.lean)
+(11 declarations), connecting the competitor to the actual unit-interval AC
+path infimum and proving the physical positive-floor shortcut. One generic integration theorem is in
 [Analysis/CompactParametricIntegral.lean](../../formal/FractalSync/Analysis/CompactParametricIntegral.lean)
 and is counted as analysis support. These are exact-real statements under the
 existing Lean and Mathlib pins.
@@ -175,21 +178,86 @@ The amplitude radius `delta` is existential and may depend on the span and
 (7), together with the proved absolute continuity, give actual shorter
 fixed-endpoint coordinate competitors whenever `ell > pi`.
 
-In the dimensional model, the normalized threshold corresponds to Euclidean
-Shore separation `L > pi*epsilon`. That interpretation uses the existing
-dilation normalization. This module itself states the variation and
-shortening theorems for the `epsilon = 1` coordinate metric.
+The second-variation module states its amplitude calculation for the
+`epsilon = 1` coordinate metric. The following checked extension supplies the
+Euclidean path-infimum and physical dilation steps.
 
-## 5. Verification and remaining scope
+## 5. The actual pairwise infimum and physical shortcut
+
+`FlatShoreShortcuts` lifts (2) through the existing continuous linear chart
+into the actual Euclidean plane `WithLp 2 (R x R)`, then reparameterizes it
+from `[0,pi]` to `[0,1]` using `affineSubpath`. Lean proves that the resulting
+`modePath` is an ordinary Euclidean AC path and has exactly the two designated
+Shore endpoints. The chart is not assumed to be an isometry for the default
+coordinate product norm.
+
+The previously checked AC density identity and exact affine-subpath length
+law give
+
+\[
+L_{1,a}(\operatorname{modePath}_{\ell,A})
+=\mathcal L_{\ell,a}(A).
+\tag{8}
+\]
+
+Here the left side is the actual `acGraphLength` from the general closed-set
+path construction, including the actual distance trace and its a.e.
+derivative. The proof permits the unsigned-distance cusp at Shore endpoints.
+
+Every such path is therefore an admissible competitor for the existing
+pairwise path infimum, giving
+
+\[
+D_{1,a}((0,0),(0,\ell))\le\mathcal L_{\ell,a}(A).
+\tag{9}
+\]
+
+Choosing any amplitude from (7) proves a strict inequality for the actual
+distance. This passage uses the bounded-below candidate-length set and an
+explicit competitor. No minimizing curve or geodesic regularity is assumed.
+
+The new module also checks the elementary metric dilation
+
+\[
+g_{\epsilon,a}(\epsilon r)(\epsilon v,\epsilon w)
+=g_{1,a}(r)(v,w),\qquad \epsilon\ne0,
+\]
+
+and, for every actual Euclidean AC curve and positive floor,
+
+\[
+L_{\epsilon,a}(\epsilon\gamma)=L_{1,a}(\gamma).
+\tag{10}
+\]
+
+This is proved through actual coordinate derivatives and the existing
+coordinate/graph-length equality. It is not an assumed scaling convention.
+With \(\ell=L/\epsilon\), the resulting physical theorem is
+
+\[
+\boxed{
+\epsilon>0,\quad L>\pi\epsilon
+\quad\Longrightarrow\quad
+D_{\epsilon,a}((0,0),(0,L))<\frac L\epsilon.
+}
+\tag{11}
+\]
+
+The quantity \(L/\epsilon\) is the intrinsic length of the straight Shore
+segment. All real \(a\) are allowed. The new result proves the strict
+shortcut above the threshold for these endpoints; it does not prove the
+converse or the equality-case classification.
+
+## 6. Verification and remaining scope
 
 The targeted command
 
 ```text
-lake build --wfail FractalSync.FlatShoreSecondVariation
+lake build --wfail FractalSync.FlatShoreShortcuts
 ```
 
-completed successfully with 2,595 Lake jobs and no warnings or errors. It
-includes the compact parametric integral support dependency. Package-wide
+completed successfully with 2,596 Lake jobs and no warnings or errors. It
+includes the second-variation and compact parametric integral dependencies. Package-wide
 verification and the transitive axiom audit are recorded in
 [verification.md](verification.md).
 
@@ -200,17 +268,19 @@ verification and the transitive axiom audit are recorded in
 | Actual competitor | `hasDerivAt_modeCurve`, `modeCurve_endpoints`, `modeCurve_graph`, `absolutelyContinuousOnInterval_modeCurve`. |
 | Existing metric correspondence | `metric_modeCurve`, `metric_speed_modeCurve`, `oneModeLength_eq_coordinateIntegral`. |
 | Strict shortening | `deriv_deriv_oneModeLength_neg`, `exists_shortening_amplitude_interval`. |
+| Actual unit-interval Euclidean competitor and graph length | `hasDerivAt_euclideanMode`, `absolutelyContinuous_modePath`, `modePath_endpoints`, `acGraphLength_modePath`. |
+| Actual path-infimum comparison and physical scaling | `intrinsicDistance_le_oneModeLength`, `intrinsicDistance_lt_shore_span`, `metric_dilation`, `coordinateLength_dilation`, `acGraphLength_dilation`, `intrinsicDistance_le_oneModeLength_scaled`, `intrinsicDistance_lt_shore_length`. |
 
 This is a second-variation and shortening result for one explicit sine
 family. It does not prove the general second-variation theorem, identify
 arbitrary AC minimizers with smooth geodesics, classify all minimizers, or
 establish the global cut locus. At `ell = pi` the proved second derivative
 vanishes; equality-case minimality and uniqueness are not consequences of
-this calculation. No new reparameterization wrapper into the existing
-`[0,1]` path-infimum definition is included.
+this calculation. The unit-interval path-infimum wrapper and physical
+positive-floor shortcut are now checked by the continuation above.
 
 The earlier [Jacobi calculations](160-flat-geodesics.md) and the conventional
 global arguments in [the flat-Shore note](160-flat-shore.md) remain distinct.
-This increment directly connects a checked actual length functional to
-explicit AC competitors and proves strict shortening beyond the normalized
-threshold.
+The actual length functional, explicit Euclidean AC competitors, and the
+general pairwise infimum are now connected through the checked physical
+strict-shortcut theorem.

@@ -11,6 +11,12 @@ They do not assume the desired distance identity or a pre-existing tubular
 chart. They also do not derive such a certificate for every smooth embedded
 curve. This distinction matters when another part of Shore is nearby.
 
+The continuation in [derived normal radii](160-derived-normal-radii.md) now
+derives a uniform certificate from actual curve jets and remote separation,
+including a compact injective-curve instance. Its local `NormalPatch`
+interface removes the global-parameter requirement from the chart and metric
+bridge below. The original `NormalTube` results remain available unchanged.
+
 The checked sources are
 [TubularNeighborhood.lean](../../formal/FractalSync/TubularNeighborhood.lean)
 and [EmbeddedShoreMetric.lean](../../formal/FractalSync/EmbeddedShoreMetric.lean),
@@ -223,12 +229,15 @@ ambient-neighborhood distance identity and the metric pullback in one result.
 
 ## 6. Remaining transfer obligations
 
-The new results establish embedded distance and metric correspondence under
-explicit sufficient hypotheses. The following are still separate:
+These results establish embedded distance and metric correspondence under
+explicit sufficient hypotheses. The [derived-radius continuation](160-derived-normal-radii.md)
+now supplies R=min(m²/L,d/2), with m=v-L*delta/2>0, from actual curve-jet and
+remote-separation estimates, and derives the latter separation for compact
+injective parameterizations. The following are still separate:
 
-- Derive a positive uniform normal-chord radius from an appropriate embedded
-  curve theorem, with the required global separation assumptions. A local
-  curvature bound alone does not control another nearby component of Shore.
+- Compute usable numerical jet and separation bounds for a particular Shore
+  representation, and extend reach results to other embedding hypotheses.
+  A local curvature bound alone does not control another nearby component.
 - Package charts and overlaps into a manifold-level construction. The current
   object is an actual local open partial homeomorphism with an inverse
   derivative, plus the optional injectivity result on a supplied strip.
