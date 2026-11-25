@@ -121,5 +121,11 @@ import FractalSync.ConcreteRungeKuttaQueries
 import FractalSync.RungeKuttaMesh
 import FractalSync.RungeKuttaPhase
 import FractalSync.RungeKuttaStages
+import FractalSync.ConcreteHeldPower
+import FractalSync.ConcreteRungeKuttaWork
+import FractalSync.ConcreteRungeKuttaWorkConvergence
+import FractalSync.ConcreteWorkIntegral
+import FractalSync.RungeKuttaWork
+import FractalSync.RungeKuttaWorkMesh
 
 /-! Development-time mathematical research for FractalSync. -/

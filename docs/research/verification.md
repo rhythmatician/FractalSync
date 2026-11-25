@@ -2,9 +2,9 @@
 
 Verified 2026-11-25 (America/Chicago) in the supplied Linux environment. This
 continuation starts from draft PR #164 at
-`23d7624038e5616fe20cad86f6b5c831232ef9a1`, whose reported main-branch base is
+`7bf489baeb3a3cde95d123de1c629a8b987eb2e4`, whose reported main-branch base is
 `55df760ff706210dcce3c88e79e476a45c5331f0`.
-The preceding 1,479-declaration package and all earlier increments are retained.
+The preceding 1,538-declaration package and all earlier increments are retained.
 This record separates the new kernel-checked results, existing analysis support,
 conventional geometry, and earlier optional-tool/numerical observations.
 
@@ -22,7 +22,11 @@ conventional geometry, and earlier optional-tool/numerical observations.
 | Previously installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
 The earlier increments installed Elan, Lean and the pinned Mathlib cache.
-This continuation reused that installation and working cache. All new modules use the same pinned dependencies and cached environment.
+This continuation retained the source and compiled cache but found the per-user
+Elan/Lean executables absent. It restored Elan 4.4.0 and the official Lean
+4.24.0 Linux release, linked that installation to the existing repository
+toolchain pin, and verified the versions above. All new modules use the same
+pinned dependencies and retained cache.
 No Mathlib source was changed. The toolchain, dependency sources, manifest, Lake
 configuration, audit implementation/allowlist and workflow were unchanged.
 
@@ -32,33 +36,99 @@ From `formal/`, the complete command
 lake build --wfail
 ```
 
-completed successfully with **2,721 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,727 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing 116 result modules | 1,424 |
-| `RungeKuttaStages` | 18 |
-| `RungeKuttaPhase` | 14 |
-| `ConcreteRungeKuttaBounds` | 6 |
-| `RungeKuttaMesh` | 6 |
-| `ConcreteRungeKutta` | 7 |
-| `ConcreteRungeKuttaQueries` | 8 |
+| Existing 122 result modules | 1,483 |
+| `ConcreteHeldPower` | 7 |
+| `RungeKuttaWork` | 8 |
+| `RungeKuttaWorkMesh` | 5 |
+| `ConcreteRungeKuttaWork` | 6 |
+| `ConcreteWorkIntegral` | 5 |
+| `ConcreteRungeKuttaWorkConvergence` | 3 |
 | Existing fourteen analysis-support modules | 55 |
-| **Total across 136 source modules** | **1,538** |
+| **Total across 142 source modules** | **1,572** |
 
-This adds **59 explicit declarations in six result modules**. The result
-subtotal is 1,483 across 122 modules; support remains 55 across fourteen
+This adds **34 explicit declarations in six result modules**. The result
+subtotal is 1,517 across 128 modules; support remains 55 across fourteen
 modules. Counts include supporting lemmas and private helpers, not independent
 research results. Proved certificate constructors written as definitions
 enter the audit separately. A comment/string-stripped inventory reproduced
-the preceding count of 1,479 before counting the increment. Every result-module
+the preceding count of 1,538 before counting the increment. Every result-module
 row in the [formal inventory](../../formal/README.md) is reconciled against
 its source count and umbrella import. No existing Lean theorem declaration
-changed.
+changed. All 136 pre-existing module files are byte-for-byte unchanged.
 
 ## New checked scope
+
+### Actual held power and signed RK quadrature
+
+The [signed-work extension](159-rk-work-ledger.md) connects the runtime's
+separate fifth RHS component to the existing mechanical energy. For any
+supplied held covector q, the actual differential obeys
+DE(z)[F_q(z)]=inner(v,q-Gv), with the fixture's unit drag. The proof uses the
+actual ruler and potential jets; the conservative and connection terms cancel.
+The same identity with q=drive(z) supplies the continuously reevaluated
+reference power. Its norm/Lipschitz pair is (40,3072), derived from energy
+differential (5,134) and reference field (8,400).
+
+The generic quadrature uses the actual RK stage states and weights
+1/6,1/3,1/3,1/6. If DE is K-Lipschitz and the stage slopes are bounded by M,
+the absolute difference between endpoint energy change and signed stage work
+is at most KM²s² for substep length s. The coefficient consists of an
+endpoint Taylor term KM²s²/2 and an actual stage-differential variation term
+KM²s²/2. The regional wrapper derives all stages and endpoints from an
+enclosing-ball field bound. No high-order derivative or fourth-order claim
+is used.
+
+### Complete finite physical-work ledger
+
+For n>0 equal internal substeps over an outer interval h, the signed energy
+increments telescope, giving defect at most KM²h²/n. The fixture has K=134,
+M=16 and T=1/576. Hence 134*16²=34304 and 34304*T²=67/648<1/8.
+For m=N+1>=16 outer steps, every stored prefix k<=m satisfies
+
+```text
+abs(E(y_k)-E(y_0)-workTrajectory(n,N,k)) <= 1/(8*m*n).
+```
+
+All numerical state/stage membership, energy regularity and power premises
+are discharged for the literal fixture and exact-drive outer caller policy.
+At m=16384, the bounds are 2^-17 for n=1 and 2^-19 for n=4. The 1/n factor
+improves the certified upper bound; it is not a measured runtime error ratio.
+This ledger uses the actual drive-plus-drag stage power, distinct from the
+retained earlier Taylor ledger of DE(y_i)[y_{i+1}-y_i].
+
+### Actual continuous work and joint uniform convergence
+
+The reference power trace is continuous and interval integrable. The actual
+chain rule and interval FTC give integral_0^t P(z(s)) ds=E(z(t))-E(z(0))
+throughout the same horizon, and cumulative reference work is 40-Lipschitz.
+Combining the finite ledger with the actual energy Lipschitz constant 5 and
+phase error 3/(16m) gives grid work error at most 1/(8mn)+15/(16m).
+Affine interpolation adds 40h/2, giving, at every t in [0,1/576],
+
+```text
+abs(workInterpolant(n,N,t)-integral_0^t P(z(s)) ds)
+  <= 1/(8*m*n)+35/(36*m) <= 9/(8*m).
+```
+
+One actual reference z is chosen before both the mesh and positive internal
+count. The final quantified theorem proves simultaneous uniform convergence
+of phase and cumulative work, with one mesh threshold independent of n.
+It includes the actual reference work/energy identity. The interpolants
+are affine through stored outer values. No instantaneous-power or derivative
+convergence, RK dense output, conservation or IEEE execution is claimed.
+Internal refinement at fixed m does not remove the outer holding-policy
+discrepancy from the continuously reevaluated reference.
+
+## Retained held-RK stage and trajectory results
+
+The following results were added by the preceding 1,538-declaration increment
+and supply the actual phase histories and domain evidence used above.
 
 ### Actual Runge--Kutta stages and method residuals
 
@@ -127,8 +197,11 @@ lambda_sq=(log2)^2 and command magnitude 1/2 because MAX_DRIVE_FORCE=2.
 No default-profile or arbitrary-caller certification is inferred.
 
 The separate fifth RHS component accumulates power with RK weights and does
-not feed back into the mechanical stages. State-error bounds alone do not
-certify that work quadrature, provider acceptance/refusal or IEEE arithmetic.
+not feed back into the mechanical stages. The new signed-work extension now
+certifies that exact-real quadrature separately. Provider acceptance/refusal
+and IEEE stage/power arithmetic and summation remain outside the certificate.
+Source review confirms that attempt_step has no energy/work-residual tolerance
+or energy-drift refusal rule.
 
 The [reuse boundary](157-field-replacement-boundary.md) records the proposed
 dynamics-derived field as future work without defining it or changing this
@@ -279,9 +352,9 @@ reach or stronger singular-limit theorem is claimed in this increment.
 The concrete reference remains a quadratic test fixture. Production distance
 fidelity, compiled extraction, storage/mask/machine-index correspondence,
 query rounding and IEEE evaluation still need evidence. Actual control
-construction, operational acceptance/refusal and work quadrature, changing
+construction, operational acceptance/refusal, IEEE power/summation, changing
 commands, impulses, combined steering and continuation beyond the local
-interval remain open. The new exact-real stage/domain and method-residual
+interval remain open. The exact-real stage/domain, method-residual and signed-work
 certificates are limited to the stated fixture caller policy. Runtime behavior,
 training, canonical parameters and provider contracts are unchanged.
 
@@ -330,12 +403,12 @@ analysis-support modules and 55 explicit support theorem/lemma declarations.
 lake env lean Audit.lean
 ```
 
-passed for **3,290 project declarations**, including definitions, generated
+passed for **3,386 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 3290 project declarations
+Axiom audit passed for 3386 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -436,14 +509,17 @@ formal error bounds.
 
 ## Proof review and publication status
 
-Independent review checked the actual RK recurrence and its stage averages,
-outer-anchor holding policy, enclosing-ball bootstrap, noncircular domain
-induction, common-reference quantifier order, mesh constants, Euclidean/max
-norm distinctions and full stage/endpoint query scope. Source review also
-checked the fixture-to-runtime parameter mapping, supplied-covector caller
-contract and separation of the mechanical state from the work quadrature.
-The earlier unit-residual velocity-first certificate is retained separately;
-the new RK history uses its actual larger residual coefficients.
+Independent review checked signed-power semantics, actual RK stage weights,
+outer-anchor holding policy, stage/endpoint inclusion, both telescoping levels,
+energy differential cancellation, actual interval-integral hypotheses and all
+mesh constants. A separate review of the final convergence module checked
+one-reference quantifier order, derived reference-region membership, grid work
+comparison, endpoint-inclusive interpolation and a mesh threshold independent
+of the positive internal count. Source review verified the runtime's actual
+power rule, work initialization/addition and separation from mechanical stages;
+it also checked that the engine has no work-residual acceptance criterion.
+The earlier stage, trajectory and parameter-mapping reviews remain applicable
+because those proof modules and runtime sources are unchanged.
 
 No blocking mathematical defect was found. Source/module inventories,
 relative documentation links, proof-placeholder scans and whitespace were

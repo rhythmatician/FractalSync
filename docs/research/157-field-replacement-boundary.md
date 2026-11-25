@@ -45,6 +45,7 @@ regularity bounds.
 | Connection and continuous work-energy | Actual identities \(u=\nabla\rho\), \(H=Du\), potential derivative, and equation of motion | The field-level theorems remain applicable after these derivative and motion premises are supplied. Arbitrary coefficient arrays alone do not identify a geometric connection or an energy derivative. See [ContinuousMechanics](../../formal/FractalSync/ContinuousMechanics.lean). |
 | Local ODE existence and quantitative trajectories | Coefficient regularity or regional norm/Lipschitz certificates, positive domain radius, and ruler floor | The generic construction accepts a new acceleration field. Its numerical horizon, tube, and mesh constants must be recomputed. See [LocalDynamics](../../formal/FractalSync/LocalDynamics.lean) and [QuantitativeDynamics](../../formal/FractalSync/QuantitativeDynamics.lean). |
 | Ordered-step error, interpolation, and accumulated residuals | An actual reference ODE, acceleration Lipschitz bound, step/update residuals, and domain bounds | The error machinery can be instantiated independently of distance-to-set geometry. The update formula must still match the numerical method being analyzed. See [TrajectoryError](../../formal/FractalSync/TrajectoryError.lean), [TrajectoryInterpolation](../../formal/FractalSync/TrajectoryInterpolation.lean), and [AccumulatedDynamics](../../formal/FractalSync/AccumulatedDynamics.lean). |
+| Signed RK work and energy ledger | Actual stage power \(P=DE[F]\), a Lipschitz energy differential, bounded stage slopes and a certified closed ball | The quadrature and telescoping proof is field independent. Its constants and power identity require the replacement's own evidence. See [the signed-work extension](159-rk-work-ledger.md) and [RungeKuttaWork](../../formal/FractalSync/RungeKuttaWork.lean). |
 | Catalog cancellation and held-control residual | The same potential/drive/drag formulas, metric raising, command assumptions, and local coefficient bounds | The symbolic cancellation survives a field substitution; its quantitative constants require new evidence. See [CancelledCatalogBounds](../../formal/FractalSync/CancelledCatalogBounds.lean) and [HeldControlResidual](../../formal/FractalSync/HeldControlResidual.lean). |
 | Coordinate and frame transformations | The stated chart invertibility, differentiability, and connection/metric transformation premises | Generic covariance laws remain available. They do not supply the replacement metric's particular curvature formula or its global geometry. See [NonlinearCoordinates](../../formal/FractalSync/NonlinearCoordinates.lean) and [MovingFrames](../../formal/FractalSync/MovingFrames.lean). |
 
@@ -211,7 +212,7 @@ The source has three distinct outputs and checks:
 | Quantity | Actual runtime mapping | Checked scope or remaining correspondence |
 | --- | --- | --- |
 | Mechanical state | Four classical RK stages and the weighted endpoint update; four-substep mode composes four such updates | The [held-RK extension](159-held-runge-kutta.md) proves exact-real stage/endpoint containment and update residuals for the fixture's stated caller policy |
-| Work increment | The same RK weights applied to the fifth RHS component, \(v\cdot(q+Q_{\rm drag})\); this component does not enter the mechanical stage states | A separate quadrature/work-ledger estimate; a phase-state error bound alone does not certify this ledger |
+| Work increment | The same RK weights applied to the fifth RHS component, \(v\cdot(q+Q_{\rm drag})\); this component does not enter the mechanical stage states | The [signed-work extension](159-rk-work-ledger.md) identifies the actual stage power, proves exact-real cumulative energy/work-ledger bounds, and proves uniform convergence of the affine ledger interpolant to the reference's actual power integral. IEEE power evaluation and summation remain separate |
 | Endpoint acceptance | `checked_endpoint` at each internal substep endpoint and the final outer endpoint, followed by final finite-ledger checks before `attempt_step` assigns the new state | Provider regularity, domain and finite-arithmetic correspondence; the weighted endpoint generally differs from the fourth stage |
 
 The reusable RK bounds depend on a vector field's norm and variation on a
@@ -221,12 +222,16 @@ must be measured from the outer sample state, because the runtime does not
 reconstruct \(q\) at internal substep boundaries. A reference-trajectory speed
 bound alone does not establish numerical stage containment.
 
-The [held-RK extension](159-held-runge-kutta.md) completes this exact-real
-stage and method-residual bridge for the present fixture. Applying it to
-another field requires that field's regional certificates and the same
-control/update semantics. Exact-real stage results
-do not certify Rust floating-point arithmetic, geometry-provider acceptance,
-or the separate work accumulator.
+The [held-RK extension](159-held-runge-kutta.md) completes the exact-real
+stage and method-residual bridge, and the
+[signed-work extension](159-rk-work-ledger.md) adds the actual stage-power
+quadrature, finite energy/work-ledger estimate and uniform convergence to
+the actual reference power integral. Applying these results to another
+field requires its regional certificates, energy/power identity and the same
+control/update semantics. They do not certify Rust floating-point
+evaluation or summation, compiled provider correspondence, or operational
+acceptance. `attempt_step` checks the proposed outer ledger's finiteness;
+it has no energy/work-residual threshold or drift-based refusal criterion.
 
 ## Scope of this PR
 

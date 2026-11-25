@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,538 explicit proved theorem/lemma declarations**: 1,483 in 122 result
+**1,572 explicit proved theorem/lemma declarations**: 1,517 in 128 result
 modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -214,9 +214,15 @@ by the separate transitive audit.
 | `RungeKuttaMesh` | 6 | Held-RK error coefficient at most 108, stage/domain mesh budgets and explicit dyadic error target |
 | `ConcreteRungeKutta` | 7 | Actual held-control RK recurrence, all-time finite-run certificate, stored-state containment and uniform convergence |
 | `ConcreteRungeKuttaQueries` | 8 | All actual internal stages and weighted endpoints, plus final stored endpoints, retain safe mathematical query addresses |
-| **Result-module subtotal** | **1,483** | Includes supporting lemmas, not just independent research results |
+| `ConcreteHeldPower` | 7 | Actual arbitrary-held-covector energy/power identity and concrete energy, target-field and target-power regularity |
+| `RungeKuttaWork` | 8 | Actual signed stage-power quadrature, one-step energy defect and telescoped internal work with derived stage domains |
+| `RungeKuttaWorkMesh` | 5 | Exact fixture ledger coefficients, all-prefix mesh rate and all-time work interpolation bounds |
+| `ConcreteRungeKuttaWork` | 6 | Actual outer work and accumulated signed history; unconditional prefix/final ledger bounds and continuous interpolation |
+| `ConcreteWorkIntegral` | 5 | Actual reference power trace, interval integrability, signed FTC work identity and cumulative-work Lipschitz bound |
+| `ConcreteRungeKuttaWorkConvergence` | 3 | Grid work error, one common phase/work certificate and uniform convergence to the actual power integral |
+| **Result-module subtotal** | **1,517** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,538** | 59 more source declarations in six modules than the prior 1,479-declaration increment |
+| **Total** | **1,572** | 34 more source declarations in six modules than the prior 1,538-declaration increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -582,7 +588,7 @@ next extension below.
 
 ### #159: actual held-control Runge--Kutta histories
 
-The six modules listed above close the exact-real numerical bridge, using the
+The preceding six RK modules close the exact-real numerical bridge, using the
 same fixture and reference horizon T=1/576. Their full statements and source
 mapping are in [the held-RK note](../docs/research/159-held-runge-kutta.md).
 
@@ -618,12 +624,47 @@ the piecewise-affine outer-state interpolant. This is not RK dense output.
 
 The caller must supply the fixture's exact drive at each outer anchor. The
 runtime accepts a supplied covector and does not enforce that policy. No
-default-profile, floating-point, provider-acceptance or work-quadrature
-equivalence is inferred. The checked convergence rate is first order for
+default-profile, floating-point or provider-acceptance equivalence is inferred.
+The signed work extension below supplies the separate exact-real quadrature
+certificate. The checked convergence rate is first order for
 the held-policy comparison; there is no fourth-order or four-substep speedup
 claim. The [field-replacement note](../docs/research/157-field-replacement-boundary.md)
 separates these general-field numerical arguments from the actual
 distance-to-set calibration and geometry below.
+
+### #159: actual signed RK work and its continuous integral limit
+
+The [work-ledger note](../docs/research/159-rk-work-ledger.md) connects the
+runtime's separate power accumulator to the same held-RK mechanical stages.
+The energy is the existing kinetic-plus-conservative-potential function.
+Signed power includes both supplied drive and viscous drag; it is evaluated
+at the actual stage state with the same outer-held covector.
+
+| Module and main identifiers | Checked statement |
+| --- | --- |
+| `ConcreteHeldPower.fderiv_energy_heldField`, `fderiv_energy_targetField` | Actual DE(z)[F_q(z)]=inner(v,q-Gv), for arbitrary supplied q and the unit-drag fixture; the reference specializes q to the drive at z. |
+| `ConcreteHeldPower.energy_differential_bound`, `targetPower_bound` | Actual energy differential norm/Lipschitz pair (5,134), reference field pair (8,400), and actual power pair (40,3072) on the certified phase ball. |
+| `RungeKutta.step_energy_work_defect`, `substeps_energy_work_defect`, `outer_energy_work_defect` | Actual weighted power quadrature differs from endpoint energy change by at most KM²s² per substep and KM²h²/n over n>0 substeps; the regional wrapper derives all stages from its field bound. |
+| `ConcreteRungeKutta.workTrajectory_energy_defect` | Every prefix k<=m of the actual finite history has absolute signed energy/work defect<=1/(8mn), with m>=16 and any n>0; numerical region and actual-power premises are discharged. |
+| `ConcreteWorkIntegral.referenceWork_eq_energy_sub`, `referenceWork_lipschitzOn` | The actual integral from 0 to t of reference drive-plus-drag power equals E(z(t))-E(z(0)) and is 40-Lipschitz on the certified interval. |
+| `ConcreteRungeKutta.exists_phase_work_certificate`, `exists_uniformly_convergent_phase_work` | One reference works for all meshes and positive internal counts; affine work interpolation has error<=1/(8mn)+35/(36m), and both phase and cumulative work converge uniformly on [0,1/576], uniformly in n. |
+
+The fixture coefficient is 134*16²=34304 and 34304/576²=67/648<1/8.
+At m=16384, the prefix and final energy/work bounds are 2^-17 for n=1
+and 2^-19 for n=4. The 1/n improvement concerns this certified bound;
+internal refinement alone does not remove the outer holding-policy error
+relative to the continuously reevaluated command. Grid work comparison adds
+15/(16m) from the phase error and energy Lipschitz bound. Affine interpolation
+adds 40h/2, producing the stated all-time coefficient and a common upper
+bound 9/(8m) for all n>=1.
+
+These results concern actual physical-work samples, distinct from the earlier
+Taylor ledger retaining DE(y_i)[y_{i+1}-y_i]. They do not bound total driven
+energy change or certify conservation, instantaneous-power convergence,
+RK dense output, IEEE power evaluation/summation or compiled execution.
+The runtime has no energy/work-residual acceptance tolerance. Field/profile,
+caller policy, local horizon and production-provider boundaries remain as
+documented; no new distance-field hypothesis is used by the generic work proof.
 
 ### #160: pointwise distance-graph algebra
 
@@ -1397,7 +1438,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,290 declarations, including the 1,538 stated theorem/lemma declarations,
+The current audit covers 3,386 declarations, including the 1,572 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

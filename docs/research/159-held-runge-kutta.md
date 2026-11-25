@@ -196,10 +196,29 @@ Rust separately checks state finiteness, the operational disk, provider
 regularity, frozen identity, intermediate endpoints and energy/ledger data.
 The theorem does not certify IEEE evaluations, storage/mask/index operations,
 sample construction, refusal branches, or arbitrary caller behavior.
+
 The fifth RHS component is power \(v\cdot(q+Q_{\rm drag})\); its RK
-quadrature does not feed back into the mechanical stages and is not certified
-by a phase-state error theorem alone. Changing commands, impulses, combined
-steering and continuation beyond this local interval remain separate work.
+quadrature does not feed back into the mechanical stages. The separate
+[signed-work extension](159-rk-work-ledger.md) now identifies this actual
+stage power with \(DE[F_q]\) and bounds the exact-real cumulative
+energy/work-ledger discrepancy by \(1/(8mn)\) at every outer prefix, for
+\(m\ge16\) outer steps and \(n>0\) equal internal substeps. That argument
+uses the stage domains proved here and the actual energy differential's
+Lipschitz bound. Its \(1/n\) work-ledger improvement is separate from this
+note's coarse phase-error rate.
+
+The same extension identifies the reference work with its actual signed
+power integral. One common reference solution controls both interpolants:
+the affine work interpolant has all-time error at most
+\(1/(8mn)+35/(36m)\le9/(8m)\), uniformly over positive internal counts.
+The phase and work interpolants therefore converge uniformly together on
+the same local interval.
+
+IEEE power evaluation and ledger summation remain outside those exact-real
+results. Runtime acceptance includes finiteness of the proposed outer ledger;
+`attempt_step` has no energy/work-residual tolerance or drift-based refusal
+rule. Changing commands, impulses, combined steering and continuation beyond
+this local interval remain separate work.
 
 No runtime implementation, parameter, provider contract, dependency pin or
 audit rule changes in this increment. The geometric obligations and draft
