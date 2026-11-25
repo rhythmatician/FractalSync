@@ -780,13 +780,28 @@ impl OrbitController {
                         && previous.end_velocity == ledger.start_velocity
                         && previous.end_energy == ledger.start_energy
                 });
-                let accumulated = self.accumulated_energy_ledger.get_or_insert(
-                    crate::debug::AccumulatedEnergyLedger {
+                let accumulated = self.accumulated_energy_ledger.get_or_insert_with(
+                    || crate::debug::AccumulatedEnergyLedger {
+                        first_step: ledger.clone(),
+                        start_time_seconds: self.step_time_seconds,
+                        provenance_consistent: true,
                         steps: 0, duration: 0.0, control_work: 0.0,
                         friction_work: 0.0, impulse_work: 0.0, residual: 0.0,
                         valid: true,
                     },
                 );
+                let first = &accumulated.first_step;
+                accumulated.provenance_consistent &= first.version == ledger.version
+                    && first.geometry_contract_version == ledger.geometry_contract_version
+                    && first.controls_version == ledger.controls_version
+                    && first.d_ref == ledger.d_ref && first.epsilon == ledger.epsilon
+                    && first.lambda_sq == ledger.lambda_sq && first.kappa == ledger.kappa
+                    && first.mu == ledger.mu
+                    && first.start_geometry.provider_version == ledger.start_geometry.provider_version
+                    && first.start_geometry.provider_version == ledger.end_geometry.provider_version
+                    && first.start_geometry.is_bridge == ledger.start_geometry.is_bridge
+                    && first.start_geometry.is_bridge == ledger.end_geometry.is_bridge;
+                accumulated.valid &= accumulated.provenance_consistent;
                 accumulated.steps += 1;
                 accumulated.duration += ledger.dt;
                 accumulated.control_work += ledger.control_work;

@@ -31,32 +31,24 @@ export const DEFAULT_TERRAIN_GRID = 129;
 /** Terrain patch half-extent in c-space units around the rider. */
 export const DEFAULT_TERRAIN_HALF = 0.5;
 
+export interface EnergyLedger {
+  version: string; geometryContractVersion: string; controlsVersion: string;
+  dt: number; startPosition: [number, number]; endPosition: [number, number];
+  startVelocity: [number, number]; endVelocity: [number, number];
+  startEnergy: number; endEnergy: number; controlPower: number; frictionPower: number;
+  controlWork: number; frictionWork: number; impulseWork: number; residual: number;
+  valid: boolean;
+  startGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
+  endGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
+}
+
 /** Wire shape of the Rust DebugSnapshot. Older recordings omit ledger fields. */
 export interface DebugSnapshot {
   version: string;
   timeSeconds: number;
-  energyLedger?: {
-    version: string;
-    geometryContractVersion: string;
-    controlsVersion: string;
-    dt: number;
-    startPosition: [number, number];
-    endPosition: [number, number];
-    startVelocity: [number, number];
-    endVelocity: [number, number];
-    startEnergy: number;
-    endEnergy: number;
-    controlPower: number;
-    frictionPower: number;
-    controlWork: number;
-    frictionWork: number;
-    impulseWork: number;
-    residual: number;
-    valid: boolean;
-    startGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
-    endGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
-  } | null;
+  energyLedger?: EnergyLedger | null;
   accumulatedEnergyLedger?: {
+    firstStep: EnergyLedger; startTimeSeconds: number; provenanceConsistent: boolean;
     steps: number; duration: number; controlWork: number; frictionWork: number;
     impulseWork: number; residual: number; valid: boolean;
   } | null;

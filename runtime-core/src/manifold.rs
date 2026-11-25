@@ -468,8 +468,16 @@ pub fn geodesic_acceleration(
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<(f64, f64), String> {
-    let gamma = christoffel_symbols(c, config)?;
-    
+    let jet = geometry_jet(c, config)?;
+    geodesic_acceleration_from_jet(v, &jet, config)
+}
+
+fn geodesic_acceleration_from_jet(
+    v: (f64, f64),
+    jet: &crate::geometry_provider::GeometryJet,
+    config: &ManifoldConfig,
+) -> Result<(f64, f64), String> {
+    let gamma = christoffel_symbols_from_jet(jet, config)?;
     let mut a = [0.0; 2];
     for i in 0..2 {
         for j in 0..2 {
@@ -651,7 +659,8 @@ pub fn integrate_step(
     }
 
     // Geodesic (curvature) acceleration: -Gamma(v, v).
-    let a_geodesic = geodesic_acceleration(v, c, config)?;
+    let start_geometry = geometry_jet(c, config)?;
+    let a_geodesic = geodesic_acceleration_from_jet(v, &start_geometry, config)?;
 
     // Sum generalized force covectors: potential + wall + control + drag.
     let q_potential = potential_force(c, config)?;
@@ -691,7 +700,6 @@ pub fn integrate_step(
     let e_new = total_energy(v_new, c_new, config)?;
     let k_old = kinetic_energy(v, c, config)?;
     let k_new = kinetic_energy(v_new, c_new, config)?;
-    let start_geometry = geometry_jet(c, config)?;
     let end_geometry = geometry_jet(c_new, config)?;
     let control_power = v.0 * q_control.0 + v.1 * q_control.1;
     let friction_power = v.0 * q_drag.0 + v.1 * q_drag.1;

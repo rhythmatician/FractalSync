@@ -38,7 +38,7 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/4");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/5");
 }
 
 #[test]
@@ -53,6 +53,9 @@ fn replay_snapshot_accumulates_signed_step_ledger_and_marks_failure() {
     let second_ledger = second.energy_ledger.as_ref().unwrap();
     let accumulated = second.accumulated_energy_ledger.as_ref().unwrap();
     assert_eq!(accumulated.steps, 2);
+    assert_eq!(accumulated.first_step, first_ledger);
+    assert!(accumulated.provenance_consistent);
+    assert_eq!(accumulated.start_time_seconds, 0.0);
     assert!((accumulated.residual - first_ledger.residual - second_ledger.residual).abs() < 1e-14);
     assert!((accumulated.control_work - first_ledger.control_work - second_ledger.control_work).abs() < 1e-14);
     let wire = serde_json::to_value(&second).unwrap();
@@ -62,6 +65,22 @@ fn replay_snapshot_accumulates_signed_step_ledger_and_marks_failure() {
     ctrl.step_with_controls(0.001, &controls(1.0));
     assert!(ctrl.last_energy_ledger.is_none());
     assert!(!ctrl.accumulated_energy_ledger.unwrap().valid);
+}
+
+#[test]
+fn accumulated_ledger_marks_configuration_changes_even_if_they_are_reverted() {
+    let _g = lock();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let initial = ctrl.manifold_config.kappa;
+    ctrl.manifold_config.kappa = initial + 0.1;
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    ctrl.manifold_config.kappa = initial;
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let accumulated = ctrl.debug_snapshot().unwrap().accumulated_energy_ledger.unwrap();
+    assert_eq!(accumulated.first_step.kappa, initial);
+    assert!(!accumulated.provenance_consistent);
+    assert!(!accumulated.valid);
 }
 
 #[test]

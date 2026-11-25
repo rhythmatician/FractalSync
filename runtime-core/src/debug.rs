@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/4";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/5";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -225,6 +225,12 @@ pub struct DebugSnapshot {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccumulatedEnergyLedger {
+    /// First step retains the run's starting state, geometry and configuration.
+    pub first_step: crate::manifold::WorkEnergyLedger,
+    pub start_time_seconds: f64,
+    /// False if any step changes configuration or provider identity. Individual
+    /// controls and geometry samples still require the recorded snapshot stream.
+    pub provenance_consistent: bool,
     pub steps: u64,
     pub duration: f64,
     pub control_work: f64,

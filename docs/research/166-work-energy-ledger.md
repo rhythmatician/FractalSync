@@ -41,3 +41,19 @@ were 6.61613e-4, 3.33404e-4, and 1.67355e-4. The test requires a coarse
 absolute bound of 0.01 and at least 40% reduction at each refinement. This
 isolates integrator accounting from raster interpolation for this smooth field;
 it does not establish fidelity of the bridge or acceptance across the Map.
+
+
+The accumulated summary retains the first step (including its initial state,
+configuration, and provider sample), start clock, signed sums and a persistent
+configuration/provider consistency flag. A change and later reversion still
+marks it inconsistent and invalid. A summary alone does not preserve each
+step's controls or geometry; retain the snapshot stream for replay.
+
+A local release-mode microbenchmark on Windows at a repeated fixed point
+(`cargo run --release -p runtime_core --example ledger_cost`) measured 1,000
+pairs of provider queries at 6.80 ms and 1,000 complete steps at 14.11 ms before
+reuse. This is a warm microbenchmark, not a production profile, and times vary.
+The start ledger jet now also supplies the existing geodesic calculation,
+eliminating one identical query. The end jet remains an additional query to
+record endpoint validity and provenance; further reuse requires changing the
+energy evaluation API while preserving provider and error semantics.
