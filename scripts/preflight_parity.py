@@ -9,9 +9,6 @@ check fails, naming the mismatching component and the max abs error:
                         synthesize WITH residuals (shared phases passed explicitly).
   c) Shared phase source - residual_phases_for_seed_py == OrbitState.residual_phases().
 
-Non-fatal warning-only check:
-  d) Minimap availability - baked mip pyramid artifacts + load_mip_pyramid_py binding.
-
 Exit code 0 only if a, b, c all pass.
 
 Usage:
@@ -368,39 +365,6 @@ def check_shared_phase_source(rc) -> tuple[bool, float]:
                 if err > 1e-12:
                     ok = False
     return ok, max_err
-
-
-def check_minimap_availability(rc) -> tuple[bool, float]:
-    """(d) Warning-only: report minimap artifact / binding availability.
-
-    Always returns (True, 0.0); failures here are advisory, not fatal.
-    """
-    names = ("mandel_F_mips_f32.bin", "mandel_S_mips_f32.bin", "mandel_mips_meta.json")
-    found: dict[str, Path | None] = {}
-    for name in names:
-        hit = next(
-            (
-                candidate
-                for base in (REPO_ROOT, _BACKEND)
-                if (candidate := base / name).exists()
-            ),
-            None,
-        )
-        found[name] = hit
-    has_binding = hasattr(rc, "load_mip_pyramid_py")
-
-    missing = [n for n, p in found.items() if p is None]
-    if missing:
-        print(f"WARNING [minimap]: missing artifacts: {', '.join(missing)}")
-    else:
-        print("Minimap artifacts present:")
-        for name, p in found.items():
-            print(f"  {name}: {p}")
-    if not has_binding:
-        print("WARNING [minimap]: runtime_core does not expose load_mip_pyramid_py")
-    else:
-        print("Minimap binding available: runtime_core.load_mip_pyramid_py")
-    return True, 0.0
 
 
 def _load_golden() -> dict:
@@ -1029,7 +993,6 @@ CHECKS: list[tuple[str, bool, Callable]] = [
         True,
         check_feature_version,
     ),
-    ("d) Minimap availability (warning only)", False, check_minimap_availability),
 ]
 
 

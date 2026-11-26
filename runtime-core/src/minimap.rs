@@ -4,8 +4,7 @@
 //! - **The Map** — the Mandelbrot set
 //! - **The Shore** — the boundary of The Map
 //! - **The minimaps** — the Player's 9×9 windows at c, one per selected mip level
-//! - **The mip pyramid** — pre-rendered multi-scale maps (base 2048², from
-//!   `scripts/bake_mandel_maps_gl.py`), stored as raw little-endian f32 planes
+//! - **The mip pyramid** — multi-scale maps supplied as in-memory planes
 //! - **Slope** — the gradient vector of the grey field at a point
 //!
 //! The pyramid carries two fields per level:
@@ -540,103 +539,6 @@ pub fn with_pyramid<T>(f: impl FnOnce(Option<&MipPyramid>) -> T) -> T {
         Ok(g) => f(g.as_ref()),
         Err(_) => f(None),
     }
-}
-
-/// Load a mip pyramid from the baked binary artifacts produced by
-/// `scripts/bake_mandel_maps_gl.py`.
-///
-/// Each `.bin` file is a concatenation of little-endian f32 row-major planes
-/// (one per mip level); the companion JSON metadata carries the per-level
-/// widths/heights/offsets and the world extent. Both fields (F = escape
-/// iteration, S = shore proximity) are loaded from their respective files.
-pub fn load_pyramid_from_files(
-    f_bin_path: &str,
-    s_bin_path: &str,
-    meta_path: &str,
-) -> Result<MipPyramid, String> {
-    use std::fs;
-
-    let meta_str = fs::read_to_string(meta_path)
-        .map_err(|e| format!("read {}: {}", meta_path, e))?;
-    let meta: serde_json::Value =
-        serde_json::from_str(&meta_str).map_err(|e| format!("meta parse: {}", e))?;
-
-    let re_min = meta["re_min"].as_f64().ok_or("meta missing re_min")?;
-    let re_max = meta["re_max"].as_f64().ok_or("meta missing re_max")?;
-    let im_min = meta["im_min"].as_f64().ok_or("meta missing im_min")?;
-    let im_max = meta["im_max"].as_f64().ok_or("meta missing im_max")?;
-
-    let read_field = |bin_path: &str, key: &str| -> Result<Vec<Vec<f32>>, String> {
-        let m = &meta[key];
-        let widths: Vec<usize> = m["mip_widths"]
-            .as_array()
-            .ok_or(format!("meta missing {}.mip_widths", key))?
-            .iter()
-            .map(|v| v.as_u64().unwrap_or(0) as usize)
-            .collect();
-        let heights: Vec<usize> = m["mip_heights"]
-            .as_array()
-            .ok_or(format!("meta missing {}.mip_heights", key))?
-            .iter()
-            .map(|v| v.as_u64().unwrap_or(0) as usize)
-            .collect();
-        let offsets: Vec<usize> = m["mip_offsets_bytes"]
-            .as_array()
-            .ok_or(format!("meta missing {}.mip_offsets_bytes", key))?
-            .iter()
-            .map(|v| v.as_u64().unwrap_or(0) as usize)
-            .collect();
-
-        let bytes = fs::read(bin_path).map_err(|e| format!("read {}: {}", bin_path, e))?;
-        let mut levels = Vec::with_capacity(widths.len());
-        for i in 0..widths.len() {
-            let start = offsets[i];
-            let n = widths[i].saturating_mul(heights[i]);
-            let end = start + n * 4;
-            if end > bytes.len() {
-                return Err(format!(
-                    "{} truncated at level {} (need {} bytes, have {})",
-                    bin_path,
-                    i,
-                    end,
-                    bytes.len()
-                ));
-            }
-            let mut plane = Vec::with_capacity(n);
-            for chunk in bytes[start..end].chunks_exact(4) {
-                plane.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-            }
-            levels.push(plane);
-        }
-        Ok(levels)
-    };
-
-    let f_levels = read_field(f_bin_path, "F")?;
-    let s_levels = read_field(s_bin_path, "S")?;
-
-    // Build with both fields properly separated: temporarily construct via
-    // from_levels for validation, then swap in the distinct field planes.
-    let mut pyr = MipPyramid::from_levels(
-        s_levels.clone(),
-        meta["S"]["mip_widths"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_u64().unwrap() as usize)
-            .collect(),
-        meta["S"]["mip_heights"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_u64().unwrap() as usize)
-            .collect(),
-        re_min,
-        re_max,
-        im_min,
-        im_max,
-    )?;
-    pyr.fields = [f_levels, s_levels];
-    Ok(pyr)
 }
 
 #[cfg(test)]

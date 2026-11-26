@@ -412,62 +412,6 @@ export function createAnalysisTimebase(): import('./analysisTimebase').WasmAnaly
   return new m.AnalysisTimebase();
 }
 
-/**
- * Load the mip pyramid (minimaps) into the wasm runtime so the Player's
- * contour-biased stepper can follow the Shore. Fetches the baked artifacts
- * from the backend API and calls the wasm `set_mip_pyramid` binding.
- *
- * Best-effort: if the artifacts are unavailable, the Player falls back to
- * plain clamped motion (still audio-driven, no closed loop).
- */
-export async function loadMipPyramid(): Promise<boolean> {
-  const m = requireWasm();
-  if (typeof (m as any).set_mip_pyramid !== 'function') {
-    console.warn('[orbitSynthesizer] wasm build has no set_mip_pyramid; minimap disabled');
-    return false;
-  }
-  try {
-    const metaResp = await fetch('/api/minimap/meta', { credentials: 'same-origin' });
-    if (!metaResp.ok) {
-      console.warn('[orbitSynthesizer] mip pyramid metadata unavailable:', metaResp.status);
-      return false;
-    }
-    const meta = await metaResp.json();
-
-    const [fResp, sResp] = await Promise.all([
-      fetch('/api/minimap/field/F', { credentials: 'same-origin' }),
-      fetch('/api/minimap/field/S', { credentials: 'same-origin' }),
-    ]);
-    if (!fResp.ok || !sResp.ok) {
-      console.warn('[orbitSynthesizer] mip pyramid field unavailable');
-      return false;
-    }
-
-    const [fBuf, sBuf] = await Promise.all([fResp.arrayBuffer(), sResp.arrayBuffer()]);
-    const fFlat = new Float32Array(fBuf);
-    const sFlat = new Float32Array(sBuf);
-
-    const widths = new Uint32Array(meta.F.mip_widths);
-    const heights = new Uint32Array(meta.F.mip_heights);
-
-    (m as any).set_mip_pyramid(
-      fFlat,
-      sFlat,
-      widths,
-      heights,
-      meta.re_min,
-      meta.re_max,
-      meta.im_min,
-      meta.im_max
-    );
-    console.log('[orbitSynthesizer] mip pyramid loaded:', widths.length, 'levels');
-    return true;
-  } catch (err) {
-    console.warn('[orbitSynthesizer] failed to load mip pyramid:', err);
-    return false;
-  }
-}
-
 function requireWasm(): WasmModule {
   if (!wasm) {
     throw new Error(

@@ -180,19 +180,9 @@ def collect_c_traces(
 
     import runtime_core
 
-    from .control_trainer import _ensure_mip_pyramid_loaded
-
     was_training = model.training
     model.eval()
     traces: Dict[str, np.ndarray] = {}
-
-    # Load the Map so the wall/tilt/energy physics is active in the replay.
-    pyramid_loaded = _ensure_mip_pyramid_loaded()
-    if not pyramid_loaded:
-        logger.warning(
-            "c-trace: mip pyramid unavailable — replaying without the "
-            "Shore wall (picture will not show boundary physics)"
-        )
 
     with torch.no_grad():
         for idx, audio_file in enumerate(dataset_files):
@@ -256,7 +246,7 @@ def collect_c_traces(
             ctrl.set_drag(0.90)
             ctrl.set_thrust(float(thrust_ct[0]))
             ctrl.set_energy(float(energy_ct[0]))
-            ctrl.set_shore_bias(pyramid_loaded)
+            ctrl.set_shore_bias(False)
             ctrl.set_d_star(0.5)
             ctrl.set_max_step(0.05)
             ctrl.set_c(float(_ic_re), float(_ic_im))

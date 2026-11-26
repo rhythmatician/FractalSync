@@ -112,12 +112,6 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "k_residuals": "int",
         RET: "list[float]",
     },
-    "load_mip_pyramid_py": {
-        "f_bin_path": "str",
-        "s_bin_path": "str",
-        "meta_path": "str",
-        RET: "tuple[int, float, float, float, float]",
-    },
     "install_pyramid_py": {
         "levels_data": "Sequence[Sequence[float]]",
         "widths": "Sequence[int]",
@@ -628,7 +622,6 @@ FUNCTION_ORDER = [
     "sample_distance_field_py",
     "get_builtin_distance_field_py",
     "residual_phases_for_seed_py",
-    "load_mip_pyramid_py",
     "install_pyramid_py",
     "clear_pyramid_py",
     "player_observation_py",
