@@ -483,3 +483,20 @@ literature comparison, not an announced new mathematical result.
    [author manuscript](https://personales.unican.es/beltranc/archivos/LogConvexCN.pdf).
    The author manuscript's Theorem 2 and its unique-nearest-point hypotheses
    were inspected.
+
+## Research disposition
+
+The first theorem package for [#160](https://github.com/rhythmatician/FractalSync/issues/160)
+is complete. The checked results include the radial calibration and exact
+distance to the Shore, the actual proper length metric and its minimizing
+paths, and the componentwise zero-floor limit. The conventional comparison
+with the scale-only metric gives the stated factor $\sqrt{1+a^2}$.
+The lower-dimensional examples distinguish the smooth curvature formulas
+from behavior at a nonsmooth distance stratum. [Formal inventory](../../formal/README.md)
+
+Keep the results as an engineering theorem package. The radial formulas and
+model examples are specific to this metric family, and the prior-art check
+supports no standalone publication claim. Numerical geodesic shortcuts and
+cut-locus ambiguity belong to [#172](https://github.com/rhythmatician/FractalSync/issues/172).
+The curved-Shore bifurcation in the research notes is a candidate beyond the
+first theorem package.

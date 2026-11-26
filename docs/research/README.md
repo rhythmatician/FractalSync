@@ -55,6 +55,18 @@ actually verified by Lean. The independent numerical checks in `formal/checks/`
 exercise analytic models and counterexamples; they do not certify the current
 GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 
+## Foundation acceptance
+
+| Issue | Evidence | Research disposition |
+| --- | --- | --- |
+| #157 | [Pinned Lean package and authoring setup](../../formal/README.md#reproducible-environment) | The proof build, audit, official skills, and project MCP configuration have reproducible checks. |
+| #158 | [Aeneas and Charon spike](158-rust-verification-spike.md) | Defer integration. The isolated Rust fixtures compile, with extraction blocked before Lean generation. The report records the compiler and floating-point boundaries. |
+| #159 | [Phase A acceptance](159-phase-a-acceptance.md) | The checked core geometry and mechanics contracts map to runtime test seams. Gesture and audiovisual work has separate follow-ups. |
+| #160, #173 | [Distance graph disposition](160-distance-geometry.md#research-disposition), [fixed-pair examples](160-pairwise-metric-limit.md#synthetic-checks-for-the-fixed-pair-branches) | Keep the length geometry, nearest-Shore calibration, and zero-floor results as an engineering theorem package. The examples cover each fixed-pair branch. |
+| #161 | [Sensitivity comparison](161-sensitivity-preconditioning.md), [response bounds](161-response-bounds.md) | Template, fold, and periodic-point examples complete the foundational comparison. Observable and Controls measurements remain separate. |
+| #162 | [Normalized distance fields](162-normalized-distance-fields.md), [set limits and affine reconstruction](162-map-limits-and-reconstruction.md) | Keep the checked chart, error, limit, and restricted reconstruction results for numerical geometry. |
+| #163 | [Holonomy criterion and examples](163-holonomy-acceptance.md) | A complete unit-phase kernel is PSD exactly when every triangle has trivial transport product. Empirical audiovisual fit remains with #126. |
+
 ## Geometry and steering studies
 
 | Issues | Research note | Result |
@@ -184,6 +196,5 @@ classification at and below the threshold are complete at their documented
 formal scope. Fixed-pair zero-floor limits now have the minimizing-path
 continuation described above. Uniform convergence over varying endpoint pairs
 and convergence of an arbitrary whole selected path family remain separate.
-Runtime behavior, training, canonical parameters and provider contracts are
-unchanged. The completed research package is scoped for PR #164; the research
-issues remain open for the obligations above.
+The foundational package landed in PR #164. The application obligations
+above have their own acceptance criteria.

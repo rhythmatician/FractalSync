@@ -145,5 +145,8 @@ import FractalSync.ExteriorRulerJets
 import FractalSync.ShoreFloorGluing
 import FractalSync.TrapSteeringBudget
 import FractalSync.TrapMetricComparison
+import FractalSync.SensitivityResponse
+import FractalSync.NormalizedMapLimits
+import FractalSync.CovariantHolonomy
 
 /-! Development-time mathematical research for FractalSync. -/

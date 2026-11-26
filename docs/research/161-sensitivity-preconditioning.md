@@ -223,7 +223,10 @@ The explicit formulas and counterexamples in this note are derivations made for 
 
 ## 7. Concrete follow-up and formalization inventory
 
-This note advances the analytic-model and assumptions parts of #161. It does not complete the Julia measurement program, the full literature map, or the issue's entire Lean deliverable.
+The [residual curvature and response bounds](161-response-bounds.md) complete
+the comparison package with the actual least-squares second derivative and
+the finite-horizon action bound. The renderer and Controls measurements
+remain in #150 and #151.
 
 - Preserve the arbitrary-template theorem as a mathematical control family for #150/#151, alongside the Gaussian special case.
 - In measurements, report both normalized singular values; fitting a single scale exponent can conceal a direction that is becoming null.
