@@ -55,6 +55,14 @@ actually verified by Lean. The independent numerical checks in `formal/checks/`
 exercise analytic models and counterexamples; they do not certify the current
 GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 
+## Geometry and steering studies
+
+| Issues | Research note | Result |
+| --- | --- | --- |
+| #181, #167 | [Roundoff on a retained operational-field patch](181-operational-patch.md) | A rational error calculation bounds value, gradient, and Hessian error relative to the stored spline on one patch. A native Rust probe checks samples against those bounds. |
+| #182, #184 | [Main-cardioid ruler](184-main-cardioid-ruler.md) | The reciprocal hyperbolic density matches true Shore distance to leading order along smooth boundary approaches. The ratio at the cusp depends on the approach. The note compares the candidate and existing rulers on the same paths. |
+| #185 | [Fixed point-trap steering](185-orbit-trap-steering.md) | Lean checks the regular tangent and identifies the three critical points for the second critical iterate. A numerical comparison measures contour drift and near-critical angular sensitivity. |
+
 ## Originality verdict
 
 No independently publishable new result has been established in this pass.
