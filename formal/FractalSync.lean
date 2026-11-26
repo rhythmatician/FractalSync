@@ -131,5 +131,7 @@ import FractalSync.PerturbedRungeKutta
 import FractalSync.PerturbedRungeKuttaWork
 import FractalSync.ConcretePerturbedRungeKutta
 import FractalSync.ConcretePerturbedRungeKuttaWork
+import FractalSync.MainCardioidRuler
+import FractalSync.OrbitTrapSteering
 
 /-! Development-time mathematical research for FractalSync. -/

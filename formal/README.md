@@ -1,11 +1,11 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,604 explicit proved theorem/lemma declarations**: 1,549 in 132 result
-modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
-analysis-support modules, including attributed upstream backports. Definitions
-and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
-execution, Python training, the browser, and Aeneas/Charon.
+**1,622 explicit proved theorem/lemma declarations** across 134 result modules
+and fourteen analysis-support modules, including attributed upstream backports.
+The transitive axiom audit also counts definitions and generated helpers.
+The package is independent of Rust execution, Python training, the browser,
+and Aeneas/Charon.
 
 The conventional statements, proofs, counterexamples, and originality assessment
 are in [the research notes](../docs/research/README.md). Those notes contain more
@@ -224,9 +224,11 @@ by the separate transitive audit.
 | `PerturbedRungeKuttaWork` | 5 | Actual recorded power and mechanical stages, signed energy/work defect and independent stored-ledger accumulation |
 | `ConcretePerturbedRungeKutta` | 12 | Nonzero local operation budgets, all-time phase and query containment, and a common reference for every admitted one-substep history |
 | `ConcretePerturbedRungeKuttaWork` | 7 | Concrete local and prefix ledger bounds, actual integral comparison, and common-reference uniform phase/work convergence under shrinking local budgets |
-| **Result-module subtotal** | **1,549** | Includes supporting lemmas, not just independent research results |
+| `MainCardioidRuler` | 10 | Multiplier-map derivative, chord distance bounds, tangent speed, and exact cusp-axis distance and ruler ratio |
+| `OrbitTrapSteering` | 8 | Derivative, unit conformal speed, tangency, critical set, and saddle identity for the second-iterate point trap |
+| **Result-module subtotal** | **1,567** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,604** | 32 more source declarations in four modules than the prior 1,572-declaration increment |
+| **Total** | **1,622** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1475,7 +1477,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,573 declarations, including the 1,604 stated theorem/lemma declarations,
+The current audit covers 3,625 declarations, including the 1,622 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
