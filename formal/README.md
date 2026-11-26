@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,572 explicit proved theorem/lemma declarations**: 1,517 in 128 result
+**1,604 explicit proved theorem/lemma declarations**: 1,549 in 132 result
 modules supporting #157, #159, and research issues #160--#163, plus 55 in fourteen
 analysis-support modules, including attributed upstream backports. Definitions
 and generated helpers are counted separately by the transitive axiom audit. It is independent of Rust
@@ -220,9 +220,13 @@ by the separate transitive audit.
 | `ConcreteRungeKuttaWork` | 6 | Actual outer work and accumulated signed history; unconditional prefix/final ledger bounds and continuous interpolation |
 | `ConcreteWorkIntegral` | 5 | Actual reference power trace, interval integrability, signed FTC work identity and cumulative-work Lipschitz bound |
 | `ConcreteRungeKuttaWorkConvergence` | 3 | Grid work error, one common phase/work certificate and uniform convergence to the actual power integral |
-| **Result-module subtotal** | **1,517** | Includes supporting lemmas, not just independent research results |
+| `PerturbedRungeKutta` | 8 | Explicit observed RHS, stage and endpoint errors; sequential stage containment and whole-step consistency |
+| `PerturbedRungeKuttaWork` | 5 | Actual recorded power and mechanical stages, signed energy/work defect and independent stored-ledger accumulation |
+| `ConcretePerturbedRungeKutta` | 12 | Nonzero local operation budgets, all-time phase and query containment, and a common reference for every admitted one-substep history |
+| `ConcretePerturbedRungeKuttaWork` | 7 | Concrete local and prefix ledger bounds, actual integral comparison, and common-reference uniform phase/work convergence under shrinking local budgets |
+| **Result-module subtotal** | **1,549** | Includes supporting lemmas, not just independent research results |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,572** | 34 more source declarations in six modules than the prior 1,538-declaration increment |
+| **Total** | **1,604** | 32 more source declarations in four modules than the prior 1,572-declaration increment |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -665,6 +669,39 @@ RK dense output, IEEE power evaluation/summation or compiled execution.
 The runtime has no energy/work-residual acceptance tolerance. Field/profile,
 caller policy, local horizon and production-provider boundaries remain as
 documented; no new distance-field hypothesis is used by the generic work proof.
+
+### #159: local RK operation errors and complete observed histories
+
+The [operation-error note](../docs/research/159-rk-operation-errors.md) records
+the final conditional numerical bridge. `RungeKutta.Perturbed.Residuals` bounds
+individual RHS, stage-construction and endpoint errors. Its `stageBounds`
+theorem derives containment in evaluation order, then `euler_defect_le`
+converts those local errors into a completed-step estimate. `Powers` and
+`PowerResiduals` use the identical recorded mechanical states, and
+`energy_work_defect` retains actual signed power and work-update arithmetic.
+
+For the existing fixture, `ConcretePerturbedRungeKutta.History` permits RHS
+errors at most h and stage/endpoint errors at most h², with h=(1/576)/m and
+m>=16. `WorkHistory` permits power errors at most h and a combined weighted
+work/accumulation residual at most h². All allowances are nonzero at a finite
+mesh; the initial phase and zero initial work remain exact.
+
+| Main identifier | Checked statement |
+| --- | --- |
+| `observed_stage_bounds`, `observed_stage_region` | Recorded stages and endpoint stay in the 18h ball around the source, from the actual field bound and local error contracts. |
+| `ordered_defect`, `exists_history_certificate` | Local operation errors imply completed-step defect<=18000h², then all-time phase error<=3/(16m) and inner-region containment. |
+| `history_stage_safe_query` | Every recorded stage and endpoint retains the existing mathematical query allowance 1/64. |
+| `observed_work_defect`, `WorkHistory.energy_defect` | Local energy/work defect<=65536h² and every-prefix signed ledger defect<=1/(4m). |
+| `exists_phase_work_certificate`, `exists_uniformly_convergent_phase_work` | One reference precedes all meshes and admitted histories; all-time work error<=11/(9m) against its actual power integral, with conditional uniform phase/work convergence. |
+
+The last five rows use namespace `FractalSync.ConcretePerturbedRungeKutta`.
+This extension covers one RK4 substep per outer interval. The prior exact-real
+results for arbitrary positive internal counts are retained. Refinement assumes
+a family satisfying the shrinking local budgets; no fixed-precision IEEE
+scaling, rounded control construction or provider execution is proved.
+The energy is mathematical E at the observed phase and the interpolation grid
+is the ideal k*h; separately rounded energy reporting and machine-clock
+accumulation remain outside the certificate.
 
 ### #160: pointwise distance-graph algebra
 
@@ -1438,7 +1475,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,386 declarations, including the 1,572 stated theorem/lemma declarations,
+The current audit covers 3,573 declarations, including the 1,604 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

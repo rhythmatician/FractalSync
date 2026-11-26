@@ -127,5 +127,9 @@ import FractalSync.ConcreteRungeKuttaWorkConvergence
 import FractalSync.ConcreteWorkIntegral
 import FractalSync.RungeKuttaWork
 import FractalSync.RungeKuttaWorkMesh
+import FractalSync.PerturbedRungeKutta
+import FractalSync.PerturbedRungeKuttaWork
+import FractalSync.ConcretePerturbedRungeKutta
+import FractalSync.ConcretePerturbedRungeKuttaWork
 
 /-! Development-time mathematical research for FractalSync. -/

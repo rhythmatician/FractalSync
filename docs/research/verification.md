@@ -1,12 +1,12 @@
 # Verification record: Lean geometry and mathematical research
 
-Verified 2026-11-25 (America/Chicago) in the supplied Linux environment. This
-continuation starts from draft PR #164 at
-`7bf489baeb3a3cde95d123de1c629a8b987eb2e4`, whose reported main-branch base is
-`55df760ff706210dcce3c88e79e476a45c5331f0`.
-The preceding 1,538-declaration package and all earlier increments are retained.
-This record separates the new kernel-checked results, existing analysis support,
-conventional geometry, and earlier optional-tool/numerical observations.
+Verified 2026-11-25 (America/Chicago) in the supplied Linux environment. The
+final increment starts from PR #164 at
+`6e3fea1725246787fc4e56dac3724c8ff2235f07`, with actual `main` at
+`26eeb9a911a3e3005ce5b992e152ef429a53ae26` when the checkout was prepared.
+The preceding 1,572-declaration package and all earlier increments are retained.
+This record separates the new conditional operation-error bridge, retained
+exact-real results, conventional geometry, and earlier optional-tool observations.
 
 ## Environment and full Lean build
 
@@ -21,12 +21,13 @@ conventional geometry, and earlier optional-tool/numerical observations.
 | Official proof guidance | `leanprover/skills` at `7d3da0282e7b724b07620e45cf212f2e05e19334` |
 | Previously installed and exercised optional Lean LSP/MCP | 0.33.0, commit `7932203d79db213852db215835bd79c943bb99b0` |
 
-The earlier increments installed Elan, Lean and the pinned Mathlib cache.
-This continuation retained the source and compiled cache but found the per-user
-Elan/Lean executables absent. It restored Elan 4.4.0 and the official Lean
-4.24.0 Linux release, linked that installation to the existing repository
-toolchain pin, and verified the versions above. All new modules use the same
-pinned dependencies and retained cache.
+This final continuation used a fresh checkout. Elan and Lean were absent, so
+Elan 4.4.0 and the official pinned Lean 4.24.0 Linux release were installed.
+Mathlib and its transitive packages were fetched at the committed revisions.
+An initial broad cache request encountered HTTP 429 responses; a targeted cache
+request for the project's 88 direct Mathlib imports, with one concurrent download
+and retries, completed and unpacked 2,568 dependency files. No toolchain or
+dependency pin was changed.
 No Mathlib source was changed. The toolchain, dependency sources, manifest, Lake
 configuration, audit implementation/allowlist and workflow were unchanged.
 
@@ -36,35 +37,57 @@ From `formal/`, the complete command
 lake build --wfail
 ```
 
-completed successfully with **2,727 Lake jobs**, mostly cached dependencies,
+completed successfully with **2,731 Lake jobs**, mostly cached dependencies,
 and no warnings or errors. All result and support modules are reachable from
 `FractalSync.lean`.
 
 | Declaration inventory | Explicit theorem/lemma declarations |
 | --- | ---: |
-| Existing 122 result modules | 1,483 |
-| `ConcreteHeldPower` | 7 |
-| `RungeKuttaWork` | 8 |
-| `RungeKuttaWorkMesh` | 5 |
-| `ConcreteRungeKuttaWork` | 6 |
-| `ConcreteWorkIntegral` | 5 |
-| `ConcreteRungeKuttaWorkConvergence` | 3 |
+| Existing 128 result modules | 1,517 |
+| `PerturbedRungeKutta` | 8 |
+| `PerturbedRungeKuttaWork` | 5 |
+| `ConcretePerturbedRungeKutta` | 12 |
+| `ConcretePerturbedRungeKuttaWork` | 7 |
 | Existing fourteen analysis-support modules | 55 |
-| **Total across 142 source modules** | **1,572** |
+| **Total across 146 source modules** | **1,604** |
 
-This adds **34 explicit declarations in six result modules**. The result
-subtotal is 1,517 across 128 modules; support remains 55 across fourteen
+This adds **32 explicit declarations in four result modules**. The result
+subtotal is 1,549 across 132 modules; support remains 55 across fourteen
 modules. Counts include supporting lemmas and private helpers, not independent
-research results. Proved certificate constructors written as definitions
-enter the audit separately. A comment/string-stripped inventory reproduced
-the preceding count of 1,538 before counting the increment. Every result-module
-row in the [formal inventory](../../formal/README.md) is reconciled against
-its source count and umbrella import. No existing Lean theorem declaration
-changed. All 136 pre-existing module files are byte-for-byte unchanged.
+research results. Definitions and generated helpers enter the transitive audit
+separately. All 142 pre-existing proof module files are byte-for-byte unchanged.
+The source inventory and umbrella import graph are reconciled with the
+[formal inventory](../../formal/README.md).
 
 ## New checked scope
 
-### Actual held power and signed RK quadrature
+### Local operation errors and complete observed phase/work histories
+
+The [operation-error extension](159-rk-operation-errors.md) records the actual
+observed mechanical stages, RHS slopes, endpoint, powers and stored work.
+Separate local residuals cover each operation. The generic proof establishes
+stage containment in evaluation order, then bounds the complete mechanical
+step and its signed energy/work defect. No distance-to-set premise is used.
+
+For the unchanged quadratic fixture, m>=16 and h=(1/576)/m, the new one-substep
+profile permits RHS and power errors up to h, and stage, endpoint and combined
+work-update errors up to h². Actual local bounds close the 18h enclosing ball.
+The whole-step comparison defect is at most 18000h², yielding all-time phase
+error 3/(16m) and derived inner-region/query containment. The actual power
+identity and energy differential pair (5,134) give local ledger defect at most
+65536h² and every-prefix defect at most 1/(4m). The actual reference integral
+then gives all-time work error at most 11/(9m).
+
+One reference solution is selected before all meshes and admitted phase/work
+records. Uniform convergence is conditional on a family satisfying the shrinking
+operation-error budgets. It does not certify that fixed-precision arithmetic
+satisfies them. The new profile uses one RK4 substep per outer interval; the
+prior exact-real results for arbitrary positive internal counts remain intact.
+Energy is exact mathematical energy at recorded phase values, and interpolation
+uses ideal times k*h. Rounded energy reports, accumulated machine clocks,
+control construction and compiled acceptance/refusal remain outside the result.
+
+### Retained actual held power and signed RK quadrature
 
 The [signed-work extension](159-rk-work-ledger.md) connects the runtime's
 separate fifth RHS component to the existing mechanical energy. For any
@@ -403,12 +426,12 @@ analysis-support modules and 55 explicit support theorem/lemma declarations.
 lake env lean Audit.lean
 ```
 
-passed for **3,386 project declarations**, including definitions, generated
+passed for **3,573 project declarations**, including definitions, generated
 helpers, and declarations in adopted upstream namespaces. Its output was:
 
 ```text
 Transitive axioms: [propext, Classical.choice, Quot.sound]
-Axiom audit passed for 3386 project declarations
+Axiom audit passed for 3573 project declarations
 ```
 
 The audit chooses roots by defining-module provenance as well as the
@@ -509,6 +532,16 @@ formal error bounds.
 
 ## Proof review and publication status
 
+The final independent review checked sequential containment, observed-state
+RHS comparisons, the completed-step error adapter, actual power identity and
+stored-work telescoping, common-reference quantifiers, and the distinction
+between nonzero finite-mesh allowances and shrinking-budget refinement.
+Runtime-source review confirmed RK stage order and weights, the held covector,
+and the power coordinate's independence from mechanical stage construction.
+The final source inventory has 1,604 declarations across 146 modules, with no
+unimported proof module or unexpected proof placeholder/axiom token. All 659
+relative file links in the research notes and formal inventory resolve.
+
 Independent review checked signed-power semantics, actual RK stage weights,
 outer-anchor holding policy, stage/endpoint inclusion, both telescoping levels,
 energy differential cancellation, actual interval-integral hypotheses and all
@@ -529,15 +562,16 @@ are unchanged.
 
 The earlier targeted prior-art work did not establish publication-level
 novelty of the package. Issues #157, #159 and #160--#163 remain open;
-successful Lean verification is not a novelty certificate. PR #164 remains
-a draft.
+successful Lean verification is not a novelty certificate. The conditional
+operation-error increment completes the bounded scope selected for PR #164;
+its wider research and implementation obligations remain separate.
 
 ## CI scope
 
 `lean-proofs.yml` builds the pinned formal package and runs the axiom audit for
 formal-package changes. The commands and counts above are the observed local
 results. Hosted workflow results for the published increment are tracked on
-[draft PR #164](https://github.com/rhythmatician/FractalSync/pull/164).
+[PR #164](https://github.com/rhythmatician/FractalSync/pull/164).
 No runtime or training code was changed, so the application test suite was
 not rerun locally. Automatically triggered GitHub workflows are tracked
-separately on the draft PR.
+separately on the PR.
