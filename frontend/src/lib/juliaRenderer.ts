@@ -347,6 +347,15 @@ export class JuliaRenderer {
   }
 
   render(): void {
+    this.draw(this.currentParams, this.time);
+  }
+
+  /** Render a fixed state without advancing or changing the animation state. */
+  renderFrozen(params: VisualParameters): void {
+    this.draw(params, 0);
+  }
+
+  private draw(params: VisualParameters, time: number): void {
     this.resize();
     const gl = this.gl;
 
@@ -356,13 +365,13 @@ export class JuliaRenderer {
     gl.useProgram(this.program);
 
     // Core uniforms
-    gl.uniform2f(this.uJuliaSeedLocation!, this.currentParams.juliaSeed.real, this.currentParams.juliaSeed.imag);
+    gl.uniform2f(this.uJuliaSeedLocation!, params.juliaSeed.real, params.juliaSeed.imag);
     gl.uniform2f(this.uResolutionLocation!, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.uTimeLocation!, this.time);
+    gl.uniform1f(this.uTimeLocation!, time);
 
-    gl.uniform1f(this.uZoomLocation!, Math.max(this.currentParams.zoom, 1e-6));
-    gl.uniform1f(this.uHueLocation!, this.wrap01(this.currentParams.colorHue));
-    gl.uniform1f(this.uSatLocation!, Math.max(0, Math.min(1, this.currentParams.colorSat)));
+    gl.uniform1f(this.uZoomLocation!, Math.max(params.zoom, 1e-6));
+    gl.uniform1f(this.uHueLocation!, this.wrap01(params.colorHue));
+    gl.uniform1f(this.uSatLocation!, Math.max(0, Math.min(1, params.colorSat)));
 
     // Ported parameters (defaults from mandelbrot.py)
     gl.uniform1i(this.uMaxIterLocation!, this.MAX_ITER_DEFAULT);
@@ -376,7 +385,7 @@ export class JuliaRenderer {
     gl.uniform1f(this.uShininessLocation!, this.SHININESS);
     
     // Dual light setup (Frax-style)
-    const bright = Math.max(0, Math.min(1, this.currentParams.colorBright));
+    const bright = Math.max(0, Math.min(1, params.colorBright));
     
     // Light 1: Point source (sharp directional)
     const az1 = (2 * Math.PI) * (this.LIGHT1_AZ_DEG / 360.0);
@@ -420,11 +429,11 @@ export class JuliaRenderer {
     gl.uniform1f(this.uPreferGradientNormalsLocation!, this.preferGradientNormals ? 1.0 : 0.0);
 
     // Debug: log first frame
-    if (this.time === 0) {
+    if (time === 0 && params === this.currentParams) {
       console.log('First render:', {
-        seed: [this.currentParams.juliaSeed.real, this.currentParams.juliaSeed.imag],
+        seed: [params.juliaSeed.real, params.juliaSeed.imag],
         resolution: [this.canvas.width, this.canvas.height],
-        zoom: this.currentParams.zoom,
+        zoom: params.zoom,
         maxIter: this.MAX_ITER_DEFAULT,
         gradientNormals: this.useGradientNormals,
         fdIter: this.fdIter,

@@ -12,6 +12,12 @@ contract, primary experiment, reward, or first-training prerequisites.
 
 ## Results and decisions
 
+The [dynamical-ruler decision](182-dynamical-ruler-decision.md) keeps the
+signed-distance graph baseline after matched Physics and frozen-renderer
+comparisons. The [attachment crossing](183-attachment-crossing-fixture.md)
+and [Julia sensitivity probe](151-frozen-julia-sensitivity.md) give the
+reproduction commands and quantitative results for those experiments.
+
 | Issue | Research note | Main progress | Practical consequence |
 | --- | --- | --- | --- |
 | #157/#159 | [Metric foundations](157-scale-metric.md) | Checked rank-one positive metric, two-sided inverse, arbitrary-dimensional determinant, conditional anisotropy, plane rotations, and exact impulse-energy bound | One shared metric supports the downstream proofs. Exact algebra does not certify floating-point thresholds or provider derivatives. |

@@ -47,4 +47,4 @@ cargo run --offline -p runtime_core --features experimental-operational-field --
 cargo run --offline -p runtime_core --features experimental-operational-field --example dynamical_ruler_ablation -- --retained tmp/geometry145-retained-fine.bin docs/validation/bounded-reference-policy.json --region exterior
 ```
 
-These runs compare three matched prepared profiles within each local chart. Provider joins, Shore crossing, visual response, general attracting-cycle coverage, and certified operational error remain open for #183. The results do not select a replacement geometry for #182.
+These runs compare three matched prepared profiles within each local chart. The [attachment fixture](183-attachment-crossing-fixture.md) adds one analytic Shore crossing. The [geometry decision](182-dynamical-ruler-decision.md) compares rendered motion on its three paths and keeps the production baseline. Provider joins, independent true-Shore correspondence, general attracting-cycle coverage, and certified operational error remain open for #183.
