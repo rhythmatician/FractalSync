@@ -46,6 +46,12 @@ Ruler normalization allowed all five tested spacings at both near-Shore centers 
 
 No adjacent measured pair passed the refinement rule. For example, at the near-Shore exterior center the full metric's finest two raw eigenvalues changed by about 73% and 68%, even though both directions exceeded the rounding-only budget. The run therefore supports a stencil-locality benefit and identifies finite-size and readback limits. It supplies no resolved derivative-based ordering of the normalizations. The results retain the low-signal and unstable cases.
 
+## Inspect a bookmark in the cockpit
+
+Open `debugCockpit.html`, expand **DIAG · Frozen Julia bookmark**, and choose the saved `results.json`. Select a frozen state, metric, and step size. A measured step shows the saved raw matrix, eigenvalues and axes, and rank above the RGB8 budget. A refused step shows its saved status. A center refused by the geometry provider has no metric selector.
+
+**Saved replay inputs and diagnostics** shows the shader and renderer provenance, center geometry, basis and metric, endpoint records, and the selected step's saved diagnostics. The viewer reads the file locally. It does not rerun the probe or change the current trajectory or renderer. Player View hides the panel and preserves the loaded bookmark when returning to diagnostic view. [Cockpit bookmark viewer](../../frontend/src/components/JuliaSensitivityBookmark.tsx).
+
 ## Disposition
 
-The offline #151 probe and provenance are in place. Keep #151 open for the [#111](https://github.com/rhythmatician/FractalSync/issues/111) bookmark and inspection path. The [#171](https://github.com/rhythmatician/FractalSync/issues/171) follow-up still needs the Gaussian and asymmetric-template calibration, held-out resolved patches, and an independently justified observable or a response study across renderer resolutions. The first RGB8 run warrants neither a metric change nor an observation or reward decision.
+The offline probe and the [#111](https://github.com/rhythmatician/FractalSync/issues/111) bookmark inspection cover #151's diagnostic scope. The unresolved and near-null results remain part of that evidence. Calibration, held-out resolved patches, and alternate observable or resolution comparisons belong to the [#171](https://github.com/rhythmatician/FractalSync/issues/171) follow-up. The first RGB8 run supplies no evidence for changing the metric, observations, or reward.

@@ -34,6 +34,7 @@ import {
 import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
+import { JuliaSensitivityBookmark } from './JuliaSensitivityBookmark';
 import {
   MINIMAP_SIZE,
   paintMinimap,
@@ -596,6 +597,8 @@ export function DebugCockpit(): JSX.Element {
         </p>
         {error && <p style={{ color: '#f66', fontSize: 12 }}>{error}</p>}
         {!ready && !error && <p style={{ fontSize: 12 }}>initializing wasm…</p>}
+
+        <div hidden={playerView}><JuliaSensitivityBookmark /></div>
 
         {runs && (
           <div style={{ marginBottom: 12 }}>

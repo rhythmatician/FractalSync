@@ -7,11 +7,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { calibrateJuliaSensitivity } from './julia_sensitivity_calibration.mjs';
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
-const output = resolve(process.argv[2] ?? resolve(root, 'tmp/julia-151/results.json'));
-const attachment = process.argv[3] ? await readFile(resolve(process.argv[3])) : null;
+const heldOut = process.argv[2] === '--held-out';
+const output = resolve((heldOut ? process.argv[3] : process.argv[2])
+  ?? resolve(root, heldOut ? 'tmp/julia-151/held-out.json' : 'tmp/julia-151/results.json'));
+const attachment = !heldOut && process.argv[3] ? await readFile(resolve(process.argv[3])) : null;
 const attachmentPaths = attachment ? JSON.parse(attachment).profiles.map(profile => {
   const samples = profile.fine.samples;
   return {
@@ -23,10 +26,17 @@ const attachmentPaths = attachment ? JSON.parse(attachment).profiles.map(profile
 }) : [];
 const shaderPath = 'shared/shaders/julia.frag';
 const fragment = await readFile(resolve(root, shaderPath));
-const resolution = 80;
+const resolution = heldOut ? 160 : 80;
 const spacings = [0.02, 0.01, 0.005, 0.0025, 0.00125];
 const presentation = { zoom: 1, colorHue: 0.58, colorSat: 0.75, colorBright: 0.6, speed: 0 };
-const states = [
+const states = heldOut ? [
+  { name: 'held-out-cardioid', c: [-0.31, 0.19] },
+  { name: 'held-out-period-two', c: [-1.04, -0.13] },
+  { name: 'held-out-attachment', c: [-0.75, 0] },
+  { name: 'held-out-period-three', c: [-0.122561, -0.744862] },
+  { name: 'held-out-exterior-collar', c: [0.27, 0.012] },
+  { name: 'held-out-distant', c: [1.1, -0.31] },
+] : [
   { name: 'real-axis-center', c: [0, 0] },
   { name: 'wide-cardioid', c: [-0.17, 0.09] },
   { name: 'period-two', c: [-0.98, 0.09] },
@@ -106,6 +116,11 @@ function basis(matrix) {
   return { columns: e, max_orthonormality_error: residual };
 }
 
+const calibration = calibrateJuliaSensitivity(basis);
+if (process.argv[2] === '--calibrate') {
+  console.log(JSON.stringify(calibration, null, 2));
+  process.exit(0);
+}
 const geometry = queryGeometry(states.map(({ c }) => c), true);
 const centerRows = states.map((state, i) => ({ ...state, geometry: geometry.points[i], metrics: [] }));
 const endpoints = [];
@@ -171,6 +186,7 @@ try {
   await page.goto(`${server.resolvedUrls.local[0]}__julia_sensitivity__.html`);
   const result = await page.evaluate(async ({ states, resolution, presentation, attachmentPaths }) => {
     const { JuliaRenderer } = await import('/src/lib/juliaRenderer.ts');
+    const { dot, sensitivitySpectrum } = await import('/scripts/julia_sensitivity_spectrum.mjs');
     const canvas = document.createElement('canvas');
     canvas.width = resolution;
     canvas.height = resolution;
@@ -237,7 +253,6 @@ try {
       });
       return { ...path, frames };
     });
-    const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
     const derivative = (minus, plus, h) => {
       const direction = new Float64Array(components);
       let changed = 0;
@@ -282,15 +297,11 @@ try {
           const pixels = step.endpoints.map(({ c }) => render(c));
           const pairs = [0, 2].map(k => derivative(pixels[k], pixels[k + 1], step.h));
           const [v, w] = pairs.map(pair => pair.direction);
-          const [a, b, d] = [dot(v, v), dot(v, w), dot(w, w)];
           step.status = 'measured';
-          step.gram = [[a, b], [b, d]];
-          const angle = Math.atan2(2 * b, a - d) / 2;
-          const major = (a + d + Math.hypot(a - d, 2 * b)) / 2;
-          const minor = major > 0 ? (a * d - b * b) / major : 0;
-          const axis = [Math.cos(angle), Math.sin(angle)];
-          step.eigenvalues = [minor, major];
-          step.eigenvectors_intrinsic = [[-axis[1], axis[0]], axis];
+          const spectrum = sensitivitySpectrum([v, w]);
+          Object.assign(step, spectrum);
+          const [minor, major] = spectrum.eigenvalues;
+          const [, axis] = spectrum.eigenvectors_intrinsic;
           step.condition_gram_raw = minor > 0 ? major / minor : null;
           step.condition_jacobian_raw = minor > 0 ? Math.sqrt(major / minor) : null;
           step.quantization_operator_budget = Math.SQRT2 / (510 * step.h);
@@ -327,6 +338,7 @@ try {
     return { renderer: rendererInfo, repeatable_baseline: true, states, attachment_motion: attachmentMotion };
   }, { states: centerRows, resolution, presentation, attachmentPaths });
   const provenance = {
+    panel: heldOut ? 'held-out' : 'initial',
     chromium: browser.version(),
     shader: { path: shaderPath, sha256: createHash('sha256').update(fragment).digest('hex'),
       bailout_squared: 1e10, supersampling: false },
@@ -339,7 +351,7 @@ try {
     geometry: { ...geometry, points: undefined },
   };
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, JSON.stringify({ provenance, ...result }, null, 2) + '\n');
+  await writeFile(output, JSON.stringify({ provenance, calibration, ...result }, null, 2) + '\n');
   for (const state of result.states) {
     if (!state.metrics.length) console.log(`${state.name}: excluded ${state.geometry.jet?.validity ?? state.geometry.error}`);
     for (const metric of state.metrics) {
