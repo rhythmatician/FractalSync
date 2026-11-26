@@ -70,6 +70,10 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #185 | [Exact trap contours](185-exact-trap-contours.md) | Lean checks the exact lift, its tangent derivative, and its conformal speed. The lifted contour benchmarks Euler drift and distinguishes one-turn and two-turn closure. |
 | #182, #184 | [Exterior ruler bounds](184-exterior-ruler-bounds.md) | Post-escape bounds enclose the ruler from the Green function and its gradient. The ruler grows as $\lvert c\rvert\log\lvert c\rvert$ far offshore. |
 | #185 | [Trap-saddle curvature](185-trap-saddle-curvature.md) | The exact contour has unbounded signed curvature as the level approaches the saddle. The turning layer shrinks while its net turn tends to a quarter turn in either direction. |
+| #182, #184 | [Quartic floor across the Shore](184-shore-floor-gluing.md) | Uniform local bounds give a positive $C^3$ metric across the finite Shore. The cardioid cusp precludes a $C^4$ extension. |
+| #183, #184 | [Exterior ruler derivatives](184-exterior-ruler-jets.md) | Lean checks a common escape disk and Cauchy bounds for derivatives of its complex tail. Interval examples show how to choose an iteration count for a requested jet width. |
+| #185 | [Trap steering budget](185-trap-steering-budget.md) | A squared-speed profile gives an acceleration-bounded restart and stop. At the saddle, a phase schedule can continue through an orthogonal handoff with zero crossing speed. |
+| #183, #185 | [Steering demand under three metrics](185-matched-metric-steering.md) | The same near-saddle arcs have different acceleration demand under the signed-distance graph, signed-distance conformal and analytic cardioid metrics. |
 
 ## Originality verdict
 

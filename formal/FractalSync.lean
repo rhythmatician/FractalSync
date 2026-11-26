@@ -141,5 +141,9 @@ import FractalSync.PeriodTwoAttachment
 import FractalSync.OrbitTrapContours
 import FractalSync.ExteriorRulerBounds
 import FractalSync.OrbitTrapCurvature
+import FractalSync.ExteriorRulerJets
+import FractalSync.ShoreFloorGluing
+import FractalSync.TrapSteeringBudget
+import FractalSync.TrapMetricComparison
 
 /-! Development-time mathematical research for FractalSync. -/

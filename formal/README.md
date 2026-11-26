@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,697 explicit proved theorem/lemma declarations** across 142 result modules
+**1,726 explicit proved theorem/lemma declarations** across 146 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -234,9 +234,13 @@ by the separate transitive audit.
 | `OrbitTrapContours` | 15 | Anchored square-root lift, exact trap level preservation, branch guard, tangent derivative and conformal speed |
 | `ExteriorRulerBounds` | 10 | Escape growth, weighted potential and derivative increments, finite tail envelope, and ratio bounds |
 | `OrbitTrapCurvature` | 4 | Second derivative of the anchored lift and normalized imaginary component for the heading rate |
-| **Result-module subtotal** | **1,642** | Includes supporting lemmas |
+| `ExteriorRulerJets` | 11 | Common escape disk, uniform holomorphic tail, and Cauchy bounds for its center derivatives |
+| `ShoreFloorGluing` | 6 | Zero derivatives and $C^3$ gluing from uniform distance-power bounds |
+| `TrapSteeringBudget` | 9 | Squared-speed acceleration components, braking bounds, and stop-to-stop schedule |
+| `TrapMetricComparison` | 3 | Planar Gram identity and metric-normal acceleration at unit speed |
+| **Result-module subtotal** | **1,671** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,697** | Explicit theorem and lemma declarations |
+| **Total** | **1,726** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1485,7 +1489,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,785 declarations, including the 1,697 stated theorem/lemma declarations,
+The current audit covers 3,844 declarations, including the 1,726 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
@@ -1493,10 +1497,10 @@ an implementation's correspondence to their definitions.
 
 ## Independent numerical checks
 
-The four scripts under `checks/` are standalone mathematical experiments.
-They are not imported by runtime, training, or bindings. Three need only the
-Python standard library; `check_sensitivity_models.py` additionally uses NumPy
-and SciPy. The optional versions used here are pinned in `checks/requirements.txt`.
+The six scripts under `checks/` are standalone mathematical experiments.
+Three use the Python standard library. The sensitivity and exterior-jet
+checks use the optional libraries pinned in `checks/requirements.txt`.
+The steering comparison calls the project's compiled Rust bindings.
 
 Use the project Python environment from the repository root:
 
@@ -1506,8 +1510,11 @@ python formal/checks/check_distance_geometry.py
 python formal/checks/check_sensitivity_models.py
 python formal/checks/check_normalized_distance_fields.py
 python formal/checks/check_covariant_statistics.py
+python formal/checks/check_exterior_ruler_jets.py
+python formal/checks/check_trap_steering_budget.py
 ```
 
 Activate the repository's environment or replace `python` with its explicit
-interpreter path. Numerical results and the observed verification scope are
-recorded in [verification.md](../docs/research/verification.md).
+interpreter path. See the [verification record](../docs/research/verification.md),
+the [exterior jet intervals](../docs/research/184-exterior-ruler-jets.md#interval-experiment),
+and the [steering comparison](../docs/research/185-matched-metric-steering.md).
