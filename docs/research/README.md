@@ -62,6 +62,8 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #181, #167 | [Roundoff on a retained operational-field patch](181-operational-patch.md) | A rational error calculation bounds value, gradient, and Hessian error relative to the stored spline on one patch. A native Rust probe checks samples against those bounds. |
 | #182, #184 | [Main-cardioid ruler](184-main-cardioid-ruler.md) | The reciprocal hyperbolic density matches true Shore distance to leading order along smooth boundary approaches. The ratio at the cusp depends on the approach. The note compares the candidate and existing rulers on the same paths. |
 | #185 | [Fixed point-trap steering](185-orbit-trap-steering.md) | Lean checks the regular tangent and identifies the three critical points for the second critical iterate. A numerical comparison measures contour drift and near-critical angular sensitivity. |
+| #184 | [Conformal floor curvature](184-conformal-floor-curvature.md) | A positive floor raises conformal curvature. The main-cardioid cusp has path-dependent curvature limits, which rule out a positive $C^2$ metric extension there. |
+| #185 | [Steering confidence](185-steering-confidence.md) | Lean checks a sharp angle gate for gradients with bounded error. The fixed-trap note derives sample position and binary64 evaluation budgets. |
 
 ## Originality verdict
 
