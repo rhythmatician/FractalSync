@@ -26,6 +26,7 @@ import {
   riderSurfaceHeight,
   sampleTerrainPatch,
   type CockpitTrajectory,
+  type DebugSnapshot,
 } from '../lib/debugCockpit';
 import {
   ManualDriver,
@@ -61,6 +62,29 @@ import {
   transformTrailToHyperbolic,
   transformRiderToHyperbolic,
 } from '../lib/hyperbolicCamera';
+
+export function EnergyLedgerPanel({ frame }: { frame: DebugSnapshot }) {
+  return (
+  <Panel title="WORK / ENERGY LEDGER">
+    {frame.energyLedger ? <>
+      <Row label="step validity" value={frame.energyLedger.valid ? 'valid endpoints' : 'INVALID'} kind="DIAG" />
+      <Row label="drive work" value={frame.energyLedger.controlWork} kind="DIAG" />
+      <Row label="friction work" value={frame.energyLedger.frictionWork} kind="DIAG" />
+      <Row label="impulse work" value={frame.energyLedger.impulseWork} kind="DIAG" />
+      <Row label="step residual" value={frame.energyLedger.residual} kind="DIAG" />
+      <Row label="provider" value={`${frame.energyLedger.endGeometry.provider_version} / ${frame.energyLedger.endGeometry.validity}`} kind="DIAG" />
+    </> : <Row label="step ledger" value="unavailable" kind="DIAG" />}
+    {frame.accumulatedEnergyLedger && <>
+      <Row label="run validity" value={frame.accumulatedEnergyLedger.valid ? 'valid' : 'INVALID'} kind="DIAG" />
+      <Row label="run steps" value={frame.accumulatedEnergyLedger.steps} kind="DIAG" />
+      <Row label="run drive work" value={frame.accumulatedEnergyLedger.controlWork} kind="DIAG" />
+      <Row label="run friction work" value={frame.accumulatedEnergyLedger.frictionWork} kind="DIAG" />
+      <Row label="run impulse work" value={frame.accumulatedEnergyLedger.impulseWork} kind="DIAG" />
+      <Row label="run residual" value={frame.accumulatedEnergyLedger.residual} kind="DIAG" />
+    </>}
+  </Panel>
+  );
+}
 
 type Badge = 'STATE' | 'ACTION' | 'DIAG';
 
@@ -662,7 +686,8 @@ export function DebugCockpit(): JSX.Element {
           </Panel>
         )}
 
-        {!playerView && diag && (
+        {!playerView && frame && <EnergyLedgerPanel frame={frame} />}
+{!playerView && diag && (
           <Panel title="DIAGNOSTICS">
             <Row label="step clock (s)" value={frame?.timeSeconds} kind="STATE" digits={4} />
             <Row label="fd step" value={diag.derivativeStep} kind="DIAG" digits={9} />
