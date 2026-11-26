@@ -1,0 +1,34 @@
+name: Lean research proofs
+
+on:
+  pull_request:
+    paths:
+      - 'formal/**'
+      - '.github/workflows/lean-proofs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'formal/**'
+      - '.github/workflows/lean-proofs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned Lean package
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1
+        with:
+          lake-package-directory: formal
+          auto-config: 'false'
+          build: 'true'
+          build-args: '--wfail'
+          use-mathlib-cache: 'true'
+      - name: Audit transitive axioms
+        working-directory: formal
+        run: lake env lean Audit.lean

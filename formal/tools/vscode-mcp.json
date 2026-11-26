@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "lean-lsp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oOo0oOo/lean-lsp-mcp.git@7932203d79db213852db215835bd79c943bb99b0",
+        "lean-lsp-mcp"
+      ],
+      "env": {
+        "LEAN_PROJECT_PATH": "${workspaceFolder}/formal",
+        "LEAN_LOG_LEVEL": "NONE"
+      }
+    }
+  }
+}
