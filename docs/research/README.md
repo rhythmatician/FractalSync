@@ -87,6 +87,7 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #185 | [Trap steering budget](185-trap-steering-budget.md) | A squared-speed profile gives an acceleration-bounded restart and stop. At the saddle, a phase schedule can continue through an orthogonal handoff with zero crossing speed. |
 | #183, #185 | [Steering demand under three metrics](185-matched-metric-steering.md) | The same near-saddle arcs have different acceleration demand under the signed-distance graph, signed-distance conformal and analytic cardioid metrics. |
 | #184 | [Conformal proof contracts and dependency audit](184-conformal-contract-acceptance.md) | Lean checks the inland length, kinetic, and scale bounds, exact planar conformal curvature, and the ideal normal Jacobi equation. The audit identifies the classical inputs and numerical provider obligations. |
+| #185 | [Interior navigation comparison](185-navigation-field-comparison.md), [exterior directions](185-exterior-navigation.md), [trap selection](185-trap-selection-validity.md) | Matched-speed paths compare natural coordinates, Map gradients, and a fixed trap. Lean checks exterior rate bounds and a finite error margin for the selected trap. |
 
 ## Originality verdict
 
