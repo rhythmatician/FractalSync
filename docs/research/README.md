@@ -88,6 +88,9 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #183, #185 | [Steering demand under three metrics](185-matched-metric-steering.md) | The same near-saddle arcs have different acceleration demand under the signed-distance graph, signed-distance conformal and analytic cardioid metrics. |
 | #184 | [Conformal proof contracts and dependency audit](184-conformal-contract-acceptance.md) | Lean checks the inland length, kinetic, and scale bounds, exact planar conformal curvature, and the ideal normal Jacobi equation. The audit identifies the classical inputs and numerical provider obligations. |
 | #185 | [Interior navigation comparison](185-navigation-field-comparison.md), [exterior directions](185-exterior-navigation.md), [trap selection](185-trap-selection-validity.md) | Matched-speed paths compare natural coordinates, Map gradients, and a fixed trap. Lean checks exterior rate bounds and a finite error margin for the selected trap. |
+| #168 | [Stable radial profile](168-stable-radial-profile.md) | Lean checks a positive-sum formula for intrinsic distance to the Shore. A log-scaled binary64 probe checks finite and overflow cases against high precision. |
+| #169 | [Shore-crossing work cap](169-crossing-work-cap.md) | Lean checks path-length and speed-time work caps and the corresponding necessary energy conditions for a crossing. |
+| #174 | [Intrinsic target bounds](174-intrinsic-target-bounds.md) | Lean checks exact target-set infima, consistent lower bounds, and tolerance and search-radius rules for navigation. |
 
 ## Originality verdict
 

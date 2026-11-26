@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,777 explicit proved theorem/lemma declarations** across 152 result modules
+**1,813 explicit proved theorem/lemma declarations** across 155 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -239,9 +239,12 @@ by the separate transitive audit.
 | `ConformalRulerContracts` | 22 | Density and inland comparisons, conformal specialization, planar curvature and ideal normal Jacobi first zeros |
 | `ExteriorNavigation` | 5 | Exterior ray and equipotential rates, speed, and error under an approximate logarithmic derivative |
 | `OrbitTrapSelection` | 9 | Sharp finite selection margins, local regularity of a winning branch, ties, and critical return periods |
-| **Result-module subtotal** | **1,722** | Includes supporting lemmas |
+| `IntrinsicTargetBounds` | 18 | Target-set infima, consistent lower bounds, tolerance adjustment, and search radius |
+| `ShoreCrossingWorkBound` | 8 | Force and path-length work caps, crest energy deficits, and impulse-adjusted travel |
+| `StableRadialProfile` | 10 | Exact positive-sum radial formula, zero cases, and scaled second argument |
+| **Result-module subtotal** | **1,758** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,777** | Explicit theorem and lemma declarations |
+| **Total** | **1,813** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1490,7 +1493,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,953 declarations, including the 1,777 stated theorem/lemma declarations,
+The current audit covers 3,996 declarations, including the 1,813 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
