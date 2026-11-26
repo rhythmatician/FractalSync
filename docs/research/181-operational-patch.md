@@ -1,4 +1,4 @@
-# Binary64 error on one retained operational-field cell
+# Binary64 error on retained operational-field patches
 
 This certificate covers the immutable experimental field `9721bb7647a0b8e6`
 used in the retained fine replay. It bounds the compiled evaluator's value,
@@ -102,3 +102,25 @@ the archived reference-refusal policy. It checks the scalar sent through
 cut point `(-1, 0)`. The sample results establish compiled correspondence at
 the chosen points. The uniform bound comes from the regional arithmetic
 argument and its assumptions.
+
+## Four cells around a grid vertex
+
+On the same asset, let \(v=o+h(2604,1504)\) use the exact real values of the decoded origin \(o\) and spacing \(h\). The new patch has radius \(r=h/4\) in the maximum norm. It sits near \((0.3,0.05)\) and includes portions of four closed cells. Inputs \(p\) again denote the exact real values of binary64 coordinates handed to the provider. The exact grid coordinate \(q=(p-o)/h\) lies between \(i-1/4\) and \(i+1/4\) on an axis with vertex index \(i\).
+
+For the machine coordinate \(\widehat q\), the checker applies the same separately rounded subtraction and division bounds used for one cell. The bounds on \(|\widehat q-q|\) are \(5.783\times10^{-13}\) and \(3.341\times10^{-13}\) on the two axes. Each is below \(3/4\), so the exact and machine floors each lie in \(\{i-1,i\}\). Each selected index has a complete six-node stencil per axis. The union is the 49 stored coefficients in columns \(2601\ldots2607\) and rows \(1501\ldots1507\), with maximum magnitude \(B<0.019353609\) and no availability mask. The two floors can differ. All four candidates have safe integer conversion and \(\lfloor\widehat q\rfloor+1\le2\lfloor\widehat q\rfloor\) in each dimension. Sterbenz's lemma therefore gives exact local subtraction \(t=\widehat q-\lfloor\widehat q\rfloor\) with \(0\le t<1\).
+
+Define the shifted physical point \(p'=o+h\widehat q\) in exact arithmetic. This is an analysis point and need not be binary64. The evaluator's local arguments select the exact spline at \(p'\). Bounding Horner and accumulation against that spline with exact \(t\) separates arithmetic roundoff from position error. The checker runs the existing jet arithmetic bounds once for each candidate stencil with \(|t|\le1\) and zero argument error. It takes the componentwise maximum across those four bounds.
+
+The position shift satisfies \(\|p'-p\|_\infty<2.892\times10^{-16}\). Extend just the 49 coefficients by zero to the full lattice. Each endpoint has its full stencil in that union, so its exact jet agrees with the zero-extended spline. The [global spline query gains](162-operational-reference-fidelity.md#4-explicit-global-hessian-query-stability) for value, differential, and Hessian are \(8B/(3h)\), \(68B/(9h^2)\), and \(32B/h^3\). They bound the shift even across the join. The differential and Hessian shift bounds also dominate the maximum gradient entry and maximum absolute Hessian row sum used in this allocation. The extension is a proof device for the stated patch.
+
+| Quantity | Roundoff at \(p'\), rounded up | Shift \(p'\) to \(p\), rounded up | Combined, rounded up |
+| --- | ---: | ---: | ---: |
+| Value | \(1.305\times10^{-15}\) | \(2.985\times10^{-14}\) | \(3.115\times10^{-14}\) |
+| Gradient, maximum entry | \(5.380\times10^{-12}\) | \(1.692\times10^{-10}\) | \(1.745\times10^{-10}\) |
+| Hessian, maximum absolute row sum | \(4.621\times10^{-8}\) | \(1.433\times10^{-6}\) | \(1.479\times10^{-6}\) |
+
+Using \(r=h/4\) as the scale, the normalized anchored value, gradient, and scaled Hessian allocations are below \(4.996\times10^{-10}\), \(1.745\times10^{-10}\), and \(1.849\times10^{-10}\). The normalized value includes subtraction and division with a binary64 anchor in the patch. All three fit below the same illustrative \(10^{-8}\) allocation as the single-cell check.
+
+The same command also sends 225 vertex-patch inputs to the compiled probe. These are the Cartesian product of 15 coordinates per axis: each rounded patch edge moved inward if needed, the nearest binary64 to the vertex, and its 1, 2, 4, 8, 16, and 32 step nextafter neighbors in both directions. The checker reproduces the source's binary64 normalization to derive \(p'\), then compares compiled jets against separately floored, exact monomial oracles for \(p'\) and \(p\). Both sets of floors visit all four cells. In 82 samples a machine floor differs from the exact floor, and in 40 the machine coordinate lands on the grid vertex. The largest observed value error was \(1.42\times10^{-16}\), the largest gradient entry error was \(6.56\times10^{-15}\), and the largest Hessian entry error was \(2.15\times10^{-11}\).
+
+This adds a cross-cell arithmetic certificate for one checksum-locked operational patch. It relies on the same binary64 and compiler assumptions as the original check. True-Shore fidelity, coordinate generation before the provider, and the rest of the asset remain outside this result. [#181](https://github.com/rhythmatician/FractalSync/issues/181).

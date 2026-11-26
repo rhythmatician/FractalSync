@@ -1,4 +1,4 @@
-"""Check the retained operational asset's single-cell arithmetic certificate."""
+"""Check the retained operational asset's single-cell and four-cell arithmetic certificates."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from fractions import Fraction as Q
 from hashlib import sha256
 import json
+from math import floor, inf, nextafter
 from pathlib import Path
 import struct
 import subprocess
@@ -23,6 +24,7 @@ CELL = (2604, 1504)
 CENTER = (Q(9839, 32768), Q(1647, 32768))
 SCALE = Q(1, 16384)
 U = Q(1, 2**53)
+NORMALIZED_TOLERANCE = Q(1, 10**8)
 TINY = Q(1, 2**80)  # Conservative replacement for the subnormal allowance 2^-1075.
 FINITE_LIMIT = 2**1023
 POLYNOMIALS = (
@@ -70,11 +72,15 @@ class Bound:
 def cell_coordinates(origin: Q, spacing: Q, center: Q, cell: int) -> Bound:
     q_lo = (center - SCALE - origin) / spacing
     q_hi = (center + SCALE - origin) / spacing
-    rounded_q = Bound.rounded(q_hi * spacing, Q(0)).div(Bound.exact(spacing), spacing)
+    rounded_q = grid_coordinate_bound(q_hi, spacing)
     assert 2 <= cell and cell < q_lo - rounded_q.error
     assert q_hi + rounded_q.error < cell + 1
     assert cell + 1 <= 2 * cell  # Sterbenz: subtracting the exact cell index is exact.
     return Bound(q_hi - cell, rounded_q.error)
+
+
+def grid_coordinate_bound(upper: Q, spacing: Q) -> Bound:
+    return Bound.rounded(upper * spacing, Q(0)).div(Bound.exact(spacing), spacing)
 
 
 def basis_bound(t: Bound, polynomial: tuple[int, ...]) -> tuple[Bound, Bound, Bound]:
@@ -107,9 +113,16 @@ def jet_bounds(coordinates: tuple[Bound, Bound], spacing: Q, coefficients: list[
     return bounds
 
 
-def exact_jet(point: tuple[Q, Q], origin: tuple[Q, Q], spacing: Q, coefficients: list[Q]) -> list[Q]:
+def exact_jet(
+    point: tuple[Q, Q],
+    origin: tuple[Q, Q],
+    spacing: Q,
+    cell: tuple[int, int],
+    coefficients: list[Q],
+) -> list[Q]:
     """Independent rational oracle using differentiated monomials."""
-    tx, ty = ((p - o) / spacing - i for p, o, i in zip(point, origin, CELL, strict=True))
+    tx, ty = ((p - o) / spacing - i for p, o, i in zip(point, origin, cell, strict=True))
+    assert 0 <= tx < 1 and 0 <= ty < 1
 
     def weight(t: Q, i: int, derivative: int) -> Q:
         total = Q(0)
@@ -125,6 +138,167 @@ def exact_jet(point: tuple[Q, Q], origin: tuple[Q, Q], spacing: Q, coefficients:
         / spacing ** (a + b)
         for a, b in DERIVATIVES
     ]
+
+
+def coefficient_at(asset: bytes, width: int, x: int, y: int) -> Q:
+    return Q(struct.unpack_from("<d", asset, 56 + 8 * (y * width + x))[0])
+
+
+def vertex_axis_samples(vertex: Q, radius: Q) -> list[Q]:
+    # Move rounded patch endpoints inward if needed. Sample the nearest
+    # representable vertex and increasingly wide nextafter neighborhoods.
+    lo, hi = float(vertex - radius), float(vertex + radius)
+    if Q(lo) < vertex - radius:
+        lo = nextafter(lo, inf)
+    if Q(hi) > vertex + radius:
+        hi = nextafter(hi, -inf)
+    middle = float(vertex)
+    samples = [Q(lo), Q(middle), Q(hi)]
+    for direction in (-inf, inf):
+        value = middle
+        for step in range(1, 33):
+            value = nextafter(value, direction)
+            if step in (1, 2, 4, 8, 16, 32):
+                samples.append(Q(value))
+    assert all(abs(p - vertex) <= radius for p in samples)
+    return sorted(set(samples))
+
+
+@dataclass(frozen=True)
+class VertexPatch:
+    origin: tuple[Q, Q]
+    spacing: Q
+    radius: Q
+    points: list[tuple[Q, Q]]
+    cell_coefficients: dict[tuple[int, int], list[Q]]
+    coordinate_errors: tuple[Q, Q]
+    maximum_coefficient: Q
+    roundoff: list[Bound]
+    shift_errors: tuple[Q, Q, Q]
+
+    def check_samples(self, results: list[list[Q]]) -> tuple[list[Q], int, int]:
+        maxima = [Q(0) for _ in DERIVATIVES]
+        changes = 0
+        vertex_hits = 0
+        exact_cells: set[tuple[int, int]] = set()
+        represented_cells: set[tuple[int, int]] = set()
+        for point, compiled in zip(self.points, results, strict=True):
+            x, y = point
+            ox, oy = self.origin
+            spacing = self.spacing
+            exact_q = ((x - ox) / spacing, (y - oy) / spacing)
+            machine_q = (
+                Q((float(x) - float(ox)) / float(spacing)),
+                Q((float(y) - float(oy)) / float(spacing)),
+            )
+            for exact, machine, error in zip(
+                exact_q, machine_q, self.coordinate_errors, strict=True
+            ):
+                assert abs(exact - machine) <= error
+            exact_cell = (floor(exact_q[0]), floor(exact_q[1]))
+            represented_cell = (floor(machine_q[0]), floor(machine_q[1]))
+            exact_cells.add(exact_cell)
+            represented_cells.add(represented_cell)
+            changes += exact_cell != represented_cell
+            vertex_hits += machine_q == CELL
+            exact = exact_jet(
+                point, self.origin, spacing, exact_cell, self.cell_coefficients[exact_cell]
+            )
+            shifted = (ox + spacing * machine_q[0], oy + spacing * machine_q[1])
+            shifted_exact = exact_jet(
+                shifted, self.origin, spacing, represented_cell,
+                self.cell_coefficients[represented_cell],
+            )
+            comparison = zip(DERIVATIVES, compiled, exact, shifted_exact, self.roundoff, strict=True)
+            for i, ((a, b), actual, expected, shifted_expected, bound) in enumerate(comparison):
+                shift = self.shift_errors[a + b]
+                assert abs(actual - shifted_expected) <= bound.error, (point, i, "roundoff")
+                assert abs(shifted_expected - expected) <= shift, (point, i, "coordinate shift")
+                error = abs(actual - expected)
+                assert error <= bound.error + shift
+                maxima[i] = max(maxima[i], error)
+        assert exact_cells == represented_cells == self.cell_coefficients.keys()
+        assert changes > 0 and vertex_hits > 0
+        return maxima, changes, vertex_hits
+
+    def report(self, results: list[list[Q]]) -> None:
+        maxima, changes, vertex_hits = self.check_samples(results)
+        roundoff = self.roundoff
+        total_error = (
+            roundoff[0].error + self.shift_errors[0],
+            max(roundoff[1].error, roundoff[2].error) + self.shift_errors[1],
+            max(roundoff[3].error + roundoff[4].error, roundoff[4].error + roundoff[5].error)
+            + self.shift_errors[2],
+        )
+        # Both anchor and evaluation are binary64 points in the patch.
+        value = Bound(roundoff[0].magnitude + self.shift_errors[0], total_error[0])
+        normalized_value = value.add(value).div(Bound.exact(self.radius), self.radius).error
+        allocations = (normalized_value, total_error[1], self.radius * total_error[2])
+        assert max(allocations) < NORMALIZED_TOLERANCE
+        print("Vertex union coefficient maximum:", f"{float(self.maximum_coefficient):.9e}")
+        print("Vertex normalized-coordinate error:", *(f"{float(e):.9e}" for e in self.coordinate_errors))
+        print("Vertex physical-coordinate error (max norm):", f"{float(self.spacing * max(self.coordinate_errors)):.9e}")
+        print("Vertex component roundoff at shifted point:", *(f"{float(b.error):.9e}" for b in roundoff))
+        print("Vertex shift errors (value, gradient, Hessian):", *(f"{float(e):.9e}" for e in self.shift_errors))
+        print("Vertex total errors (value, max gradient entry, max Hessian row sum):", *(f"{float(e):.9e}" for e in total_error))
+        print("Vertex normalized value, gradient and scaled Hessian errors:", *(f"{float(e):.9e}" for e in allocations))
+        print(f"{len(maxima)} jet components, {len(self.points)} vertex queries, "
+              f"{changes} exact/machine floor differences, {vertex_hits} machine vertex hits")
+        print("Vertex observed component errors:", *(f"{float(e):.9e}" for e in maxima))
+
+
+def make_vertex_patch(
+    asset: bytes, shape: tuple[int, int], origin: tuple[Q, Q], spacing: Q
+) -> VertexPatch:
+    cx, cy = CELL
+    nx, ny = shape
+    radius = spacing / 4
+    vertex = (origin[0] + spacing * cx, origin[1] + spacing * cy)
+    candidates = [(x, y) for y in (cy - 1, cy) for x in (cx - 1, cx)]
+    dx = grid_coordinate_bound(cx + Q(1, 4), spacing).error
+    dy = grid_coordinate_bound(cy + Q(1, 4), spacing).error
+    for index, size, error in ((cx, nx, dx), (cy, ny, dy)):
+        # The exact box and its rounded image floor into the same two
+        # candidate cells. Each candidate has its entire six-node halo.
+        assert 0 <= error < Q(3, 4)
+        assert 2 <= index - 1 and index < size - 3
+        assert 2 * index < 2**53
+        for cell in (index - 1, index):
+            assert cell + 1 <= 2 * cell  # Sterbenz for the local subtraction.
+    union = {
+        (x, y): coefficient_at(asset, nx, x, y)
+        for y in range(cy - 3, cy + 4)
+        for x in range(cx - 3, cx + 4)
+    }
+    assert len(union) == 49
+    maximum = max(map(abs, union.values()))
+    coefficients = {
+        (x, y): [
+            union[(i, j)]
+            for j in range(y - 2, y + 4)
+            for i in range(x - 2, x + 4)
+        ]
+        for x, y in candidates
+    }
+    cell_bounds = [
+        jet_bounds((Bound.exact(1), Bound.exact(1)), spacing, stencil)
+        for stencil in coefficients.values()
+    ]
+    roundoff = [
+        Bound(max(b.magnitude for b in component), max(b.error for b in component))
+        for component in zip(*cell_bounds, strict=True)
+    ]
+    displacement = spacing * max(dx, dy)
+    shift_errors = (
+        8 * maximum / (3 * spacing) * displacement,
+        68 * maximum / (9 * spacing**2) * displacement,
+        32 * maximum / spacing**3 * displacement,
+    )
+    xs, ys = (vertex_axis_samples(center, radius) for center in vertex)
+    return VertexPatch(
+        origin, spacing, radius, [(x, y) for y in ys for x in xs],
+        coefficients, (dx, dy), maximum, roundoff, shift_errors,
+    )
 
 
 RUST_PROBE = r"""
@@ -213,7 +387,7 @@ def main() -> None:
     origin, spacing = (Q(ox), Q(oy)), Q(h)
     assert spacing > 0
     coefficients = [
-        Q(struct.unpack_from("<d", asset, 56 + 8 * (y * nx + x))[0])
+        coefficient_at(asset, nx, x, y)
         for y in range(CELL[1] - 2, CELL[1] + 4)
         for x in range(CELL[0] - 2, CELL[0] + 4)
     ]
@@ -228,13 +402,15 @@ def main() -> None:
     normalized_error = value.add(value).div(Bound.exact(SCALE), SCALE).error
     gradient_error = max(bounds[1].error, bounds[2].error)
     hessian_error = max(bounds[3].error + bounds[4].error, bounds[4].error + bounds[5].error)
-    tolerance = Q(1, 10**8)
-    assert max(normalized_error, gradient_error, SCALE * hessian_error) < tolerance
+    assert max(normalized_error, gradient_error, SCALE * hessian_error) < NORMALIZED_TOLERANCE
 
     points = [(CENTER[0] + i * SCALE / 4, CENTER[1] + j * SCALE / 4) for j in range(-4, 5) for i in range(-4, 5)]
     maxima = [Q(0) for _ in DERIVATIVES]
-    for point, compiled in zip(points, compiled_queries(asset_path, points, args.offline), strict=True):
-        for component, (actual, exact, bound) in enumerate(zip(compiled, exact_jet(point, origin, spacing, coefficients), bounds, strict=True)):
+    vertex_patch = make_vertex_patch(asset, (nx, ny), origin, spacing)
+    results = compiled_queries(asset_path, points + vertex_patch.points, args.offline)
+    for point, compiled in zip(points, results[:len(points)], strict=True):
+        expected = exact_jet(point, origin, spacing, CELL, coefficients)
+        for component, (actual, exact, bound) in enumerate(zip(compiled, expected, bounds, strict=True)):
             error = abs(actual - exact)
             assert error <= bound.error, (point, component, error, bound.error)
             maxima[component] = max(maxima[component], error)
@@ -242,6 +418,7 @@ def main() -> None:
     print("Regional component errors (value, dx, dy, dxx, dxy, dyy):", *(f"{float(b.error):.9e}" for b in bounds))
     print("Regional normalized value, gradient and scaled Hessian errors:", *(f"{float(e):.9e}" for e in (normalized_error, gradient_error, SCALE * hessian_error)))
     print(f"{len(points)} release-mode Rust queries, observed component errors:", *(f"{float(e):.9e}" for e in maxima))
+    vertex_patch.report(results[len(points):])
 
 
 if __name__ == "__main__":
