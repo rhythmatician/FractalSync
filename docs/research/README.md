@@ -68,6 +68,8 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #185 | [Finite-step trap drift](185-finite-step-trap-drift.md) | Lean checks per-step and cumulative drift bounds. The bound separates the effect of gradient error from the quadratic displacement remainder. |
 | #184 | [Period-two bulb and attachment](184-period-two-attachment.md) | The exact bulb ruler and a local two-component quartic metric give a smooth crossing fixture. Offset paths expose a quadratic gap between the boundary arcs. |
 | #185 | [Exact trap contours](185-exact-trap-contours.md) | Lean checks the exact lift, its tangent derivative, and its conformal speed. The lifted contour benchmarks Euler drift and distinguishes one-turn and two-turn closure. |
+| #182, #184 | [Exterior ruler bounds](184-exterior-ruler-bounds.md) | Post-escape bounds enclose the ruler from the Green function and its gradient. The ruler grows as $\lvert c\rvert\log\lvert c\rvert$ far offshore. |
+| #185 | [Trap-saddle curvature](185-trap-saddle-curvature.md) | The exact contour has unbounded signed curvature as the level approaches the saddle. The turning layer shrinks while its net turn tends to a quarter turn in either direction. |
 
 ## Originality verdict
 

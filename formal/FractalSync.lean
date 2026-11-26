@@ -139,5 +139,7 @@ import FractalSync.QuarticRulerFloor
 import FractalSync.OrbitTrapDrift
 import FractalSync.PeriodTwoAttachment
 import FractalSync.OrbitTrapContours
+import FractalSync.ExteriorRulerBounds
+import FractalSync.OrbitTrapCurvature
 
 /-! Development-time mathematical research for FractalSync. -/

@@ -74,7 +74,7 @@ theorem slitPlane_of_step_guard (c θ : ℂ)
   rw [norm_div, norm_pow]
   exact (div_lt_iff₀ (lt_of_le_of_lt (norm_nonneg _) h)).2 (by simpa using h)
 
-private theorem slope_lift_ne_zero (c θ : ℂ) (hA : slope c ≠ 0)
+theorem slope_lift_ne_zero (c θ : ℂ) (hA : slope c ≠ 0)
     (hbranch : relativeDiscriminant c θ ∈ Complex.slitPlane) :
     slope (lift c θ) ≠ 0 := by
   rw [slope_lift]

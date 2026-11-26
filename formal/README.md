@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,683 explicit proved theorem/lemma declarations** across 140 result modules
+**1,697 explicit proved theorem/lemma declarations** across 142 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -232,9 +232,11 @@ by the separate transitive audit.
 | `OrbitTrapDrift` | 11 | Exact trap increment, endpoint remainder, gradient-error contribution, and accumulated drift |
 | `PeriodTwoAttachment` | 13 | Period-two multiplier and circle distance, bulb ruler, and conditional quartic $C^2$ metric gluing |
 | `OrbitTrapContours` | 15 | Anchored square-root lift, exact trap level preservation, branch guard, tangent derivative and conformal speed |
-| **Result-module subtotal** | **1,628** | Includes supporting lemmas |
+| `ExteriorRulerBounds` | 10 | Escape growth, weighted potential and derivative increments, finite tail envelope, and ratio bounds |
+| `OrbitTrapCurvature` | 4 | Second derivative of the anchored lift and normalized imaginary component for the heading rate |
+| **Result-module subtotal** | **1,642** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,683** | Explicit theorem and lemma declarations |
+| **Total** | **1,697** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1483,7 +1485,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,741 declarations, including the 1,683 stated theorem/lemma declarations,
+The current audit covers 3,785 declarations, including the 1,697 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
