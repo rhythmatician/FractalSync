@@ -86,6 +86,7 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #183, #184 | [Exterior ruler derivatives](184-exterior-ruler-jets.md) | Lean checks a common escape disk and Cauchy bounds for derivatives of its complex tail. Interval examples show how to choose an iteration count for a requested jet width. |
 | #185 | [Trap steering budget](185-trap-steering-budget.md) | A squared-speed profile gives an acceleration-bounded restart and stop. At the saddle, a phase schedule can continue through an orthogonal handoff with zero crossing speed. |
 | #183, #185 | [Steering demand under three metrics](185-matched-metric-steering.md) | The same near-saddle arcs have different acceleration demand under the signed-distance graph, signed-distance conformal and analytic cardioid metrics. |
+| #184 | [Conformal proof contracts and dependency audit](184-conformal-contract-acceptance.md) | Lean checks the inland length, kinetic, and scale bounds, exact planar conformal curvature, and the ideal normal Jacobi equation. The audit identifies the classical inputs and numerical provider obligations. |
 
 ## Originality verdict
 
