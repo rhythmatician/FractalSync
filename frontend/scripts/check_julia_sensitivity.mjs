@@ -12,18 +12,28 @@ import { calibrateJuliaSensitivity } from './julia_sensitivity_calibration.mjs';
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
 const heldOut = process.argv[2] === '--held-out';
-const output = resolve((heldOut ? process.argv[3] : process.argv[2])
-  ?? resolve(root, heldOut ? 'tmp/julia-151/held-out.json' : 'tmp/julia-151/results.json'));
-const attachment = !heldOut && process.argv[3] ? await readFile(resolve(process.argv[3])) : null;
-const attachmentPaths = attachment ? JSON.parse(attachment).profiles.map(profile => {
-  const samples = profile.fine.samples;
-  return {
-    profile: profile.profile,
-    crossing_time: profile.fine.crossing.time,
-    frames: samples.filter((_, i) => i % 8 === 0 || i === samples.length - 1)
-      .map(({ mechanical_time: t, position: c }) => ({ t, c })),
-  };
-}) : [];
+const contours = process.argv[2] === '--contours';
+const defaultOutput = heldOut ? 'tmp/julia-151/held-out.json'
+  : contours ? 'tmp/navigation-185/julia-motion.json' : 'tmp/julia-151/results.json';
+const outputArgument = heldOut ? process.argv[3] : contours ? process.argv[4] : process.argv[2];
+const output = resolve(outputArgument ?? resolve(root, defaultOutput));
+const replayFile = heldOut ? undefined : process.argv[3];
+if (contours) assert.ok(replayFile, 'Expected the contour_controls_trial JSON path');
+const replayBytes = replayFile ? await readFile(resolve(replayFile)) : null;
+const replay = replayBytes ? JSON.parse(replayBytes) : null;
+function sampleFrames(samples, stride) {
+  return samples.filter((_, i) => i % stride === 0 || i === samples.length - 1)
+    .map(({ mechanical_time: t, position: c }) => ({ t, c }));
+}
+const paths = contours
+  ? [['cardioid', replay], ['period-two', replay.period_two]].flatMap(([chart, pair]) =>
+    ['natural_multiplier', 'map_iso_scale'].map(profile => ({
+      chart, profile, frames: sampleFrames(pair[profile].frames, 4),
+    })))
+  : replay ? replay.profiles.map(profile => ({
+    profile: profile.profile, crossing_time: profile.fine.crossing.time,
+    frames: sampleFrames(profile.fine.samples, 8),
+  })) : [];
 const shaderPath = 'shared/shaders/julia.frag';
 const fragment = await readFile(resolve(root, shaderPath));
 const resolution = heldOut ? 160 : 80;
@@ -184,7 +194,7 @@ try {
     viewport: { width: 320, height: 240 }, deviceScaleFactor: 1,
   });
   await page.goto(`${server.resolvedUrls.local[0]}__julia_sensitivity__.html`);
-  const result = await page.evaluate(async ({ states, resolution, presentation, attachmentPaths }) => {
+  const result = await page.evaluate(async ({ states, resolution, presentation, paths, contours }) => {
     const { JuliaRenderer } = await import('/src/lib/juliaRenderer.ts');
     const { dot, sensitivitySpectrum } = await import('/scripts/julia_sensitivity_spectrum.mjs');
     const canvas = document.createElement('canvas');
@@ -241,15 +251,17 @@ try {
       }
       return Math.sqrt(squaredCodes) * normalizedScale;
     };
-    const attachmentMotion = attachmentPaths.map(path => {
-      const first = render(path.frames[0].c);
-      let previous = first;
-      const frames = path.frames.map(frame => {
-        const pixels = render(frame.c);
-        const measured = { ...frame, rms_from_previous: rgbDistance(pixels, previous),
-          rms_from_initial: rgbDistance(pixels, first) };
-        previous = pixels;
-        return measured;
+    const renders = paths.map(path => path.frames.map(({ c }) => render(c)));
+    const motion = paths.map((path, index) => {
+      const pixels = renders[index];
+      const reference = contours && path.profile === 'map_iso_scale' ? renders[index - 1] : null;
+      const frames = path.frames.map((frame, i) => {
+        if (reference && frame.t !== paths[index - 1].frames[i].t) {
+          throw new Error('Contour replay frame times differ');
+        }
+        return { ...frame, rms_from_previous: rgbDistance(pixels[i], pixels[Math.max(i - 1, 0)]),
+          rms_from_initial: rgbDistance(pixels[i], pixels[0]),
+          rms_from_natural: reference ? rgbDistance(pixels[i], reference[i]) : undefined };
       });
       return { ...path, frames };
     });
@@ -335,8 +347,9 @@ try {
         }
       }
     }
-    return { renderer: rendererInfo, repeatable_baseline: true, states, attachment_motion: attachmentMotion };
-  }, { states: centerRows, resolution, presentation, attachmentPaths });
+    return { renderer: rendererInfo, repeatable_baseline: true, states,
+      [contours ? 'contour_motion' : 'attachment_motion']: motion };
+  }, { states: centerRows, resolution, presentation, paths, contours });
   const provenance = {
     panel: heldOut ? 'held-out' : 'initial',
     chromium: browser.version(),
@@ -347,7 +360,8 @@ try {
     presentation: { ...presentation, center: [0, 0], rotation: 0, time: 0 },
     representation: 'mean-normalized RGB8 framebuffer/1; ignore alpha; bottom-up WebGL order',
     spacings,
-    attachment_fixture_sha256: attachment ? createHash('sha256').update(attachment).digest('hex') : undefined,
+    [contours ? 'contour_trial_sha256' : 'attachment_fixture_sha256']:
+      replayBytes ? createHash('sha256').update(replayBytes).digest('hex') : undefined,
     geometry: { ...geometry, points: undefined },
   };
   await mkdir(dirname(output), { recursive: true });
