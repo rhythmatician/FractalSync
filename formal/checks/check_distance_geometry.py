@@ -92,6 +92,30 @@ def main() -> None:
     print(f"2000 pointwise cases: maximum scaled remainder discrepancy {worst_remainder:.3e}")
     print("21 explicit singular-limit cases: all within the proved relative bound")
 
+    # Opposite points of the unit circle around a point Shore. At zero floor,
+    # the angle change costs π even if a competitor varies the radius.
+    # The semicircle supplies an upper bound at positive floor.
+    clearance = math.exp(-math.pi)
+    crossings: list[float] = []
+    shore_endpoints: list[float] = []
+    for epsilon in (1e-2, 1e-3, 1e-4):
+        detour_upper = math.pi / math.hypot(1.0, epsilon)
+        detour_lower = (1 - (epsilon / clearance)**2) * math.pi
+        assert epsilon < clearance
+        assert detour_lower <= detour_upper <= math.pi
+
+        # Parallel Shores at x=0 and x=2. The path from x=-1 to x=1/2
+        # attains the two radial costs F(1) + F(1/2). The path from x=0
+        # to x=2 must reach distance one, and costs 2F(1).
+        radial = radial_closed(1 / epsilon, 1)
+        crossings.append(radial + radial_closed(0.5 / epsilon, 1))
+        shore_endpoints.append(2 * radial)
+        assert radial_closed(0, 1) == 0
+
+    assert all(a < b for a, b in zip(crossings, crossings[1:]))
+    assert all(a < b for a, b in zip(shore_endpoints, shore_endpoints[1:]))
+    print("Fixed-pair checks: diagonal, point-Shore detour, split components, distinct Shore endpoints")
+
 
 if __name__ == "__main__":
     main()

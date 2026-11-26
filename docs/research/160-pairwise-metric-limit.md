@@ -356,6 +356,24 @@ single bundled extended metric. No uniform convergence over varying endpoint
 pairs is claimed. The estimate (14) depends on the chosen reference bound
 and the initial endpoint's positive clearance.
 
+## Synthetic checks for the fixed-pair branches
+
+The [distance-geometry checker](../../formal/checks/check_distance_geometry.py)
+exercises the supplementary examples for [#173](https://github.com/rhythmatician/FractalSync/issues/173).
+For a point Shore in the plane, antipodal points on the unit circle
+have exact zero-floor distance $\pi$. The angle term alone costs at
+least $\pi$ and a semicircle attains it. At positive floor the same
+path has length $\pi/\sqrt{1+\epsilon^2}$, consistent with the
+checked lower bound using $B=\pi$. The diagonal has length zero.
+
+For the two parallel Shores $x=0$ and $x=2$, a horizontal path from
+$x=-1$ to $x=1/2$ attains the crossing lower bound $F(1)+F(1/2)$.
+A path between the two lines must reach $x=1$, where distance to
+the Shore is one. Its exact length minimum is $2F(1)$ for endpoints
+with the same height. Both nontrivial expressions increase as the
+floor decreases in the example. These checks evaluate the explicit
+models alongside the general Lean results.
+
 ## 7. Checked length-space continuation and remaining boundary
 
 The later [intrinsic-length extension](160-intrinsic-length.md) now identifies

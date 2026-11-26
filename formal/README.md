@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,726 explicit proved theorem/lemma declarations** across 146 result modules
+**1,741 explicit proved theorem/lemma declarations** across 149 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -50,13 +50,13 @@ it is not a training preflight requirement.
 
 ### Optional agent authoring tools
 
-The earlier 596-theorem increment installed the pinned server in a separate Python
-environment and tested it through an actual MCP stdio session. It exposed 22 tools; diagnostics for
-`DistanceToSet.lean` were clean and `lean_verify` accepted
+The pinned server passed the stdio smoke check. It exposed 22 tools,
+reported clean diagnostics for `DistanceToSet.lean`, and accepted
 `FractalSync.DistanceGraph.exists_nearest_segment` with standard axioms only.
-The check exited successfully. The server still emitted the previously
-observed ignored asyncio cleanup warning after successful diagnostics and
-verification. Its smoke check is reproducible from the repository root:
+The stdio check also passed using the transport returned by a fresh `codex mcp get`
+from this checkout. On Windows the server emitted an asyncio cleanup warning
+after verification and the check exited successfully. Run the smoke check
+from the repository root with an isolated Python environment:
 
 ```sh
 python -m pip install -r formal/tools/requirements-mcp.txt
@@ -64,25 +64,20 @@ python formal/tools/check_mcp.py
 ```
 
 Use the interpreter belonging to the environment where the server is installed.
-The server also needs Elan's binaries on PATH and the Lean package built.
-[tools/vscode-mcp.json](tools/vscode-mcp.json) is a pinned VS Code MCP
-configuration template; merge its `servers` entry into the local
-`.vscode/mcp.json` when using that client.
-[tools/codex-mcp.toml](tools/codex-mcp.toml) supplies the matching pinned Codex
-entry. Replace its absolute project-path placeholder and make Elan's binaries
-available on the client's PATH before use. The installed Codex CLI's actual
-`mcp add` command was attempted in this environment but could not persist its
-entry because the active client configuration is read-only. Thus local stdio
-operation is verified, but persistent client registration remains blocked.
-These templates do not claim that a client has registered the server.
-Python/MCP are authoring aids and
-are not dependencies of proof CI or part of the kernel's trusted foundation.
+The server needs Elan's binaries on `PATH` and the Lean package built. A fresh
+Codex CLI launch from the repository root loads the
+[project MCP configuration](../.codex/config.toml) when the checkout is trusted.
+Make `uvx` available on the client's `PATH`. Run `codex mcp get fractalsync-lean`
+from the root to check recognition. Open a new project session to load the
+server if the active session predates the configuration. The
+[VS Code MCP template](tools/vscode-mcp.json) has a matching pinned `servers`
+entry for `.vscode/mcp.json`. Proof CI and the kernel audit run independently
+of the authoring server.
 
-The official `lean-proof` and `mathlib-build` skills at the pin above were
-installed and their presence in the personal skill catalog was verified.
-They are not vendored into the runtime repository. This closes the skill
-installation part of #157; the specific read-only client configuration is
-the remaining MCP-registration blocker. Keep one shared proof package.
+The official `lean-proof`, `mathlib-build` and `lean-setup` skills were
+installed from the pinned `leanprover/skills` revision and verified in the
+Codex skill directory. Keep the skills and proof tools on the development
+side of the project.
 
 ## Exact theorem inventory
 
@@ -238,9 +233,12 @@ by the separate transitive audit.
 | `ShoreFloorGluing` | 6 | Zero derivatives and $C^3$ gluing from uniform distance-power bounds |
 | `TrapSteeringBudget` | 9 | Squared-speed acceleration components, braking bounds, and stop-to-stop schedule |
 | `TrapMetricComparison` | 3 | Planar Gram identity and metric-normal acceleration at unit speed |
-| **Result-module subtotal** | **1,671** | Includes supporting lemmas |
+| `SensitivityResponse` | 5 | Actual least-squares second derivative, residual correction, and composed action response |
+| `NormalizedMapLimits` | 4 | Anchored pointwise distance-function limits and affine reconstruction from symmetric samples |
+| `CovariantHolonomy` | 6 | Unit-phase kernel determinant, PSD criterion, common reference, rank one, and integer harmonics |
+| **Result-module subtotal** | **1,686** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,726** | Explicit theorem and lemma declarations |
+| **Total** | **1,741** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1489,7 +1487,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,844 declarations, including the 1,726 stated theorem/lemma declarations,
+The current audit covers 3,870 declarations, including the 1,741 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
