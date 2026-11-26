@@ -98,6 +98,15 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #169 | [Shore-crossing work cap](169-crossing-work-cap.md) | Lean checks path-length and speed-time work caps and the corresponding necessary energy conditions for a crossing. |
 | #174 | [Intrinsic target bounds](174-intrinsic-target-bounds.md) | Lean checks exact target-set infima, consistent lower bounds, and tolerance and search-radius rules for navigation. |
 
+## Reproducible experiments
+
+| Area | Evidence |
+| --- | --- |
+| Visual sensitivity | [Frozen stencils and cockpit inspection](151-frozen-julia-sensitivity.md), [analytic calibration and second panel](171-julia-sensitivity-calibration.md), [geometry mask and pixel confounds](140-julia-morphology-provenance.md) |
+| Physics and Map | [Sampled baseline metric](120-sampled-metric-validation.md), [signed work ledger](166-work-energy-ledger.md), [held-RK integral and refusal](166-held-rk-work.md), [Shore shortcut benchmark](172-shore-shortcut-benchmark.md), [retained field against exact Shore](181-retained-period-two-fidelity.md), [two-component Controls trial](185-contour-controls-trial.md), [recurrence and trap controls](185-finite-recurrence-controls.md) |
+| Training inputs and resets | [Causal density](101-onset-density-ablation.md), [SongFormer boundaries](102-boundary-target-evidence.md), [affect heads and provenance](103-offline-affect-screen.md), [temporal policy audit](104-temporal-policy-audit.md), [scale-stratified resets](110-reset-distribution.md), [sparse gates](152-sparse-event-gate-ablation.md) |
+| Musical and expressive studies | [Teacher timeline alignment](188-teacher-timeline-alignment.md), [stimuli and randomized protocol](189-expressive-dynamics-protocol.md), [sample-aligned Julia playback](189-frozen-julia-playback.md) |
+
 ## Originality verdict
 
 No independently publishable new result has been established in this pass.
@@ -120,22 +129,20 @@ claimed by the current proof files.
 
 ## Relationship to the existing Lean issues
 
-The pinned package under `formal/` now contains **1,604 explicit theorem/lemma
-declarations across 146 modules**: 1,549 in 132 result modules and 55 in
-fourteen analysis-support modules. This adds 32 declarations in four result
-modules to the preceding 1,572-declaration package. Counts include supporting
-lemmas and private helpers, not independent discoveries. Existing declarations
-and analysis-support modules are retained.
-The complete pinned build passed with **2,731 Lake jobs**. The transitive
-axiom audit passed for **3,573 project declarations**, with only `propext`,
-`Classical.choice` and `Quot.sound`. The full results are recorded in
-[verification.md](verification.md).
-The earlier 596-theorem increment installed the pinned optional LSP/MCP server and
-passed its actual stdio smoke test with 22 tools. The official proof/build
-skills were installed then as well. The
-[formal inventory](../../formal/README.md) and
-[verification record](verification.md) give the reproducible setup and exact
-trust boundary.
+The pinned package has **1,813 explicit theorem and lemma declarations** in
+155 result modules and fourteen analysis-support modules. The current
+`lake build --wfail` and transitive axiom audit pass. The audit covers 3,996
+declarations and reports only `propext`, `Classical.choice`, and `Quot.sound`.
+See the [formal inventory](../../formal/README.md) for statement-level scope
+and [verification record](verification.md) for earlier checkpoints.
+
+The optional Lean LSP server is registered in the repository
+[Codex configuration](../../.codex/config.toml). A fresh configured session
+passed the stdio smoke test with 22 tools and checked an actual theorem.
+The [Aeneas/Charon spike](158-rust-verification-spike.md) documents the decision
+to defer generated Rust proofs. The foundational issues have closed at their
+documented proof boundary. The experiments and application requirements below
+remain independent.
 
 The same actual potential, normalized fixed-command drive and viscous-drag
 catalog now has local force pair (6,210) and acceleration pair (8,400). The
@@ -179,15 +186,6 @@ For #160, the prior zero-floor attainment, uniform subsequential selected-path
 convergence and full-sequence selected-length convergence remain intact. This
 increment does not strengthen those geometric limits or infer smoothness of
 arbitrary AC minimizers.
-For #157, persistent Codex MCP registration was attempted and blocked by the
-read-only active client configuration; installed tools and passing stdio
-tests do not silently close that remaining integration step.
-Aeneas/Charon (#158) remains independent.
-
-Keep one proof package when those issues proceed. Extend its definitions and
-inventory instead of creating parallel formal authorities. All four research
-issues remain open for their explicitly stated remaining obligations.
-
 ## Remaining formal and implementation boundaries
 
 | Area | Remaining work |
@@ -199,7 +197,6 @@ issues remain open for their explicitly stated remaining obligations.
 | Actual providers and arithmetic | Extend the concrete quadratic-fixture fidelity to production distance assets; certify compiled extraction/storage/mask/index correspondence, actual query-rounding budgets and IEEE field/force evaluation. The literal fixture, its actual reference jets, catalog force constants and real-query address control are checked. |
 | Full discrete dynamics | Discharge the conditional operation-error budgets for compiled RHS, stage, power and work arithmetic; certify rounded control construction, reported energy, clock accumulation and operational acceptance/refusal. Extend to perturbed internal-substep composition, impulses, time-dependent commands, combined steering and continuation beyond T=1/576. Exact-real arbitrary-substep and conditional one-substep phase/work certificates remain distinct. |
 | Zero-floor minimizing paths | Establish additional uniqueness or selection hypotheses for whole-family path convergence, convergence of velocities if needed, and uniform limits over varying endpoints. Actual componentwise zero-floor attainment, uniform subsequential path convergence and full-sequence unregularized length convergence are checked. |
-| Optional authoring integration | Register the installed MCP server in a writable persistent client configuration. The existing managed configuration is read-only. |
 
 The AC metric-length bridge, arbitrary-endpoint attainment, all-nearest-Shore
 minimizer classification, flat Euclidean specialization, and flat Shore
