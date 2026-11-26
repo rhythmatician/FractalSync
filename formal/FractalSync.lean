@@ -151,5 +151,8 @@ import FractalSync.CovariantHolonomy
 import FractalSync.ConformalRulerContracts
 import FractalSync.ExteriorNavigation
 import FractalSync.OrbitTrapSelection
+import FractalSync.IntrinsicTargetBounds
+import FractalSync.ShoreCrossingWorkBound
+import FractalSync.StableRadialProfile
 
 /-! Development-time mathematical research for FractalSync. -/
