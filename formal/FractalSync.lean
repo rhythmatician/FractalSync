@@ -135,5 +135,7 @@ import FractalSync.MainCardioidRuler
 import FractalSync.OrbitTrapSteering
 import FractalSync.ConformalFloorCurvature
 import FractalSync.OrbitTrapConfidence
+import FractalSync.QuarticRulerFloor
+import FractalSync.OrbitTrapDrift
 
 /-! Development-time mathematical research for FractalSync. -/
