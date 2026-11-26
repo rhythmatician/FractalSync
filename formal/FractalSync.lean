@@ -148,5 +148,6 @@ import FractalSync.TrapMetricComparison
 import FractalSync.SensitivityResponse
 import FractalSync.NormalizedMapLimits
 import FractalSync.CovariantHolonomy
+import FractalSync.ConformalRulerContracts
 
 /-! Development-time mathematical research for FractalSync. -/
