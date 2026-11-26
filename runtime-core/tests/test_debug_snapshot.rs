@@ -38,7 +38,86 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/3");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/5");
+}
+
+#[test]
+fn accumulated_ledger_rejects_a_replaced_raster_with_equal_local_energy() {
+    use runtime_core::distance_field::{load_builtin_distance_field, set_distance_field_from_vec};
+
+    let _g = lock();
+    let (rows, cols, xmin, xmax, ymin, ymax) =
+        load_builtin_distance_field("mandelbrot_default").unwrap();
+    let mut field = include_bytes!("../data/mandelbrot_distance_1024.bin")
+        .chunks_exact(4)
+        .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+        .collect::<Vec<_>>();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.0, &controls(0.0));
+    let before = ctrl.last_energy_ledger.clone().unwrap();
+    assert!(before.valid);
+    field[0] += 0.125;
+    set_distance_field_from_vec(field, rows, cols, xmin, xmax, ymin, ymax).unwrap();
+    ctrl.step_with_controls(0.0, &controls(0.0));
+    let after = ctrl.last_energy_ledger.as_ref().unwrap();
+    let run = ctrl.accumulated_energy_ledger.as_ref().unwrap();
+    let result = (
+        after.start_position,
+        after.start_energy,
+        after.valid,
+        run.valid,
+        run.provenance_consistent,
+        before.raster_generation.zip(after.raster_generation),
+    );
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+    assert_eq!(result.0, before.end_position);
+    assert_eq!(result.1, before.end_energy);
+    assert!(result.2);
+    assert!(!result.3 && !result.4);
+    let (before_generation, after_generation) = result.5.unwrap();
+    assert_ne!(before_generation, after_generation);
+}
+
+#[test]
+fn replay_snapshot_accumulates_signed_step_ledger_and_marks_failure() {
+    let _g = lock();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let first = ctrl.debug_snapshot().unwrap();
+    let first_ledger = first.energy_ledger.unwrap();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let second = ctrl.debug_snapshot().unwrap();
+    let second_ledger = second.energy_ledger.as_ref().unwrap();
+    let accumulated = second.accumulated_energy_ledger.as_ref().unwrap();
+    assert_eq!(accumulated.steps, 2);
+    assert_eq!(accumulated.first_step, first_ledger);
+    assert!(accumulated.provenance_consistent);
+    assert_eq!(accumulated.start_time_seconds, 0.0);
+    assert!((accumulated.residual - first_ledger.residual - second_ledger.residual).abs() < 1e-14);
+    assert!((accumulated.control_work - first_ledger.control_work - second_ledger.control_work).abs() < 1e-14);
+    let wire = serde_json::to_value(&second).unwrap();
+    assert_eq!(wire["energyLedger"]["version"], "work-energy-ledger/1");
+    assert!(wire["energyLedger"]["startGeometry"]["provider_version"].is_string());
+    ctrl.c = Complex64::new(2.1, 0.0);
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    assert!(ctrl.last_energy_ledger.is_none());
+    assert!(!ctrl.accumulated_energy_ledger.unwrap().valid);
+}
+
+#[test]
+fn accumulated_ledger_marks_configuration_changes_even_if_they_are_reverted() {
+    let _g = lock();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let initial = ctrl.manifold_config.kappa;
+    ctrl.manifold_config.kappa = initial + 0.1;
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    ctrl.manifold_config.kappa = initial;
+    ctrl.step_with_controls(0.001, &controls(1.0));
+    let accumulated = ctrl.debug_snapshot().unwrap().accumulated_energy_ledger.unwrap();
+    assert_eq!(accumulated.first_step.kappa, initial);
+    assert!(!accumulated.provenance_consistent);
+    assert!(!accumulated.valid);
 }
 
 #[test]
@@ -309,10 +388,12 @@ fn standalone_snapshot_matches_controller_snapshot() {
     )
     .expect("standalone snapshot");
 
-    // The step clock is controller-owned (the pure builder has no clock);
+    // The step clock and ledger are controller-owned (the pure builder has no history);
     // every state-derived field must match exactly.
     let mut from_ctrl_no_clock = from_ctrl.clone();
     from_ctrl_no_clock.time_seconds = 0.0;
+    from_ctrl_no_clock.energy_ledger = None;
+    from_ctrl_no_clock.accumulated_energy_ledger = None;
     assert_eq!(from_ctrl_no_clock, from_state);
     assert!(from_ctrl.time_seconds > 0.0);
 }

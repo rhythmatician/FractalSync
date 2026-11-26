@@ -21,7 +21,58 @@ struct DistanceField {
     ymax: f64,
 }
 
-static DIST_FIELD: Lazy<RwLock<Option<DistanceField>>> = Lazy::new(|| RwLock::new(None));
+#[derive(Default)]
+struct DistanceFieldSlot {
+    field: Option<DistanceField>,
+    generation: u64,
+}
+
+static DIST_FIELD: Lazy<RwLock<DistanceFieldSlot>> =
+    Lazy::new(|| RwLock::new(DistanceFieldSlot::default()));
+
+#[derive(Clone, Copy)]
+pub(crate) struct RasterStamp {
+    generation: u64,
+    loaded: bool,
+}
+
+/// A process-local stamp read under the same lock used to replace the raster.
+pub(crate) fn raster_stamp() -> Option<RasterStamp> {
+    let slot = DIST_FIELD.read().ok()?;
+    Some(RasterStamp {
+        generation: slot.generation,
+        loaded: slot.field.is_some(),
+    })
+}
+
+/// Return the generation that covered a sequence of raster reads.
+pub(crate) fn raster_generation_since(start: Option<RasterStamp>) -> Option<u64> {
+    let start = start?;
+    let end = raster_stamp()?;
+    // Allow a single lazy installation from an empty slot. In that case
+    // there was no older field available to any of the reads.
+    (end.loaded
+        && (start.generation == end.generation
+            || (!start.loaded && start.generation.checked_add(1) == Some(end.generation))))
+    .then_some(end.generation)
+}
+
+#[cfg(test)]
+#[test]
+fn raster_stamp_allows_initial_load_but_detects_replacement_during_reads() {
+    let _guard = global_test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    clear_distance_field();
+    let empty = raster_stamp();
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+    let initially_loaded = raster_stamp();
+    let generation = raster_generation_since(empty).unwrap();
+    assert_eq!(raster_generation_since(initially_loaded), Some(generation));
+
+    clear_distance_field();
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+    assert_eq!(raster_generation_since(initially_loaded), None);
+    assert_eq!(raster_generation_since(empty), None);
+}
 
 /// Clear the in-memory distance field (test helper)
 ///
@@ -29,7 +80,10 @@ static DIST_FIELD: Lazy<RwLock<Option<DistanceField>>> = Lazy::new(|| RwLock::ne
 /// avoid calling this in production code.
 pub fn clear_distance_field() {
     if let Ok(mut g) = DIST_FIELD.write() {
-        *g = None;
+        if g.field.is_some() {
+            g.generation = g.generation.saturating_add(1);
+            g.field = None;
+        }
     }
 }
 
@@ -44,7 +98,11 @@ pub fn set_distance_field_from_vec(data: Vec<f32>, rows: usize, cols: usize, xmi
     let arr = Array2::from_shape_vec((rows, cols), data).map_err(|e| format!("reshape: {}", e))?;
     let df = DistanceField { data: arr, xmin, xmax, ymin, ymax };
     let mut guard = DIST_FIELD.write().map_err(|e| format!("lock error: {}", e))?;
-    *guard = Some(df);
+    guard.generation = guard
+        .generation
+        .checked_add(1)
+        .ok_or("raster generation exhausted")?;
+    guard.field = Some(df);
     Ok(())
 }
 
@@ -106,7 +164,7 @@ pub fn load_builtin_distance_field(name: &str) -> Result<(usize, usize, f64, f64
 /// the per-pixel spacings in world coordinates.
 pub fn distance_field_metadata() -> Option<(usize, usize, f64, f64, f64, f64, f64, f64)> {
     let guard = DIST_FIELD.read().ok()?;
-    let df = guard.as_ref()?;
+    let df = guard.field.as_ref()?;
     let (rows, cols) = (df.data.nrows(), df.data.ncols());
     let dx = if cols > 1 {
         (df.xmax - df.xmin) / (cols as f64 - 1.0)
@@ -157,7 +215,7 @@ pub fn sample_signed_distance_field(
     // If no distance field is loaded, try loading the canonical builtin
     // so callers (like tests) can sample without an explicit prior set.
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-    if guard.is_none() {
+    if guard.field.is_none() {
         drop(guard);
         // Best-effort: try to load the canonical built-in. If that fails still
         // return the original 'not loaded' error to the caller.
@@ -167,7 +225,7 @@ pub fn sample_signed_distance_field(
         }
     }
     let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-    let df = guard.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
+    let df = guard.field.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
 
     let (h, w) = (df.data.nrows() as f64, df.data.ncols() as f64);
     let dx = (df.xmax - df.xmin) as f64;
@@ -354,12 +412,12 @@ pub fn mandelbrot_distance_estimate_with_params(
     let perimeter_min = |xr: f64, yr: f64| -> Result<f64, String> {
         // read builtin metadata (best-effort)
         let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-        if guard.is_none() {
+        if guard.field.is_none() {
             drop(guard);
             load_builtin_distance_field("mandelbrot_default")?;
         }
         let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-        let df = guard.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
+        let df = guard.field.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
         let xmin = df.xmin;
         let xmax = df.xmax;
         let ymin = df.ymin;

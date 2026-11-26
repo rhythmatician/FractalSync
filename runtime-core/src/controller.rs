@@ -529,6 +529,9 @@ pub struct OrbitController {
     pub last_friction_power: f64,
     /// Total-energy change of the last destination step.
     pub last_delta_total: Option<f64>,
+    pub last_energy_ledger: Option<crate::manifold::WorkEnergyLedger>,
+    pub accumulated_energy_ledger: Option<crate::debug::AccumulatedEnergyLedger>,
+    pub energy_ledger_interrupted: bool,
 }
 
 impl Default for OrbitController {
@@ -558,6 +561,9 @@ impl Default for OrbitController {
             last_friction_beta: 0.0,
             last_friction_power: 0.0,
             last_delta_total: None,
+            last_energy_ledger: None,
+            accumulated_energy_ledger: None,
+            energy_ledger_interrupted: false,
         }
     }
 }
@@ -768,12 +774,57 @@ impl OrbitController {
                 self.last_friction_beta = clamped.friction_beta();
                 self.last_controls = Some(*controls);
                 self.last_delta_total = Some(info.delta_total);
+                let ledger = info.ledger;
+                let contiguous = self.last_energy_ledger.as_ref().map_or(true, |previous| {
+                    previous.end_position == ledger.start_position
+                        && previous.end_velocity == ledger.start_velocity
+                        && previous.end_energy == ledger.start_energy
+                });
+                let accumulated = self.accumulated_energy_ledger.get_or_insert_with(
+                    || crate::debug::AccumulatedEnergyLedger {
+                        first_step: ledger.clone(),
+                        start_time_seconds: self.step_time_seconds,
+                        provenance_consistent: true,
+                        steps: 0, duration: 0.0, control_work: 0.0,
+                        friction_work: 0.0, impulse_work: 0.0, residual: 0.0,
+                        valid: true,
+                    },
+                );
+                let first = &accumulated.first_step;
+                accumulated.provenance_consistent &= first.version == ledger.version
+                    && first.geometry_contract_version == ledger.geometry_contract_version
+                    && first.controls_version == ledger.controls_version
+                    && first.d_ref == ledger.d_ref && first.epsilon == ledger.epsilon
+                    && first.lambda_sq == ledger.lambda_sq && first.kappa == ledger.kappa
+                    && first.mu == ledger.mu
+                    && first.start_geometry.provider_version == ledger.start_geometry.provider_version
+                    && first.start_geometry.provider_version == ledger.end_geometry.provider_version
+                    && first.raster_generation == ledger.raster_generation
+                    && first.start_geometry.is_bridge == ledger.start_geometry.is_bridge
+                    && first.start_geometry.is_bridge == ledger.end_geometry.is_bridge;
+                accumulated.valid &= accumulated.provenance_consistent;
+                accumulated.steps += 1;
+                accumulated.duration += ledger.dt;
+                accumulated.control_work += ledger.control_work;
+                accumulated.friction_work += ledger.friction_work;
+                accumulated.impulse_work += ledger.impulse_work;
+                accumulated.residual += ledger.residual;
+                accumulated.valid &= ledger.valid && contiguous && !self.energy_ledger_interrupted;
+                accumulated.valid &= [accumulated.duration, accumulated.control_work,
+                    accumulated.friction_work, accumulated.impulse_work, accumulated.residual]
+                    .iter().all(|value| value.is_finite());
+                self.last_energy_ledger = Some(ledger);
                 self.step_time_seconds += dt;
                 self.c = c_new;
                 self.planar_velocity = v_new;
                 self.c
             }
             Err(e) => {
+                self.last_energy_ledger = None;
+                self.energy_ledger_interrupted = true;
+                if let Some(accumulated) = &mut self.accumulated_energy_ledger {
+                    accumulated.valid = false;
+                }
                 self.manifold_error = Some(e);
                 self.c
             }
@@ -800,6 +851,8 @@ impl OrbitController {
             self.last_delta_total,
         )?;
         snap.time_seconds = self.step_time_seconds;
+        snap.energy_ledger = self.last_energy_ledger.clone();
+        snap.accumulated_energy_ledger = self.accumulated_energy_ledger.clone();
         snap.diagnostics.valid = self.manifold_error.is_none();
         snap.diagnostics.last_error = self.manifold_error.clone();
         Ok(snap)
