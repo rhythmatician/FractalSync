@@ -62,6 +62,18 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #181, #167 | [Roundoff on a retained operational-field patch](181-operational-patch.md) | A rational error calculation bounds value, gradient, and Hessian error relative to the stored spline on one patch. A native Rust probe checks samples against those bounds. |
 | #182, #184 | [Main-cardioid ruler](184-main-cardioid-ruler.md) | The reciprocal hyperbolic density matches true Shore distance to leading order along smooth boundary approaches. The ratio at the cusp depends on the approach. The note compares the candidate and existing rulers on the same paths. |
 | #185 | [Fixed point-trap steering](185-orbit-trap-steering.md) | Lean checks the regular tangent and identifies the three critical points for the second critical iterate. A numerical comparison measures contour drift and near-critical angular sensitivity. |
+| #184 | [Quadratic floor curvature](184-conformal-floor-curvature.md) | A quadratic floor raises conformal curvature. The main-cardioid cusp has path-dependent curvature limits, which rule out a positive $C^2$ metric extension there. |
+| #185 | [Steering confidence](185-steering-confidence.md) | Lean checks a sharp angle gate for gradients with bounded error. The fixed-trap note derives sample position and binary64 evaluation budgets. |
+| #184 | [Quartic ruler floor](184-quartic-ruler-floor.md) | Zero extension of the fourth power gives a positive $C^2$ conformal metric through the cusp. Curvature tends to zero at the cardioid boundary and can be positive in the interior. |
+| #185 | [Finite-step trap drift](185-finite-step-trap-drift.md) | Lean checks per-step and cumulative drift bounds. The bound separates the effect of gradient error from the quadratic displacement remainder. |
+| #184 | [Period-two bulb and attachment](184-period-two-attachment.md) | The exact bulb ruler and a local two-component quartic metric give a smooth crossing fixture. Offset paths expose a quadratic gap between the boundary arcs. |
+| #185 | [Exact trap contours](185-exact-trap-contours.md) | Lean checks the exact lift, its tangent derivative, and its conformal speed. The lifted contour benchmarks Euler drift and distinguishes one-turn and two-turn closure. |
+| #182, #184 | [Exterior ruler bounds](184-exterior-ruler-bounds.md) | Post-escape bounds enclose the ruler from the Green function and its gradient. The ruler grows as $\lvert c\rvert\log\lvert c\rvert$ far offshore. |
+| #185 | [Trap-saddle curvature](185-trap-saddle-curvature.md) | The exact contour has unbounded signed curvature as the level approaches the saddle. The turning layer shrinks while its net turn tends to a quarter turn in either direction. |
+| #182, #184 | [Quartic floor across the Shore](184-shore-floor-gluing.md) | Uniform local bounds give a positive $C^3$ metric across the finite Shore. The cardioid cusp precludes a $C^4$ extension. |
+| #183, #184 | [Exterior ruler derivatives](184-exterior-ruler-jets.md) | Lean checks a common escape disk and Cauchy bounds for derivatives of its complex tail. Interval examples show how to choose an iteration count for a requested jet width. |
+| #185 | [Trap steering budget](185-trap-steering-budget.md) | A squared-speed profile gives an acceleration-bounded restart and stop. At the saddle, a phase schedule can continue through an orthogonal handoff with zero crossing speed. |
+| #183, #185 | [Steering demand under three metrics](185-matched-metric-steering.md) | The same near-saddle arcs have different acceleration demand under the signed-distance graph, signed-distance conformal and analytic cardioid metrics. |
 
 ## Originality verdict
 
