@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,763 explicit proved theorem/lemma declarations** across 150 result modules
+**1,777 explicit proved theorem/lemma declarations** across 152 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -237,9 +237,11 @@ by the separate transitive audit.
 | `NormalizedMapLimits` | 4 | Anchored pointwise distance-function limits and affine reconstruction from symmetric samples |
 | `CovariantHolonomy` | 6 | Unit-phase kernel determinant, PSD criterion, common reference, rank one, and integer harmonics |
 | `ConformalRulerContracts` | 22 | Density and inland comparisons, conformal specialization, planar curvature and ideal normal Jacobi first zeros |
-| **Result-module subtotal** | **1,708** | Includes supporting lemmas |
+| `ExteriorNavigation` | 5 | Exterior ray and equipotential rates, speed, and error under an approximate logarithmic derivative |
+| `OrbitTrapSelection` | 9 | Sharp finite selection margins, local regularity of a winning branch, ties, and critical return periods |
+| **Result-module subtotal** | **1,722** | Includes supporting lemmas |
 | `Analysis/*` (fourteen modules) | 55 | Attributed AC FTC backport and project analysis/metric/integral support |
-| **Total** | **1,763** | Explicit theorem and lemma declarations |
+| **Total** | **1,777** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1488,7 +1490,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 3,928 declarations, including the 1,763 stated theorem/lemma declarations,
+The current audit covers 3,953 declarations, including the 1,777 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
@@ -1496,7 +1498,7 @@ an implementation's correspondence to their definitions.
 
 ## Independent numerical checks
 
-The six scripts under `checks/` are standalone mathematical experiments.
+The scripts under `checks/` are standalone mathematical experiments.
 Three use the Python standard library. The sensitivity and exterior-jet
 checks use the optional libraries pinned in `checks/requirements.txt`.
 The steering comparison calls the project's compiled Rust bindings.
@@ -1511,6 +1513,8 @@ python formal/checks/check_normalized_distance_fields.py
 python formal/checks/check_covariant_statistics.py
 python formal/checks/check_exterior_ruler_jets.py
 python formal/checks/check_trap_steering_budget.py
+python formal/checks/check_navigation_fields.py --images tmp/navigation-185
+python formal/checks/check_exterior_navigation.py
 ```
 
 Activate the repository's environment or replace `python` with its explicit

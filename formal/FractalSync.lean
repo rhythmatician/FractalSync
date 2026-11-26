@@ -149,5 +149,7 @@ import FractalSync.SensitivityResponse
 import FractalSync.NormalizedMapLimits
 import FractalSync.CovariantHolonomy
 import FractalSync.ConformalRulerContracts
+import FractalSync.ExteriorNavigation
+import FractalSync.OrbitTrapSelection
 
 /-! Development-time mathematical research for FractalSync. -/
