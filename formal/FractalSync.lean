@@ -137,5 +137,7 @@ import FractalSync.ConformalFloorCurvature
 import FractalSync.OrbitTrapConfidence
 import FractalSync.QuarticRulerFloor
 import FractalSync.OrbitTrapDrift
+import FractalSync.PeriodTwoAttachment
+import FractalSync.OrbitTrapContours
 
 /-! Development-time mathematical research for FractalSync. -/

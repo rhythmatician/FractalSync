@@ -66,6 +66,8 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #185 | [Steering confidence](185-steering-confidence.md) | Lean checks a sharp angle gate for gradients with bounded error. The fixed-trap note derives sample position and binary64 evaluation budgets. |
 | #184 | [Quartic ruler floor](184-quartic-ruler-floor.md) | Zero extension of the fourth power gives a positive $C^2$ conformal metric through the cusp. Curvature tends to zero at the cardioid boundary and can be positive in the interior. |
 | #185 | [Finite-step trap drift](185-finite-step-trap-drift.md) | Lean checks per-step and cumulative drift bounds. The bound separates the effect of gradient error from the quadratic displacement remainder. |
+| #184 | [Period-two bulb and attachment](184-period-two-attachment.md) | The exact bulb ruler and a local two-component quartic metric give a smooth crossing fixture. Offset paths expose a quadratic gap between the boundary arcs. |
+| #185 | [Exact trap contours](185-exact-trap-contours.md) | Lean checks the exact lift, its tangent derivative, and its conformal speed. The lifted contour benchmarks Euler drift and distinguishes one-turn and two-turn closure. |
 
 ## Originality verdict
 
