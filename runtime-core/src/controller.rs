@@ -799,6 +799,7 @@ impl OrbitController {
                     && first.mu == ledger.mu
                     && first.start_geometry.provider_version == ledger.start_geometry.provider_version
                     && first.start_geometry.provider_version == ledger.end_geometry.provider_version
+                    && first.raster_generation == ledger.raster_generation
                     && first.start_geometry.is_bridge == ledger.start_geometry.is_bridge
                     && first.start_geometry.is_bridge == ledger.end_geometry.is_bridge;
                 accumulated.valid &= accumulated.provenance_consistent;

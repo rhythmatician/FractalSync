@@ -659,6 +659,7 @@ pub fn integrate_step(
     }
 
     // Geodesic (curvature) acceleration: -Gamma(v, v).
+    let raster_start = crate::distance_field::raster_stamp();
     let start_geometry = geometry_jet(c, config)?;
     let a_geodesic = geodesic_acceleration_from_jet(v, &start_geometry, config)?;
 
@@ -712,7 +713,7 @@ pub fn integrate_step(
             control_power, friction_power, control_work, friction_work, residual]
             .iter().all(|x| x.is_finite()) && dt >= 0.0;
 
-    let energy_info = EnergyInfo {
+    let mut energy_info = EnergyInfo {
         kinetic: k_new,
         potential: e_new - k_new,
         total: e_new,
@@ -737,6 +738,7 @@ pub fn integrate_step(
             residual,
             start_geometry,
             end_geometry,
+            raster_generation: None,
             d_ref: config.d_ref,
             epsilon: config.epsilon,
             lambda_sq: config.lambda_sq,
@@ -747,6 +749,7 @@ pub fn integrate_step(
             valid,
         },
     };
+    energy_info.ledger.check_raster_provenance(raster_start);
 
     Ok((c_new, v_new, energy_info))
 }
@@ -785,6 +788,9 @@ pub struct WorkEnergyLedger {
     pub residual: f64,
     pub start_geometry: crate::geometry_provider::GeometryJet,
     pub end_geometry: crate::geometry_provider::GeometryJet,
+    /// Process-local raster generation covering the geometry reads for this step.
+    #[serde(default)]
+    pub raster_generation: Option<u64>,
     pub d_ref: f64,
     pub epsilon: f64,
     pub lambda_sq: f64,
@@ -794,6 +800,20 @@ pub struct WorkEnergyLedger {
     pub friction_beta: f64,
     /// Endpoint samples are regular; this does not certify the intervening path.
     pub valid: bool,
+}
+
+impl WorkEnergyLedger {
+    pub(crate) fn check_raster_provenance(
+        &mut self,
+        start: Option<crate::distance_field::RasterStamp>,
+    ) {
+        if self.start_geometry.is_bridge || self.end_geometry.is_bridge {
+            let generation = crate::distance_field::raster_generation_since(start);
+            self.valid &= generation.is_some()
+                && self.raster_generation.map_or(true, |old| generation == Some(old));
+            self.raster_generation = generation;
+        }
+    }
 }
 
 #[cfg(test)]

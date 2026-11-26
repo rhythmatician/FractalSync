@@ -42,6 +42,43 @@ fn snapshot_version_is_pinned() {
 }
 
 #[test]
+fn accumulated_ledger_rejects_a_replaced_raster_with_equal_local_energy() {
+    use runtime_core::distance_field::{load_builtin_distance_field, set_distance_field_from_vec};
+
+    let _g = lock();
+    let (rows, cols, xmin, xmax, ymin, ymax) =
+        load_builtin_distance_field("mandelbrot_default").unwrap();
+    let mut field = include_bytes!("../data/mandelbrot_distance_1024.bin")
+        .chunks_exact(4)
+        .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+        .collect::<Vec<_>>();
+    let mut ctrl = OrbitController::default();
+    ctrl.step_with_controls(0.0, &controls(0.0));
+    let before = ctrl.last_energy_ledger.clone().unwrap();
+    assert!(before.valid);
+    field[0] += 0.125;
+    set_distance_field_from_vec(field, rows, cols, xmin, xmax, ymin, ymax).unwrap();
+    ctrl.step_with_controls(0.0, &controls(0.0));
+    let after = ctrl.last_energy_ledger.as_ref().unwrap();
+    let run = ctrl.accumulated_energy_ledger.as_ref().unwrap();
+    let result = (
+        after.start_position,
+        after.start_energy,
+        after.valid,
+        run.valid,
+        run.provenance_consistent,
+        before.raster_generation.zip(after.raster_generation),
+    );
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+    assert_eq!(result.0, before.end_position);
+    assert_eq!(result.1, before.end_energy);
+    assert!(result.2);
+    assert!(!result.3 && !result.4);
+    let (before_generation, after_generation) = result.5.unwrap();
+    assert_ne!(before_generation, after_generation);
+}
+
+#[test]
 fn replay_snapshot_accumulates_signed_step_ledger_and_marks_failure() {
     let _g = lock();
     let mut ctrl = OrbitController::default();

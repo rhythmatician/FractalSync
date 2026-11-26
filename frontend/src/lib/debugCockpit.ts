@@ -38,6 +38,7 @@ export interface EnergyLedger {
   startEnergy: number; endEnergy: number; controlPower: number; frictionPower: number;
   controlWork: number; frictionWork: number; impulseWork: number; residual: number;
   valid: boolean;
+  rasterGeneration?: number | null;
   startGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
   endGeometry: { validity: string; provider_version: string; requested_scale: number; resolved_scale: number };
 }

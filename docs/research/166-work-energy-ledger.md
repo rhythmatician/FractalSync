@@ -49,6 +49,14 @@ configuration/provider consistency flag. A change and later reversion still
 marks it inconsistent and invalid. A summary alone does not preserve each
 step's controls or geometry; retain the snapshot stream for replay.
 
+Raster ledger records carry the in-process installation generation. Each
+replacement or clear of a loaded raster updates the stamp under the field's
+write lock. A change across the continuous step or the Controls wrapper
+invalidates that ledger. Different generations between accepted steps
+invalidate accumulated provenance even if the sampled values at the splice
+agree. A single initial installation from an empty slot is allowed. The stamp
+identifies an installation within one process and is not a raster content hash.
+
 A local release-mode microbenchmark on Windows at a repeated fixed point
 (`cargo run --release -p runtime_core --example ledger_cost`) measured 1,000
 pairs of provider queries at 6.80 ms and 1,000 complete steps at 14.11 ms before

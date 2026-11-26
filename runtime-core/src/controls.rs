@@ -760,6 +760,7 @@ pub fn integrate_motion_controls(
     dt: f64,
     config: &crate::manifold::ManifoldConfig,
 ) -> Result<(Complex64, (f64, f64), crate::manifold::EnergyInfo), String> {
+    let raster_start = crate::distance_field::raster_stamp();
     let m = controls.clamped();
     let q_drive = m.drive_covector(c, config)?;
     // Reuse manifold's single G^{-1} path for the summed covector:
@@ -785,6 +786,8 @@ pub fn integrate_motion_controls(
         - info.ledger.control_work - info.ledger.friction_work - info.ledger.impulse_work;
     info.ledger.valid &= [v_new.0, v_new.1, info.ledger.end_energy,
         info.ledger.impulse_work, info.ledger.residual].iter().all(|x| x.is_finite());
+    let delta_kinetic = k_after - crate::manifold::kinetic_energy(v, c, config)?;
+    info.ledger.check_raster_provenance(raster_start);
     Ok((
         c_new,
         v_new,
@@ -793,7 +796,7 @@ pub fn integrate_motion_controls(
             potential: info.potential,
             total: k_after + info.potential,
             delta_total: k_after + info.potential - info.total + info.delta_total, // approximate keep
-            delta_kinetic: k_after - crate::manifold::kinetic_energy(v, c, config)?,
+            delta_kinetic,
             ledger: info.ledger,
         },
     ))
