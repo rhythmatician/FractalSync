@@ -4,7 +4,9 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock, RwLock, RwLockReadGuard};
 
 mod raster_navigation;
-pub use raster_navigation::RasterNavigationRegion;
+pub use raster_navigation::{
+    RasterNavigationRegion, RasterRouteError, RasterRouteWitness, RasterWaypoint,
+};
 
 static GLOBAL_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 /// Global mutex to serialize tests that mutate or depend on the distance field.

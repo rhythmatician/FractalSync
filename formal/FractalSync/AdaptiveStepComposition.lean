@@ -1,5 +1,6 @@
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Analysis.Complex.Exponential
+import Mathlib.Topology.MetricSpace.Pseudo.Defs
 
 /-!
 # Error composition on accepted heterogeneous steps
@@ -72,5 +73,33 @@ theorem error_le_exp_mul (n : ℕ) (error dt defect : ℕ → ℝ) (initial rate
           rw [mul_add (Real.exp (rate * (T + dt n))) D (defect n)]
           exact add_le_add_left (le_mul_of_one_le_left (hdefect n hn) hE) _
         _ = _ := by rw [Finset.sum_range_succ, Finset.sum_range_succ, ← add_assoc]
+
+/-- An accepted numerical history and its reference share the same ordered time
+intervals. Each local defect is the sum of a method bound, a duration-scaled
+field residual, and an additive evaluation bound. Only the two states compared
+on each interval need satisfy the reference transition's stability bound. -/
+theorem acceptedHistory_dist_le {E : Type*} [PseudoMetricSpace E] (n : ℕ)
+    (reference actual : ℕ → E) (advance : ℕ → E → E)
+    (dt method residual evaluation : ℕ → ℝ) (initial rate : ℝ)
+    (hinit : dist (reference 0) (actual 0) ≤ initial) (hinitial : 0 ≤ initial)
+    (hrate : 0 ≤ rate) (hdt : ∀ j < n, 0 ≤ dt j)
+    (hmethod : ∀ j < n, 0 ≤ method j) (hresidual : ∀ j < n, 0 ≤ residual j)
+    (hevaluation : ∀ j < n, 0 ≤ evaluation j)
+    (href : ∀ j < n, reference (j + 1) = advance j (reference j))
+    (hstable : ∀ j < n, dist (advance j (reference j)) (advance j (actual j)) ≤
+      (1 + rate * dt j) * dist (reference j) (actual j))
+    (hlocal : ∀ j < n, dist (advance j (actual j)) (actual (j + 1)) ≤
+      method j + dt j * residual j + evaluation j) :
+    dist (reference n) (actual n) ≤ Real.exp (rate * ∑ j ∈ Finset.range n, dt j) *
+      (initial + ∑ j ∈ Finset.range n, (method j + dt j * residual j + evaluation j)) := by
+  refine error_le_exp_mul n (fun j => dist (reference j) (actual j)) dt
+    (fun j => method j + dt j * residual j + evaluation j) initial rate
+    hinit hinitial hrate hdt ?_ ?_
+  · exact fun j hj => add_nonneg
+      (add_nonneg (hmethod j hj) (mul_nonneg (hdt j hj) (hresidual j hj))) (hevaluation j hj)
+  · exact fun j hj => by
+      simpa only [href j hj] using
+        (dist_triangle (advance j (reference j)) (advance j (actual j)) (actual (j + 1))).trans
+          (add_le_add (hstable j hj) (hlocal j hj))
 
 end FractalSync.AdaptiveStepComposition

@@ -7,6 +7,27 @@ use crate::geometry_provider::{
 use crate::intrinsic_bounds::{add_up, div_down, div_up, mul_up, sub_down};
 use crate::manifold::ManifoldConfig;
 use crate::map_certificates::displacement_lower;
+use crate::map_navigation::search::{search_with_sum, SearchLimits};
+
+/// A vertex in a directed graph of straight Map segments.
+pub struct RasterWaypoint<'a> {
+    pub position: [f64; 2],
+    pub neighbors: &'a [usize],
+}
+
+#[derive(Debug, PartialEq)]
+pub struct RasterRouteWitness {
+    /// Waypoint indices in traversal order, including start and arrival.
+    pub path: Vec<usize>,
+    pub length_upper: f64,
+    pub raster_generation: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RasterRouteError {
+    InvalidInput,
+    StaleRegion,
+}
 
 /// A full-support window for the default profile's raster-bridge metric.
 ///
@@ -96,23 +117,83 @@ impl RasterNavigationRegion {
         if !self.is_current() || !self.contains(start) || !self.contains(end) {
             return None;
         }
-        let [dx, dy] = std::array::from_fn(|axis| {
-            if start[axis] == end[axis] {
-                0.0
-            } else {
-                (end[axis] - start[axis]).abs().next_up()
-            }
-        });
-        let square = add_up(mul_up(dx, dx), mul_up(dy, dy));
-        let displacement = if square == 0.0 {
-            0.0
-        } else {
-            square.sqrt().next_up()
-        };
-        Some(mul_up(displacement, self.length_per_displacement_upper))
+        Some(self.segment_upper(start, end))
     }
 
-    fn contains(&self, point: [f64; 2]) -> bool {
+    fn segment_upper(&self, start: [f64; 2], end: [f64; 2]) -> f64 {
+        mul_up(
+            displacement_upper(start, end),
+            self.length_per_displacement_upper,
+        )
+    }
+
+    /// Find a waypoint path whose certified length upper bound fits the budget.
+    /// All waypoints must lie in this region and name valid neighbors.
+    /// A waypoint is accepted when its outward displacement bound fits the
+    /// ambient ball. Rounding can leave near-boundary waypoints unaccepted.
+    /// A zero-radius ball accepts exact coordinate equality.
+    /// An empty result rules out a witness under these graph tests only.
+    pub fn search_route(
+        &self,
+        waypoints: &[RasterWaypoint<'_>],
+        start: usize,
+        center: [f64; 2],
+        radius: f64,
+        length_budget: f64,
+    ) -> Result<Option<RasterRouteWitness>, RasterRouteError> {
+        if start >= waypoints.len()
+            || !center.into_iter().all(f64::is_finite)
+            || !radius.is_finite()
+            || radius < 0.0
+            || length_budget.is_nan()
+            || length_budget < 0.0
+            || waypoints.iter().any(|vertex| {
+                !self.contains(vertex.position)
+                    || vertex
+                        .neighbors
+                        .iter()
+                        .any(|&index| index >= waypoints.len())
+            })
+        {
+            return Err(RasterRouteError::InvalidInput);
+        }
+        if !self.is_current() {
+            return Err(RasterRouteError::StaleRegion);
+        }
+        let result = search_with_sum(
+            waypoints.len(),
+            start,
+            |node| displacement_upper(waypoints[node].position, center) <= radius,
+            |node| {
+                let vertex = &waypoints[node];
+                vertex.neighbors.iter().map(move |&neighbor| {
+                    (
+                        neighbor,
+                        self.segment_upper(vertex.position, waypoints[neighbor].position),
+                    )
+                })
+            },
+            |node| self.target_lower(waypoints[node].position, center, radius),
+            |_| true,
+            (
+                SearchLimits {
+                    budget: length_budget,
+                    prune_with_bound: true,
+                },
+                add_up,
+            ),
+        );
+        if !self.is_current() {
+            return Err(RasterRouteError::StaleRegion);
+        }
+        Ok(result.cost.map(|length_upper| RasterRouteWitness {
+            path: result.path,
+            length_upper,
+            raster_generation: self.raster_generation,
+        }))
+    }
+
+    pub(crate) fn contains(&self, point: [f64; 2]) -> bool {
         let [lo, hi] = self.bounds;
         (0..2).all(|axis| lo[axis] <= point[axis] && point[axis] <= hi[axis])
     }
@@ -126,10 +207,14 @@ impl RasterNavigationRegion {
         center: [f64; 2],
         radius: f64,
     ) -> Option<f64> {
-        let [lo, hi] = self.bounds;
         if !self.is_current() || !radius.is_finite() || radius < 0.0 || !self.contains(start) {
             return None;
         }
+        self.target_lower(start, center, radius)
+    }
+
+    fn target_lower(&self, start: [f64; 2], center: [f64; 2], radius: f64) -> Option<f64> {
+        let [lo, hi] = self.bounds;
         let exit = (0..2).fold(f64::INFINITY, |distance, axis| {
             distance
                 .min((start[axis] - lo[axis]).next_down().max(0.0))
@@ -140,6 +225,22 @@ impl RasterNavigationRegion {
         // See docs/research/174-raster-route-bounds.md for the rounding argument.
         let metric_ruler_upper = mul_up(std::f64::consts::SQRT_2.next_up(), self.rho_upper);
         Some(div_down(target.min(exit), metric_ruler_upper))
+    }
+}
+
+fn displacement_upper(start: [f64; 2], end: [f64; 2]) -> f64 {
+    let [dx, dy] = std::array::from_fn(|axis| {
+        if start[axis] == end[axis] {
+            0.0
+        } else {
+            (end[axis] - start[axis]).abs().next_up()
+        }
+    });
+    let square = add_up(mul_up(dx, dx), mul_up(dy, dy));
+    if square == 0.0 {
+        0.0
+    } else {
+        square.sqrt().next_up()
     }
 }
 

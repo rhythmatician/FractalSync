@@ -169,7 +169,7 @@ fn checked_direction(direction: [f64; 2]) -> Result<[f64; 2], String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{FrozenRollout, Integrator, PhysicsProfile, ReferenceCut};
+    use super::super::{FrozenRollout, Integrator, MechanicalState, PhysicsProfile, ReferenceCut};
     use crate::{manifold::ManifoldConfig, operational_field::PreparedField};
     use std::sync::Arc;
 
@@ -512,6 +512,70 @@ mod tests {
             "{previous_position_error:e}"
         );
         assert!(previous_angle_error < 0.01, "{previous_angle_error:e}");
+    }
+
+    #[test]
+    fn moving_transport_refines_when_retracing_with_reversed_turns() {
+        let field = sheared_shore();
+        let lambda_sq = 0.7;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let start = [0.04, 0.05];
+        let initial_axis = [0.9, -0.1];
+        let [ax, ay] = graph.coordinates(start, initial_axis);
+        let initial_angle = ay.atan2(ax);
+        let forward_rates = [0.9, -0.4, 1.4, 0.3];
+        let reverse_rates = [-0.3, -1.4, 0.4, -0.9];
+        let mut previous_forward_error = f64::INFINITY;
+        let mut previous_return_error = f64::INFINITY;
+
+        for count in [4, 8, 16] {
+            let dt = 0.16 / f64::from(count);
+            let rollout = rollout(field.clone(), dt, lambda_sq);
+            let mut state = rollout.initial_state(start, [-0.12, 0.4]).unwrap();
+            let mut axis = initial_axis;
+            let mut expected = initial_angle;
+            let mut leg = |state: &mut MechanicalState, rates: &[f64; 4]| {
+                for _ in 0..count {
+                    let (_, trace) = rollout.attempt_step_with_trace(state, [0.0; 2]).unwrap();
+                    let frame = rollout
+                        .transport_endpoint_chords_with_rates(&trace, axis, rates)
+                        .unwrap();
+                    axis = frame.axis;
+                    for (pair, &rate) in trace.endpoints().windows(2).zip(rates) {
+                        expected += graph.chord_angle(pair[0].position, pair[1].position)
+                            + (dt / 4.0) * rate;
+                    }
+                }
+                let [ax, ay] = graph.coordinates(state.position, axis);
+                (ay.atan2(ax), expected)
+            };
+
+            let (forward, forward_reference) = leg(&mut state, &forward_rates);
+            assert!(unsigned_angle_difference(forward_reference, initial_angle) > 0.2);
+            // Reversing velocity defines a separate free-geodesic replay.
+            // Compare its own committed chords since RK4 need not retrace exactly.
+            let mut reverse = rollout
+                .initial_state(state.position, state.velocity.map(|component| -component))
+                .unwrap();
+            let (returned, return_reference) = leg(&mut reverse, &reverse_rates);
+            let end_displacement =
+                (reverse.position[0] - start[0]).hypot(reverse.position[1] - start[1]);
+            let reference_gap = unsigned_angle_difference(return_reference, initial_angle);
+            let forward_error = unsigned_angle_difference(forward, forward_reference);
+            let return_error = unsigned_angle_difference(returned, return_reference);
+            eprintln!(
+                "{count}: forward error {forward_error:e}, return error {return_error:e}, \
+                 reference gap {reference_gap:e}, endpoint displacement {end_displacement:e}"
+            );
+            assert!(end_displacement < 1e-8);
+            assert!(reference_gap < 1e-8);
+            assert!(forward_error < 0.65 * previous_forward_error);
+            assert!(return_error < 0.65 * previous_return_error);
+            previous_forward_error = forward_error;
+            previous_return_error = return_error;
+        }
+        assert!(previous_forward_error < 0.003);
+        assert!(previous_return_error < 0.006);
     }
 
     #[test]

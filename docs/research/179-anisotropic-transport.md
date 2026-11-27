@@ -185,3 +185,30 @@ checks bit-for-bit equality with the held-rate entry point for a constant
 schedule, and checks that malformed schedules leave the next valid result
 unchanged. The pose and gesture epoch needed by the harmonic statistic
 remain a separate runtime input.
+
+## Retracing a moving path with reversed turn rates
+
+In the same affine field, a free-geodesic replay runs for 0.16 mechanical
+seconds with `λ² = 0.7`, starting at `(0.04, 0.05)` with velocity
+`(-0.12, 0.4)`. Each outer step holds `[0.9, -0.4, 1.4, 0.3]` radians per
+mechanical second over its four committed chords. The return replay starts
+at the actual forward endpoint with reversed velocity and carries the
+forward frame into it. It negates and reverses the rate schedule.
+
+The comparison integrates the exact one-form on the chords of both
+replays, since RK4 can return along a slightly different path. Intentional
+turn integrates to zero across the two legs. The remaining reference angle
+gap measures the chord mismatch. Both the outbound frame error and the
+error after the two legs fall by roughly a factor of two with each
+refinement.
+
+| Outer steps per leg | Outbound frame error (rad) | Round-trip frame error (rad) | Round-trip reference angle gap (rad) | Return position error |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 0.00837865 | 0.0168392 | `5.69e-10` | `3.68e-10` |
+| 8 | 0.00420407 | 0.00842878 | `1.77e-11` | `1.15e-11` |
+| 16 | 0.00210557 | 0.00421632 | `5.54e-13` | `3.59e-13` |
+
+Frame errors use the analytic coframe at each measured endpoint. The
+round-trip error can exceed the outbound error even when the two
+reconstructed paths nearly coincide. The comparison gives a numerical
+calibration of the normalized Euler update on this fixture.
