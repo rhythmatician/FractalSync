@@ -274,5 +274,13 @@ units of its exact rational grid time. This covers all 16 recorded outer steps
 in each profile starting from zero. The Lean history estimate still uses the
 exact grid. A large starting clock or another profile needs a separate check.
 
+The fixture now reads its numerical substep data from
+`FrozenRollout::attempt_step_with_trace`. The trace exposes the represented
+duration, evaluated stages and slopes, weighted endpoint, and work for each
+committed RK4 substep. Trace collection reuses the executed stages without
+additional provider evaluations. The fixture still records query positions
+separately to check support and address selection. The trace provides inputs
+for the independent checker, whose bounds apply to the pinned runs.
+
 A uniform arithmetic bound across targets, profiles, or meshes, accuracy
 of the reported total energy, and production field fidelity remain open.

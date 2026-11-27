@@ -176,6 +176,19 @@ bounds, rounds their running sum upward and uses the remaining
 target length lower bound to order and prune the search. The returned
 path carries its length upper bound and raster generation. The method
 holds that generation under a single read lock while pricing edges.
+The graph's straight edges stay inside the convex window, so its
+displacement heuristic applies without a first-exit allowance. The
+continuous-path query still accounts for paths that leave the window.
+The raster test compares against a zero-heuristic search on the same
+graph and checks that a finite budget can prune a boundary launch
+before retrieving its adjacency list.
+
+The same search accepts a nonempty union of closed ambient balls.
+Each zero-radius component recovers a point target. Arrival accepts a
+waypoint in any component, while the heuristic takes the minimum of
+the component lower bounds. The built-in test reverses the target
+component order and obtains the same first route. The cockpit currently
+exposes a single component.
 
 Arrival requires a waypoint whose outward ambient displacement from the
 target center is within the radius. Equality of coordinates suffices for

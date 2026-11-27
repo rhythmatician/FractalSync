@@ -286,3 +286,25 @@ The strongest practical consequences are already actionable: no duplicate covari
 - [R4] Taco Cohen, Maurice Weiler, Berkay Kicanaoglu, and Max Welling, *Gauge Equivariant Convolutional Networks and the Icosahedral CNN*, ICML 2019. https://proceedings.mlr.press/v97/cohen19d.html . Relevant prior work for gauge transformation rules of features and transport, not a claim that local covariance is novel here.
 
 The search was a targeted first pass, not a comprehensive novelty clearance.
+
+## Rust comparison over accepted gesture samples
+
+The prepared-field rollout can now emit a motion phasor from the velocity
+in its transported frame. The harmonic comparison consumes this phasor
+once and requires every gesture sample to share the trajectory, epoch,
+and reference identifiers. The caller supplies aligned sample arrays. A
+positive lag pairs gesture index `i` with audio index `i - lag`. Weights
+index gesture samples. Missing motion phases and zero weights remove the
+same pair from the cross-moment and both energies. The comparison divides
+all three sums by their common weight and reports no result on insufficient
+support or zero energy. Coherence is the magnitude of the normalized
+cross-moment divided by the geometric mean of the normalized energies.
+
+Changing the epoch reference rotates the complex moment by the expected
+harmonic phase factor. Magnitude and coherence are invariant under a
+constant reference rotation. A signed fit must rotate its preferred
+reference by the same factor. The current result carries the complex
+moment so a probe can make that comparison. It supplies no angle-error
+estimate when any contributing frame lacks one. The experimental
+transport currently supplies no certified angle bound. The held-out
+audiovisual fit experiment and production gesture source remain open.

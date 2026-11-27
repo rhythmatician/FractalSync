@@ -92,7 +92,12 @@ evidence for the metric provider along the path and for the velocity
 used to evaluate the intrinsic speed. The intervals must cover the same
 history and metric as $B$. The Lean theorem
 `sampledAction_lower_bound_of_excess` takes the resulting length
-allowances as hypotheses. Establishing them for a runtime replay
-remains open.
+allowances as hypotheses. Rust now checks that the panels cover the
+arrival prefix on the canonical sample clock, accumulates each speed
+gap and growth allowance upward, and rounds the resulting action
+floor downward. The unequal-panel test uses a speed jump at a panel
+boundary and refuses a gap, an incomplete prefix, and an estimated
+target length. Production use still needs independent bounds for
+the initial speed gap and speed growth on each RK interval.
 
 [Sampled-action proof](../../formal/FractalSync/SampledAction.lean)

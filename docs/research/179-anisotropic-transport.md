@@ -251,8 +251,37 @@ a chord of duration `h` with rate `ω` rotates the normalized Euler frame by
 `atan(h ω)`. The regression exercises positive, zero, and negative rates,
 checks bit-for-bit equality with the held-rate entry point for a constant
 schedule, and checks that malformed schedules leave the next valid result
-unchanged. The pose and gesture epoch needed by the harmonic statistic
-remain a separate runtime input.
+unchanged.
+
+## Transported gesture epochs on accepted traces
+
+`FrozenRollout` can now start an experimental gesture epoch at the first
+endpoint of an accepted trace. The caller records trajectory, epoch and
+reference identity and supplies a start direction and metric speed floor.
+Each advance checks rollout identity and an exact match of the previous
+accepted position, velocity and mechanical time with the next trace's
+start. The trace must advance the mechanical clock. Replay branches with
+identical start state still require the caller to assign distinct
+trajectory or epoch identities when their phase origins differ.
+
+The epoch uses zero intentional turn and carries the prior frame axis
+into the next transport. At the new endpoint the real and imaginary
+parts of the motion phasor are the metric projections of velocity onto
+the transported axis and its positive quarter-turn companion. This
+already accounts for the chord transport. The regression feeds two
+accepted samples to the same-epoch harmonic statistic against an
+analytic-coframe reference and checks full coherence. A speed at or below
+the floor suppresses the motion phasor while the frame still advances. An
+unsupported geometry or a discontinuity refuses the trace without
+advancing the epoch. Explicit restart permits a new reference after a
+reset or velocity jump.
+
+The sample carries the committed endpoint and the frame for replay
+inspection. Its continuous-path angular bound is currently unavailable.
+The experimental traces do not record authorized Physics impulse events,
+so this entry point does not supply a same-epoch impulse phase jump.
+The production gesture/diagnostic and binding integration still needs an
+authoritative Physics trace and its error evidence.
 
 ## Retracing a moving path with reversed turn rates
 

@@ -5,7 +5,7 @@ use std::sync::{Mutex, OnceLock, RwLock, RwLockReadGuard};
 
 mod raster_navigation;
 pub use raster_navigation::{
-    RasterNavigationRegion, RasterRouteError, RasterRouteWitness, RasterWaypoint,
+    RasterNavigationRegion, RasterRouteError, RasterRouteWitness, RasterTargetBall, RasterWaypoint,
 };
 
 static GLOBAL_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();

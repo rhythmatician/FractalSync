@@ -10,7 +10,106 @@ pub struct TransportedFrame {
     pub companion: [f64; 2],
 }
 
+/// Caller-assigned replay trajectory, epoch and reference identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GestureEpochId {
+    pub trajectory: u64,
+    pub epoch: u64,
+    pub reference: u64,
+}
+
+/// Velocity projected into the frame parallel transported over the chords.
+#[derive(Clone, Copy, Debug)]
+pub struct GestureSample {
+    pub id: GestureEpochId,
+    pub endpoint: super::MechanicalEndpoint,
+    pub frame: TransportedFrame,
+    /// Metric speed, irrespective of heading validity.
+    pub speed: f64,
+    /// Real and imaginary phasor coordinates, available above the speed floor.
+    pub motion_phasor: Option<[f64; 2]>,
+    /// Continuous-path angular bound, currently unavailable.
+    pub angular_error_bound: Option<f64>,
+}
+
+/// Experimental replay state. A discontinuity requires a new epoch.
+pub struct TransportedGestureEpoch {
+    id: GestureEpochId,
+    rollout_policy: Arc<[super::ReferenceCut]>,
+    endpoint: super::MechanicalEndpoint,
+    axis: [f64; 2],
+    speed_floor: f64,
+}
+
 impl FrozenRollout {
+    /// Start a gesture epoch at a committed trace's first endpoint.
+    ///
+    /// The reference is a coordinate direction at that endpoint. The caller
+    /// must supply distinct epoch identity after a reset or discontinuity.
+    pub fn begin_transported_gesture_epoch(
+        &self,
+        id: GestureEpochId,
+        trace: &AcceptedStepTrace,
+        reference: [f64; 2],
+        speed_floor: f64,
+    ) -> Result<TransportedGestureEpoch, String> {
+        self.check_transport_trace(trace)?;
+        checked_direction(reference)?;
+        if !speed_floor.is_finite() || speed_floor < 0.0 {
+            return Err("gesture speed floor must be finite and nonnegative".into());
+        }
+        Ok(TransportedGestureEpoch {
+            id,
+            rollout_policy: Arc::clone(&self.cuts),
+            endpoint: trace.endpoints()[0],
+            axis: reference,
+            speed_floor,
+        })
+    }
+
+    /// Advance on the next contiguous accepted trace, using zero intentional turn.
+    ///
+    /// Low speed suppresses the phasor while the reference frame continues.
+    /// A refused trace leaves the epoch at its last accepted endpoint.
+    /// Use this only for a contiguous replay with caller-managed branch identity.
+    pub fn advance_transported_gesture_epoch(
+        &self,
+        epoch: &mut TransportedGestureEpoch,
+        trace: &AcceptedStepTrace,
+    ) -> Result<GestureSample, String> {
+        let endpoints = trace.endpoints();
+        if !Arc::ptr_eq(&epoch.rollout_policy, &self.cuts) || epoch.endpoint != endpoints[0] {
+            return Err("gesture trace does not continue the epoch".into());
+        }
+        let endpoint = endpoints[endpoints.len() - 1];
+        if endpoint.mechanical_time <= epoch.endpoint.mechanical_time {
+            return Err("gesture trace does not advance the epoch clock".into());
+        }
+        let (frame, metric) = self.transport_chords(
+            trace,
+            epoch.axis,
+            std::iter::repeat_n(0.0, endpoints.len() - 1),
+        )?;
+        let [vx, vy] = metric.coordinates(endpoint.velocity);
+        let [ax, ay] = metric.coordinates(frame.axis);
+        let [bx, by] = metric.coordinates(frame.companion);
+        let phasor = [vx * ax + vy * ay, vx * bx + vy * by];
+        let speed = vx.hypot(vy);
+        if !speed.is_finite() || phasor.iter().any(|coordinate| !coordinate.is_finite()) {
+            return Err("unsupported velocity projection".into());
+        }
+        epoch.endpoint = endpoint;
+        epoch.axis = frame.axis;
+        Ok(GestureSample {
+            id: epoch.id,
+            endpoint,
+            frame,
+            speed,
+            motion_phasor: (speed > epoch.speed_floor).then_some(phasor),
+            angular_error_bound: None,
+        })
+    }
+
     /// Apply endpoint-normalized covariant Euler to affine chords between
     /// the committed endpoints. The chord displacement supplies the base
     /// velocity integral. The recorded endpoint velocities are unused.
@@ -31,6 +130,7 @@ impl FrozenRollout {
             initial_direction,
             std::iter::repeat_n(turn_rate, trace.endpoints().len() - 1),
         )
+        .map(|(frame, _)| frame)
     }
 
     /// Apply the same diagnostic transport with a signed turn rate in radians
@@ -43,14 +143,10 @@ impl FrozenRollout {
         turn_rates: &[f64],
     ) -> Result<TransportedFrame, String> {
         self.transport_chords(trace, initial_direction, turn_rates.iter().copied())
+            .map(|(frame, _)| frame)
     }
 
-    fn transport_chords(
-        &self,
-        trace: &AcceptedStepTrace,
-        initial_direction: [f64; 2],
-        turn_rates: impl ExactSizeIterator<Item = f64> + Clone,
-    ) -> Result<TransportedFrame, String> {
+    fn check_transport_trace(&self, trace: &AcceptedStepTrace) -> Result<(), String> {
         // The policy allocation is owned by this rollout and retained by
         // the trace. Fingerprints alone do not establish its provenance.
         if !Arc::ptr_eq(&trace.rollout_policy, &self.cuts)
@@ -59,6 +155,16 @@ impl FrozenRollout {
         {
             return Err("FrozenIdentity: trace belongs to another rollout".into());
         }
+        Ok(())
+    }
+
+    fn transport_chords(
+        &self,
+        trace: &AcceptedStepTrace,
+        initial_direction: [f64; 2],
+        turn_rates: impl ExactSizeIterator<Item = f64> + Clone,
+    ) -> Result<(TransportedFrame, MetricFactor), String> {
+        self.check_transport_trace(trace)?;
         let endpoints = trace.endpoints();
         let chord_count = endpoints.len() - 1;
         if turn_rates.len() != chord_count {
@@ -103,10 +209,11 @@ impl FrozenRollout {
                 metric = MetricFactor::new(manifold::induced_metric_from_jet(&start_jet, config)?)?;
                 axis = metric.unit(trial)?;
             }
-            Ok(TransportedFrame {
+            let frame = TransportedFrame {
                 axis,
                 companion: metric.quarter_turn(axis)?,
-            })
+            };
+            Ok((frame, metric))
         })?;
         Ok(frame)
     }
@@ -170,6 +277,7 @@ fn checked_direction(direction: [f64; 2]) -> Result<[f64; 2], String> {
 #[cfg(test)]
 mod tests {
     use super::super::{FrozenRollout, Integrator, MechanicalState, PhysicsProfile, ReferenceCut};
+    use super::GestureEpochId;
     use crate::{manifold::ManifoldConfig, operational_field::PreparedField};
     use std::sync::Arc;
 
@@ -390,6 +498,104 @@ mod tests {
         ];
         let angle = (momentum * rho_end / speed).asin() - (momentum * rho_start / speed).asin();
         (end, angle, flight_time(field_end))
+    }
+
+    #[test]
+    fn gesture_epoch_projects_motion_and_refuses_discontinuous_traces() {
+        let field = sheared_shore();
+        let rollout = rollout(field, 0.008, 0.7);
+        let id = GestureEpochId {
+            trajectory: 3,
+            epoch: 0,
+            reference: 8,
+        };
+        let graph = AffineGraphMetric::new(0.7);
+        let reference = [0.9, -0.1];
+        let mut state = rollout.initial_state([0.04, 0.05], [-0.12, 0.4]).unwrap();
+        let (_, first) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let mut epoch = rollout
+            .begin_transported_gesture_epoch(id, &first, reference, 0.0)
+            .unwrap();
+        let mut low_speed = rollout
+            .begin_transported_gesture_epoch(id, &first, reference, 1e6)
+            .unwrap();
+        let mut impulse = rollout
+            .initial_state(state.position, state.velocity.map(|v| -v))
+            .unwrap();
+        impulse.mechanical_time = state.mechanical_time;
+        let (_, jumped) = rollout
+            .attempt_step_with_trace(&mut impulse, [0.0; 2])
+            .unwrap();
+        let (_, second) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let mut previous_axis = reference;
+        let mut samples = Vec::new();
+        let mut audio = Vec::new();
+
+        for trace in [&first, &second] {
+            let result = rollout
+                .advance_transported_gesture_epoch(&mut epoch, trace)
+                .unwrap();
+            let suppressed = rollout
+                .advance_transported_gesture_epoch(&mut low_speed, trace)
+                .unwrap();
+            assert_eq!(result.id, id);
+            assert!(suppressed.motion_phasor.is_none());
+            assert_eq!(suppressed.frame.axis, result.frame.axis);
+            assert_eq!(suppressed.speed, result.speed);
+            assert!(result.angular_error_bound.is_none());
+            let independent_frame = rollout
+                .transport_endpoint_chords(trace, previous_axis, 0.0)
+                .unwrap();
+            assert_eq!(result.frame.axis, independent_frame.axis);
+            previous_axis = independent_frame.axis;
+
+            let endpoint = result.endpoint;
+            let [ax, ay] = graph.coordinates(endpoint.position, independent_frame.axis);
+            let [vx, vy] = graph.coordinates(endpoint.position, endpoint.velocity);
+            let [u, v] = result.motion_phasor.unwrap();
+            let expected_u = ax * vx + ay * vy;
+            let expected_v = ax * vy - ay * vx;
+            assert!((u.hypot(v) - result.speed).abs() < 1e-13);
+            assert!((u - expected_u).abs() < 1e-13);
+            assert!((v - expected_v).abs() < 1e-13);
+            samples.push(result);
+            audio.push(num_complex::Complex64::new(expected_u, expected_v));
+            assert!(
+                rollout
+                    .advance_transported_gesture_epoch(&mut epoch, &first)
+                    .is_err()
+            );
+            assert!(
+                rollout
+                    .advance_transported_gesture_epoch(&mut epoch, &jumped)
+                    .is_err()
+            );
+        }
+
+        let moment =
+            super::super::compare_gesture_harmonics(&audio, &samples, &[1.0, 2.0], [2, 2], 0, 2)
+                .unwrap()
+                .unwrap();
+        assert_eq!(moment.epoch, id);
+        assert_eq!(moment.support, 2);
+        assert!((moment.coherence - 1.0).abs() < 1e-13);
+        assert!((moment.cross_moment.re - moment.audio_energy).abs() < 1e-13);
+        assert!(moment.cross_moment.im.abs() < 1e-13);
+        assert!(moment.estimated_cross_moment_angle_error.is_none());
+
+        let restarted_id = GestureEpochId { epoch: 1, ..id };
+        let mut restarted = rollout
+            .begin_transported_gesture_epoch(restarted_id, &jumped, reference, 0.0)
+            .unwrap();
+        let sample = rollout
+            .advance_transported_gesture_epoch(&mut restarted, &jumped)
+            .unwrap();
+        assert_eq!(sample.id, restarted_id);
+        assert!(sample.motion_phasor.is_some());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Necessary feasibility bounds for navigation deadlines and Shore arrivals.
 
-use crate::intrinsic_bounds::{add_up, div_down, div_up, mul_down, mul_up};
+use crate::intrinsic_bounds::{add_up, div_down, div_up, mul_down, mul_up, sub_down};
 use crate::timebase::CANONICAL_SAMPLE_RATE;
 use serde::Serialize;
 
@@ -81,6 +81,71 @@ pub struct FeasibilityAssessment {
     pub crest_work_status: Option<FeasibilityStatus>,
 }
 
+/// Bounds that enclose the speed missed by one left-endpoint kinetic sample.
+#[derive(Clone, Copy, Debug)]
+pub struct SampledActionPanel {
+    pub start_sample: u64,
+    pub end_sample: u64,
+    pub initial_speed_gap_upper: f64,
+    pub speed_growth_upper: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SampledActionBound {
+    pub missed_length_upper: f64,
+    pub covered_length_lower: f64,
+    pub minimum_kinetic_action: f64,
+}
+
+/// Bound left-endpoint sampled kinetic action over a complete arrival prefix.
+/// The caller supplies a length lower bound in the reference metric and
+/// certifies that each panel's reference speed minus its nonnegative sampled
+/// speed is at most the initial speed gap plus the speed growth bound times
+/// elapsed seconds. Split panels at impulses and other discontinuities.
+pub fn sampled_action_lower_bound(
+    length: LengthLowerBound,
+    start_sample: u64,
+    arrival_sample: u64,
+    panels: &[SampledActionPanel],
+) -> Option<SampledActionBound> {
+    let LengthLowerBound::Certified(length) = length else {
+        return None;
+    };
+    let duration = arrival_sample.checked_sub(start_sample)?;
+    if duration == 0 || !valid_nonnegative(length) {
+        return None;
+    }
+    let mut next_sample = start_sample;
+    let mut missed_length_upper = 0.0;
+    for panel in panels {
+        if panel.start_sample != next_sample
+            || panel.end_sample <= next_sample
+            || panel.end_sample > arrival_sample
+            || !valid_nonnegative(panel.initial_speed_gap_upper)
+            || !valid_nonnegative(panel.speed_growth_upper)
+        {
+            return None;
+        }
+        let h = seconds_upper(panel.end_sample - next_sample);
+        let excess = add_up(
+            mul_up(h, panel.initial_speed_gap_upper),
+            mul_up(mul_up(h / 2.0, h), panel.speed_growth_upper),
+        );
+        missed_length_upper = add_up(missed_length_upper, excess);
+        next_sample = panel.end_sample;
+    }
+    if next_sample != arrival_sample || !missed_length_upper.is_finite() {
+        return None;
+    }
+    let covered_length_lower = sub_down(length, missed_length_upper);
+    Some(SampledActionBound {
+        missed_length_upper,
+        covered_length_lower,
+        minimum_kinetic_action: action_floor(covered_length_lower, seconds_upper(duration)),
+    })
+}
+
 /// Apply necessary bounds to a deadline on the canonical sample clock.
 /// With a certified length bound `B`, a supplied positive speed cap `V`
 /// gives `T >= B/V`. For positive `T`, Cauchy–Schwarz gives
@@ -113,11 +178,7 @@ pub fn evaluate_feasibility(
     });
     let minimum_kinetic_action = certified_length
         .filter(|_| duration_samples > 0)
-        .map(|length| {
-            // Multiplication by 2 is exact over the range of canonical durations.
-            let half_mean_speed = div_down(length, 2.0 * duration_upper);
-            mul_down(length, half_mean_speed)
-        });
+        .map(|length| action_floor(length, duration_upper));
     let kinetic_action_status = limits.kinetic_action_budget.map(|budget| {
         if valid_nonnegative(budget) {
             compare(minimum_kinetic_action, budget)
@@ -178,6 +239,11 @@ fn valid_nonnegative(value: f64) -> bool {
     value.is_finite() && value >= 0.0
 }
 
+fn action_floor(length_lower: f64, duration_upper: f64) -> f64 {
+    // Multiplication by 2 is exact over the range of canonical durations.
+    mul_down(length_lower, div_down(length_lower, 2.0 * duration_upper))
+}
+
 fn seconds_upper(samples: u64) -> f64 {
     if samples == 0 {
         return 0.0;
@@ -213,6 +279,54 @@ mod tests {
     use FeasibilityStatus::{InsufficientEvidence, NotRuledOut, RuledOut};
 
     const SECOND: u64 = CANONICAL_SAMPLE_RATE as u64;
+
+    #[test]
+    fn sampled_action_accounts_for_unequal_panels_with_a_speed_jump() {
+        // Each panel starts at speed 1.25 and then increases at unit
+        // rate. At the boundary an impulse resets reference speed to 1.25.
+        // Each recorded left endpoint speed is 1.0.
+        let first = SampledActionPanel {
+            start_sample: SECOND,
+            end_sample: SECOND + SECOND / 4,
+            initial_speed_gap_upper: 0.25,
+            speed_growth_upper: 1.0,
+        };
+        let second = SampledActionPanel {
+            start_sample: first.end_sample,
+            end_sample: 2 * SECOND,
+            ..first
+        };
+        let length = LengthLowerBound::Certified(1.5625);
+        let run = |panels: &[SampledActionPanel]| {
+            sampled_action_lower_bound(length, SECOND, 2 * SECOND, panels)
+        };
+        let bound = run(&[first, second]).unwrap();
+        assert!(bound.missed_length_upper >= 0.5625);
+        assert!(bound.covered_length_lower <= 1.0);
+        assert!(bound.minimum_kinetic_action > 0.499999999);
+        assert!(bound.minimum_kinetic_action <= 0.5);
+        assert_eq!(run(&[first]), None);
+        assert_eq!(run(&[second, first]), None);
+        assert_eq!(
+            run(&[
+                first,
+                SampledActionPanel {
+                    start_sample: first.end_sample + 1,
+                    ..second
+                }
+            ]),
+            None
+        );
+        assert_eq!(
+            sampled_action_lower_bound(
+                LengthLowerBound::Estimate(1.5625),
+                SECOND,
+                2 * SECOND,
+                &[first, second],
+            ),
+            None
+        );
+    }
 
     fn deadline(speed_cap: SpeedCap) -> FeasibilityLimits {
         FeasibilityLimits {
