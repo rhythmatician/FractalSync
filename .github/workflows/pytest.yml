@@ -9,6 +9,8 @@ jobs:
   bounded-operational-controls:
     name: Bounded Operational Controls
     runs-on: ubuntu-latest
+    env:
+      FRACTALSYNC_RK_FIXTURE_TRACE: ${{ runner.temp }}/fractalsync-181-rk-bits.json
     permissions:
       contents: read
     steps:
@@ -29,6 +31,7 @@ jobs:
         run: |
           python -m venv .venv
           . .venv/bin/activate
+          python formal/fixtures/check_181_rounded_rk.py "$FRACTALSYNC_RK_FIXTURE_TRACE"
           python -m pip install maturin mypy numpy
           maturin build --release --manifest-path runtime-core/Cargo.toml --features python,experimental-operational-field --bindings pyo3 --out tmp/operational-wheel
           python -m pip install tmp/operational-wheel/*.whl
