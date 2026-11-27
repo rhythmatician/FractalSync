@@ -180,90 +180,92 @@ def collect_c_traces(
     import runtime_core
 
     was_training = model.training
-    model.eval()
-    traces: Dict[str, np.ndarray] = {}
+    try:
+        model.eval()
+        traces: Dict[str, np.ndarray] = {}
 
-    with torch.no_grad():
-        for idx, audio_file in enumerate(dataset_files):
-            try:
-                features = np.asarray(
-                    feature_extractor.extract_windowed_features(
-                        _load_audio(audio_file), window_frames
-                    ),
-                    dtype=np.float64,
-                )
-            except Exception as exc:  # noqa: BLE001 - skip unreadable files
-                logger.warning("c-trace: failed to extract %s: %s", audio_file.name, exc)
-                continue
-            if features.ndim != 2 or features.shape[0] == 0:
-                continue
-            if features.shape[0] > max_frames_per_file:
-                features = features[:max_frames_per_file]
-
-            rows = [feature_extractor.normalize_features(r) for r in features.tolist()]
-            # Model expects (batch, feature_dim) rows — one window per row.
-            x = torch.tensor(np.vstack(rows), dtype=torch.float32)
-            if next(model.parameters()).device.type != "cpu":
-                x = x.to(next(model.parameters()).device)
-
-            out = model(x)
-            parsed = model.parse_output(out)
-            # The browser uses the same Rust audio drive calculation.
-            feature_rows: list[list[float]] = x.tolist()
-            has_legacy_layout = x.shape[1] > 0 and x.shape[1] % 6 == 0
-
-            # Domain-randomized start (90%: boundary, 10%: dust) seeded per file.
-            _seed = abs(hash(audio_file.stem)) % (1 << 31)
-            _g = torch.Generator(device=parsed["s_target"].device)
-            _g.manual_seed(_seed)
-            _is_dust = torch.rand((), generator=_g).item() < 0.10
-            if _is_dust:
-                _ang = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
-                _r = 1.8 + torch.rand((), generator=_g).item() * 0.4
-                import math as _m3
-                _ic_re = _m3.cos(_ang) * _r
-                _ic_im = _m3.sin(_ang) * _r
-            else:
-                _t = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
-                _mu = complex(__import__("math").cos(_t), __import__("math").sin(_t))
-                _cb = _mu * 0.5 - _mu * _mu * 0.25
-                _j = (torch.rand((), generator=_g).item() - 0.5) * 0.30
-                _ic_re = _cb.real + _j * _mu.real * 0.5
-                _ic_im = _cb.imag + _j * _mu.imag * 0.5
-
-            # Replay through the canonical Rust controller (momentum + shore
-            # bias + energy). This is the same code path the browser runs.
-            ctrl = runtime_core.OrbitController(
-                float(parsed["s_target"][0]), float(parsed["alpha"][0]), 1.0
-            )
-            ctrl.set_momentum(True)
-            ctrl.set_drag(0.90)
-            ctrl.set_c(float(_ic_re), float(_ic_im))
-            c_list: list[complex] = []
-            for i, row in enumerate(feature_rows):
-                if i > 0:
-                    ctrl.apply_controls(
-                        float(parsed["s_target"][i]), float(parsed["alpha"][i])
+        with torch.no_grad():
+            for idx, audio_file in enumerate(dataset_files):
+                try:
+                    features = np.asarray(
+                        feature_extractor.extract_windowed_features(
+                            _load_audio(audio_file), window_frames
+                        ),
+                        dtype=np.float64,
                     )
-                # Preserve neutral averages for non-legacy layouts.
-                rms, onset = 0.0, 0.0
-                if has_legacy_layout:
-                    averages: dict[str, float] = json.loads(
-                        runtime_core.legacy_audio_feature_averages_json(row)
-                    )
-                    rms, onset = averages["rms"], averages["onset"]
-                drive: dict[str, float] = json.loads(
-                    runtime_core.legacy_orbit_drive_inputs_json(rms, onset)
-                )
-                ctrl.set_thrust(drive["thrust"])
-                ctrl.set_energy(drive["energy"])
-                gates = [float(g) for g in parsed["band_gates"][i]]
-                re, im = ctrl.step(1.0 / 60.0, gates, drive["transient"])
-                c_list.append(complex(re, im))
-            traces[audio_file.stem] = np.asarray(c_list, dtype=np.complex128)
+                except Exception as exc:  # noqa: BLE001 - skip unreadable files
+                    logger.warning("c-trace: failed to extract %s: %s", audio_file.name, exc)
+                    continue
+                if features.ndim != 2 or features.shape[0] == 0:
+                    continue
+                if features.shape[0] > max_frames_per_file:
+                    features = features[:max_frames_per_file]
 
-    if was_training:
-        model.train()
+                rows = [feature_extractor.normalize_features(r) for r in features.tolist()]
+                # Model expects (batch, feature_dim) rows — one window per row.
+                x = torch.tensor(np.vstack(rows), dtype=torch.float32)
+                if next(model.parameters()).device.type != "cpu":
+                    x = x.to(next(model.parameters()).device)
+
+                out = model(x)
+                parsed = model.parse_output(out)
+                # The browser uses the same Rust audio drive calculation.
+                feature_rows: list[list[float]] = x.tolist()
+                has_legacy_layout = x.shape[1] > 0 and x.shape[1] % 6 == 0
+
+                # Domain-randomized start (90%: boundary, 10%: dust) seeded per file.
+                _seed = abs(hash(audio_file.stem)) % (1 << 31)
+                _g = torch.Generator(device=parsed["s_target"].device)
+                _g.manual_seed(_seed)
+                _is_dust = torch.rand((), generator=_g).item() < 0.10
+                if _is_dust:
+                    _ang = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
+                    _r = 1.8 + torch.rand((), generator=_g).item() * 0.4
+                    import math as _m3
+                    _ic_re = _m3.cos(_ang) * _r
+                    _ic_im = _m3.sin(_ang) * _r
+                else:
+                    _t = torch.rand((), generator=_g).item() * 2 * 3.141592653589793
+                    _mu = complex(__import__("math").cos(_t), __import__("math").sin(_t))
+                    _cb = _mu * 0.5 - _mu * _mu * 0.25
+                    _j = (torch.rand((), generator=_g).item() - 0.5) * 0.30
+                    _ic_re = _cb.real + _j * _mu.real * 0.5
+                    _ic_im = _cb.imag + _j * _mu.imag * 0.5
+
+                # Replay through the canonical Rust controller (momentum + shore
+                # bias + energy). This is the same code path the browser runs.
+                ctrl = runtime_core.OrbitController(
+                    float(parsed["s_target"][0]), float(parsed["alpha"][0]), 1.0
+                )
+                ctrl.set_momentum(True)
+                ctrl.set_drag(0.90)
+                ctrl.set_c(float(_ic_re), float(_ic_im))
+                c_list: list[complex] = []
+                for i, row in enumerate(feature_rows):
+                    if i > 0:
+                        ctrl.apply_controls(
+                            float(parsed["s_target"][i]), float(parsed["alpha"][i])
+                        )
+                    # Preserve neutral averages for non-legacy layouts.
+                    rms, onset = 0.0, 0.0
+                    if has_legacy_layout:
+                        averages: dict[str, float] = json.loads(
+                            runtime_core.legacy_audio_feature_averages_json(row)
+                        )
+                        rms, onset = averages["rms"], averages["onset"]
+                    drive: dict[str, float] = json.loads(
+                        runtime_core.legacy_orbit_drive_inputs_json(rms, onset)
+                    )
+                    ctrl.set_thrust(drive["thrust"])
+                    ctrl.set_energy(drive["energy"])
+                    gates = [float(g) for g in parsed["band_gates"][i]]
+                    re, im = ctrl.step(1.0 / 60.0, gates, drive["transient"])
+                    c_list.append(complex(re, im))
+                traces[audio_file.stem] = np.asarray(c_list, dtype=np.complex128)
+
+    finally:
+        if was_training:
+            model.train()
     return traces
 
 
