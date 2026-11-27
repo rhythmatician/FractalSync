@@ -32,4 +32,20 @@ theorem sampledAction_lower_bound {ι : Type*} (steps : Finset ι)
       hs.trans hcs
     _ = ((∑ i ∈ steps, dt i * speed i ^ 2) / 2) * (2 * ∑ i ∈ steps, dt i) := by ring
 
+/-- Certified interval length excess reduces the length floor available to the
+sampled kinetic action. If the allowance covers the entire floor, the
+remaining bound is zero. -/
+theorem sampledAction_lower_bound_of_excess {ι : Type*} (steps : Finset ι)
+    (dt speed length excess : ι → ℝ) (bound : ℝ)
+    (hdt : ∀ i ∈ steps, 0 ≤ dt i) (hspeed : ∀ i ∈ steps, 0 ≤ speed i)
+    (hT : 0 < ∑ i ∈ steps, dt i) (hpath : bound ≤ ∑ i ∈ steps, length i)
+    (hcovered : ∀ i ∈ steps, length i ≤ dt i * speed i + excess i) :
+    max 0 (bound - ∑ i ∈ steps, excess i) ^ 2 / (2 * ∑ i ∈ steps, dt i) ≤
+      ∑ i ∈ steps, dt i * speed i ^ 2 / 2 := by
+  refine sampledAction_lower_bound steps dt speed (fun i => dt i * speed i) _
+    hdt hT (le_max_left _ _) ?_ (fun _ _ => le_rfl)
+  exact max_le (Finset.sum_nonneg fun i hi => mul_nonneg (hdt i hi) (hspeed i hi))
+    (sub_le_iff_le_add.mpr (by
+      simpa only [Finset.sum_add_distrib] using hpath.trans (Finset.sum_le_sum hcovered)))
+
 end FractalSync

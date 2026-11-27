@@ -140,6 +140,44 @@ binary64 evaluations, and the bound covers the chord reconstruction.
 Production use would require a roundoff enclosure and separate
 continuous-path evidence.
 
+### Perturbing the chord and its held turn
+
+Let \(P=I+B\) and \(M=I-D+kJ\), so the Euler trial for an initial
+unit vector \(w\) in coframe coordinates is \(v=PMw\). A perturbed
+chord uses its own start and endpoint coframes and coefficients
+\(\widehat P,\widehat D,\widehat k\). Compare trials with the same
+unit coordinates at their respective starts. The trial discrepancy
+satisfies \(\|\widehat v-v\|\le e\) for
+\[
+ e=\|\widehat P-P\|\big(\|I-D\|+|k|\big)
+    +\|\widehat P\|\big(\|\widehat D-D\|+|\widehat k-k|\big).
+\]
+This follows by subtracting the trial products as
+\((\widehat P-P)M+\widehat P(\widehat M-M)\). Thus the endpoint
+scale ratio, directional derivative, and turn and connection increment
+can supply separate input-error budgets.
+
+Use a nominal lower bound \(\ell=\sqrt{1+k^2}-r>0\) for the trial
+length. If \(e<\ell\), the perturbed length is at least \(\ell-e\).
+The perturbed trial projects at least \(\ell-e\) along the nominal ray
+and at most \(e\) transverse to it in absolute value. The wrapped angle
+difference is therefore at most \(\arctan(e/(\ell-e))\). The distance
+between the two normalized vectors is at most \(2e/\ell\). To see this,
+divide both vectors by the nominal length, which costs at most
+\(e/\ell\) in vector discrepancy. Renormalizing the perturbed vector
+then costs at most another \(e/\ell\) by the reverse triangle inequality.
+If the strict margin fails, the envelope gives no angle or nonvanishing
+guarantee.
+
+The Rust fixture compares two separately committed one-chord RK4 traces
+at each perturbation size. It changes initial position, velocity and
+held turn together and checks both bounds on two coordinate axes and
+one oblique direction of the analytic coframe. These are single-chord
+comparisons in the declared coframes. To compose them along a path,
+one must also propagate the incoming axis error or compare each step
+against exact isometric transport. The fixture uses binary64 comparisons
+under an exact-real bound.
+
 ## Continuous free geodesic on the affine fixture
 
 The affine metric also gives a continuous reference trajectory through

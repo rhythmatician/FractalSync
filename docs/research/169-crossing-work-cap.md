@@ -72,4 +72,27 @@ are allowed. To use it with the runtime ledger, a provider and update
 certificate must establish the per-interval length coverage for the actual
 sampled speeds. Endpoint speeds alone may miss motion between the samples.
 
+If an interval certificate instead gives $ℓ_i\le h_i v_i+e_i$, where
+$e_i$ bounds the length missed by the sampled speed, subtract the
+total allowance before applying the action bound. For
+$T=\sum_i h_i>0$ and nonnegative sampled speeds, the resulting floor is
+
+$$
+\sum_i h_i v_i^2/2\ge\frac{\max(0,B-\sum_i e_i)^2}{2T}.
+$$
+
+For example, let $w(t)$ be the actual intrinsic speed on
+$[t_i,t_i+h_i]$. If $w(t)-v_i\le b_i+L_i(t-t_i)$ almost everywhere,
+integrating gives $e_i=h_i b_i+L_i h_i^2/2$. Here $b_i$ can bound the
+discrepancy between the true starting speed and the sampled speed, and
+$L_i$ can bound the subsequent growth of intrinsic speed. An impulse or
+any other event that changes the speed estimate's premises needs its
+own interval boundary. A bound across an uninterrupted interval needs
+evidence for the metric provider along the path and for the velocity
+used to evaluate the intrinsic speed. The intervals must cover the same
+history and metric as $B$. The Lean theorem
+`sampledAction_lower_bound_of_excess` takes the resulting length
+allowances as hypotheses. Establishing them for a runtime replay
+remains open.
+
 [Sampled-action proof](../../formal/FractalSync/SampledAction.lean)

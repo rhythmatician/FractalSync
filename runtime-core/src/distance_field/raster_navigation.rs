@@ -114,17 +114,30 @@ impl RasterNavigationRegion {
     /// default raster metric. Both endpoints must lie in the certified window.
     /// The caller must keep the provider and profile fixed during use.
     pub fn segment_length_upper(&self, start: [f64; 2], end: [f64; 2]) -> Option<f64> {
-        if !self.is_current() || !self.contains(start) || !self.contains(end) {
+        if !default_query_uses_raster_bridge() || !self.contains(start) || !self.contains(end) {
             return None;
         }
-        Some(self.segment_upper(start, end))
+        let slot = DIST_FIELD.read().ok()?;
+        let field = slot
+            .field
+            .as_ref()
+            .filter(|_| slot.generation == self.raster_generation)?;
+        Some(self.segment_upper(field, start, end))
     }
 
-    fn segment_upper(&self, start: [f64; 2], end: [f64; 2]) -> f64 {
-        mul_up(
-            displacement_upper(start, end),
-            self.length_per_displacement_upper,
-        )
+    fn segment_upper(&self, field: &DistanceField, start: [f64; 2], end: [f64; 2]) -> f64 {
+        let displacement = displacement_upper(start, end);
+        if displacement == 0.0 {
+            return 0.0;
+        }
+        let bounds = [
+            std::array::from_fn(|i| start[i].min(end[i])),
+            std::array::from_fn(|i| start[i].max(end[i])),
+        ];
+        let regional = self.length_per_displacement_upper;
+        let factor =
+            local_length_factor(field, bounds).map_or(regional, |local| local.min(regional));
+        mul_up(displacement, factor)
     }
 
     /// Find a waypoint path whose certified length upper bound fits the budget.
@@ -157,9 +170,17 @@ impl RasterNavigationRegion {
         {
             return Err(RasterRouteError::InvalidInput);
         }
-        if !self.is_current() {
+        if !default_query_uses_raster_bridge() {
             return Err(RasterRouteError::StaleRegion);
         }
+        let slot = DIST_FIELD
+            .read()
+            .map_err(|_| RasterRouteError::StaleRegion)?;
+        let field = slot
+            .field
+            .as_ref()
+            .filter(|_| slot.generation == self.raster_generation)
+            .ok_or(RasterRouteError::StaleRegion)?;
         let result = search_with_sum(
             waypoints.len(),
             start,
@@ -169,7 +190,7 @@ impl RasterNavigationRegion {
                 vertex.neighbors.iter().map(move |&neighbor| {
                     (
                         neighbor,
-                        self.segment_upper(vertex.position, waypoints[neighbor].position),
+                        self.segment_upper(field, vertex.position, waypoints[neighbor].position),
                     )
                 })
             },
@@ -183,9 +204,6 @@ impl RasterNavigationRegion {
                 add_up,
             ),
         );
-        if !self.is_current() {
-            return Err(RasterRouteError::StaleRegion);
-        }
         Ok(result.cost.map(|length_upper| RasterRouteWitness {
             path: result.path,
             length_upper,
@@ -252,7 +270,7 @@ fn in_hard_disk([lo, hi]: [[f64; 2]; 2]) -> bool {
     add_up(mul_up(x, x), mul_up(y, y)) < 4.0
 }
 
-fn sample_magnitude_upper(field: &DistanceField, [lo, hi]: [[f64; 2]; 2]) -> Option<f64> {
+fn coefficient_range(field: &DistanceField, [lo, hi]: [[f64; 2]; 2]) -> Option<[f64; 2]> {
     let min = [field.xmin, field.ymin];
     let max = [field.xmax, field.ymax];
     let shape = [field.data.ncols(), field.data.nrows()];
@@ -278,21 +296,79 @@ fn sample_magnitude_upper(field: &DistanceField, [lo, hi]: [[f64; 2]; 2]) -> Opt
         first[axis] = lower.floor() as usize - 1;
         last[axis] = upper.floor() as usize + 2;
     }
-    let mut magnitude = 0.0_f64;
+    let mut lower = f64::INFINITY;
+    let mut upper = f64::NEG_INFINITY;
     for row in first[1]..=last[1] {
         for column in first[0]..=last[0] {
             let value = field.data[[row, column]];
             if !value.is_finite() {
                 return None;
             }
-            magnitude = magnitude.max(f64::from(value.abs()));
+            lower = lower.min(f64::from(value));
+            upper = upper.max(f64::from(value));
         }
     }
+    Some([lower, upper])
+}
+
+fn sample_magnitude_upper(field: &DistanceField, bounds: [[f64; 2]; 2]) -> Option<f64> {
+    let [lower, upper] = coefficient_range(field, bounds)?;
+    let magnitude = lower.abs().max(upper.abs());
     // Exact Catmull–Rom tensor weight L1 is at most 25/16. The extra
     // 1/64 bounds the binary64 kernel, sum and division before the binary32
     // cast. A monotone cast bounds the sampler's own final cast.
     let upper = mul_up(101.0 / 64.0, magnitude) as f32;
     upper.is_finite().then_some(f64::from(upper))
+}
+
+fn sample_range(field: &DistanceField, bounds: [[f64; 2]; 2]) -> Option<[f64; 2]> {
+    let [lower, upper] = coefficient_range(field, bounds)?;
+    let spread = range_width([lower, upper]);
+    let magnitude = lower.abs().max(upper.abs());
+    // The tensor's negative weight mass is at most 9/32. The additional
+    // allowance covers the compiled kernel and normalization before casting.
+    let allowance = add_up(
+        mul_up(9.0 / 32.0, spread),
+        mul_up(2.0_f64.powi(-26), magnitude),
+    );
+    let lo = (lower - allowance).next_down() as f32;
+    let hi = (upper + allowance).next_up() as f32;
+    (lo.is_finite() && hi.is_finite()).then_some([f64::from(lo), f64::from(hi)])
+}
+
+fn range_width([lo, hi]: [f64; 2]) -> f64 {
+    if lo == hi {
+        0.0
+    } else {
+        (hi - lo).next_up()
+    }
+}
+
+fn local_length_factor(field: &DistanceField, bounds: [[f64; 2]; 2]) -> Option<f64> {
+    let epsilon = ManifoldConfig::default().epsilon;
+    let [lo, hi] = sample_range(field, bounds)?;
+    let d_upper = lo.abs().max(hi.abs());
+    let rho_upper = add_up(mul_up(d_upper, d_upper), mul_up(epsilon, epsilon))
+        .sqrt()
+        .next_up();
+    let d_lower = lo.max(-hi).max(0.0);
+    let step_lower =
+        (GEOMETRY_SCALE_ALPHA * epsilon.max(d_lower)).clamp(GEOMETRY_MIN_STEP, GEOMETRY_MAX_STEP);
+    let step_upper = (GEOMETRY_SCALE_ALPHA * rho_upper).clamp(GEOMETRY_MIN_STEP, GEOMETRY_MAX_STEP);
+    let stencil_bounds = [
+        bounds[0].map(|v| (v - step_upper).next_down()),
+        bounds[1].map(|v| (v + step_upper).next_up()),
+    ];
+    let gradient_upper = div_up(
+        range_width(sample_range(field, stencil_bounds)?),
+        2.0 * step_lower,
+    );
+    if gradient_upper > f64::from(1 << 18) {
+        return None;
+    }
+    // The rounded ruler dominates |D| and is at least epsilon / 2.
+    let rho_lower = (epsilon / 2.0).max(d_lower);
+    Some(div_up(add_up(2.0, mul_up(6.0, gradient_upper)), rho_lower))
 }
 
 #[cfg(test)]

@@ -187,6 +187,15 @@ mod tests {
     }
 
     fn rollout(field: Arc<PreparedField>, dt: f64, lambda_sq: f64) -> FrozenRollout {
+        rollout_with_integrator(field, dt, lambda_sq, Integrator::Rk4FourSubsteps)
+    }
+
+    fn rollout_with_integrator(
+        field: Arc<PreparedField>,
+        dt: f64,
+        lambda_sq: f64,
+        integrator: Integrator,
+    ) -> FrozenRollout {
         let config = ManifoldConfig {
             epsilon: EPSILON,
             lambda_sq,
@@ -194,7 +203,7 @@ mod tests {
             mu: 0.0,
             ..ManifoldConfig::default()
         };
-        let profile = PhysicsProfile::new(config, dt, 0.0, Integrator::Rk4FourSubsteps).unwrap();
+        let profile = PhysicsProfile::new(config, dt, 0.0, integrator).unwrap();
         FrozenRollout::new(field, profile, vec![]).unwrap()
     }
 
@@ -212,6 +221,24 @@ mod tests {
     // Independent coframe in the oriented normal/tangent basis of F(x, y) = x + 2y.
     struct AffineGraphMetric {
         normal_weight: f64,
+    }
+
+    struct AffineChordTrial {
+        scale_ratio: [f64; 2],
+        log_scale_derivative: [f64; 2],
+        angle_increment: f64,
+    }
+
+    impl AffineChordTrial {
+        fn remainder_norm(&self) -> f64 {
+            let [p_normal, p_tangent] = self.scale_ratio;
+            let [d_normal, d_tangent] = self.log_scale_derivative;
+            let b_normal = p_normal - 1.0;
+            let b_tangent = p_tangent - 1.0;
+            (b_normal - p_normal * d_normal)
+                .hypot(b_tangent - p_tangent * d_tangent)
+                .hypot(self.angle_increment * b_normal.hypot(b_tangent))
+        }
     }
 
     impl AffineGraphMetric {
@@ -258,8 +285,7 @@ mod tests {
             along * relative_change.ln_1p() / (root_weight * across)
         }
 
-        // Exact-real Euler angle bound in the analytic normal/tangent coframe.
-        fn chord_euler_angle_bound(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> f64 {
+        fn chord_trial(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> AffineChordTrial {
             let [x0, y0] = start;
             let [x1, y1] = end;
             let f0 = x0 + 2.0 * y0;
@@ -267,20 +293,26 @@ mod tests {
             let (rho0, sigma0) = self.scales(f0);
             let (rho1, sigma1) = self.scales(f1);
             let rho_ratio = rho0 / rho1;
-            let b_normal = (sigma1 / sigma0) * rho_ratio.powi(2) - 1.0;
-            let b_tangent = rho_ratio - 1.0;
             let slope = f0 * (f1 - f0);
             let d_tangent = -slope / rho0.powi(2);
             let d_normal = self.normal_weight * slope / sigma0.powi(2) + 2.0 * d_tangent;
             let start_angle = (-2.0 * (x1 - x0) + (y1 - y0)) * f0 / (rho0 * sigma0);
-            let k = turn + start_angle;
-            let r = (b_normal - (1.0 + b_normal) * d_normal)
-                .hypot(b_tangent - (1.0 + b_tangent) * d_tangent)
-                .hypot(k * b_normal.hypot(b_tangent));
+            AffineChordTrial {
+                scale_ratio: [(sigma1 / sigma0) * rho_ratio.powi(2), rho_ratio],
+                log_scale_derivative: [d_normal, d_tangent],
+                angle_increment: turn + start_angle,
+            }
+        }
+
+        // Exact-real Euler angle bound in the analytic normal/tangent coframe.
+        fn chord_euler_angle_bound(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> f64 {
+            let trial = self.chord_trial(start, end, turn);
+            let k = trial.angle_increment;
+            let r = trial.remainder_norm();
             let trial_norm = 1.0_f64.hypot(k);
             assert!(r < trial_norm);
             let remainder_angle = (r / (trial_norm - r)).atan();
-            let quadrature_angle = (self.chord_angle(start, end) - start_angle).abs();
+            let quadrature_angle = (self.chord_angle(start, end) + turn - k).abs();
             remainder_angle + k.abs().powi(3) / 3.0 + quadrature_angle
         }
     }
@@ -475,6 +507,68 @@ mod tests {
                 previous_bound = angle_bound;
             }
             assert!(previous_error < 0.02, "{route}: {previous_error:e}");
+        }
+    }
+
+    #[test]
+    fn accepted_chord_perturbations_fit_the_normalized_trial_envelope() {
+        let dt = 0.03;
+        let lambda_sq = 0.7;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let rollout = rollout_with_integrator(sheared_shore(), dt, lambda_sq, Integrator::Rk4);
+        let replay = |offset: f64| {
+            let start = [0.04 + offset, 0.05 - 0.3 * offset];
+            let velocity = [-0.12 + 0.2 * offset, 0.4 - offset];
+            let mut state = rollout.initial_state(start, velocity).unwrap();
+            let (_, trace) = rollout
+                .attempt_step_with_trace(&mut state, [0.0; 2])
+                .unwrap();
+            let rate = 0.9 - 2.0 * offset;
+            assert_eq!(trace.endpoints().len(), 2);
+            let trial = graph.chord_trial(start, state.position, dt * rate);
+            let axes = [[1.0, 0.0], [0.0, 1.0], [0.6, -0.8]].map(|[a, b]| {
+                let normal = [1.0, 2.0];
+                let tangent = [-2.0, 1.0];
+                let a = a / graph.coordinates(start, normal)[0];
+                let b = b / graph.coordinates(start, tangent)[1];
+                let axis = std::array::from_fn(|i| a * normal[i] + b * tangent[i]);
+                let frame = rollout
+                    .transport_endpoint_chords(&trace, axis, rate)
+                    .unwrap();
+                graph.coordinates(state.position, frame.axis)
+            });
+            (trial, axes)
+        };
+        let (nominal, nominal_axes) = replay(0.0);
+        let lower = 1.0_f64.hypot(nominal.angle_increment) - nominal.remainder_norm();
+        let max_abs = |[a, b]: [f64; 2]| a.abs().max(b.abs());
+        let nominal_inner_norm =
+            max_abs(nominal.log_scale_derivative.map(|d| 1.0 - d)) + nominal.angle_increment.abs();
+        let mut previous_bound = f64::INFINITY;
+
+        for offset in [1e-3, 1e-4, 1e-5] {
+            let (changed, changed_axes) = replay(offset);
+            let scale_error = max_abs(std::array::from_fn(|i| {
+                changed.scale_ratio[i] - nominal.scale_ratio[i]
+            }));
+            let derivative_error = max_abs(std::array::from_fn(|i| {
+                changed.log_scale_derivative[i] - nominal.log_scale_derivative[i]
+            }));
+            let increment_error = (changed.angle_increment - nominal.angle_increment).abs();
+            let trial_error = scale_error * nominal_inner_norm
+                + max_abs(changed.scale_ratio) * (derivative_error + increment_error);
+            assert!(trial_error < lower);
+            let angle_bound = (trial_error / (lower - trial_error)).atan();
+            let unit_distance_bound = 2.0 * trial_error / lower;
+            assert!(angle_bound < 0.2 * previous_bound);
+
+            for ([ax, ay], [bx, by]) in nominal_axes.into_iter().zip(changed_axes) {
+                let angle = unsigned_angle_difference(ay.atan2(ax), by.atan2(bx));
+                assert!(angle > 1e-7);
+                assert!(angle <= angle_bound + 1e-13);
+                assert!((ax - bx).hypot(ay - by) <= unit_distance_bound + 1e-13);
+            }
+            previous_bound = angle_bound;
         }
     }
 
