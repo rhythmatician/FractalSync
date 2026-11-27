@@ -7,6 +7,7 @@ pub mod verification;
 mod navigation;
 
 pub use navigation::{OperationalLengthInterval, OperationalNavigationRegion};
+pub(crate) use navigation::SegmentEvaluator;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FieldJet {

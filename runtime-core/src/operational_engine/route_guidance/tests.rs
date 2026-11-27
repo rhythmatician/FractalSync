@@ -51,9 +51,7 @@ fn guidance_from_a_committed_position_supports_off_grid_points_and_arrival() {
         .route_guidance(
             &state,
             OperationalRouteRequest {
-                length_budget: Some(
-                    (report.graph_length_lower.unwrap() + report.route_length_upper.unwrap()) / 2.0,
-                ),
+                length_budget: Some(report.nominal_window_length_lower),
                 ..request(target)
             },
         )
@@ -118,6 +116,57 @@ fn a_full_refusal_barrier_leaves_navigation_without_a_graph_witness() {
     assert!(report.graph_length_lower.is_none());
     assert!(report.next_direction.is_none());
     assert!(report.refused_edges > 0);
+}
+
+#[test]
+fn budget_prunes_spline_queries_before_search_and_preserves_a_route_at_the_budget() {
+    let engine = engine(vec![]);
+    let state = engine.initial_state([-0.4375, 0.375], [0.0; 2]).unwrap();
+    let query = request([-0.3125, 0.375]);
+    let full = engine.route_guidance(&state, query).unwrap();
+    let budget = full.route_length_upper.unwrap();
+    let bounded = engine
+        .route_guidance(
+            &state,
+            OperationalRouteRequest {
+                length_budget: Some(budget),
+                ..query
+            },
+        )
+        .unwrap();
+    assert_eq!(bounded.status, OperationalRouteStatus::RouteFound);
+    assert_eq!(bounded.route_length_upper, Some(budget));
+    assert_eq!(bounded.path.first(), Some(&state.position));
+    assert_eq!(bounded.path.last(), Some(&query.target.center));
+    assert!(bounded.graph_length_lower.unwrap() <= 0.2);
+    assert!(bounded.budget_skipped_edges > 0);
+    assert!(bounded.edge_certificate_queries < full.edge_certificate_queries);
+    assert!(bounded.cell_certificate_queries < full.cell_certificate_queries);
+}
+
+#[test]
+fn partial_graph_without_a_witness_keeps_the_budget_as_a_lower_bound() {
+    let engine = engine(vec![ReferenceCut {
+        bounds: [-0.0625, 0.25, 0.0625, 0.5],
+        authority: "synthetic route cut".into(),
+    }]);
+    let state = engine.initial_state([-0.4375, 0.375], [0.0; 2]).unwrap();
+    let query = request([0.4375, 0.375]);
+    let budget = 1.41;
+    let report = engine
+        .route_guidance(
+            &state,
+            OperationalRouteRequest {
+                length_budget: Some(budget),
+                ..query
+            },
+        )
+        .unwrap();
+    assert_eq!(report.status, OperationalRouteStatus::NoCertifiedRoute);
+    assert!(report.nominal_window_length_lower < budget);
+    assert!(report.budget_skipped_edges > 0);
+    assert_eq!(report.graph_length_lower, Some(budget));
+    assert!(report.route_length_upper.is_none());
 }
 
 #[test]

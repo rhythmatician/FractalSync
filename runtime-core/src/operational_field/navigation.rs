@@ -16,6 +16,30 @@ pub struct OperationalLengthInterval {
     pub upper: f64,
 }
 
+pub(crate) struct SegmentEvaluator<'r, 'f> {
+    region: &'r OperationalNavigationRegion<'f>,
+    cells: BTreeMap<[usize; 2], Option<([f64; 2], [f64; 2])>>,
+}
+
+impl SegmentEvaluator<'_, '_> {
+    pub(crate) fn bounds(
+        &mut self,
+        start: [f64; 2],
+        end: [f64; 2],
+    ) -> Option<OperationalLengthInterval> {
+        self.region.segment_bounds_using(start, end, |cell| {
+            *self
+                .cells
+                .entry(cell)
+                .or_insert_with(|| self.region.field.bernstein_cell_bounds(cell))
+        })
+    }
+
+    pub(crate) fn cell_queries(&self) -> usize {
+        self.cells.len()
+    }
+}
+
 /// A rectangular search window with a fixed prepared field and metric profile.
 /// Each segment still needs complete coefficient support.
 pub struct OperationalNavigationRegion<'a> {
@@ -109,16 +133,10 @@ impl OperationalNavigationRegion<'_> {
     }
 
     /// Reuse cell enclosures while building one graph over this region.
-    pub(crate) fn segment_evaluator(
-        &self,
-    ) -> impl FnMut([f64; 2], [f64; 2]) -> Option<OperationalLengthInterval> + '_ {
-        let mut cells = BTreeMap::new();
-        move |start, end| {
-            self.segment_bounds_using(start, end, |cell| {
-                *cells
-                    .entry(cell)
-                    .or_insert_with(|| self.field.bernstein_cell_bounds(cell))
-            })
+    pub(crate) fn segment_evaluator(&self) -> SegmentEvaluator<'_, '_> {
+        SegmentEvaluator {
+            region: self,
+            cells: BTreeMap::new(),
         }
     }
 

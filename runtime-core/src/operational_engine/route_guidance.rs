@@ -5,10 +5,12 @@ use super::{CANONICAL_REFERENCE_POINTS, FrozenRollout, MechanicalState};
 use crate::crossing_feasibility::{
     FeasibilityAssessment, FeasibilityLimits, LengthLowerBound, evaluate_feasibility,
 };
-use crate::intrinsic_bounds::{add_up, mul_up};
+use crate::intrinsic_bounds::{add_down, add_up, mul_up};
 use crate::map_certificates::displacement_lower;
 use crate::map_navigation::search::{SearchLimits, search};
-use crate::operational_field::{OperationalLengthInterval, OperationalNavigationRegion};
+use crate::operational_field::{
+    OperationalLengthInterval, OperationalNavigationRegion, SegmentEvaluator,
+};
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 
@@ -87,12 +89,20 @@ pub struct OperationalRouteGuidance {
     pub nominal_window_length_lower: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nominal_feasibility: Option<FeasibilityAssessment>,
+    /// Lower bound on the full admitted graph, including paths outside the
+    /// budgeted subset. A budgeted query may report a weaker lower bound.
     pub graph_length_lower: Option<f64>,
     pub route_length_upper: Option<f64>,
     pub path: Vec<[f64; 2]>,
     pub next_direction: Option<[f64; 2]>,
     pub certified_edges: usize,
     pub refused_edges: usize,
+    /// Candidate edges skipped before checking reference support or spline bounds.
+    pub budget_skipped_edges: usize,
+    /// Edge enclosure attempts after the budget and reference checks.
+    pub edge_certificate_queries: usize,
+    /// Distinct spline cells inspected by the per-request evaluator.
+    pub cell_certificate_queries: usize,
     pub expanded_upper: usize,
 }
 
@@ -166,6 +176,9 @@ impl FrozenRollout {
             next_direction: None,
             certified_edges: 0,
             refused_edges: 0,
+            budget_skipped_edges: 0,
+            edge_certificate_queries: 0,
+            cell_certificate_queries: 0,
             expanded_upper: 0,
         };
         if target_relation(start, target) == TargetRelation::Inside {
@@ -176,9 +189,12 @@ impl FrozenRollout {
             return Ok(report);
         }
 
-        let graph = RouteGraph::new(self, &region, &x, &y, start, target.center)?;
+        let graph = RouteGraph::new(self, &region, &x, &y, start, target, request.length_budget)?;
         report.certified_edges = graph.certified;
         report.refused_edges = graph.refused;
+        report.budget_skipped_edges = graph.budget_skipped;
+        report.edge_certificate_queries = graph.edge_queries;
+        report.cell_certificate_queries = graph.cell_queries;
         let outcomes: Vec<_> = graph
             .points
             .iter()
@@ -199,10 +215,17 @@ impl FrozenRollout {
         .cost;
 
         let budget = request.length_budget.unwrap_or(f64::INFINITY);
-        if report
-            .graph_length_lower
-            .is_some_and(|lower| lower > budget)
-        {
+        let budget_excluded = ambient_lower > budget
+            || report
+                .graph_length_lower
+                .is_some_and(|lower| lower > budget);
+        // A skipped path costs more than the budget, but can still cost less
+        // than an admitted detour. Keep the lower bound valid for both.
+        if graph.budget_skipped > 0 {
+            report.graph_length_lower =
+                Some(report.graph_length_lower.unwrap_or(budget).min(budget));
+        }
+        if budget_excluded {
             report.status = OperationalRouteStatus::GraphBudgetExcluded;
             return Ok(report);
         }
@@ -257,6 +280,10 @@ struct RouteGraph {
     start: usize,
     certified: usize,
     refused: usize,
+    budget_skipped: usize,
+    edge_queries: usize,
+    cell_queries: usize,
+    allowed: Vec<bool>,
 }
 
 impl RouteGraph {
@@ -266,7 +293,8 @@ impl RouteGraph {
         x: &[f64],
         y: &[f64],
         start: [f64; 2],
-        target: [f64; 2],
+        target: AmbientTarget,
+        budget: Option<f64>,
     ) -> Result<Self, String> {
         let index = |i, j| j * x.len() + i;
         let mut points: Vec<_> = y
@@ -274,7 +302,19 @@ impl RouteGraph {
             .flat_map(|&py| x.iter().map(move |&px| [px, py]))
             .collect();
         let start_index = points.len();
-        points.extend([start, target]);
+        points.extend([start, target.center]);
+        let allowed = points
+            .iter()
+            .map(|&p| {
+                budget.is_none_or(|cap| {
+                    let to_vertex = region.target_lower_bound(start, p, 0.0).unwrap_or(0.0);
+                    let from_vertex = region
+                        .target_lower_bound(p, target.center, target.radius)
+                        .unwrap_or(0.0);
+                    add_down(to_vertex, from_vertex) <= cap
+                })
+            })
+            .collect();
         let limit = (((1_u64 << 53) - 1) / (points.len() as u64 + 1)) as f64;
         let mut graph = Self {
             edges: vec![Vec::new(); points.len()],
@@ -282,6 +322,10 @@ impl RouteGraph {
             start: start_index,
             certified: 0,
             refused: 0,
+            budget_skipped: 0,
+            edge_queries: 0,
+            cell_queries: 0,
+            allowed,
         };
         let mut segment = region.segment_evaluator();
         for j in 0..y.len() {
@@ -297,7 +341,7 @@ impl RouteGraph {
                 }
             }
         }
-        for (offset, p) in [start, target].into_iter().enumerate() {
+        for (offset, p) in [start, target.center].into_iter().enumerate() {
             let ix = x.partition_point(|&v| v <= p[0]).clamp(1, x.len() - 1);
             let iy = y.partition_point(|&v| v <= p[1]).clamp(1, y.len() - 1);
             for j in (iy - 1)..=iy {
@@ -312,17 +356,22 @@ impl RouteGraph {
                 }
             }
         }
+        graph.cell_queries = segment.cell_queries();
         Ok(graph)
     }
 
     fn add_edge(
         &mut self,
         engine: &FrozenRollout,
-        segment: &mut impl FnMut([f64; 2], [f64; 2]) -> Option<OperationalLengthInterval>,
+        segment: &mut SegmentEvaluator<'_, '_>,
         from: usize,
         to: usize,
         limit: f64,
     ) -> Result<(), String> {
+        if !self.allowed[from] || !self.allowed[to] {
+            self.budget_skipped += 1;
+            return Ok(());
+        }
         let a = self.points[from];
         let b = self.points[to];
         let bbox = [
@@ -331,7 +380,10 @@ impl RouteGraph {
         ];
         let length = engine
             .chart_edge_is_clear(bbox)
-            .then(|| segment(a, b))
+            .then(|| {
+                self.edge_queries += 1;
+                segment.bounds(a, b)
+            })
             .flatten();
         let Some(length) = length else {
             self.refused += 1;

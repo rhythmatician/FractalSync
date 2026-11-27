@@ -74,4 +74,18 @@ theorem ambientTargetLower_le {X : Type*} [PseudoMetricSpace X]
   have hTriangle := dist_triangle start arrival center
   linarith
 
+/-- A vertex on a feasible route must fit both the prefix and a suffix to
+the target ball into the budget. This bound can precede edge certification. -/
+theorem throughVertexLower_le_budget {X : Type*} [PseudoMetricSpace X]
+    (start vertex arrival center : X) (radius rulerUpper prefixLength suffixLength budget : ℝ)
+    (hRuler : 0 < rulerUpper) (hSuffix : 0 ≤ suffixLength)
+    (hPrefixDisplacement : dist start vertex ≤ prefixLength * rulerUpper)
+    (hSuffixDisplacement : dist vertex arrival ≤ suffixLength * rulerUpper)
+    (hArrival : dist arrival center ≤ radius) (hBudget : prefixLength + suffixLength ≤ budget) :
+    dist start vertex / rulerUpper + max 0 (dist vertex center - radius) / rulerUpper ≤ budget := by
+  have hPrefix := (div_le_iff₀ hRuler).2 hPrefixDisplacement
+  have hTail := ambientTargetLower_le vertex arrival center radius rulerUpper suffixLength
+    hRuler hSuffix hSuffixDisplacement hArrival
+  exact (add_le_add hPrefix hTail).trans hBudget
+
 end FractalSync.OperationalRouteBounds

@@ -68,7 +68,22 @@ try {
         || route.nominalFeasibility.deadlineStatus !== 'insufficientEvidence') {
       throw new Error('Unexpected nominal timing assessment');
     }
-    return { ...engineReport, route, route_ms };
+    const comparison = {
+      ...request, nominalTiming: undefined,
+      target: { center: [460 / 2048, -1 / 2048], radius: 0.0002 },
+    };
+    const unrestricted = JSON.parse(engine.route_guidance(JSON.stringify(comparison)));
+    if (unrestricted.routeLengthUpper === null) throw new Error('Missing short-route reference');
+    const bounded = JSON.parse(engine.route_guidance(JSON.stringify({ ...comparison, lengthBudget: unrestricted.routeLengthUpper })));
+    if (bounded.status !== 'routeFound' || bounded.routeLengthUpper !== unrestricted.routeLengthUpper
+        || JSON.stringify(bounded.path) !== JSON.stringify(unrestricted.path)
+        || bounded.edgeCertificateQueries >= unrestricted.edgeCertificateQueries
+        || bounded.cellCertificateQueries >= unrestricted.cellCertificateQueries
+        || engine.state() !== saved) {
+      throw new Error('Budgeted edge certification failed to preserve the short route');
+    }
+    const budget_comparison = { unrestricted, bounded };
+    return { ...engineReport, route, route_ms, budget_comparison };
   }, mode === '--verify-cusp-route');
   const report = { browser: browser.version(), device: cpus()[0].model, asset_sha256: createHash('sha256').update(asset).digest('hex'), policy_sha256: createHash('sha256').update(policy).digest('hex'), wasm_sha256: createHash('sha256').update(wasm).digest('hex'), result, note: 'Probe includes metric, potential and JSON; not a single geometry-query timing. Timer quantization and no cache stress apply.' };
   await writeFile(outputPath, JSON.stringify(report, null, 2));
