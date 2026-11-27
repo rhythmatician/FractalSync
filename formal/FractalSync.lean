@@ -40,6 +40,7 @@ import FractalSync.IntrinsicVariation
 import FractalSync.MetricComparison
 import FractalSync.MetricImpulse
 import FractalSync.MovingFrames
+import FractalSync.GestureExecution
 import FractalSync.MovingMetricMechanics
 import FractalSync.NonlinearCoordinates
 import FractalSync.NormalRadius

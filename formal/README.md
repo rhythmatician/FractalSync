@@ -1,5 +1,12 @@
 # Lean research contracts
 
+Issue #247: [GestureExecution.lean](FractalSync/GestureExecution.lean) checks
+the actual derivative of a time-varying continuous linear map applied to a
+time-varying vector, and its specialization to a parameterized curve with an
+independent phase. See the [research note](../docs/research/247-gesture-execution-development.md)
+for the hypotheses, conventional gauge and moving-anchor arguments, and the
+unverified Physics, rendering, and perceptual questions.
+
 This is a development-time mathematical proof package. It currently contains
 **1,883 explicit proved theorem/lemma declarations** across 166 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
