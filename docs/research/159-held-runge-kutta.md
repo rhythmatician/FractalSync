@@ -260,3 +260,36 @@ for both profiles. Its one-substep trace meets the local-error theorem's
 numerical premises. Uniform rounded-stage bounds remain open in #181.
 [Measured binary64 residuals](159-rk-operation-errors.md#measured-binary64-residuals-for-the-literal-fixture)
 [#181](https://github.com/rhythmatician/FractalSync/issues/181)
+
+## Composing heterogeneous accepted intervals
+
+Issue #178 needs a phase-error budget when accepted step lengths vary. For
+accepted states compared with reference states at matching times, let $e_j$ be
+the error at the start of interval $j$. Give each accepted step its own
+nonnegative gain $\kappa_j$ and local defect $\Delta_j$ satisfying
+$e_{j+1}\le\kappa_j e_j+\Delta_j$. Starting from $B_0\ge e_0$, the Lean
+recurrence $B_{j+1}=\kappa_j B_j+\Delta_j$ bounds every accepted prefix.
+Each defect enters once and is amplified only by subsequent gains. The empty
+prefix has the initial budget. This applies to unequal dyadic lengths when the
+local contracts hold on their actual reference intervals.
+
+If the gains are bounded by $1+Lh_j$ with $L,h_j\ge0$, the defects are
+nonnegative, and $B_0\ge0$, a second theorem gives
+
+\[
+e_n\le \exp\!\left(L\sum_{j<n}h_j\right)
+          \left(B_0+\sum_{j<n}\Delta_j\right).
+\]
+
+This uses actual accepted time and actual local defects. A fixed elapsed time
+alone does not ensure convergence because the total local defect may fail to
+shrink with the mesh.
+
+The local stage and provider obligations still apply on each interval. The
+recurrence covers the accepted history supplied to it. The executable caller
+must provide evidence that rejected trials leave accepted phase, work, and
+impulse accounting intact, and that accepted intervals exactly fill the
+scheduled outer step. The budget is over real numbers and requires separate
+rounding evidence for a stored implementation.
+
+[Accepted-step composition proof](../../formal/FractalSync/AdaptiveStepComposition.lean)

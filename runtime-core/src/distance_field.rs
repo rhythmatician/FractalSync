@@ -1,7 +1,7 @@
 use ndarray::Array2;
 use once_cell::sync::Lazy;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock, RwLockReadGuard};
 
 mod raster_navigation;
 pub use raster_navigation::RasterNavigationRegion;
@@ -32,6 +32,19 @@ struct DistanceFieldSlot {
 
 static DIST_FIELD: Lazy<RwLock<DistanceFieldSlot>> =
     Lazy::new(|| RwLock::new(DistanceFieldSlot::default()));
+
+fn read_or_load_default() -> Result<RwLockReadGuard<'static, DistanceFieldSlot>, String> {
+    let read = || DIST_FIELD.read().map_err(|e| format!("lock error: {}", e));
+    // Use the existing guard when loaded. A second read can block behind a waiting writer.
+    let guard = read()?;
+    if guard.field.is_some() {
+        return Ok(guard);
+    }
+    drop(guard);
+    load_builtin_distance_field("mandelbrot_default")
+        .map_err(|e| format!("could not auto-load builtin: {}", e))?;
+    read()
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct RasterStamp {
@@ -217,19 +230,16 @@ pub fn sample_signed_distance_field(
 ) -> Result<Vec<f32>, String> {
     // If no distance field is loaded, try loading the canonical builtin
     // so callers (like tests) can sample without an explicit prior set.
-    let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-    if guard.field.is_none() {
-        drop(guard);
-        // Best-effort: try to load the canonical built-in. If that fails still
-        // return the original 'not loaded' error to the caller.
-        match load_builtin_distance_field("mandelbrot_default") {
-            Ok(_) => {}
-            Err(e) => return Err(format!("could not auto-load builtin: {}", e)),
-        }
-    }
-    let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
+    let guard = read_or_load_default()?;
     let df = guard.field.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
 
+    Ok(sample_signed_in_field(df, points))
+}
+
+fn sample_signed_in_field(
+    df: &DistanceField,
+    points: &[num_complex::Complex64],
+) -> Vec<f32> {
     let (h, w) = (df.data.nrows() as f64, df.data.ncols() as f64);
     let dx = (df.xmax - df.xmin) as f64;
     let dy = (df.ymax - df.ymin) as f64;
@@ -310,7 +320,7 @@ pub fn sample_signed_distance_field(
             out.push(s);
         }
     }
-    Ok(out)
+    out
 }
 
 fn raster_pixel(position: f64, minimum: f64, span: f64, count: f64) -> f64 {
@@ -411,13 +421,7 @@ pub fn mandelbrot_distance_estimate_with_params(
 
     // helper: perimeter min distance using signed SDF
     let perimeter_min = |xr: f64, yr: f64| -> Result<f64, String> {
-        // read builtin metadata (best-effort)
-        let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
-        if guard.field.is_none() {
-            drop(guard);
-            load_builtin_distance_field("mandelbrot_default")?;
-        }
-        let guard = DIST_FIELD.read().map_err(|e| format!("lock error: {}", e))?;
+        let guard = read_or_load_default()?;
         let df = guard.field.as_ref().ok_or_else(|| "distance field not loaded".to_string())?;
         let xmin = df.xmin;
         let xmax = df.xmax;
@@ -433,8 +437,8 @@ pub fn mandelbrot_distance_estimate_with_params(
         perimeter_cs.extend(ys_lr.iter().map(|&y| num_complex::Complex64::new(xmin, y)));
         perimeter_cs.extend(ys_lr.iter().map(|&y| num_complex::Complex64::new(xmax, y)));
 
-        let sdf_vals = sample_distance_field(&perimeter_cs)?;
-        if sdf_vals.len() != perimeter_cs.len() { return Err("sdf length mismatch".to_string()) }
+        let sdf_vals = sample_signed_in_field(df, &perimeter_cs);
+        drop(guard);
         let mut best = f64::INFINITY;
         for (p, &sdf) in perimeter_cs.iter().zip(sdf_vals.iter()) {
             let xb = p.re;
