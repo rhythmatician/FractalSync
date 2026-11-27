@@ -100,15 +100,45 @@ the test can detect omission of the graph term independently of any change
 in the mechanical trajectory. Refinement compares each run to its own
 committed chords.
 
-| Outer steps | Chords | Positive-side error (rad) | Crossing error (rad) |
-| ---: | ---: | ---: | ---: |
-| 8 | 32 | 0.0200704 | 0.0647522 |
-| 16 | 64 | 0.0100064 | 0.0326058 |
-| 32 | 128 | 0.00499527 | 0.0163255 |
+| Outer steps | Chords | Positive-side error (rad) | Positive-side bound (rad) | Crossing error (rad) | Crossing bound (rad) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | 32 | 0.0200704 | 0.0532005 | 0.0647522 | 0.355654 |
+| 16 | 64 | 0.0100064 | 0.0264831 | 0.0326058 | 0.174656 |
+| 32 | 128 | 0.00499527 | 0.0132148 | 0.0163255 | 0.0867597 |
 
 The conformal angle differs from the full graph angle by 1.37 radians on
 the positive-side route and 1.49 radians on the crossing route at these
 resolutions.
+
+### Per-chord angle bound on the affine fixture
+
+In the analytic normal/tangent coframe above, both \(B=S_1S_0^{-1}-I\)
+and \(D=DS_0[\Delta]S_0^{-1}\) are diagonal since the oriented normal
+and tangent directions are constant. Let their diagonal entries be
+\(b_i,d_i\). The \(b_i\) are endpoint scale ratios minus one and
+the \(d_i\) are the directional derivatives of the log scales at the
+start. With \(k=h\omega+\alpha_0(\Delta)\), the diagonal entries of
+\(R=B-(I+B)D+kBJ\) are \(b_i-(1+b_i)d_i\), and its off-diagonal
+entries are \(-k b_1\) and \(k b_2\). Its Frobenius norm \(r\) bounds
+its operator norm. The unperturbed trial has length \(\sqrt{1+k^2}\),
+so when \(r<\sqrt{1+k^2}\) the bound for one chord is
+\[
+ \arctan\!\frac{r}{\sqrt{1+k^2}-r}
+ +\frac{|k|^3}{3}
+ +\left|\int_{\mathrm{chord}}\alpha-\alpha_0(\Delta)\right|.
+\]
+The last term uses the closed-form chord integral. This bound holds
+uniformly over starting unit directions. Since the exact chord update
+adds an angle independently of the starting direction, the per-chord
+bounds add over the full route.
+
+The compiled tests evaluate the bound on each committed chord for both
+moving routes above. At each sampled resolution the computed sum covers
+the measured frame error and falls by at least 30% under step halving.
+The formulas use exact-real arithmetic. The test comparisons use
+binary64 evaluations, and the bound covers the chord reconstruction.
+Production use would require a roundoff enclosure and separate
+continuous-path evidence.
 
 ## Continuous free geodesic on the affine fixture
 

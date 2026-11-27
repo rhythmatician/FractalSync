@@ -1,7 +1,7 @@
 //! Compare target scans on the Debug Cockpit's four common-start crossing replays.
 use runtime_core::controller::{OrbitController, HOP_LENGTH, SAMPLE_RATE};
 use runtime_core::controls::MotionControls;
-use runtime_core::map_navigation::{evaluate_map_navigation, MapRoute};
+use runtime_core::map_navigation::{evaluate_map_navigation, MapRoute, RasterWaypointSearch};
 use serde_json::json;
 
 const THROTTLES: [f64; 4] = [0.05, 0.4, 0.8, 1.0];
@@ -96,6 +96,17 @@ fn main() -> Result<(), String> {
         .all(|&frame| frame > ranking_frame));
     assert_eq!(report.baseline.first_arrival_route, Some(2));
     assert_eq!(report.bounded.first_arrival_route, Some(3));
+    let RasterWaypointSearch::Witness {
+        route_index,
+        frame_index,
+        length_upper,
+    } = report.raster_waypoint_search
+    else {
+        panic!("expected a certified raster waypoint path");
+    };
+    assert_eq!(route_index, 3);
+    assert_eq!(Some(frame_index), report.bounded.arrivals[route_index]);
+    assert!(length_upper.is_finite() && length_upper > 0.0);
     assert!(
         report.bounded.queries_to_first_arrival.unwrap()
             < report.baseline.queries_to_first_arrival.unwrap()
