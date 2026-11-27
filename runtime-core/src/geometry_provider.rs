@@ -487,6 +487,18 @@ pub fn query_geometry_with_config(
     query_geometry(c, config.epsilon)
 }
 
+pub(crate) fn default_query_uses_raster_bridge() -> bool {
+    #[cfg(test)]
+    if TEST_PLANE.with(|active| active.get()) {
+        return false;
+    }
+    #[cfg(feature = "experimental-operational-field")]
+    if crate::operational_field::ACTIVE.with(|active| active.borrow().is_some()) {
+        return false;
+    }
+    true
+}
+
 // ---------------------------------------------------------------------------
 // Analytic chain-rule derivations: D, grad_D, H_D -> rho, sigma, G, Gamma
 // These are pure math, not sampling: they turn one coherent jet into the

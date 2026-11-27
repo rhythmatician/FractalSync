@@ -166,3 +166,9 @@ target needs at least 0.59214 units of action in one second and 0.00592 over
 0.05 and the stated metric and containment premises. Default `runtimeMap`
 curriculum still needs evidence that those premises apply to the rollout.
 [Retained Map experiment](174-operational-route-enclosures.md)
+
+The [default raster trial](174-raster-route-bounds.md) also certifies a
+pointwise metric lower bound directly from full bicubic support. Its
+one-second ambient-ball task needs at least 0.06077 units of action, even
+if a path first leaves the window. This fixture uses the default Physics
+profile and a fixed raster generation.
