@@ -3,6 +3,9 @@ use once_cell::sync::Lazy;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock, RwLock};
 
+mod raster_navigation;
+pub use raster_navigation::RasterNavigationRegion;
+
 static GLOBAL_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 /// Global mutex to serialize tests that mutate or depend on the distance field.
 /// Controls and distance-field integration tests acquire this for the duration
@@ -267,19 +270,13 @@ pub fn sample_signed_distance_field(
     for point in points {
         let xr = point.re;
         let yr = point.im;
-        // normalized [0,1]
-        let mut u = (xr - df.xmin) / dx;
-        let mut v = (yr - df.ymin) / dy;
         // compute outside distance in real coordinates before clamping
         let extra_x = if xr < df.xmin { df.xmin - xr } else if xr > df.xmax { xr - df.xmax } else { 0.0 };
         let extra_y = if yr < df.ymin { df.ymin - yr } else if yr > df.ymax { yr - df.ymax } else { 0.0 };
         let outside_dist = (extra_x * extra_x + extra_y * extra_y).sqrt();
 
-        u = u.clamp(0.0, 1.0);
-        v = v.clamp(0.0, 1.0);
-        // pixel coordinates
-        let fx = u * (w - 1.0);
-        let fy = v * (h - 1.0);
+        let fx = raster_pixel(xr, df.xmin, dx, w);
+        let fy = raster_pixel(yr, df.ymin, dy, h);
         let x0 = fx.floor() as isize;
         let y0 = fy.floor() as isize;
 
@@ -314,6 +311,10 @@ pub fn sample_signed_distance_field(
         }
     }
     Ok(out)
+}
+
+fn raster_pixel(position: f64, minimum: f64, span: f64, count: f64) -> f64 {
+    ((position - minimum) / span).clamp(0.0, 1.0) * (count - 1.0)
 }
 
 /// Sample the in-memory distance field at the given complex-valued coordinates,

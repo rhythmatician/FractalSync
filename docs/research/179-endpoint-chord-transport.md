@@ -30,6 +30,10 @@ analytic metric confirms unit axes, orthogonality, positive orientation, and
 the signed angle for a held turn. The successful trial reads one jet per
 endpoint. Refusal checks confirm that an unchanged trace remains reusable.
 
+The same fixture also has an exact moving-chord reference in an oriented
+normal/tangent frame. Two moving routes exercise the shear with opposite held
+turn signs. [Full-metric angle and calibration](179-anisotropic-transport.md)
+
 ```powershell
 rtk proxy cargo test --release -p runtime_core --features experimental-operational-field --lib frame_transport
 ```
