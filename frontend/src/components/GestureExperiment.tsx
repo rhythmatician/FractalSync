@@ -23,6 +23,8 @@ export function GestureExperiment() {
   const rendererRef = useRef<JuliaRenderer | null>(null);
   const runRef = useRef<{ audio: AudioContext; frame: number } | null>(null);
   const startingRef = useRef(false);
+  const recordRef = useRef<{ startedAt: string; events: unknown[]; samples: unknown[] } | null>(null);
+  const [hasRecord, setHasRecord] = useState(false);
   const mountedRef = useRef(false);
   const [settings, setSettings] = useState(initial);
   const [ready, setReady] = useState(false);
@@ -31,11 +33,10 @@ export function GestureExperiment() {
   const [time, setTime] = useState(0);
 
   function update(next: Partial<Settings>) {
-    setSettings(previous => {
-      const value = { ...previous, ...next };
-      settingsRef.current = value;
-      return value;
-    });
+    const value = { ...settingsRef.current, ...next };
+    settingsRef.current = value;
+    recordRef.current?.events.push({ type: 'settings', audioTime: runRef.current?.audio.currentTime ?? null, settings: value });
+    setSettings(value);
   }
 
   useEffect(() => {
@@ -74,7 +75,10 @@ export function GestureExperiment() {
   async function stop() {
     const run = runRef.current;
     runRef.current = null;
-    if (run) { cancelAnimationFrame(run.frame); await run.audio.close(); }
+    if (run) {
+      recordRef.current?.events.push({ type: 'stop', audioTime: run.audio.currentTime });
+      cancelAnimationFrame(run.frame); await run.audio.close();
+    }
     setPlaying(false);
   }
 
@@ -89,6 +93,8 @@ export function GestureExperiment() {
       await audio.resume();
       if (!mountedRef.current) { await audio.close(); return; }
       const startAt = audio.currentTime + 0.1;
+      recordRef.current = { startedAt: new Date().toISOString(), events: [{ type: 'start', audioTime: startAt, settings: settingsRef.current }], samples: [] };
+      setHasRecord(true);
       // The sine modulators and Rust phase calculation share this audio clock.
       function layer(frequency: number, modulation: number, segments?: Schedule['b_segments']) {
         const carrier = audio!.createOscillator();
@@ -124,10 +130,11 @@ export function GestureExperiment() {
             current.sourceA === 'off' || current.condition === 'audio' ? 0 : current.gainA,
             current.sourceB === 'off' || current.condition === 'audio' ? 0 : current.gainB, current.excursion, current.rotating);
           if (Math.hypot(point[0], point[1]) >= 2) throw new Error('Target outside the Map. Reduce excursion or move the anchor.');
+          recordRef.current?.samples.push({ elapsed, audioTime: run.audio.currentTime, phases: Array.from(phases), target: Array.from(point), settings: current });
           rendererRef.current?.renderFrozen({ juliaSeed: { real: point[0], imag: point[1] },
             colorHue: current.hue, colorSat: 0.8, colorBright: 0.9, zoom: current.zoom, speed: 0 });
           if (elapsed - lastDisplay > 0.1) { setTime(elapsed); lastDisplay = elapsed; }
-        } catch (cause) { setError(String(cause)); void stop(); return; }
+        } catch (cause) { recordRef.current?.events.push({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
         run.frame = requestAnimationFrame(animate);
       };
       run.frame = requestAnimationFrame(animate);
@@ -137,6 +144,21 @@ export function GestureExperiment() {
     } finally {
       startingRef.current = false;
     }
+  }
+
+  function exportRecord() {
+    if (!recordRef.current) return;
+    const blob = new Blob([JSON.stringify({
+      format: 'fractal-sync-gesture-diagnostic/1',
+      limitations: 'Known synthetic phases and direct kinematic target; no Physics or CycleBank.',
+      ...recordRef.current,
+    }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'gesture-diagnostic.json';
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   const slider = (label: string, key: 'gainA' | 'gainB' | 'excursion' | 'offset' | 'zoom' | 'hue', min: number, max: number, step: number) =>
@@ -150,6 +172,7 @@ export function GestureExperiment() {
     <p>Known synthetic pulses: the 3:4 relationship departs after 8 seconds and returns at 24 seconds. This shows the intended target directly, without Physics tracking or CycleBank estimation.</p>
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
       <button disabled={!ready} onClick={() => playing ? void stop() : void start()}>{playing ? 'Stop passage' : 'Start passage'}</button>
+      <button disabled={!hasRecord} onClick={exportRecord}>Export diagnostic record</button>
       <button onClick={() => void canvas.current?.requestFullscreen()}>Show Julia only</button>
       <span>Passage: {time.toFixed(1)} s</span>
       <label>Comparison <select value={settings.condition} onChange={event => update({ condition: event.target.value as Settings['condition'] })}><option value="matched">Matched visual</option><option value="misaligned">Visual changes early</option><option value="audio">Audio with fixed Julia</option></select></label>

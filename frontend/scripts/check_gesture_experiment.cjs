@@ -31,6 +31,14 @@ const { chromium } = require('playwright');
   const text = await page.locator('main').innerText();
   if (alert.length || errors.length || /Passage: 0\.0 s/.test(text)) throw new Error(JSON.stringify({ alert, errors, text }));
   await page.getByRole('button', { name: 'Stop passage' }).click();
-  console.log('Gesture page started, advanced its audio clock, and stopped without errors.');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export diagnostic record' }).click();
+  const download = await downloadPromise;
+  const record = JSON.parse(await require('node:fs/promises').readFile(await download.path(), 'utf8'));
+  if (record.format !== 'fractal-sync-gesture-diagnostic/1' || !record.samples.length ||
+      !record.events.some(event => event.type === 'settings') || !record.events.some(event => event.type === 'stop')) {
+    throw new Error('Incomplete diagnostic record');
+  }
+  console.log('Gesture page advanced, stopped, and exported its diagnostic record.');
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });
