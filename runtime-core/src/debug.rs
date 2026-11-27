@@ -143,6 +143,9 @@ pub struct GeometrySnapshot {
     pub singularity: String,
     /// Signed distance D(c).
     pub d: f64,
+    /// Derived from this raster sample and the active metric parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shore_distance_estimate: Option<crate::shore_distance::ShoreDistanceEstimate>,
     /// Gradient norm |grad D| (eikonal: ~1 where smooth).
     pub grad_d_norm: f64,
     /// Hessian Frobenius norm |H_D|.
@@ -388,6 +391,10 @@ pub fn snapshot_from_state(
             validity: jet.validity.as_str().to_string(),
             singularity: jet.singularity.as_str().to_string(),
             d: jet.d,
+            shore_distance_estimate: crate::shore_distance::ShoreDistanceEstimate::from_jet(
+                &jet, config,
+            )
+            .ok(),
             grad_d_norm: jet.grad_norm(),
             hessian_norm: jet.hessian_norm(),
             hessian_eigenvalues: jet.hessian_eigenvalues(),

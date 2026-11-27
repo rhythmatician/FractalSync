@@ -61,4 +61,10 @@ least $10^{-300}$ was $2.30\times10^{-13}$. At $q=10^{-300}$ and $a=10^{300}$,
 direct binary64 subtraction returned zero while the scaled result was
 $1.1477935747\times10^{-300}$. These are sampled scalar comparisons.
 
-[#168](https://github.com/rhythmatician/FractalSync/issues/168) remains open for a Rust authority with range and accuracy tests, provider provenance, and diagnostic integration. A provider-derived value retains the provenance of its input distance. The unrestricted ideal distance can give a lower bound in a restricted admissible domain when the metrics correspond, even if the nearest segment is unavailable there.
+## Rust and cockpit diagnostics
+
+`runtime_core::shore_distance::RadialProfile` evaluates the profile with explicit input and overflow errors. It uses the ordinary quotient for finite values and logarithmic asymptotics when the quotient or first argument overflows. The Rust tests check independent quadrature, sampled binary64 extremes, plane and circle paths, and the radius sensitivity bound. [Rust implementation](../../runtime-core/src/shore_distance.rs), [numerical tests](../../runtime-core/tests/test_shore_distance.rs).
+
+Cockpit replay snapshots carry `diagnostics.geometry.shoreDistanceEstimate` alongside the signed distance, provider version, tile, resolution, and validity for the same query. The estimate records the active `epsilon` and `anisotropy`. It is available for a finite raster sample, including at unresolved or singular jets, and absent outside the provider domain or when its scalar has unknown Shore-distance correspondence. The current raster has no certified radius error. A future certified radius error can be propagated via `propagate_radius_error`, with a separate allowance for floating-point evaluation.
+
+The analytic value is exact for the unrestricted ideal model and a true Euclidean radius. It gives a lower bound in a restricted admissible domain when the metrics correspond, even if the nearest segment is unavailable there. The cockpit displays a raster estimate, which carries no such route guarantee. [Issue #168](https://github.com/rhythmatician/FractalSync/issues/168).

@@ -626,3 +626,40 @@ fn debug_snapshot_serializes_camel_case() {
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"signedDistance\""), "wire format is camelCase: {json}");
 }
+
+#[test]
+fn replay_snapshot_records_shore_estimate_with_its_source() {
+    let _g = lock();
+    let config = ManifoldConfig {
+        epsilon: 0.002,
+        lambda_sq: 2.25,
+        ..ManifoldConfig::default()
+    };
+    let snap = snapshot_from_state(
+        Complex64::new(0.3, 0.0),
+        (0.0, 0.0),
+        None,
+        None,
+        &config,
+        None,
+    )
+    .expect("snapshot");
+    let estimate = snap.diagnostics.geometry.shore_distance_estimate.unwrap();
+    let wire = serde_json::to_value(&snap).unwrap();
+    let geometry = &wire["diagnostics"]["geometry"];
+    assert_eq!(geometry["providerName"], "raster-bridge");
+    assert_eq!(geometry["validity"], snap.diagnostics.geometry.validity);
+    assert_eq!(geometry["d"], snap.diagnostics.geometry.d);
+    assert_eq!(geometry["shoreDistanceEstimate"]["epsilon"], config.epsilon);
+    assert_eq!(
+        geometry["shoreDistanceEstimate"]["anisotropy"],
+        1.5 / std::f64::consts::LN_2
+    );
+    assert_eq!(geometry["shoreDistanceEstimate"]["value"], estimate.value);
+    assert_eq!(
+        runtime_core::shore_distance::RadialProfile::new(estimate.epsilon, estimate.anisotropy)
+            .unwrap()
+            .evaluate(snap.diagnostics.geometry.d.abs()),
+        Ok(estimate.value)
+    );
+}

@@ -87,6 +87,9 @@ export interface DebugSnapshot {
     lastDeltaTotal: number | null;
     /** Rust-owned regularized crest potential kappa*log2(d_ref/epsilon). */
     crestPotential: number;
+    geometry?: {
+      shoreDistanceEstimate?: { value: number; epsilon: number; anisotropy: number };
+    };
   };
 }
 
