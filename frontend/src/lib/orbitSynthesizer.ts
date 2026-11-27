@@ -67,8 +67,8 @@ interface WasmOrbitController {
   apply_controls(s: number, alpha: number): void;
   set_momentum(on: boolean): void;
   set_drag(drag: number): void;
-  set_thrust(thrust: number): void;
-  set_energy(energy: number): void;
+  thrust: number;
+  energy: number;
   set_manifold_physics?(on: boolean): void;
   set_manifold_config?(c: unknown): void;
   set_manifold_drag?(d: number): void;
@@ -546,30 +546,12 @@ export class OrbitSynthesizer {
 
   /** Audio thrust: sustained loudness builds inertia (tangential acceleration). */
   setThrust(thrust: number): void {
-    const s = this.state as unknown as {
-      thrust: number;
-      set_thrust?: (v: number) => void;
-    };
-    const clamped = Math.max(0, Math.min(0.2, thrust));
-    if (typeof s.set_thrust === 'function') {
-      s.set_thrust(clamped);
-    } else {
-      s.thrust = clamped;
-    }
+    this.state.thrust = thrust;
   }
 
   /** Audio energy in [0,1]: loud audio pulls c toward the Shore (energy servo). */
   setEnergy(energy: number): void {
-    const s = this.state as unknown as {
-      energy: number;
-      set_energy?: (v: number) => void;
-    };
-    const clamped = Math.max(0, Math.min(1, energy));
-    if (typeof s.set_energy === 'function') {
-      s.set_energy(clamped);
-    } else {
-      s.energy = clamped;
-    }
+    this.state.energy = energy;
   }
 
   /**

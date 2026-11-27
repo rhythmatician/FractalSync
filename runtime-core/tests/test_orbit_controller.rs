@@ -125,3 +125,14 @@ fn momentum_refinement_smooths_jitter() {
         d_plain
     );
 }
+
+#[test]
+fn audio_drive_setters_enforce_controller_limits() {
+    let mut ctrl = OrbitController::new(1.0, 0.0, 1.0);
+
+    for (input, thrust, energy) in [(-1.0, 0.0, 0.0), (0.1, 0.1, 0.1), (2.0, 0.2, 1.0)] {
+        ctrl.set_thrust(input);
+        ctrl.set_energy(input);
+        assert_eq!((ctrl.thrust, ctrl.energy), (thrust, energy));
+    }
+}
