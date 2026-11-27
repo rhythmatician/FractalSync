@@ -209,6 +209,30 @@ pub struct RkSubstepTrace {
     pub work: f64,
 }
 
+impl RkSubstepTrace {
+    /// Outward L1 bound on the ambient chord's deviation from left-endpoint
+    /// drift, using the represented duration, start velocity, and positions.
+    /// This does not enclose the between-endpoint trajectory or metric length.
+    pub fn left_drift_defect_upper(&self) -> Option<f64> {
+        if !self.duration.is_finite() || self.duration <= 0.0 {
+            return None;
+        }
+        let start = self.stages[0];
+        let mut bound = 0.0;
+        for axis in 0..2 {
+            let chord = self.end[axis] - start[axis];
+            let drift = self.duration * start[axis + 2];
+            if !chord.is_finite() || !drift.is_finite() {
+                return None;
+            }
+            let lo = (chord.next_down() - drift.next_up()).next_down();
+            let hi = (chord.next_up() - drift.next_down()).next_up();
+            bound = crate::intrinsic_bounds::add_up(bound, lo.abs().max(hi.abs()));
+        }
+        bound.is_finite().then_some(bound)
+    }
+}
+
 /// Start and discrete endpoints of one committed experimental Physics step.
 /// These samples carry no between-endpoint path or parallel-transport certificate.
 #[derive(Debug)]

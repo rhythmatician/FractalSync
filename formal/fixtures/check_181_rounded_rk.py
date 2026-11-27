@@ -195,6 +195,7 @@ def rhs(phase: Phase, jet: Jet, command: Vector) -> tuple[Interval, Interval, In
 
 class Substep(TypedDict):
     dt: int
+    left_drift_defect_upper: int
     stages: list[list[int]]
     slopes: list[list[int]]
     end: list[int]
@@ -269,6 +270,14 @@ def check_profile(profile: Profile, field: Field) -> None:
             endpoint = phase_of(sub["end"])
             expected_end = tuple(source[i] + weighted[i] for i in range(4))
             check("weighted endpoint", phase_error(endpoint, expected_end), dt**2)
+            represented_dt = binary64(sub["dt"])
+            drift_defect = sum(
+                abs(endpoint[i] - source[i] - represented_dt * source[i + 2])
+                for i in range(2)
+            )
+            drift_upper = binary64(sub["left_drift_defect_upper"])
+            assert drift_defect <= drift_upper
+            check("left drift defect upper", drift_upper, 100 * dt**2)
             check("substep work", abs(binary64(sub["work"]) - weighted[4]), dt**2)
             exact_outer_work += weighted[4]
             source = endpoint
