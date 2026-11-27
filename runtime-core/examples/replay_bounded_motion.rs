@@ -1,11 +1,18 @@
 //! Replay the original #148 driven and undriven Controls crossing scenario.
+use runtime_core::controller::SAMPLE_RATE;
 use runtime_core::controls::MotionControls;
+use runtime_core::crossing_feasibility::{
+    evaluate_feasibility, FeasibilityLimits, LengthLowerBound,
+};
 use runtime_core::manifold::ManifoldConfig;
 use runtime_core::operational_engine::{
     reference_policy_for_field, FrozenRollout, Integrator, PhysicsProfile,
 };
 use runtime_core::operational_field::PreparedField;
 use std::sync::Arc;
+
+const STEP_SAMPLES: u64 = 960;
+const STEPS: u64 = 400;
 
 fn main() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
@@ -30,14 +37,14 @@ fn main() -> Result<(), String> {
     };
     let profile = PhysicsProfile::new(
         config,
-        0.02,
+        STEP_SAMPLES as f64 / SAMPLE_RATE as f64,
         controls(0.0).friction_beta(),
         Integrator::Rk4FourSubsteps,
     )?;
     let rollout = FrozenRollout::new(field, profile, cuts)?;
     let run = |throttle| -> Result<(bool, [f64; 2]), String> {
         let mut state = rollout.initial_state([0.3, 0.05], [0.0; 2])?;
-        for _ in 0..400 {
+        for _ in 0..STEPS {
             let q = rollout.drive_covector(state.position, &controls(throttle))?;
             rollout.attempt_step(&mut state, q)?;
             if rollout.probe(state.position)?["operational_value"]
@@ -57,9 +64,24 @@ fn main() -> Result<(), String> {
             "crossing failed: undriven={undriven:?}, driven={driven:?}"
         ));
     }
+    // This task asks for the first true-Shore arrival by the replay deadline.
+    // An operational sign change and an observed speed are not certificates.
+    let feasibility = evaluate_feasibility(
+        LengthLowerBound::Unavailable,
+        STEPS * STEP_SAMPLES,
+        FeasibilityLimits::default(),
+    );
     println!(
         "{}",
-        serde_json::json!({"operational_crossing":"passed","reference_crossing":"unverified","field_id":format!("{:016x}",rollout.field_id()),"physics_profile_id":format!("{:016x}",rollout.profile().id()),"undriven":undriven,"driven":driven})
+        serde_json::json!({
+            "operational_crossing": "passed",
+            "reference_crossing": "unverified",
+            "field_id": format!("{:016x}", rollout.field_id()),
+            "physics_profile_id": format!("{:016x}", rollout.profile().id()),
+            "undriven": undriven,
+            "driven": driven,
+            "true_shore_arrival_feasibility": feasibility,
+        })
     );
     Ok(())
 }

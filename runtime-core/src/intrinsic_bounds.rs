@@ -268,7 +268,7 @@ fn add_down(left: f64, right: f64) -> f64 {
     }
 }
 
-fn add_up(left: f64, right: f64) -> f64 {
+pub(crate) fn add_up(left: f64, right: f64) -> f64 {
     if left == 0.0 || right == 0.0 {
         left + right
     } else {
@@ -295,11 +295,11 @@ fn sub_up(left: f64, right: f64) -> f64 {
     }
 }
 
-fn mul_down(left: f64, right: f64) -> f64 {
+pub(crate) fn mul_down(left: f64, right: f64) -> f64 {
     (left * right).next_down().max(0.0)
 }
 
-fn mul_up(left: f64, right: f64) -> f64 {
+pub(crate) fn mul_up(left: f64, right: f64) -> f64 {
     if left == 0.0 || right == 0.0 {
         0.0
     } else {
@@ -307,11 +307,11 @@ fn mul_up(left: f64, right: f64) -> f64 {
     }
 }
 
-fn div_down(numerator: f64, denominator: f64) -> f64 {
+pub(crate) fn div_down(numerator: f64, denominator: f64) -> f64 {
     (numerator / denominator).next_down().max(0.0)
 }
 
-fn div_up(numerator: f64, denominator: f64) -> f64 {
+pub(crate) fn div_up(numerator: f64, denominator: f64) -> f64 {
     (numerator / denominator).next_up()
 }
 

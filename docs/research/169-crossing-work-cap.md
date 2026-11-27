@@ -52,4 +52,9 @@ If the approach is required to follow the straight normal segment without revers
 
 [ShoreCrossingWorkBound.lean](../../formal/FractalSync/ShoreCrossingWorkBound.lean) checks the sustained power and work inequalities, impulse jump cap, full crest deficit with minimum arrival kinetic energy, combined duration bound, and scalar rest envelope. The physical application of the rest envelope uses `hasDerivAt_canonicalEnergy` and the pointwise force pairing. The signed energy identity and exact Shore/wall potential difference come from the existing mechanics package. The crossing-specific geometry and integrated kinetic action remain separate bounds. [Potential forces and work–energy](159-potential-controls.md), [absolutely continuous crossing bounds](160-absolute-continuous-paths.md).
 
-#169 remains open for navigation, curriculum, and replay integration. Hard deadline exclusions need certified endpoint and arrival-set semantics, provider-to-ideal metric correspondence, the caps required by the selected bound, event accounting when impulses are present, and sample-time and rounding evidence. The remaining implementation and replay checks belong at the shared #174 geometry seam and the #166 ledger seam. [Navigation bounds](https://github.com/rhythmatician/FractalSync/issues/174), [work-energy ledger](https://github.com/rhythmatician/FractalSync/issues/166).
+The [Rust feasibility check and replay trial](169-navigation-feasibility.md)
+evaluate necessary conditions on the canonical sample clock. Hard curriculum
+exclusions still need certified target and metric correspondence, an applicable
+cap, and event accounting when impulses are present. The navigation and
+training consumers remain open. [Navigation bounds](https://github.com/rhythmatician/FractalSync/issues/174),
+[work-energy ledger](https://github.com/rhythmatician/FractalSync/issues/166).
