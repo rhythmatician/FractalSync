@@ -84,11 +84,10 @@ impl RasterNavigationRegion {
             bounds,
             raster_generation: slot.generation,
             rho_upper,
-            // The compiled metric is bounded above by (2 + 6 * gradient_upper)^2 / rho^2.
-            // The rounded ruler is at least epsilon / 2.
-            length_per_displacement_upper: div_up(
-                add_up(4.0, mul_up(12.0, gradient_upper)),
-                config.epsilon,
+            length_per_displacement_upper: metric_length_factor(
+                (config.epsilon * config.epsilon).sqrt(),
+                d_upper,
+                gradient_upper,
             ),
         })
     }
@@ -366,9 +365,21 @@ fn local_length_factor(field: &DistanceField, bounds: [[f64; 2]; 2]) -> Option<f
     if gradient_upper > f64::from(1 << 18) {
         return None;
     }
-    // The rounded ruler dominates |D| and is at least epsilon / 2.
-    let rho_lower = (epsilon / 2.0).max(d_lower);
-    Some(div_up(add_up(2.0, mul_up(6.0, gradient_upper)), rho_lower))
+    // Use the same monotone rounded operations as rho_from_jet.
+    let rho_lower = (d_lower * d_lower + epsilon * epsilon).sqrt();
+    Some(metric_length_factor(rho_lower, d_upper, gradient_upper))
+}
+
+/// Enclose the compiled default matrix by its maximum absolute row sum.
+fn metric_length_factor(rho_lower: f64, d_upper: f64, gradient_upper: f64) -> f64 {
+    // Every binary32 center sample widens exactly. Its square is exact in
+    // binary64, so the rounded ruler is also at least the sample magnitude.
+    let ratio_upper = (d_upper / rho_lower).min(1.0);
+    let sigma_upper = (ratio_upper * gradient_upper) / (rho_lower * std::f64::consts::LN_2);
+    let base_upper = 1.0 / (rho_lower * rho_lower);
+    let rank_upper = sigma_upper * sigma_upper;
+    let diagonal_upper = base_upper + rank_upper;
+    add_up(diagonal_upper, rank_upper).sqrt().next_up()
 }
 
 #[cfg(test)]

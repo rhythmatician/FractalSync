@@ -114,7 +114,7 @@ fn main() -> Result<(), String> {
     assert_eq!(report_json["rasterWaypointSearch"]["rasterGeneration"], raster_generation);
     assert_eq!(report_json["rasterWaypointSearch"]["window"], serde_json::json!(window));
     assert_eq!(Some(frame_index), report.bounded.arrivals[route_index]);
-    assert!(length_upper > 0.0 && length_upper < 1_000_000.0);
+    assert!(length_upper > 0.0 && length_upper < 100_000.0);
     assert!(
         report.bounded.queries_to_first_arrival.unwrap()
             < report.baseline.queries_to_first_arrival.unwrap()

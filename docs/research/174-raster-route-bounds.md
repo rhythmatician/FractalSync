@@ -127,16 +127,26 @@ The curriculum does not consume this certificate.
 ## Straight-segment route witnesses
 
 For two points in the certified window, the whole straight segment stays
-in the window by convexity. Let \(G_*\) be the outward bound on the
-magnitude of each compiled centered gradient component. The rounded
-scale gradient satisfies \(|g_i|\le 4G_*/\widehat\rho\). This uses
-\(|D|\le\widehat\rho\) and the same scale-gradient denominator and
-rounding allowance as the lower bound. The base term satisfies
-\(b\le 2/\widehat\rho^2\). With the entry errors bounded by \(b/64\),
-the matrix quadratic form is at most
-\((4+32G_*^2)\|v\|^2/\widehat\rho^2\). Taking the square root and
-using \(\widehat\rho\ge\varepsilon/2\) bounds length by
-\((4+12G_*)/\varepsilon\) times ambient displacement.
+in the window by convexity. The length factor encloses the compiled
+matrix by its maximum absolute row sum. Starting from lower ruler
+bound `rhoLower`, upper center magnitude `dUpper`, and upper gradient
+component magnitude `gradUpper`, evaluate the same rounded operations
+as the default metric:
+
+```text
+ratioUpper = min(1, fl(dUpper / rhoLower))
+sigmaUpper = fl(fl(ratioUpper * gradUpper) / fl(rhoLower * ln2))
+baseUpper  = fl(1 / fl(rhoLower * rhoLower))
+rankUpper  = fl(sigmaUpper * sigmaUpper)
+rowUpper   = add_up(fl(baseUpper + rankUpper), rankUpper)
+```
+
+The widened binary32 center square is exact, so the compiled ruler
+dominates the absolute center sample and the computed ratio is at most
+one. Monotonicity of the individual rounded operations gives upper
+bounds for the diagonal and absolute off-diagonal entries. The matrix
+is symmetric, so the row sum bounds the quadratic form. Rounded-up
+square root and displacement multiplication give a length upper bound.
 
 `segment_length_upper` also encloses center and stencil samples using
 the raster coefficients that support the segment's bounding rectangle.
@@ -157,7 +167,7 @@ raises the lower bound on the adaptive step. The stencil interval's
 width divided by twice this minimum step bounds the centered gradient.
 Substituting these bounds into `(2 + 6 G*) / rho` gives a local metric
 factor. The implementation takes the smaller of the local factor and
-the original regional factor. If a local scan cannot certify its
+the regional factor. If a local scan cannot certify its
 arithmetic, the regional factor still applies.
 
 `RasterNavigationRegion::search_route` takes a caller-supplied
@@ -192,7 +202,7 @@ Controls arrival and its sampled frame are reported separately.
 In the [common-start replay fixture](174-route-benchmark.md#controls-replays-on-the-map),
 the raster search reaches frame 698, zero-based, of the commit 1.0
 replay with either bound. The local edge certificate reduces the
-length upper bound from 7,466,920,211 to 475,492, about 15,700-fold.
+length upper bound from 7,466,920,211 to 475,492. The row-sum enclosure further reduces it to 80,923, about 5.9-fold on the same witness.
 The bound still uses worst-case density within each edge's support.
 
 ## Reproduce the built-in raster trial
