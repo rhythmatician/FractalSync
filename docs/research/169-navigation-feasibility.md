@@ -90,14 +90,16 @@ caps the integral of kinetic energy over the arrival interval.
     "target": [2.125, 0],
     "startSample": 48000,
     "deadlineSample": 96000,
-    "kineticActionBudget": 0.25
+    "kineticActionBudget": 2.0
   }
 ]
 ```
 
 For an explicitly ideal task, `idealDistanceGraph` uses certified bounds for
-the ideal Mandelbrot Shore. The example is ruled out by its kinetic action
-budget. Extending the deadline to sample 4,848,000 leaves that budget open.
+the ideal Mandelbrot Shore. The example's one-second interval needs at least
+121.16 units of kinetic action against a budget of two. Extending the deadline
+to sample 4,848,000 gives a 100-second interval and lowers the bound to 1.21,
+leaving that budget open.
 The default `runtimeMap` metric retains the candidate with insufficient
 evidence because the ideal distance bound lacks runtime metric correspondence.
 The deadline check also reports insufficient evidence without a speed cap

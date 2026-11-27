@@ -35,7 +35,7 @@ def test_check_curriculum_feasibility(tmp_path: Path) -> None:
         "target": [2.125, 0],
         "startSample": SAMPLE_RATE,
         "deadlineSample": 2 * SAMPLE_RATE,
-        "kineticActionBudget": 0.25,
+        "kineticActionBudget": 2.0,
     }
     ideal = {**base, "metric": "idealDistanceGraph"}
     result = _check(
@@ -53,13 +53,15 @@ def test_check_curriculum_feasibility(tmp_path: Path) -> None:
     cases = {entry["id"]: entry["feasibility"] for entry in report["cases"]}
 
     short = cases["short-ideal"]
+    assert short["referenceStatus"] == "idealDistanceBounds"
+    assert short["sampleRate"] == SAMPLE_RATE
     assert short["startSample"] == SAMPLE_RATE
     assert short["deadlineSample"] == 2 * SAMPLE_RATE
     assert short["proof"] is not None
     assert short["assessment"]["durationSamples"] == SAMPLE_RATE
     assert short["assessment"]["status"] == "ruledOut"
     assert short["assessment"]["kineticActionStatus"] == "ruledOut"
-    assert short["assessment"]["minimumKineticAction"] > 0.25
+    assert short["assessment"]["minimumKineticAction"] > 2.0
     assert short["assessment"]["minimumSeconds"] is None
     assert short["assessment"]["deadlineStatus"] == "insufficientEvidence"
 
@@ -71,6 +73,8 @@ def test_check_curriculum_feasibility(tmp_path: Path) -> None:
 
     actual = cases["runtime-map"]
     assert actual["metric"] == "runtimeMap"
+    assert actual["referenceStatus"] == "runtimeMetricCorrespondenceUncertified"
+    assert actual["runtimeGeometryVersion"]
     assert actual.get("proof") is None
     assert actual["assessment"]["status"] == "insufficientEvidence"
     assert actual["assessment"]["minimumKineticAction"] is None
