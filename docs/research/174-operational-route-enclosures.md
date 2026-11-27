@@ -78,6 +78,39 @@ paths. The metric describes the stored spline in real arithmetic. Compiled
 Physics error, Controls reachability, and comparison to the mathematical
 Shore require separate evidence.
 
+## Budget before edge certification
+
+If the ruler is at most \(R\) on the window, any admitted path of length
+at most \(B\) that visits a vertex \(v\) and ends in the target ball
+satisfies
+
+\[
+\frac{\|s-v\| + \max(0,\|v-c\|-r)}{R} \le B.
+\]
+
+Here \(s\) is the start, \(c\) the target center and \(r\) the ambient
+arrival radius. The two terms bound the prefix and suffix separately.
+The Rust planner rounds both terms and the sum down before comparing
+with the budget. An unavailable bound leaves the vertex eligible. It
+skips incident edges before checking the support or building a Bernstein
+enclosure. [Checked vertex bound](../../formal/FractalSync/OperationalRouteBounds.lean)
+
+Skipped paths can cost less than an expensive detour while still exceeding
+the budget. When edges were skipped, the planner caps the reported lower
+bound for the full graph at the budget. A trimmed graph with no witness can
+still return insufficient route evidence. The result records the number of
+skipped edges, attempted edge enclosures and distinct spline cells inspected.
+
+On the retained fine asset in Chromium, the short-arrival test used the
+same committed cusp start and searched the same 64-by-64 interval window
+as the longer route. The target was `[460/2048, -1/2048]` with ambient radius
+`0.0002`. The budgeted request reused the unbounded route's upper length,
+`0.2574903964996338`. Both searches returned the same seven vertices and
+upper length. The budget skipped 16,022 candidate edges. Edge enclosure
+attempts fell from 16,518 to 498 and distinct spline cells from 7,920 to
+266. These counts measure certificate queries on this bounded graph.
+[Chromium reproduction](../validation/bounded-operational-engine.md#read-only-map-route-guidance)
+
 The same regional ruler bound gives a nominal length lower bound of 1.08825
 for the first point target. With a kinetic-action budget of 0.05, the
 one-second check rules it out at a lower bound of 0.59214. The action lower
