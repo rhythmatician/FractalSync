@@ -129,3 +129,27 @@ export function compareBoxResolutions(panels) {
     }
   }
 }
+
+export function findJointWindows(panels) {
+  const [coarse, fine] = panels.slice(-2);
+  const windows = [];
+  for (const [s, state] of fine.states.entries()) {
+    for (const [m, metric] of state.metrics.entries()) {
+      const coarseSteps = coarse.states[s].metrics[m].steps;
+      for (let i = 2; i < metric.steps.length; i++) {
+        const sample = metric.steps.slice(i - 2, i + 1);
+        const reference = coarseSteps.slice(i - 2, i + 1);
+        for (const kind of ['box_rgb8', 'box_float']) {
+          const matchesResolution = sample.every(step => step.observations?.[kind].resolution_refinement?.stable);
+          const matchesSteps = [sample, reference].every(row =>
+            row.slice(1).every(step => step.observations?.[kind].step_refinement?.stable));
+          if (matchesResolution && matchesSteps) {
+            windows.push({ center: state.name, metric: metric.name, representation: kind,
+              resolutions: [coarse.resolution, fine.resolution], spacings: sample.map(step => step.h) });
+          }
+        }
+      }
+    }
+  }
+  return windows;
+}

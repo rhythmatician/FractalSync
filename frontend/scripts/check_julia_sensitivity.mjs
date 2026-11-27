@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { calibrateJuliaSensitivity } from './julia_sensitivity_calibration.mjs';
-import { BOXES, RESOLUTIONS, compareBoxResolutions } from './julia_sensitivity_refinement.mjs';
+import { BOXES, RESOLUTIONS, compareBoxResolutions, findJointWindows } from './julia_sensitivity_refinement.mjs';
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
@@ -174,7 +174,9 @@ for (const state of centerRows) {
 }
 
 const server = await createServer({
-  root: frontend, configFile: false, appType: 'custom', server: { host: '127.0.0.1', port: 0 },
+  root: frontend, configFile: false, appType: 'custom',
+  cacheDir: refinement ? resolve(root, 'tmp/julia-171/vite-cache') : undefined,
+  server: { host: '127.0.0.1', port: 0 },
 });
 server.middlewares.use((request, response, next) => {
   if (request.url === '/__julia_sensitivity__.html') {
@@ -419,6 +421,7 @@ try {
     panels.push({ resolution, ...result });
   }
   if (refinement) compareBoxResolutions(panels);
+  const jointWindows = refinement ? findJointWindows(panels) : undefined;
   const { resolution: firstResolution, ...result } = panels[0];
   const provenance = {
     panel: refinement ? 'matched refinement' : heldOut ? 'held-out' : 'initial',
@@ -437,14 +440,19 @@ try {
     geometry: { ...geometry, points: undefined },
   };
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, JSON.stringify({ provenance, calibration, ...(refinement ? { panels } : result) }, null, 2) + '\n');
-  for (const state of result.states) {
-    if (!state.metrics.length) console.log(`${state.name}: excluded ${state.geometry.jet?.validity ?? state.geometry.error}`);
-    for (const metric of state.metrics) {
-      const last = [...metric.steps].reverse().find(step => step.status === 'measured');
-      console.log(`${state.name}/${metric.name}: ${metric.steps.map(step => step.status).join(', ')}`,
-        last ? { h: last.h, eigenvalues: last.eigenvalues, rank: last.rank_above_rgb8_budget,
-          refinement: metric.steps.map(step => step.refinement?.stable ?? null) } : '');
+  const evidence = refinement ? { panels, joint_windows: jointWindows } : result;
+  await writeFile(output, JSON.stringify({ provenance, calibration, ...evidence }, null, 2) + '\n');
+  if (refinement) {
+    console.log(`${jointWindows.length} jointly stable box-mean windows`);
+  } else {
+    for (const state of result.states) {
+      if (!state.metrics.length) console.log(`${state.name}: excluded ${state.geometry.jet?.validity ?? state.geometry.error}`);
+      for (const metric of state.metrics) {
+        const last = [...metric.steps].reverse().find(step => step.status === 'measured');
+        console.log(`${state.name}/${metric.name}: ${metric.steps.map(step => step.status).join(', ')}`,
+          last ? { h: last.h, eigenvalues: last.eigenvalues, rank: last.rank_above_rgb8_budget,
+            refinement: metric.steps.map(step => step.refinement?.stable ?? null) } : '');
+      }
     }
   }
   console.log(`Evidence written to ${output}`);
