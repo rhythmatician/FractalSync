@@ -6,8 +6,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 mod frame_transport;
+mod gesture_harmonics;
+pub use gesture_harmonics::{compare_gesture_harmonics, GestureHarmonicMoment};
 mod route_guidance;
-pub use frame_transport::TransportedFrame;
+pub use frame_transport::{
+    GestureEpochId, GestureSample, TransportedFrame, TransportedGestureEpoch,
+};
 pub use route_guidance::{
     AmbientTarget, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
     OperationalRouteStatus,
@@ -193,12 +197,25 @@ impl MechanicalEndpoint {
     }
 }
 
+/// Represented binary64 values from one successful classical RK4 substep.
+/// Phase components are position x/y and velocity x/y. Each slope contains
+/// their four derivatives followed by signed control-plus-drag power.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RkSubstepTrace {
+    pub duration: f64,
+    pub stages: [[f64; 4]; 4],
+    pub slopes: [[f64; 5]; 4],
+    pub end: [f64; 4],
+    pub work: f64,
+}
+
 /// Start and discrete endpoints of one committed experimental Physics step.
 /// These samples carry no between-endpoint path or parallel-transport certificate.
 #[derive(Debug)]
 pub struct AcceptedStepTrace {
     endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
     len: usize,
+    rk_substeps: Vec<RkSubstepTrace>,
     rollout_policy: Arc<[ReferenceCut]>,
     field_id: u64,
     physics_profile_id: u64,
@@ -209,6 +226,7 @@ impl AcceptedStepTrace {
         Self {
             endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
             len: 1,
+            rk_substeps: Vec::new(),
             rollout_policy: rollout.cuts.clone(),
             field_id: state.field_id,
             physics_profile_id: state.physics_profile_id,
@@ -224,6 +242,12 @@ impl AcceptedStepTrace {
     /// Internal times use offsets from the start on the rollout's f64 mechanical clock.
     pub fn endpoints(&self) -> &[MechanicalEndpoint] {
         &self.endpoints[..self.len]
+    }
+
+    /// Stage arithmetic evidence for the committed RK method, in execution order.
+    /// Euler has no RK stages. These samples require separate error enclosures.
+    pub fn rk_substeps(&self) -> &[RkSubstepTrace] {
+        &self.rk_substeps
     }
 }
 
@@ -527,8 +551,15 @@ fn rk4_profile_advance(
     let substep_dt = profile.dt / count as f64;
     let mut work = 0.0;
     for step in 0..count {
-        let (next, velocity, increment) =
-            rk4_advance(c, v, q, profile.beta, substep_dt, &profile.config)?;
+        let (next, velocity, increment) = rk4_advance(
+            c,
+            v,
+            q,
+            profile.beta,
+            substep_dt,
+            &profile.config,
+            trace.as_deref_mut().map(|trace| &mut trace.rk_substeps),
+        )?;
         // Internal endpoints are temporary, but require the same complete
         // differential and energy checks as the final outer endpoint.
         if step + 1 < count {
@@ -557,6 +588,7 @@ fn rk4_advance(
     beta: f64,
     dt: f64,
     config: &ManifoldConfig,
+    trace: Option<&mut Vec<RkSubstepTrace>>,
 ) -> Result<(Complex64, (f64, f64), f64), String> {
     let initial = [c.re, c.im, v.0, v.1];
     let k1 = rhs(initial, q, beta, config).map_err(|e| format!("RK stage 1: {e}"))?;
@@ -571,14 +603,15 @@ fn rk4_advance(
         end[i] += dt / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
     }
     let work = dt / 6.0 * (k1[4] + 2.0 * k2[4] + 2.0 * k3[4] + k4[4]);
-    #[cfg(test)]
-    fixture_queries::record_substep(
-        dt,
-        [initial, second, third, fourth],
-        [k1, k2, k3, k4],
-        end,
-        work,
-    );
+    if let Some(trace) = trace {
+        trace.push(RkSubstepTrace {
+            duration: dt,
+            stages: [initial, second, third, fourth],
+            slopes: [k1, k2, k3, k4],
+            end,
+            work,
+        });
+    }
     Ok((Complex64::new(end[0], end[1]), (end[2], end[3]), work))
 }
 fn checked_endpoint(
@@ -742,6 +775,51 @@ mod tests {
                 .unwrap();
             assert_eq!(work, plain_work);
             assert_eq!(traced, plain);
+            let substeps = trace.rk_substeps();
+            let expected_count = match method {
+                Integrator::Euler => 0,
+                Integrator::Rk4 => 1,
+                Integrator::Rk4FourSubsteps => 4,
+            };
+            assert_eq!(substeps.len(), expected_count);
+            for (i, substep) in substeps.iter().enumerate() {
+                let start = trace.endpoints()[i];
+                let end = trace.endpoints()[i + 1];
+                assert_eq!(
+                    substep.duration,
+                    rollout.profile().dt / expected_count as f64
+                );
+                assert_eq!(
+                    substep.stages[0],
+                    [
+                        start.position[0],
+                        start.position[1],
+                        start.velocity[0],
+                        start.velocity[1]
+                    ],
+                );
+                assert_eq!(
+                    substep.end,
+                    [
+                        end.position[0],
+                        end.position[1],
+                        end.velocity[0],
+                        end.velocity[1]
+                    ],
+                );
+                for (stage, slope) in substep.stages.iter().zip(substep.slopes) {
+                    assert_eq!([slope[0], slope[1]], [stage[2], stage[3]]);
+                }
+                for (stage, (slope, fraction)) in substep.stages[1..]
+                    .iter()
+                    .zip(substep.slopes.iter().zip([0.5, 0.5, 1.0]))
+                {
+                    let expected: [f64; 4] = std::array::from_fn(|j| {
+                        substep.stages[0][j] + (substep.duration * fraction) * slope[j]
+                    });
+                    assert_eq!(*stage, expected);
+                }
+            }
             let endpoints = trace.endpoints();
             assert_eq!(endpoints.len(), times.len());
             for (endpoint, &time) in endpoints.iter().zip(times) {

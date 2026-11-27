@@ -22,6 +22,10 @@ fn default_raster_segment_witnesses_supply_graph_edge_costs() {
         RasterNavigationRegion::for_default_profile([[-1.5, -0.45], [-0.4, 0.45]]).unwrap();
     let points = [[-1.0, 0.0], [-0.9, 0.2], [-0.85, 0.05], [-0.7, 0.1]];
     let target = points[3];
+    let point_target = RasterTargetBall {
+        center: target,
+        radius: 0.0,
+    };
     assert_eq!(region.segment_length_upper(points[0], points[0]), Some(0.0));
     assert_eq!(region.segment_length_upper(points[0], [0.0, 0.0]), None);
     assert_eq!(
@@ -95,6 +99,27 @@ fn default_raster_segment_witnesses_supply_graph_edge_costs() {
     assert_eq!(witness.length_upper, directed_upper);
     assert_eq!(witness.raster_generation, region.raster_generation());
     assert_eq!(find(0, target, 0.0, directed_upper.next_down()), Ok(None));
+    let direct_reference = region
+        .search_waypoints(&waypoints, 0, &[point_target], (directed_upper, false))
+        .unwrap();
+    assert_eq!(direct_reference.cost, Some(witness.length_upper));
+    assert_eq!(direct_reference.path, witness.path);
+    let target_region = RasterTargetBall {
+        center: [-0.851, 0.05],
+        radius: 0.002,
+    };
+    for targets in [[point_target, target_region], [target_region, point_target]] {
+        let union = region
+            .search_target_set(&waypoints, 0, &targets, directed_upper)
+            .unwrap()
+            .unwrap();
+        assert_eq!(union.path, [0, 2]);
+        assert!(union.length_upper < witness.length_upper);
+    }
+    assert_eq!(
+        region.search_target_set(&waypoints, 0, &[], directed_upper),
+        Err(RasterRouteError::InvalidInput),
+    );
     assert_eq!(find(3, points[0], 0.0, f64::INFINITY), Ok(None));
     assert_eq!(
         find(0, [points[0][0] + 0.01, points[0][1]], 0.02, 0.0)
@@ -115,6 +140,22 @@ fn default_raster_segment_witnesses_supply_graph_edge_costs() {
         region.search_route(&boundary, 0, target, 0.0, 0.0),
         Ok(None)
     );
+    let tiny_budget = (
+        region
+            .displacement_length_lower(boundary[0].position, target, 0.0)
+            .unwrap()
+            / 2.0,
+        true,
+    );
+    let bounded = region
+        .search_waypoints(&boundary, 0, &[point_target], tiny_budget)
+        .unwrap();
+    let reference = region
+        .search_waypoints(&boundary, 0, &[point_target], (tiny_budget.0, false))
+        .unwrap();
+    assert_eq!(bounded.cost, reference.cost);
+    assert_eq!(bounded.counts.expanded, 0);
+    assert_eq!(reference.counts.expanded, 1);
     let invalid = [RasterWaypoint {
         position: points[0],
         neighbors: &[1],

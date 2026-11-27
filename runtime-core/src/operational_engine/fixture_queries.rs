@@ -1,4 +1,4 @@
-use super::{FrozenRollout, Integrator, PhysicsProfile, ReferenceCut};
+use super::{FrozenRollout, Integrator, PhysicsProfile, ReferenceCut, RkSubstepTrace};
 use crate::{controls::MotionControls, manifold::ManifoldConfig, operational_field::PreparedField};
 use num_complex::Complex64;
 use serde::Serialize;
@@ -16,7 +16,6 @@ thread_local! {
 #[derive(Default)]
 struct Recording {
     queries: Vec<[f64; 2]>,
-    substeps: Vec<RkSubstep>,
 }
 
 #[derive(Serialize)]
@@ -50,24 +49,16 @@ pub(super) fn record_query(c: Complex64) {
     });
 }
 
-pub(super) fn record_substep(
-    dt: f64,
-    stages: [[f64; 4]; 4],
-    slopes: [[f64; 5]; 4],
-    end: [f64; 4],
-    work: f64,
-) {
-    RECORDING.with(|recording| {
-        if let Some(recording) = recording.borrow_mut().as_mut() {
-            recording.substeps.push(RkSubstep {
-                dt: dt.to_bits(),
-                stages: stages.map(|stage| stage.map(f64::to_bits)),
-                slopes: slopes.map(|slope| slope.map(f64::to_bits)),
-                end: end.map(f64::to_bits),
-                work: work.to_bits(),
-            });
+impl From<&RkSubstepTrace> for RkSubstep {
+    fn from(trace: &RkSubstepTrace) -> Self {
+        Self {
+            dt: trace.duration.to_bits(),
+            stages: trace.stages.map(|stage| stage.map(f64::to_bits)),
+            slopes: trace.slopes.map(|slope| slope.map(f64::to_bits)),
+            end: trace.end.map(f64::to_bits),
+            work: trace.work.to_bits(),
         }
-    });
+    }
 }
 
 fn record<T>(f: impl FnOnce() -> T) -> (T, Recording) {
@@ -184,7 +175,7 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
                 record(|| rollout.attempt_step_with_trace(&mut state, command));
             let (work, trace) = accepted.unwrap();
             let positions = recording.queries;
-            assert_eq!(recording.substeps.len(), substeps);
+            assert_eq!(trace.rk_substeps().len(), substeps);
             assert_eq!(work.geometry_evaluations, positions.len());
             assert_eq!(work.coefficient_reads_upper_bound, 36 * positions.len());
             assert!(positions.len() >= 5 * substeps);
@@ -194,23 +185,24 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
             for endpoint in trace.endpoints() {
                 assert!(positions.contains(&endpoint.position));
             }
-            for (recorded, endpoints) in recording.substeps.iter().zip(trace.endpoints().windows(2))
+            for (recorded, endpoints) in
+                trace.rk_substeps().iter().zip(trace.endpoints().windows(2))
             {
                 let phase = |endpoint: &super::MechanicalEndpoint| {
                     let [x, y] = endpoint.position;
                     let [vx, vy] = endpoint.velocity;
-                    [x, y, vx, vy].map(f64::to_bits)
+                    [x, y, vx, vy]
                 };
                 assert_eq!(recorded.stages[0], phase(&endpoints[0]));
                 assert_eq!(recorded.end, phase(&endpoints[1]));
                 assert!(recorded
                     .stages
                     .iter()
-                    .all(|s| positions.contains(&[s[0], s[1]].map(f64::from_bits))));
+                    .all(|s| positions.contains(&[s[0], s[1]])));
             }
             steps.push(OuterStep {
                 command: command.map(f64::to_bits),
-                substeps: recording.substeps,
+                substeps: trace.rk_substeps().iter().map(RkSubstep::from).collect(),
                 stored_work: state.integrated_work.to_bits(),
                 mechanical_time: state.mechanical_time.to_bits(),
             });

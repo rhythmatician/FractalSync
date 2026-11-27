@@ -7,12 +7,19 @@ use crate::geometry_provider::{
 use crate::intrinsic_bounds::{add_up, div_down, div_up, mul_up, sub_down};
 use crate::manifold::ManifoldConfig;
 use crate::map_certificates::displacement_lower;
-use crate::map_navigation::search::{search_with_sum, SearchLimits};
+use crate::map_navigation::search::{search_with_sum, SearchLimits, SearchResult};
 
 /// A vertex in a directed graph of straight Map segments.
 pub struct RasterWaypoint<'a> {
     pub position: [f64; 2],
     pub neighbors: &'a [usize],
+}
+
+/// One closed ambient ball in a raster route's accepted target set.
+#[derive(Clone, Copy, Debug)]
+pub struct RasterTargetBall {
+    pub center: [f64; 2],
+    pub radius: f64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -153,10 +160,45 @@ impl RasterNavigationRegion {
         radius: f64,
         length_budget: f64,
     ) -> Result<Option<RasterRouteWitness>, RasterRouteError> {
+        self.search_target_set(
+            waypoints,
+            start,
+            &[RasterTargetBall { center, radius }],
+            length_budget,
+        )
+    }
+
+    /// Search for a waypoint in a nonempty union of closed ambient balls.
+    /// Each component uses the same conservative arrival check as a single ball.
+    pub fn search_target_set(
+        &self,
+        waypoints: &[RasterWaypoint<'_>],
+        start: usize,
+        targets: &[RasterTargetBall],
+        length_budget: f64,
+    ) -> Result<Option<RasterRouteWitness>, RasterRouteError> {
+        let result = self.search_waypoints(waypoints, start, targets, (length_budget, true))?;
+        Ok(result.cost.map(|length_upper| RasterRouteWitness {
+            path: result.path,
+            length_upper,
+            raster_generation: self.raster_generation,
+        }))
+    }
+
+    fn search_waypoints(
+        &self,
+        waypoints: &[RasterWaypoint<'_>],
+        start: usize,
+        targets: &[RasterTargetBall],
+        (length_budget, use_bound): (f64, bool),
+    ) -> Result<SearchResult, RasterRouteError> {
         if start >= waypoints.len()
-            || !center.into_iter().all(f64::is_finite)
-            || !radius.is_finite()
-            || radius < 0.0
+            || targets.is_empty()
+            || targets.iter().any(|target| {
+                !target.center.into_iter().all(f64::is_finite)
+                    || !target.radius.is_finite()
+                    || target.radius < 0.0
+            })
             || length_budget.is_nan()
             || length_budget < 0.0
             || waypoints.iter().any(|vertex| {
@@ -183,7 +225,11 @@ impl RasterNavigationRegion {
         let result = search_with_sum(
             waypoints.len(),
             start,
-            |node| displacement_upper(waypoints[node].position, center) <= radius,
+            |node| {
+                targets.iter().any(|target| {
+                    displacement_upper(waypoints[node].position, target.center) <= target.radius
+                })
+            },
             |node| {
                 let vertex = &waypoints[node];
                 vertex.neighbors.iter().map(move |&neighbor| {
@@ -193,21 +239,33 @@ impl RasterNavigationRegion {
                     )
                 })
             },
-            |node| self.target_lower(waypoints[node].position, center, radius),
+            |node| {
+                // Both endpoints of each edge lie in the convex window. Graph
+                // routes never need the first-exit allowance for continuous paths.
+                use_bound.then(|| {
+                    targets
+                        .iter()
+                        .map(|target| {
+                            self.displacement_length_lower(
+                                waypoints[node].position,
+                                target.center,
+                                target.radius,
+                            )
+                            .unwrap_or(0.0)
+                        })
+                        .fold(f64::INFINITY, f64::min)
+                })
+            },
             |_| true,
             (
                 SearchLimits {
                     budget: length_budget,
-                    prune_with_bound: true,
+                    prune_with_bound: use_bound,
                 },
                 add_up,
             ),
         );
-        Ok(result.cost.map(|length_upper| RasterRouteWitness {
-            path: result.path,
-            length_upper,
-            raster_generation: self.raster_generation,
-        }))
+        Ok(result)
     }
 
     pub(crate) fn contains(&self, point: [f64; 2]) -> bool {
@@ -237,11 +295,26 @@ impl RasterNavigationRegion {
                 .min((start[axis] - lo[axis]).next_down().max(0.0))
                 .min((hi[axis] - start[axis]).next_down().max(0.0))
         });
+        Some(
+            self.displacement_length_lower(start, center, radius)?
+                .min(div_down(exit, self.metric_ruler_upper())),
+        )
+    }
+
+    fn displacement_length_lower(
+        &self,
+        start: [f64; 2],
+        center: [f64; 2],
+        radius: f64,
+    ) -> Option<f64> {
         let target = sub_down(displacement_lower(start, center)?, radius);
+        Some(div_down(target, self.metric_ruler_upper()))
+    }
+
+    fn metric_ruler_upper(&self) -> f64 {
         // The rounded matrix still dominates I/(2 * rho^2) on this window.
         // See docs/research/174-raster-route-bounds.md for the rounding argument.
-        let metric_ruler_upper = mul_up(std::f64::consts::SQRT_2.next_up(), self.rho_upper);
-        Some(div_down(target.min(exit), metric_ruler_upper))
+        mul_up(std::f64::consts::SQRT_2.next_up(), self.rho_upper)
     }
 }
 
