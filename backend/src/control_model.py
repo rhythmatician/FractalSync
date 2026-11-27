@@ -78,7 +78,10 @@ class AudioToControlModel(nn.Module):
         self.input_dim = self.features_per_frame * window_frames
 
         self.controls_version = controls_version
-        schema_kind = "controls_v2" if controls_version == "controls/2" else "orbit_control"
+        schema_kind = {
+            "controls/2": "controls_v2",
+            "controls/2+tether": "controls_v2_tether",
+        }.get(controls_version, "orbit_control")
         self.output_schema = output_schema(schema_kind, k_bands)
         self.output_dim = len(self.output_schema)
 
@@ -123,8 +126,10 @@ class AudioToControlModel(nn.Module):
             self.encoder = nn.Sequential(*encoder_layers)
             head_input_dim = prev_dim
 
+        if self.controls_version == "controls/2+tether":
+            self.tether_head = nn.Linear(head_input_dim, 4)
         # Control signal heads
-        if self.controls_version == "controls/2":
+        if self.controls_version in ("controls/2", "controls/2+tether"):
             # 13-channel ControlsV2: motion 6 + view 7. Activations match Rust parameter_ranges:
             # directionX,Y, zoom/rotation/hue/chroma/lightness/accent/harmonyShift are tanh [-1,1];
             # throttle, brake, grip, impulse are sigmoid [0,1].
@@ -238,7 +243,7 @@ class AudioToControlModel(nn.Module):
         # Encode features
         encoded = self._encode(x)
 
-        if self.controls_version == "controls/2":
+        if self.controls_version in ("controls/2", "controls/2+tether"):
             # 13-channel ControlsV2: directionX,Y (tanh), throttle/brake/grip/impulse (sigmoid), 7 view deltas (tanh)
             direction = self.direction_head(encoded)
             throttle = self.throttle_head(encoded)
@@ -255,6 +260,12 @@ class AudioToControlModel(nn.Module):
                 "lightnessDelta": view_deltas[:, 4], "accentDelta": view_deltas[:, 5],
                 "harmonyShift": view_deltas[:, 6],
             }
+            if self.controls_version == "controls/2+tether":
+                tether = self.tether_head(encoded)
+                raw_by_name.update({
+                    "tetherAimX": tether[:, 0], "tetherAimY": tether[:, 1],
+                    "tetherGrip": tether[:, 2], "tetherReel": tether[:, 3],
+                })
             return apply_named_schema(raw_by_name, self.output_schema)
 
         # Legacy orbit_control: s_target, alpha, omega_scale, band_gates
@@ -299,7 +310,7 @@ class AudioToControlModel(nn.Module):
               controls/2 -> directionX,Y,throttle,brake,grip,impulse,view deltas
               orbit_control -> s_target, alpha, omega_scale, band_gates
         """
-        if self.controls_version == "controls/2":
+        if self.controls_version in ("controls/2", "controls/2+tether"):
             parsed = {
                 descriptor.name: output[:, index]
                 for index, descriptor in enumerate(self.output_schema)

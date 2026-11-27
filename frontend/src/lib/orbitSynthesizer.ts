@@ -81,6 +81,14 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  CockpitRope?: new () => {
+    positions?(): Float64Array;
+    step_analog?(x: number, y: number, rho: number, aimX: number, aimY: number, grip: number, reel: number, dt: number): Float64Array;
+    reset?(): void;
+    rider_space_points?(x: number, y: number, z: number): Float64Array;
+    free(): void;
+    step(x: number, y: number, rho: number, aimX: number, aimY: number, held: boolean, reel: boolean, dt: number): Float64Array;
+  };
   decodeOrbitControlJson(values: Float64Array, kBands: number): string;
   decodeControlsV2Json(values: Float64Array): string;
   decodeLegacyVisualJson(values: Float64Array, audioReactive: boolean, rms: number, onset: number): string;

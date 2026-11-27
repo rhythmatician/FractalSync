@@ -165,7 +165,8 @@ def export_to_onnx(
     controls_version = None if metadata is None else metadata.get("controls_version")
     kind = runtime_core.model_output_kind(model_type, controls_version)
     k_bands = 6 if metadata is None else int(metadata.get("k_bands", 6))
-    schema = output_schema(kind, k_bands)
+    schema_kind = "controls_v2_tether" if model_type == "controls_v2_tether" else kind
+    schema = output_schema(schema_kind, k_bands)
     metadata_schema = (
         legacy_visual_export_schema() if kind == "legacy_visual" else schema
     )

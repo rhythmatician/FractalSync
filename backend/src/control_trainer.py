@@ -1251,7 +1251,7 @@ class ControlTrainer:
             # This path is the causal PlayerPolicy training surface: a fixed ControlsV2 tensor drives the
             # same Rust integration the browser runs (controls_integrate_step), so the trainer and runtime
             # share one pipeline (ADR 0001). No (s,alpha,omega_scale) legacy adapter is used here.
-            if getattr(self.model, "controls_version", "orbit_control") == "controls/2":
+            if getattr(self.model, "controls_version", "orbit_control") in ("controls/2", "controls/2+tether"):
                 directionX = parsed["directionX"]
                 directionY = parsed["directionY"]
                 throttle = parsed["throttle"]
@@ -1357,6 +1357,17 @@ class ControlTrainer:
                     raise RuntimeError(
                         f"ControlsV2 manifold rollout failed: {_e2}"
                     ) from _e2
+                if "tetherAimX" in parsed:
+                    from .tether_rollout import tether_rollout
+
+                    tether_actions = torch.stack(
+                        [parsed[key].reshape(-1) for key in
+                         ("tetherAimX", "tetherAimY", "tetherGrip", "tetherReel")],
+                        dim=-1,
+                    )
+                    c_complex = tether_rollout(
+                        c_complex, tether_actions, segment_ids, canonical_hop_dt(), 1e-4
+                    )
                 # Audio-feature correlations for the new Controls surface (musically informed but Physics-ignorant)
                 try:
                     n_fpf = self.feature_extractor.num_features_per_frame()

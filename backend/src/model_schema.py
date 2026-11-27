@@ -55,6 +55,8 @@ def parse_schema(payload: str) -> tuple[OutputDescriptor, ...]:
 
 
 def output_schema(model_type: str, k_bands: int) -> tuple[OutputDescriptor, ...]:
+    if model_type == "controls_v2_tether":
+        return parse_schema(runtime_core.tether_schema_json())
     if model_type == "controls_v2":
         return parse_schema(runtime_core.controls_v2_schema_json())
     if model_type == "orbit_control":

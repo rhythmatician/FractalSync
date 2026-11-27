@@ -34,9 +34,12 @@ import {
 import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
+import juliaFragment from '../../../shared/shaders/julia.frag?raw';
 import {
   MINIMAP_SIZE,
-  paintMinimap,
+  minimapView,
+  paintMinimapImage,
+  type MinimapView,
   type MinimapPaintInput,
 } from '../lib/cockpitMinimap';
 import {
@@ -59,6 +62,9 @@ import {
   computeHyperbolicCameraFrame,
   transformTrailToHyperbolic,
   transformRiderToHyperbolic,
+  projectPointToCameraPoincare,
+  poincareToSceneVector,
+  HYPERBOLIC_VISUAL_SCALE,
 } from '../lib/hyperbolicCamera';
 
 type Badge = 'STATE' | 'ACTION' | 'DIAG';
@@ -111,18 +117,18 @@ function Row({
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, translucent = false }: { title: string; children: React.ReactNode; translucent?: boolean }) {
   return (
     <div
       style={{
-        background: 'rgba(10,10,22,0.82)',
+        background: translucent ? 'rgba(10,10,22,0.38)' : 'rgba(10,10,22,0.82)',
         border: '1px solid #262640',
         borderRadius: 8,
         padding: '8px 10px',
         minWidth: 250,
       }}
     >
-      <div style={{ fontSize: 11, letterSpacing: 1, color: '#778', marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 11, letterSpacing: 1, color: translucent ? '#eef' : '#778', marginBottom: 4 }}>{title}</div>
       {children}
     </div>
   );
@@ -181,11 +187,25 @@ function EnergySparkline({
   );
 }
 
+const INITIAL_TETHER_POSITIONS = [0, 0, 2.5, 0];
+
 export function DebugCockpit(): JSX.Element {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLCanvasElement | null>(null);
   const juliaCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [riderSpace, setRiderSpace] = useState(false);
+  const projectedTether = useRef<{ hand: THREE.Vector3; ball: THREE.Vector3 }>();
+  const tetherRef = useRef({ x: 0, y: 0, held: false, reel: false, active: false });
+  const updateTetherPointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tether = tetherRef.current;
+    tether.x = (18 * (event.clientX - rect.left) / rect.width - 9) / 1.4;
+    tether.y = (9 - 18 * (event.clientY - rect.top) / rect.height) / 1.4;
+    tether.held = (event.buttons & 1) !== 0;
+    tether.reel = (event.buttons & 2) !== 0;
+  };
   const juliaRendererRef = useRef<JuliaRenderer | null>(null);
+  const previewScale = useRef(1);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(4);
@@ -219,7 +239,7 @@ export function DebugCockpit(): JSX.Element {
     scene?: THREE.Scene;
     camera?: THREE.PerspectiveCamera;
     rider?: THREE.Group;
-    terrain?: THREE.Mesh;
+    terrain?: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
     trail?: THREE.Line;
     terrainCenter?: [number, number];
     terrainPatch?: ReturnType<typeof sampleTerrainPatch>;
@@ -259,11 +279,27 @@ export function DebugCockpit(): JSX.Element {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    previewScale.current = 1;
+    renderer.setPixelRatio(pixelRatio);
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     buildSceneDressing(scene);
+    const tetherView = new THREE.Group();
+    tetherView.name = 'cockpit tether';
+    tetherView.visible = false;
+    const tetherGeometry = new THREE.BufferGeometry();
+    const tetherVertices = new THREE.BufferAttribute(new Float32Array(6), 3);
+    tetherGeometry.setAttribute('position', tetherVertices);
+    const tetherLine = new THREE.Line(tetherGeometry, new THREE.LineBasicMaterial({ color: 0xffcb76 }));
+    tetherLine.frustumCulled = false;
+    const yoYo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffb646 }),
+    );
+    tetherView.add(tetherLine, yoYo);
+    scene.add(tetherView);
 
     const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
     camera.position.set(0, 6, -10);
@@ -292,6 +328,8 @@ export function DebugCockpit(): JSX.Element {
     // Animation clock: advances the rider's GLB mixer every frame (rAF runs
     // continuously, so the gait plays even while the timeline is paused).
     let last = performance.now();
+    let sampleStart = last;
+    let sampleFrames = 0;
     let animId: number;
     const loop = () => {
       animId = requestAnimationFrame(loop);
@@ -299,10 +337,29 @@ export function DebugCockpit(): JSX.Element {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
 
+      // Adjust both preview buffers together. Keep the physics clock and
+      // the CSS sizes (including the pointer coordinate space) independent.
+      sampleFrames++;
+      if (now - sampleStart >= 500) {
+        const msPerFrame = (now - sampleStart) / sampleFrames;
+        const scale = previewScale.current;
+        let nextScale = scale;
+        if (msPerFrame > 24) nextScale = Math.max(0.5, scale * 0.75);
+        if (msPerFrame < 18) nextScale = Math.min(1, scale + 0.05);
+        if (nextScale !== scale) {
+          previewScale.current = nextScale;
+          renderer.setPixelRatio(pixelRatio * nextScale);
+          juliaRendererRef.current?.setResolutionScale(nextScale);
+        }
+        sampleStart = now;
+        sampleFrames = 0;
+      }
+
       // In MANUAL mode, advance the authoritative driver on canonical ticks
       const driver = manualDriverRef.current;
       if (cockpitModeRef.current === 'MANUAL' && driver) {
-        const steps = driver.update(dt, keysRef.current);
+        const tether = tetherRef.current;
+        const steps = driver.update(dt, keysRef.current, tether.active ? tether : undefined);
         if (steps > 0) {
           const snaps = driver.trajectory.snapshots;
           const latestSnap = snaps[snaps.length - 1];
@@ -318,6 +375,25 @@ export function DebugCockpit(): JSX.Element {
         const speed = sceneRefs.current.lastMetricSpeed ?? 0;
         const throttle = sceneRefs.current.lastThrottle ?? 0;
         updateRiderAnimation(rider, dt, speed, throttle);
+        tetherView.visible = cockpitModeRef.current === 'MANUAL';
+        const projected = projectedTether.current;
+        if (tetherView.visible && projected) {
+          tetherView.position.set(0, 0, 0);
+          yoYo.position.copy(projected.ball);
+          tetherVertices.setXYZ(0, projected.hand.x, projected.hand.y, projected.hand.z);
+          tetherVertices.setXYZ(1, projected.ball.x, projected.ball.y, projected.ball.z);
+          tetherVertices.needsUpdate = true;
+        } else if (tetherView.visible) {
+          const [handX, handY, ballX, ballY] = driver?.tetherPositions ?? INITIAL_TETHER_POSITIONS;
+          // Display the top-down motion in a horizontal plane at hand height.
+          const displayScale = 0.42;
+          tetherView.position.copy(rider.position);
+          tetherView.position.y += 0.46;
+          yoYo.position.set(ballX * displayScale, 0, -ballY * displayScale);
+          tetherVertices.setXYZ(0, handX * displayScale, 0, -handY * displayScale);
+          tetherVertices.setXYZ(1, yoYo.position.x, yoYo.position.y, yoYo.position.z);
+          tetherVertices.needsUpdate = true;
+        }
       }
       renderer.render(scene, camera);
     };
@@ -327,6 +403,12 @@ export function DebugCockpit(): JSX.Element {
       disposed = true;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', onResize);
+      sceneRefs.current.terrain?.geometry.dispose();
+      sceneRefs.current.terrain?.material.dispose();
+      tetherGeometry.dispose();
+      tetherLine.material.dispose();
+      yoYo.geometry.dispose();
+      yoYo.material.dispose();
       renderer.dispose();
       mount.removeChild(renderer.domElement);
       sceneRefs.current = {};
@@ -394,52 +476,75 @@ export function DebugCockpit(): JSX.Element {
   // Rebuild terrain when the selected frame's patch center moves far from
   // the current mesh center (terrain follows the rider), and when the LOD
   // plan changes (scale shifted enough to re-plan fidelity vs performance).
+  const [handX, handY, ballX, ballY] = manualDriverRef.current?.tetherPositions ?? INITIAL_TETHER_POSITIONS;
   const run = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
   const frame = run?.snapshots[Math.min(frameIdx, (run?.snapshots.length ?? 1) - 1)];
+
+  const mappedTether = useMemo(
+    () => cockpitMode === 'MANUAL' && riderSpace && frame ? manualDriverRef.current?.riderSpaceTether(frame) : undefined,
+    [cockpitMode, riderSpace, frame],
+  );
+  const tetherProbe = mappedTether
+    ? { real: mappedTether.ball.x, imag: mappedTether.ball.y }
+    : cockpitMode === 'MANUAL' ? manualDriverRef.current?.probe : undefined;
+  const terrainWorker = useRef<Worker | null>(null);
+  const terrainPending = useRef(false);
+  const [terrainPatch, setTerrainPatch] = useState<ReturnType<typeof sampleTerrainPatch>>();
+  useEffect(() => {
+    if (!ready) return;
+    const worker = new Worker(new URL('../lib/cockpitTerrain.worker.ts', import.meta.url), { type: 'module' });
+    terrainWorker.current = worker;
+    worker.onmessage = ({ data }: MessageEvent<
+      { patch: ReturnType<typeof sampleTerrainPatch> } | { error: string }
+    >) => {
+      terrainPending.current = false;
+      if ('patch' in data) setTerrainPatch(data.patch);
+      else {
+        terrainWorker.current = null;
+        console.warn('[debugCockpit] terrain sampling failed:', data.error);
+      }
+    };
+    return () => {
+      worker.terminate();
+      terrainWorker.current = null;
+      terrainPending.current = false;
+    };
+  }, [ready]);
 
   useEffect(() => {
     const refs = sceneRefs.current;
     if (!refs.scene || !frame) return;
-    const [cx, cy] = frame.physics.c;
-    const planarSpeed = Math.hypot(frame.physics.velocity[0], frame.physics.velocity[1]);
-    const lod = planTerrainLod(frame.physics.rho, planarSpeed);
-    const current = refs.terrainCenter;
-    const lodChanged =
-      refs.lodHalf === undefined || Math.abs(refs.lodHalf - lod.half) > lod.half * 0.35;
-    const moved =
-      !current || Math.hypot(cx - current[0], cy - current[1]) > lod.half * 0.6;
-    if (!moved && !lodChanged && refs.terrain && refs.terrainPatch) {
-      if (refs.terrainOverlays !== overlays) {
-        applyOverlays(refs.terrain, refs.terrainPatch, overlays);
-        refs.terrainOverlays = overlays;
+    if (terrainPatch && terrainPatch !== refs.terrainPatch) {
+      const previous = refs.terrain;
+      const mesh = buildTerrainMesh(terrainPatch, previous?.material);
+      if (previous) {
+        refs.scene.remove(previous);
+        previous.geometry.dispose();
       }
-      return;
+      refs.scene.add(mesh);
+      refs.terrain = mesh;
+      refs.terrainPatch = terrainPatch;
+      refs.terrainCenter = terrainPatch.center;
+      refs.lodHalf = terrainPatch.half;
+      refs.terrainOverlays = undefined;
+      if (refs.camera) applyRenderDistance(refs.camera, refs.scene);
     }
-    if (refs.terrain) {
-      refs.scene.remove(refs.terrain);
-      refs.terrain.geometry.dispose();
-      const materials = Array.isArray(refs.terrain.material) ? refs.terrain.material : [refs.terrain.material];
-      materials.forEach(material => material.dispose());
+    if (refs.terrain && refs.terrainPatch && refs.terrainOverlays !== overlays) {
+      applyOverlays(refs.terrain, refs.terrainPatch, overlays);
+      refs.terrainOverlays = overlays;
     }
-    const patch = sampleTerrainPatch(cx, cy, lod.half, lod.grid);
-    // Build the terrain mesh. The static CPU position attribute carries
-    // the fallback embedding; the hyperbolic renderer projects the
-    // authoritative upperHalfPosition attribute on the GPU (see
-    // terrainProjectionUniforms).
-    const mesh = buildTerrainMesh(patch);
-    applyOverlays(mesh, patch, overlays);
-    refs.terrainOverlays = overlays;
-    refs.scene.add(mesh);
-    refs.terrain = mesh;
-    refs.terrainPatch = patch;
-    refs.terrainCenter = [cx, cy];
-    refs.lodHalf = lod.half;
-    // Hyperbolic render distance: fixed near/far + fog wall for the
-    // scaled Poincaré ball.
-    if (refs.camera) {
-      applyRenderDistance(refs.camera, refs.scene);
+
+    const [cx, cy] = frame.physics.c;
+    const lod = planTerrainLod(frame.physics.rho, Math.hypot(...frame.physics.velocity));
+    const center = refs.terrainCenter;
+    const lodChanged = refs.lodHalf === undefined || Math.abs(refs.lodHalf - lod.half) > lod.half * 0.35;
+    const moved = !center || Math.hypot(cx - center[0], cy - center[1]) > lod.half * 0.6;
+    if ((moved || lodChanged) && terrainWorker.current && !terrainPending.current) {
+      terrainPending.current = true;
+      // Bound the preview mesh to at most 74k triangles.
+      terrainWorker.current.postMessage([cx, cy, lod.half, Math.min(lod.grid, 193)]);
     }
-  }, [frame, overlays]);
+  }, [frame, overlays, terrainPatch]);
 
   // Per-frame updates: rider, trail, camera.
   useEffect(() => {
@@ -490,9 +595,47 @@ export function DebugCockpit(): JSX.Element {
     }
     transformTrailToHyperbolic(refs.trail, windowTraj.snapshots, frame, smoothedHeading, hyperbolicFrame);
     transformRiderToHyperbolic(refs.rider, frame, smoothedHeading, hyperbolicFrame);
-  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, riderReady]);
+    if (mappedTether) {
+      const inverseRotation = hyperbolicFrame.rotationMatrix.clone().invert();
+      const project = (point: typeof mappedTether.ball) =>
+        poincareToSceneVector(projectPointToCameraPoincare(point, hyperbolicFrame.cameraUpperHalf))
+          .applyMatrix4(inverseRotation).multiplyScalar(HYPERBOLIC_VISUAL_SCALE);
+      projectedTether.current = { hand: project(mappedTether.hand), ball: project(mappedTether.ball) };
+    } else {
+      projectedTether.current = undefined;
+    }
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, riderReady, terrainPatch, mappedTether]);
 
-  // Minimap panel: repaint from the canonical pyramid when the frame moves.
+  const updateMinimap = useRef<((input: MinimapPaintInput) => void) | null>(null);
+  useEffect(() => {
+    const canvas = minimapRef.current;
+    if (!ready || !canvas) return;
+    const worker = new Worker(new URL('../lib/cockpitMinimap.worker.ts', import.meta.url), { type: 'module' });
+    type Background = { view: MinimapView; pixels: Uint8ClampedArray };
+    let latest: MinimapPaintInput | undefined;
+    let background: Background | undefined;
+    let pending = false;
+    updateMinimap.current = input => {
+      latest = input;
+      if (background) paintMinimapImage(canvas, input, background.view, background.pixels);
+      const view = minimapView(canvas.width, input);
+      const old = background?.view;
+      if (pending || (old && old.half === view.half && old.center[0] === view.center[0] && old.center[1] === view.center[1])) return;
+      pending = true;
+      worker.postMessage(view);
+    };
+    worker.onmessage = ({ data }: MessageEvent<Background>) => {
+      pending = false;
+      background = data;
+      if (latest) updateMinimap.current?.(latest);
+    };
+    return () => {
+      updateMinimap.current = null;
+      worker.terminate();
+    };
+  }, [ready]);
+
+  // Overlay the latest positions on the most recent completed map.
   useEffect(() => {
     const canvas = minimapRef.current;
     const trajectory = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];
@@ -503,6 +646,7 @@ export function DebugCockpit(): JSX.Element {
       .slice(from, frameIdx + 1)
       .map((s) => [s.physics.c[0], s.physics.c[1]] as [number, number]);
     const input: MinimapPaintInput = {
+      yoYoC: tetherProbe && [tetherProbe.real, tetherProbe.imag],
       trail,
       currentC: [frame.physics.c[0], frame.physics.c[1]],
       // Zoom-with-scale: the window tracks the current LOD patch extent.
@@ -515,8 +659,8 @@ export function DebugCockpit(): JSX.Element {
           : 0,
       fovDeg: 55,
     };
-    paintMinimap(canvas, input);
-  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame]);
+    updateMinimap.current?.(input);
+  }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, terrainPatch, tetherProbe?.real, tetherProbe?.imag]);
 
   // Julia panel: the ACTUAL audience-facing view (issue #111). The existing
   // JuliaRenderer stays the authoritative presentation surface.
@@ -524,9 +668,10 @@ export function DebugCockpit(): JSX.Element {
     if (!ready || !juliaCanvasRef.current || juliaRendererRef.current) return;
     let cancelled = false;
     const renderer = new JuliaRenderer(juliaCanvasRef.current);
+    renderer.setResolutionScale(previewScale.current);
     (async () => {
       try {
-        await renderer.init();
+        await renderer.init(juliaFragment);
         if (cancelled) return;
         juliaRendererRef.current = renderer;
         renderer.updateParameters({
@@ -563,9 +708,10 @@ export function DebugCockpit(): JSX.Element {
     const current = renderer.getCurrentParameters();
     renderer.updateParameters({
       ...current,
-      juliaSeed: { real: frame.physics.c[0], imag: frame.physics.c[1] },
+      juliaSeed: tetherProbe
+        ?? { real: frame.physics.c[0], imag: frame.physics.c[1] },
     });
-  }, [frame]);
+  }, [frame, cockpitMode, tetherProbe?.real, tetherProbe?.imag]);
 
   // Playback loop.
   useEffect(() => {
@@ -823,6 +969,45 @@ export function DebugCockpit(): JSX.Element {
           </div>
         )}
 
+        {cockpitMode === 'MANUAL' && (
+          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 84, width: 'min(280px, 36vw)' }}>
+            <Panel title="YO-YO · TOP DOWN" translucent>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginBottom: 4 }}>
+                Swing coordinates
+                <select value={riderSpace ? 'rider' : 'complex'} onChange={event => setRiderSpace(event.target.value === 'rider')}>
+                  <option value="complex">Complex plane</option>
+                  <option value="rider">Rider space</option>
+                </select>
+              </label>
+              <svg
+                aria-label="Top-down yo-yo controls"
+                viewBox="-9 -9 18 18"
+                onContextMenu={event => event.preventDefault()}
+                onPointerDown={event => {
+                  if (event.button !== 0 && event.button !== 2) return;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  tetherRef.current.active = true;
+                  updateTetherPointer(event);
+                }}
+                onPointerMove={updateTetherPointer}
+                onPointerUp={updateTetherPointer}
+                onLostPointerCapture={() => { tetherRef.current.held = tetherRef.current.reel = false; }}
+                style={{ display: 'block', width: '100%', aspectRatio: '1', background: 'rgba(17,24,36,0.18)', borderRadius: 4, cursor: 'crosshair', touchAction: 'none' }}
+              >
+                <path d="M-9 0H9 M0 -9V9" stroke="#9badbf" strokeOpacity=".55" strokeWidth=".06" />
+                <circle r="1.4" fill="none" stroke="#adc3d9" strokeOpacity=".8" strokeWidth=".08" strokeDasharray=".2 .2" />
+                <line x2={handX} y2={-handY} stroke="#80c8fa" strokeWidth=".14" />
+                <line x1={handX} y1={-handY} x2={ballX} y2={-ballY} stroke="#ffcb76" strokeWidth=".12" />
+                <circle r=".32" fill="#80c8fa" />
+                <circle cx={handX} cy={-handY} r=".20" fill="#deefff" />
+                <circle cx={ballX} cy={-ballY} r=".30" fill="#ffcb76" />
+              </svg>
+              <div style={{ fontSize: 11, color: '#eef', marginTop: 6, textShadow: '0 1px 3px #080812' }}>
+                WASD drives. Mouse moves the hand. Hold left to catch, release to pay out, hold right to reel.
+              </div>
+            </Panel>
+          </div>
+        )}
         {/* RIGHT-BOTTOM: ACTUAL JULIA AUDIENCE VIEW (fixed presentation) */}
         <div
           style={{
@@ -833,14 +1018,7 @@ export function DebugCockpit(): JSX.Element {
           }}
         >
           <Panel title="ACTUAL JULIA AUDIENCE VIEW (fixed)">
-            <canvas
-              ref={juliaCanvasRef}
-              style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 4, display: 'block' }}
-            />
-            <div style={{ fontSize: 10, color: '#667', marginTop: 4 }}>
-              seed = physics c · zoom/rotation/palette HELD FIXED — what the audience
-              sees vs the terrain the Player rides
-            </div>
+            <canvas ref={juliaCanvasRef} style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 4, display: 'block' }} />
           </Panel>
         </div>
       </div>

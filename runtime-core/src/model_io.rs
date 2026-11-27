@@ -101,6 +101,21 @@ pub fn controls_v2_schema() -> Vec<OutputField> {
         .collect()
 }
 
+pub fn tether_schema() -> Vec<OutputField> {
+    let mut fields = controls_v2_schema();
+    for (name, activation, min) in [
+        ("tetherAimX", Activation::Tanh, -1.0),
+        ("tetherAimY", Activation::Tanh, -1.0),
+        ("tetherGrip", Activation::Sigmoid, 0.0),
+        ("tetherReel", Activation::Sigmoid, 0.0),
+    ] {
+        let mut output = field(name, activation, min, 1.0);
+        output.group = "tether".into();
+        fields.push(output);
+    }
+    fields
+}
+
 pub fn legacy_visual_schema() -> Vec<OutputField> {
     [
         "julia_real",

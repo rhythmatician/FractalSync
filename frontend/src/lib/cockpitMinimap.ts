@@ -24,6 +24,7 @@ export interface MinimapPaintInput {
   heading?: number;
   /** Camera vertical FOV in degrees. Default 55 (the cockpit camera). */
   fovDeg?: number;
+  yoYoC?: [number, number];
 }
 
 /**
@@ -76,21 +77,23 @@ export function paintMinimap(
   canvas: HTMLCanvasElement,
   input: MinimapPaintInput
 ): boolean {
-  const size = canvas.width;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return false;
+  const view = minimapView(canvas.width, input);
+  return paintMinimapImage(canvas, input, view, renderMinimapPixels(view));
+}
 
-  // Zoom window: centered on the player, spanning 4x the terrain patch
-  // half-extent so the minimap zooms with the in-game horizontal zoom.
-  const [cx, cy] = input.currentC;
-  const half = Math.max(input.footprintHalf, 1e-6) * 4;
+export function minimapView(size: number, input: MinimapPaintInput) {
+  return { size, center: input.currentC, half: Math.max(input.footprintHalf, 1e-6) * 4 };
+}
+
+export type MinimapView = ReturnType<typeof minimapView>;
+
+export function renderMinimapPixels({ size, center: [cx, cy], half }: MinimapView) {
   const reMin = cx - half;
   const reMax = cx + half;
   const imMin = cy - half;
   const imMax = cy + half;
 
-  // Render the Mandelbrot set via escape-time iteration.
-  const image = ctx.createImageData(size, size);
+  const pixels = new Uint8ClampedArray(size * size * 4);
   const maxIter = 192;
   const bailout = 4.0;
   for (let row = 0; row < size; row++) {
@@ -109,25 +112,41 @@ export function paintMinimap(
         zy2 = zy * zy;
         iter++;
       }
-      const i = image.data;
       const idx = (row * size + col) * 4;
       if (iter >= maxIter) {
         // Inside the set: cosmic obsidian / indigo.
-        i[idx] = 8;
-        i[idx + 1] = 14;
-        i[idx + 2] = 36;
+        pixels[idx] = 8;
+        pixels[idx + 1] = 14;
+        pixels[idx + 2] = 36;
       } else {
         // Outside: proximity ramp — brighter near the Shore boundary.
         const proximity = 1.0 - iter / maxIter;
         const v = proximity * proximity;
-        i[idx] = Math.round(25 + 230 * v);
-        i[idx + 1] = Math.round(35 + 200 * v + 20 * (1 - v));
-        i[idx + 2] = Math.round(80 + 70 * (1 - v) + 105 * v * v);
+        pixels[idx] = Math.round(25 + 230 * v);
+        pixels[idx + 1] = Math.round(35 + 200 * v + 20 * (1 - v));
+        pixels[idx + 2] = Math.round(80 + 70 * (1 - v) + 105 * v * v);
       }
-      i[idx + 3] = 255;
+      pixels[idx + 3] = 255;
     }
   }
+  return pixels;
+}
+
+export function paintMinimapImage(
+  canvas: HTMLCanvasElement,
+  input: MinimapPaintInput,
+  { size, center: [cx, cy], half }: MinimapView,
+  pixels: Uint8ClampedArray,
+): boolean {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  const image = ctx.createImageData(size, size);
+  image.data.set(pixels);
   ctx.putImageData(image, 0, 0);
+  const reMin = cx - half;
+  const reMax = cx + half;
+  const imMin = cy - half;
+  const imMax = cy + half;
 
   // World -> pixel transform (row 0 = im_max).
   const toPx = (x: number, y: number): [number, number] => [
@@ -137,7 +156,7 @@ export function paintMinimap(
 
   // Viewport footprint: the camera FOV ground triangle.
   const triangle = fovTriangleC(
-    [cx, cy],
+    input.currentC,
     input.footprintHalf,
     input.heading ?? 0,
     input.fovDeg ?? 55
@@ -169,11 +188,22 @@ export function paintMinimap(
   }
 
   // Current c: rider dot.
-  const [px, py] = toPx(cx, cy);
+  const [px, py] = toPx(...input.currentC);
   ctx.fillStyle = '#ff5555';
   ctx.beginPath();
   ctx.arc(px, py, 3, 0, Math.PI * 2);
   ctx.fill();
 
+  if (input.yoYoC) {
+    const [x, y] = toPx(...input.yoYoC);
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = '#161421';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = '#ffcb76';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
   return true;
 }

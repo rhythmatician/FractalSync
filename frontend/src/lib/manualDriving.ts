@@ -18,6 +18,7 @@
 
 import {
   OrbitSynthesizer,
+  getWasmModule,
 } from './orbitSynthesizer';
 import {
   CANONICAL_DT,
@@ -120,6 +121,21 @@ export function mapKeyboardToMotionControls(
  * Uses an accumulator to ensure steps occur strictly at CANONICAL_DT.
  */
 export class ManualDriver {
+  private rope: InstanceType<NonNullable<ReturnType<typeof getWasmModule>['CockpitRope']>> | undefined;
+  public probe: { real: number; imag: number } | undefined;
+  public riderSpaceTether(snapshot: DebugSnapshot) {
+    const z = snapshot.physics.upperHalf?.z;
+    if (z === undefined) return undefined;
+    const points = this.rope?.rider_space_points?.(...snapshot.physics.c, z);
+    if (!points) return undefined;
+    const [hx, hy, hz, bx, by, bz] = points;
+    return { hand: { x: hx, y: hy, z: hz }, ball: { x: bx, y: by, z: bz } };
+  }
+
+  public get tetherPositions(): Float64Array | undefined {
+    return this.rope?.positions?.();
+  }
+
   private synth: OrbitSynthesizer;
   private accumulator = 0;
   private lastImpulseState = false;
@@ -160,6 +176,9 @@ export class ManualDriver {
    * Resets the synthesizer and trajectory to the given or current seed coordinates.
    */
   public reset(c?: [number, number], v?: [number, number]): void {
+    this.rope?.free();
+    this.rope = undefined;
+    this.probe = undefined;
     if (c) this.initialC = [...c];
     if (v) this.initialV = [...v];
 
@@ -187,7 +206,7 @@ export class ManualDriver {
    * Steps the authoritative physics synthesizer once for every CANONICAL_DT slice.
    * Returns the number of canonical steps executed.
    */
-  public update(dtSeconds: number, keys: KeyboardState): number {
+  public update(dtSeconds: number, keys: KeyboardState, tether?: { x: number; y: number; held: boolean; reel: boolean }): number {
     // Edge-triggered impulse: register on rising edge, latch until a canonical step consumes it
     if (keys.impulse && !this.lastImpulseState) {
       this.pendingImpulse = true;
@@ -227,6 +246,14 @@ export class ManualDriver {
 
       this.synth.stepWithControls(CANONICAL_DT, ctrl);
       const snap = currentSnapshot(this.synth);
+      if (tether) {
+        const Rope = getWasmModule().CockpitRope;
+        if (Rope) {
+          this.rope ??= new Rope();
+          const [real, imag] = this.rope.step(...snap.physics.c, snap.physics.rho, tether.x, tether.y, tether.held, tether.reel, CANONICAL_DT);
+          this.probe = { real, imag };
+        }
+      }
 
       this.trajectory.snapshots.push(snap);
       this.trajectory.maxPotential = Math.max(

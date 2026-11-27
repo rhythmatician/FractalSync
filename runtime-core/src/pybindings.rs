@@ -78,7 +78,7 @@ fn controls_v2_schema_json() -> PyResult<String> {
 #[pyfunction]
 fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> PyResult<String> {
     let averages = crate::model_io::audio_feature_averages(&values, features_per_frame)
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&averages)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -86,7 +86,7 @@ fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> P
 #[pyfunction]
 fn legacy_audio_feature_averages_json(values: Vec<f64>) -> PyResult<String> {
     let averages = crate::model_io::legacy_audio_feature_averages(&values)
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&averages)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -106,7 +106,7 @@ fn legacy_visual_export_ranges_json() -> PyResult<String> {
 #[pyfunction]
 fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<String> {
     let decoded = crate::model_io::decode_orbit_control(&values, k_bands)
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -114,7 +114,7 @@ fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<Strin
 #[pyfunction]
 fn decode_controls_v2_json(values: Vec<f64>) -> PyResult<String> {
     let decoded = crate::model_io::decode_controls_v2(&values)
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -132,7 +132,7 @@ fn decode_legacy_visual_json(
         _ => return Err(pyo3::exceptions::PyValueError::new_err("rms and onset must be supplied together")),
     };
     let decoded = crate::model_io::decode_legacy_visual(&values, audio)
-        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -152,7 +152,7 @@ fn orbit_visual_parameters_json(
         &controls,
         crate::model_io::AudioFeatureAverages { rms, onset },
     )
-    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&visual)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -162,7 +162,7 @@ fn legacy_orbit_drive_inputs_json(rms: f64, onset: f64) -> PyResult<String> {
     let inputs = crate::model_io::legacy_orbit_drive_inputs(
         crate::model_io::AudioFeatureAverages { rms, onset },
     )
-    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&inputs)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -179,7 +179,7 @@ fn controls_v2_visual_parameters_json(
         .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     let visual = crate::model_io::controls_v2_visual_parameters(
         [c_re, c_im], &controls, presentation,
-    ).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    ).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     serde_json::to_string(&visual)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -2366,6 +2366,44 @@ fn compute_runtime_visual_metrics(py: Python,
     Ok(pyobj.into())
 }
 
+#[pyfunction]
+fn tether_schema_json() -> PyResult<String> {
+    Ok(serde_json::to_string(&crate::model_io::tether_schema()).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?)
+}
+
+#[pyfunction]
+fn tether_rho(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<f64> {
+    crate::manifold::regularized_distance(num_complex::Complex64::new(c.real(), c.imag()), epsilon).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+#[pyclass]
+#[derive(Default)]
+struct CockpitRope(crate::cockpit_rope::CockpitRope);
+
+#[pymethods]
+impl CockpitRope {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn step_analog(&mut self, x: f64, y: f64, rho: f64, aim_x: f64, aim_y: f64, grip: f64, reel_rate: f64, dt: f64) -> [f64; 2] {
+        self.0.step_analog([x, y], rho, [aim_x, aim_y], grip, reel_rate, dt)
+    }
+
+    fn state(&self) -> [f64; 7] {
+        self.0.state()
+    }
+
+    fn fork(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    fn reset(&mut self) {
+        self.0 = Default::default();
+    }
+}
+
 #[pymodule]
 #[allow(deprecated)]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -2414,6 +2452,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<CycleMode>()?;
     m.add_class::<CycleBank>()?;
+    m.add_class::<CockpitRope>()?;
+    m.add_function(wrap_pyfunction!(tether_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tether_rho, m)?)?;
     m.add_class::<MotionControls>()?;
     m.add_class::<JuliaViewControls>()?;
     m.add_class::<ControlsV2>()?;
