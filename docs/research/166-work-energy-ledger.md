@@ -65,3 +65,43 @@ The start ledger jet now also supplies the existing geodesic calculation,
 eliminating one identical query. The end jet remains an additional query to
 record endpoint validity and provenance; further reuse requires changing the
 energy evaluation API while preserving provider and error semantics.
+
+## Taylor remainder on the concrete quadratic field
+
+The Rust regression `euler_taylor_ledger_on_the_concrete_phase_ball` runs
+`FrozenRollout` with the Euler profile and the same quadratic spline coefficients,
+initial state and force configuration as the Lean fixture. It recomputes the
+unit drive covector at each accepted step's starting position and uses unit
+metric damping. All accepted states stay within the fixture's phase ball of
+radius `1/16` over the model-time horizon `1/576`. The energy oracle derives
+kinetic energy and the Shore and wall potentials from the prepared spline jet.
+It differentiates those expressions independently of the Physics evaluator.
+[Rust regression](../../runtime-core/src/operational_field.rs),
+[checked Taylor bounds](159-local-energy-bounds.md).
+
+For 32, 128, 512 and 2048 steps, the test checks the reported endpoint energy,
+the drive covector and the signed left-endpoint work against the oracle at
+each step. It evaluates the Taylor linear term on the actual position and
+velocity increment. The absolute local remainder is compared with
+`67 * max(||dx||, ||dv||)^2` and `1 / (64m^2)`, where `m` is the mesh size.
+The absolute telescoped remainder is compared with `1 / (64m)`. Comparisons
+use an empirical binary64 slack of `2e-14` per step. The telescoped remainder
+must drop by at least 65% for each fourfold refinement.
+
+| Steps | Largest per-step Taylor remainder | Absolute telescoped Taylor remainder | Signed energy minus work |
+| ---: | ---: | ---: | ---: |
+| 32 | `5.646e-10` | `1.803e-8` | `+1.875e-8` |
+| 128 | `3.529e-11` | `4.508e-9` | `+4.687e-9` |
+| 512 | `2.206e-12` | `1.127e-9` | `+1.172e-9` |
+| 2048 | `1.381e-13` | `2.818e-10` | `+2.929e-10` |
+
+These comparisons measure the compiled recurrence on the synthetic spline.
+They leave the continuous-reference state error, machine arithmetic bounds
+and certificate provenance for general rollouts open. The Taylor linear sum
+and the signed physical work sum are recorded separately. See the
+[held-RK work and refusal comparison](166-held-rk-work.md) for the experimental
+RK profiles.
+
+```powershell
+cargo test -p runtime_core --lib --features experimental-operational-field euler_taylor_ledger_on_the_concrete_phase_ball -- --nocapture
+```

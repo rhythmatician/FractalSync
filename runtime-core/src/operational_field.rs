@@ -316,4 +316,150 @@ mod tests {
         assert!(PreparedField::new([0.0; 2], 1.0, [4; 2], vec![f64::NAN; 16]).is_err());
         assert!(PreparedField::new([0.0; 2], 1.0, [usize::MAX; 2], vec![]).is_err());
     }
+
+    // Independent energy and differential for the unit-parameter research profile.
+    // The spline jet is shared with the executed field. No Physics energy, force,
+    // or metric routine is used to build this oracle.
+    struct EnergyOracle {
+        energy: f64,
+        kinetic: f64,
+        position_derivative: [f64; 2],
+        velocity_derivative: [f64; 2],
+        unit_drive: [f64; 2],
+    }
+
+    fn dot(a: [f64; 2], b: [f64; 2]) -> f64 {
+        a[0] * b[0] + a[1] * b[1]
+    }
+
+    fn difference(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
+        [a[0] - b[0], a[1] - b[1]]
+    }
+
+    fn energy_oracle(field: &PreparedField, position: [f64; 2], v: [f64; 2]) -> EnergyOracle {
+        use std::f64::consts::{LN_2, PI};
+
+        let jet = field.query(position).unwrap();
+        let d = jet.value;
+        let rho_sq = 1.0 + d * d;
+        let grad_log_rho = jet.gradient.map(|g| d * g / rho_sq);
+        let grad_sigma = grad_log_rho.map(|g| -g / LN_2);
+        let hessian_sigma = [0, 1].map(|i| {
+            [0, 1].map(|j| {
+                -(d * jet.hessian[i][j] / rho_sq
+                    + (1.0 - d * d) * jet.gradient[i] * jet.gradient[j] / rho_sq.powi(2))
+                    / LN_2
+            })
+        });
+        let projection = dot(grad_sigma, v);
+        let speed_sq = dot(v, v);
+        let kinetic = 0.5 * (speed_sq / rho_sq + projection * projection);
+        let s = dot(position, position) / 4.0;
+        let wall_angle = PI / 2.0 * s.powi(4);
+        let secant = 1.0 / wall_angle.cos();
+        let wall_gradient_scale = s.powi(3) * secant * wall_angle.tan();
+        let position_derivative = [0, 1].map(|i| {
+            -(1.0 + speed_sq / rho_sq) * grad_log_rho[i]
+                + projection * dot(hessian_sigma[i], v)
+                + wall_gradient_scale * position[i]
+        });
+        let g_xx = 1.0 / rho_sq + grad_sigma[0].powi(2);
+        EnergyOracle {
+            energy: kinetic - 0.5 * rho_sq.ln() + (secant - 1.0) / PI,
+            kinetic,
+            position_derivative,
+            velocity_derivative: [0, 1].map(|i| v[i] / rho_sq + projection * grad_sigma[i]),
+            unit_drive: [g_xx.sqrt(), grad_sigma[0] * grad_sigma[1] / g_xx.sqrt()],
+        }
+    }
+
+    #[test]
+    fn euler_taylor_ledger_on_the_concrete_phase_ball() {
+        use crate::controls::{MotionControls, MAX_DRIVE_FORCE};
+        use crate::manifold::ManifoldConfig;
+        use crate::operational_engine::{FrozenRollout, Integrator, PhysicsProfile};
+        use std::f64::consts::{FRAC_1_PI, LN_2};
+        use std::sync::Arc;
+
+        // Absolute comparison slack for this binary64 regression, not an IEEE bound.
+        const COMPARISON_SLACK: f64 = 2e-14;
+        let x0 = [0.5, 0.5];
+        let v0 = [0.25, 0.0];
+        let config = ManifoldConfig {
+            d_ref: 1.0,
+            epsilon: 1.0,
+            lambda_sq: 1.0,
+            kappa: LN_2,
+            mu: FRAC_1_PI,
+        };
+        let command = MotionControls {
+            direction: v0,
+            throttle: 1.0 / MAX_DRIVE_FORCE,
+            ..MotionControls::default()
+        };
+        let field = Arc::new(field());
+        let mut previous_remainder = None;
+        for steps in [32, 128, 512, 2048] {
+            let m = f64::from(steps);
+            let dt = 1.0 / (576.0 * m);
+            let profile = PhysicsProfile::new(config.clone(), dt, 1.0, Integrator::Euler).unwrap();
+            let rollout = FrozenRollout::new(Arc::clone(&field), profile, vec![]).unwrap();
+            let mut state = rollout.initial_state(x0, v0).unwrap();
+            let initial_energy = state.energy;
+            let mut linear_sum = 0.0;
+            let mut signed_work_sum = 0.0;
+            let mut largest_step_remainder: f64 = 0.0;
+            for _ in 0..steps {
+                let old = state;
+                let start = energy_oracle(&field, old.position, old.velocity);
+                let control = rollout.drive_covector(old.position, &command).unwrap();
+                assert!(difference(control, start.unit_drive)
+                    .iter()
+                    .all(|component| component.abs() <= COMPARISON_SLACK));
+                let drive_power = dot(start.unit_drive, old.velocity);
+                let drag_power = -2.0 * start.kinetic;
+                assert!(drive_power > 0.0 && drag_power < 0.0);
+                let signed_work = dt * (drive_power + drag_power);
+                rollout.attempt_step(&mut state, control).unwrap();
+                let end = energy_oracle(&field, state.position, state.velocity);
+                let dx = difference(state.position, old.position);
+                let dv = difference(state.velocity, old.velocity);
+                for (value, center) in [(state.position, x0), (state.velocity, v0)] {
+                    let offset = difference(value, center);
+                    assert!(dot(offset, offset) < (1.0_f64 / 16.0).powi(2));
+                }
+                let linear =
+                    dot(start.position_derivative, dx) + dot(start.velocity_derivative, dv);
+                let step_remainder = (state.energy - old.energy - linear).abs();
+                largest_step_remainder = largest_step_remainder.max(step_remainder);
+                let phase_increment_sq = dot(dx, dx).max(dot(dv, dv));
+                assert!((old.energy - start.energy).abs() <= COMPARISON_SLACK);
+                assert!((state.energy - end.energy).abs() <= COMPARISON_SLACK);
+                assert!(step_remainder <= 67.0 * phase_increment_sq + COMPARISON_SLACK);
+                assert!(step_remainder <= 1.0 / (64.0 * m * m) + COMPARISON_SLACK);
+                assert!(
+                    (state.integrated_work - old.integrated_work - signed_work).abs()
+                        <= COMPARISON_SLACK
+                );
+                linear_sum += linear;
+                signed_work_sum += signed_work;
+            }
+            let energy_change = state.energy - initial_energy;
+            let remainder = (energy_change - linear_sum).abs();
+            let work_residual = energy_change - state.integrated_work;
+            assert!(linear_sum.abs() > 1e-4 && signed_work_sum > 1e-4);
+            assert!(remainder <= 1.0 / (64.0 * m) + m * COMPARISON_SLACK);
+            assert!((state.integrated_work - signed_work_sum).abs() <= m * COMPARISON_SLACK);
+            if let Some(coarse_remainder) = previous_remainder {
+                assert!(remainder < 0.35 * coarse_remainder);
+            }
+            previous_remainder = Some(remainder);
+            eprintln!(
+                "m={steps}: delta E={energy_change:.9e}, linear sum={linear_sum:.9e}, \
+                 largest step remainder={largest_step_remainder:.9e}, \
+                 Taylor remainder={remainder:.9e}, signed work={signed_work_sum:.9e}, \
+                 work residual={work_residual:.9e}"
+            );
+        }
+    }
 }
