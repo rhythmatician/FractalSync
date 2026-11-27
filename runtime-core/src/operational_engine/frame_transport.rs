@@ -230,15 +230,21 @@ mod tests {
             let angle = (frame.axis[1] / zero.companion[1]).atan2(frame.axis[0] / zero.axis[0]);
             assert!((angle - 4.0 * (sign * omega * 0.05).atan()).abs() < 2e-13);
         }
-        assert!(rollout
-            .transport_endpoint_chords(&trace, [0.0; 2], 0.0)
-            .is_err());
-        assert!(rollout
-            .transport_endpoint_chords(&trace, direction, f64::NAN)
-            .is_err());
-        assert!(rollout
-            .transport_endpoint_chords(&trace, direction, 100.0)
-            .is_err());
+        assert!(
+            rollout
+                .transport_endpoint_chords(&trace, [0.0; 2], 0.0)
+                .is_err()
+        );
+        assert!(
+            rollout
+                .transport_endpoint_chords(&trace, direction, f64::NAN)
+                .is_err()
+        );
+        assert!(
+            rollout
+                .transport_endpoint_chords(&trace, direction, 100.0)
+                .is_err()
+        );
         let different = self::rollout(field.clone(), 0.1, 0.7);
         let cut_profile = PhysicsProfile::new(
             rollout.profile().config().clone(),
@@ -267,5 +273,47 @@ mod tests {
             .unwrap();
         assert_eq!(retry.axis, zero.axis);
         assert_eq!(retry.companion, zero.companion);
+    }
+
+    #[test]
+    fn analytic_sheared_metric_gives_an_oriented_unit_frame() {
+        let coefficients = (0..101)
+            .flat_map(|y| (0..101).map(move |x| -1.5 + f64::from(x) * 0.01 + f64::from(y) * 0.02));
+        let field = Arc::new(
+            PreparedField::new([-0.5; 2], 0.01, [101; 2], coefficients.collect()).unwrap(),
+        );
+        let lambda_sq = 0.7;
+        let rollout = rollout(field, 0.2, lambda_sq);
+        let point = [0.04, 0.05];
+        let mut state = rollout.initial_state(point, [0.0; 2]).unwrap();
+        let (_, trace) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let initial = rollout
+            .transport_endpoint_chords(&trace, [1.0, 0.0], 0.0)
+            .unwrap();
+        let frame = rollout
+            .transport_endpoint_chords(&trace, [1.0, 0.0], 2.0)
+            .unwrap();
+
+        let distance = point[0] + 2.0 * point[1];
+        let rho_squared = distance * distance + EPSILON * EPSILON;
+        let anisotropy_squared = lambda_sq / std::f64::consts::LN_2.powi(2);
+        let dot = |u: [f64; 2], v: [f64; 2]| {
+            (u[0] * v[0] + u[1] * v[1]) / rho_squared
+                + anisotropy_squared * distance * distance / rho_squared.powi(2)
+                    * (u[0] + 2.0 * u[1])
+                    * (v[0] + 2.0 * v[1])
+        };
+        assert!((dot(frame.axis, frame.axis) - 1.0).abs() < 2e-13);
+        assert!((dot(frame.companion, frame.companion) - 1.0).abs() < 2e-13);
+        assert!(dot(frame.axis, frame.companion).abs() < 2e-13);
+        assert!(frame.axis[0] * frame.companion[1] - frame.axis[1] * frame.companion[0] > 0.0);
+        let angle = dot(initial.companion, frame.axis).atan2(dot(initial.axis, frame.axis));
+        assert!((angle - 4.0 * 0.1_f64.atan()).abs() < 2e-13);
+        assert_eq!(
+            rollout.last_evaluation_work().geometry_evaluations,
+            trace.endpoints().len()
+        );
     }
 }
