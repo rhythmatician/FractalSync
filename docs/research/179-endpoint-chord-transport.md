@@ -3,8 +3,8 @@
 The experimental `FrozenRollout` can evaluate an oriented unit frame along
 chords joining its committed mechanical endpoints. The order and endpoints
 come from the integrator. Each chord is a declared affine reconstruction
-between those samples. The frame uses the same frozen field, profile, and
-reference policy as the trace. [Committed trace](../validation/bounded-operational-engine.md#committed-mechanical-endpoints)
+between those samples. The rollout that produced the trace evaluates the
+frame with its frozen field, profile, and reference policy. [Committed trace](../validation/bounded-operational-engine.md#committed-mechanical-endpoints)
 
 For a chord with displacement \(\Delta c\) and duration \(h\), the update
 starts with a metric-unit direction \(d\). It forms the trial direction

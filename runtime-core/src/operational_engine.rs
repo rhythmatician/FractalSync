@@ -194,15 +194,17 @@ impl MechanicalEndpoint {
 pub struct AcceptedStepTrace {
     endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
     len: usize,
+    rollout_policy: Arc<[ReferenceCut]>,
     field_id: u64,
     physics_profile_id: u64,
 }
 
 impl AcceptedStepTrace {
-    fn new(state: &MechanicalState) -> Self {
+    fn new(state: &MechanicalState, rollout: &FrozenRollout) -> Self {
         Self {
             endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
             len: 1,
+            rollout_policy: rollout.cuts.clone(),
             field_id: state.field_id,
             physics_profile_id: state.physics_profile_id,
         }
@@ -424,7 +426,7 @@ impl FrozenRollout {
         state: &mut MechanicalState,
         control: [f64; 2],
     ) -> Result<(QueryWork, AcceptedStepTrace), String> {
-        let mut trace = AcceptedStepTrace::new(state);
+        let mut trace = AcceptedStepTrace::new(state, self);
         let work = self.attempt_step_inner(state, control, Some(&mut trace))?;
         Ok((work, trace))
     }

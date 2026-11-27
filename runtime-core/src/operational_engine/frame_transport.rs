@@ -1,6 +1,7 @@
 use super::{AcceptedStepTrace, FrozenRollout};
 use crate::{geometry_provider, manifold};
 use num_complex::Complex64;
+use std::sync::Arc;
 
 /// Oriented metric-unit frame at the final endpoint of a diagnostic transport.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -14,7 +15,8 @@ impl FrozenRollout {
     /// the committed endpoints. The chord displacement supplies the base
     /// velocity integral. The recorded endpoint velocities are unused.
     ///
-    /// The signed turn rate, in radians per mechanical second, is held for
+    /// The trace must come from this rollout instance. The signed turn rate,
+    /// in radians per mechanical second, is held for
     /// the whole trace. The initial direction is normalized at its start.
     /// This diagnostic concerns the chord reconstruction. It supplies no
     /// angle bound for the continuous Physics path.
@@ -24,8 +26,13 @@ impl FrozenRollout {
         initial_direction: [f64; 2],
         turn_rate: f64,
     ) -> Result<TransportedFrame, String> {
-        if trace.field_id != self.field_id() || trace.physics_profile_id != self.profile.id() {
-            return Err("FrozenIdentity: trace belongs to another field/profile".into());
+        // The policy allocation is owned by this rollout and retained by
+        // the trace. Fingerprints alone do not establish its provenance.
+        if !Arc::ptr_eq(&trace.rollout_policy, &self.cuts)
+            || trace.field_id != self.field_id()
+            || trace.physics_profile_id != self.profile.id()
+        {
+            return Err("FrozenIdentity: trace belongs to another rollout".into());
         }
         let endpoints = trace.endpoints();
         // Use the integration duration even when adding it to the absolute
@@ -246,6 +253,8 @@ mod tests {
                 .is_err()
         );
         let different = self::rollout(field.clone(), 0.1, 0.7);
+        let same_parameters = self::rollout(field.clone(), 0.2, 0.7);
+        assert_eq!(same_parameters.profile().id(), rollout.profile().id());
         let cut_profile = PhysicsProfile::new(
             rollout.profile().config().clone(),
             0.2,
@@ -262,7 +271,7 @@ mod tests {
             }],
         )
         .unwrap();
-        for other in [&different, &cut_rollout] {
+        for other in [&different, &cut_rollout, &same_parameters] {
             let error = other
                 .transport_endpoint_chords(&trace, direction, 0.0)
                 .unwrap_err();
