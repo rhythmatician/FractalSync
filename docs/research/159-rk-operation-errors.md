@@ -241,13 +241,22 @@ These are upward-rounded bounds from the Windows x86-64 release run with Rust 1.
 
 The checker verifies the `h` and `h²` budgets at each substep with
 `h = 1/(576*16*substep_count)`. It uses the outer step squared for the
-stored outer work increment. The one-substep run supplies the numerical
-premises of `exists_phase_work_certificate` at `m = 16`. Its exact-time
-affine phase and work traces therefore have bounds `3/256` and `11/144`
-against the theorem's reference. The four-substep run verifies local
-residuals with one drive per outer step. A perturbed composition theorem
-for that holding pattern remains open.
+stored outer work increment. For the four-substep profile, write \(H=4h\).
+The recorded source phases, stages and endpoints stay in a ball of radius
+\(12H\) around the outer anchor. The held field has speed at most 10 on this
+ball. Comparing all recorded slopes with the field at the outer anchor and
+summing the endpoint residuals gives an ordered-update defect at most
+\(18000H^2\). The four energy defects telescope through the actual internal
+endpoints. The checker bounds the stored work increment against the sum of
+the four exact weighted power samples, giving an outer energy/work defect at
+most \(65536H^2\).
+
+Both sixteen-step runs supply the numerical premises of their respective
+phase/work certificates. The exact-time affine phase and stored-work traces
+through the outer endpoints have bounds `3/256` and `11/144` against the
+reference phase and integrated work on the full horizon.
 [One-substep phase and work theorem](../../formal/FractalSync/ConcretePerturbedRungeKuttaWork.lean)
+[Four-substep phase and work theorem](../../formal/FractalSync/ConcreteFourSubstepRungeKutta.lean)
 
 From the repository root with the project virtual environment available:
 
