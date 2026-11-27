@@ -2,7 +2,7 @@
 
 This is a known-phase experiment, not the Player or CycleBank. It shows a local first-order intended target directly in the Julia renderer. It does not run the target through Physics, prove that the local mapping is accurate at large excursions, or establish that the relationship is perceptible.
 
-The repository's canonical-math version rule advances `CONTROLLER_VERSION` to `orbit-controller/8` for this experiment, although the existing controller step is unchanged. Models stamped with an older controller version will be rejected until they are updated under the project's model contract.
+The experiment does not change `OrbitController::step` or its model compatibility version.
 
 Build the Wasm bundle from `wasm-orbit` with `wasm-pack build --target web --out-dir ../frontend/src/wasm --out-name orbit_synth_wasm`. Start the shader API using `.venv\Scripts\python.exe -m uvicorn api.server:app --app-dir backend --host 127.0.0.1 --port 8000` and the frontend using `npm --prefix frontend run dev`. Open `http://localhost:3000/gestureExperiment.html`, or follow the link in the debug cockpit. The shader API must be running. Audio starts only after the Start passage button is pressed.
 
@@ -23,3 +23,5 @@ The default anchor is only a starting point. If a target leaves the Map or geome
 Use **Export diagnostic record** during or after each passage to save a JSON record before starting another. It contains the synthetic phases, intended target, settings and audio-clock time for each rendered frame, along with settings changes, stop and error events. Save successful and failed trials separately. This is a diagnostic trace, not a replay or a recording of rendered pixels; it contains no realized Physics trajectory, forces, energy, CycleBank identities or confidence. Record the human observations and renderer environment alongside it.
 
 An offline Rust `GestureTracker` now explores bounded Controls/Physics pursuit and reports position, metric lag, saturation, and per-step work and energy. It is not connected to this preview: an initial browser experiment fell more than 0.25 seconds behind the audio clock during a 0.01-second-step run. Treat that as a failed realtime feasibility check in this environment, not a performance benchmark or a playability result. No rendered Physics comparison has been established.
+
+The record retains at most 36,000 samples and 2,048 events. Its `droppedSamples` and `droppedEvents` counts identify omitted entries, including any stop or error event after the event limit.

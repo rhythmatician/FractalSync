@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import { getWasmModule, initOrbitSynth } from '../lib/orbitSynthesizer';
+import { BoundedGestureRecord } from '../lib/boundedGestureRecord';
 
 type Schedule = { a_hz: number; b_segments: { start_seconds: number; frequency_hz: number }[] };
 type Source = 'a' | 'b' | 'off';
@@ -23,7 +24,7 @@ export function GestureExperiment() {
   const rendererRef = useRef<JuliaRenderer | null>(null);
   const runRef = useRef<{ audio: AudioContext; frame: number } | null>(null);
   const startingRef = useRef(false);
-  const recordRef = useRef<{ startedAt: string; events: unknown[]; samples: unknown[] } | null>(null);
+  const recordRef = useRef<{ startedAt: string; trace: BoundedGestureRecord<unknown, unknown> } | null>(null);
   const [hasRecord, setHasRecord] = useState(false);
   const mountedRef = useRef(false);
   const [settings, setSettings] = useState(initial);
@@ -35,7 +36,7 @@ export function GestureExperiment() {
   function update(next: Partial<Settings>) {
     const value = { ...settingsRef.current, ...next };
     settingsRef.current = value;
-    recordRef.current?.events.push({ type: 'settings', audioTime: runRef.current?.audio.currentTime ?? null, settings: value });
+    recordRef.current?.trace.addEvent({ type: 'settings', audioTime: runRef.current?.audio.currentTime ?? null, settings: value });
     setSettings(value);
   }
 
@@ -76,7 +77,7 @@ export function GestureExperiment() {
     const run = runRef.current;
     runRef.current = null;
     if (run) {
-      recordRef.current?.events.push({ type: 'stop', audioTime: run.audio.currentTime });
+      recordRef.current?.trace.addEvent({ type: 'stop', audioTime: run.audio.currentTime });
       cancelAnimationFrame(run.frame); await run.audio.close();
     }
     setPlaying(false);
@@ -93,7 +94,7 @@ export function GestureExperiment() {
       await audio.resume();
       if (!mountedRef.current) { await audio.close(); return; }
       const startAt = audio.currentTime + 0.1;
-      recordRef.current = { startedAt: new Date().toISOString(), events: [{ type: 'start', audioTime: startAt, settings: settingsRef.current }], samples: [] };
+      recordRef.current = { startedAt: new Date().toISOString(), trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current }) };
       setHasRecord(true);
       // The sine modulators and Rust phase calculation share this audio clock.
       function layer(frequency: number, modulation: number, segments?: Schedule['b_segments']) {
@@ -130,11 +131,11 @@ export function GestureExperiment() {
             current.sourceA === 'off' || current.condition === 'audio' ? 0 : current.gainA,
             current.sourceB === 'off' || current.condition === 'audio' ? 0 : current.gainB, current.excursion, current.rotating);
           if (Math.hypot(point[0], point[1]) >= 2) throw new Error('Target outside the Map. Reduce excursion or move the anchor.');
-          recordRef.current?.samples.push({ elapsed, audioTime: run.audio.currentTime, phases: Array.from(phases), target: Array.from(point), settings: current });
+          recordRef.current?.trace.addSample({ elapsed, audioTime: run.audio.currentTime, phases: Array.from(phases), target: Array.from(point), settings: current });
           rendererRef.current?.renderFrozen({ juliaSeed: { real: point[0], imag: point[1] },
             colorHue: current.hue, colorSat: 0.8, colorBright: 0.9, zoom: current.zoom, speed: 0 });
           if (elapsed - lastDisplay > 0.1) { setTime(elapsed); lastDisplay = elapsed; }
-        } catch (cause) { recordRef.current?.events.push({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
+        } catch (cause) { recordRef.current?.trace.addEvent({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
         run.frame = requestAnimationFrame(animate);
       };
       run.frame = requestAnimationFrame(animate);
@@ -151,7 +152,11 @@ export function GestureExperiment() {
     const blob = new Blob([JSON.stringify({
       format: 'fractal-sync-gesture-diagnostic/1',
       limitations: 'Known synthetic phases and direct kinematic target; no Physics or CycleBank.',
-      ...recordRef.current,
+      startedAt: recordRef.current.startedAt,
+      events: recordRef.current.trace.events,
+      samples: recordRef.current.trace.samples,
+      droppedEvents: recordRef.current.trace.droppedEvents,
+      droppedSamples: recordRef.current.trace.droppedSamples,
     }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
