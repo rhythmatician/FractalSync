@@ -42,6 +42,14 @@ absolute bound of 0.01 and at least 40% reduction at each refinement. This
 isolates integrator accounting from raster interpolation for this smooth field;
 it does not establish fidelity of the bridge or acceptance across the Map.
 
+A moving impulse regression uses the same analytic plane. It executes a
+driven, damped Euler step with and without an impulse to recover the
+pre-impulse velocity at the updated position. The oracle derives both endpoint
+metrics and potentials from the plane and checks the kinetic update, metric
+change, potential change and signed impulse work separately. Using the
+starting metric or the starting velocity for the impulse calculation shifts
+its reported work by more than `1e-3` on this fixture. [Controls regression](../../runtime-core/src/controls.rs).
+
 
 The accumulated summary retains the first step (including its initial state,
 configuration, and provider sample), start clock, signed sums and a persistent
