@@ -205,6 +205,7 @@ class OuterStep(TypedDict):
     command: list[int]
     substeps: list[Substep]
     stored_work: int
+    mechanical_time: int
 
 
 class Profile(TypedDict):
@@ -229,6 +230,8 @@ def check_profile(profile: Profile, field: Field) -> None:
     dt = outer_dt / count
     source = (Q(1, 2), Q(1, 2), Q(1, 4), Q(0))
     previous_work = Q(0)
+    previous_time = Q(0)
+    rounded_outer_dt = nearest_binary64(outer_dt)
     maxima: dict[str, Q] = {}
 
     def check(name: str, error: Q, limit: Q) -> None:
@@ -236,7 +239,12 @@ def check_profile(profile: Profile, field: Field) -> None:
         maxima[name] = max(maxima.get(name, Q(0)), error)
 
     assert len(profile["steps"]) == 16
-    for outer in profile["steps"]:
+    for index, outer in enumerate(profile["steps"], start=1):
+        machine_time = binary64(outer["mechanical_time"])
+        assert machine_time == nearest_binary64(previous_time + rounded_outer_dt)
+        assert machine_time > previous_time
+        check("outer clock", abs(machine_time - index * outer_dt), Q(1, 10**18))
+        previous_time = machine_time
         exact_command = drive(field.ruler_jet(source[0], source[1]))
         command_x, command_y = map(binary64, outer["command"])
         command_error = exact_command[0].error(command_x) + exact_command[1].error(command_y)

@@ -238,6 +238,7 @@ These are upward-rounded bounds from the Windows x86-64 release run with Rust 1.
 | Weighted mechanical endpoint | `9.5e-17` | `1.01e-16` |
 | Weighted substep work | `1e-18` | `1e-18` |
 | Stored outer work increment | `1e-18` | `1e-18` |
+| Stored outer clock | `1e-18` | `1e-18` |
 
 The checker verifies the `h` and `h²` budgets at each substep with
 `h = 1/(576*16*substep_count)`. It uses the outer step squared for the
@@ -266,7 +267,12 @@ rtk cargo test --release -p runtime_core --features experimental-operational-fie
 .venv/Scripts/python.exe formal/fixtures/check_181_rounded_rk.py $env:FRACTALSYNC_RK_FIXTURE_TRACE
 ```
 
-This check applies to the finite trace exported by the release regression.
-A uniform arithmetic bound across targets, profiles, or meshes, the accuracy
-of the reported total energy and machine clock, and production field fidelity
-remain open.
+The checker also decodes every recorded outer timestamp. Each timestamp
+must equal the independently rounded binary64 sum of the previous timestamp
+and the rounded outer step, advance strictly, and be within `1e-18` model-time
+units of its exact rational grid time. This covers all 16 recorded outer steps
+in each profile starting from zero. The Lean history estimate still uses the
+exact grid. A large starting clock or another profile needs a separate check.
+
+A uniform arithmetic bound across targets, profiles, or meshes, accuracy
+of the reported total energy, and production field fidelity remain open.

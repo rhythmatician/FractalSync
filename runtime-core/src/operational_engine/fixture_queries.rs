@@ -33,6 +33,7 @@ struct OuterStep {
     command: [u64; 2],
     substeps: Vec<RkSubstep>,
     stored_work: u64,
+    mechanical_time: u64,
 }
 
 #[derive(Serialize)]
@@ -211,6 +212,7 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
                 command: command.map(f64::to_bits),
                 substeps: recording.substeps,
                 stored_work: state.integrated_work.to_bits(),
+                mechanical_time: state.mechanical_time.to_bits(),
             });
             if first_stage_two.is_none() {
                 first_stage_two = positions
