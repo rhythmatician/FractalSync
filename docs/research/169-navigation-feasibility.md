@@ -72,6 +72,56 @@ The analytic paths and signed-work unit cases make it possible to test the
 classification without a navigation policy or participants. The retained
 replay supplies a negative control for missing evidence.
 
+### Retained replay length and action
+
+The replay samples each accepted outer RK4 step and its three accepted internal
+substep endpoints. At each endpoint it computes kinetic energy from the
+recorded velocity and the induced metric of the same frozen field and Physics
+profile. It integrates endpoint speeds and kinetic energies separately with
+composite trapezoids spaced 960, 480, and 240 canonical samples apart. The three
+resolutions use the same accepted trajectory. These estimates can miss variation
+between recorded states, especially where the metric changes rapidly.
+
+The JSON reports `duration_samples` through the first positive outer sample
+for the driven trial and through the full deadline for the undriven trial.
+`covered_samples` is the duration each resolution actually integrated. A
+panel needs valid values at all its observed endpoints, including any fine
+samples in its interior. The replay keeps each step separate, so an impulse
+at a step boundary can use its pre- and post-event speeds at the same sample
+without interpolating across the jump. This fixture applies no impulses. A
+rejected Physics step still aborts the replay.
+
+For full coverage, `action_floor_from_measured_length` is \(L_q^2/(2T)\),
+where \(L_q\) is the trapezoidal estimate of length. With the same trapezoid
+weights, the difference between action and this expression is half the
+duration times the weighted variance of the endpoint speeds, up to rounding.
+The comparison checks the sampled values. A continuous-path lower bound
+requires independent evidence. Partial coverage leaves the comparison null.
+
+| Throttle | Duration (samples) | Panel (samples) | Length estimate | Kinetic-action estimate |
+| --- | ---: | ---: | ---: | ---: |
+| Driven | 179,520 | 960 | 10.359196 | 18.562221 |
+| Driven | 179,520 | 480 | 10.359415 | 18.562725 |
+| Driven | 179,520 | 240 | 10.359470 | 18.562852 |
+| Undriven | 384,000 | 960 | 9.551215 | 6.956353 |
+| Undriven | 384,000 | 480 | 9.551942 | 6.957673 |
+| Undriven | 384,000 | 240 | 9.550928 | 6.955754 |
+
+All six estimates have full coverage. At 240 samples, the driven
+sampled-length comparison is 14.347408, below the action estimate of
+18.562852. The signed integrated work is 17.426484, which has units of
+energy. In the undriven trial, the last refinement moves both estimates down.
+Its signed integrated work is \(-0.695625\) and its mechanical energy changes
+by \(-0.445434\). The replay preserves this ledger discrepancy in the output.
+The true-Shore deadline assessment remains `insufficientEvidence`.
+
+The synthetic tests check refinement against exact variable-speed integrals,
+a step-boundary impulse, and a gap with a missing step and a missing endpoint.
+
+~~~powershell
+rtk cargo test --offline -p runtime_core --features experimental-operational-field --example replay_bounded_motion
+~~~
+
 ## Training curriculum check
 
 Run `python backend/train.py --check-curriculum-feasibility curriculum.json`

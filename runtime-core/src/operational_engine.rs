@@ -6,7 +6,12 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 mod frame_transport;
+mod route_guidance;
 pub use frame_transport::TransportedFrame;
+pub use route_guidance::{
+    AmbientTarget, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
+    OperationalRouteStatus,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Integrator {
@@ -242,6 +247,8 @@ pub(super) fn is_pinned() -> bool {
     CONTEXT.with(|c| c.borrow().is_some())
 }
 
+const CANONICAL_REFERENCE_POINTS: [[f64; 2]; 2] = [[-1.0, 0.0], [0.25, 0.0]];
+
 pub(super) fn check_query(c: Complex64, epsilon: f64) -> Result<(), String> {
     #[cfg(test)]
     fixture_queries::record_query(c);
@@ -254,7 +261,7 @@ pub(super) fn check_query(c: Complex64, epsilon: f64) -> Result<(), String> {
             // Retain the canonical exact-point refusals even if an asset's
             // additional reference snapshot omits them. Other cut coverage is
             // explicitly unknown unless supplied by that frozen snapshot.
-            if (c.re == -1.0 || c.re == 0.25) && c.im == 0.0 {
+            if CANONICAL_REFERENCE_POINTS.contains(&[c.re, c.im]) {
                 return Err("ReferenceSingularity: canonical cut or cusp".into());
             }
             for cut in context.cuts.iter() {

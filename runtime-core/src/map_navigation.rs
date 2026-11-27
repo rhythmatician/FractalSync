@@ -10,6 +10,9 @@ use std::f64::consts::LN_2;
 
 use serde::Serialize;
 
+#[doc(hidden)]
+pub mod search;
+
 use crate::intrinsic_bounds::{
     ambient_target_lower_bound, point_lower_bound, CrossingEvidence, IntrinsicMetric,
 };
