@@ -1,5 +1,6 @@
 //! Necessary feasibility bounds for navigation deadlines and Shore arrivals.
 
+use crate::intrinsic_bounds::{add_up, div_down, div_up, mul_down, mul_up};
 use crate::timebase::CANONICAL_SAMPLE_RATE;
 use serde::Serialize;
 
@@ -105,8 +106,8 @@ pub fn evaluate_feasibility(
 
     let minimum_seconds = certified_length
         .zip(speed_cap)
-        .map(|(length, speed)| quotient_lower(length, speed));
-    let distance_upper = speed_cap.map(|speed| product_upper(speed, duration_upper));
+        .map(|(length, speed)| div_down(length, speed));
+    let distance_upper = speed_cap.map(|speed| mul_up(speed, duration_upper));
     let deadline_status = distance_upper.map_or(FeasibilityStatus::InsufficientEvidence, |upper| {
         compare(certified_length, upper)
     });
@@ -114,8 +115,8 @@ pub fn evaluate_feasibility(
         .filter(|_| duration_samples > 0)
         .map(|length| {
             // Multiplication by 2 is exact over the range of canonical durations.
-            let half_mean_speed = quotient_lower(length, 2.0 * duration_upper);
-            product_lower(length, half_mean_speed)
+            let half_mean_speed = div_down(length, 2.0 * duration_upper);
+            mul_down(length, half_mean_speed)
         });
     let kinetic_action_status = limits.kinetic_action_budget.map(|budget| {
         if valid_nonnegative(budget) {
@@ -177,8 +178,6 @@ fn valid_nonnegative(value: f64) -> bool {
     value.is_finite() && value >= 0.0
 }
 
-// Basic IEEE-754 operations round to nearest. Move the result outward by one
-// representable value at each operation. Preserve zeros that are known exact.
 fn seconds_upper(samples: u64) -> f64 {
     if samples == 0 {
         return 0.0;
@@ -189,22 +188,7 @@ fn seconds_upper(samples: u64) -> f64 {
     } else {
         nearest
     };
-    (upper_samples / CANONICAL_SAMPLE_RATE as f64).next_up()
-}
-
-fn quotient_lower(numerator: f64, denominator: f64) -> f64 {
-    (numerator / denominator).next_down().max(0.0)
-}
-
-fn product_lower(left: f64, right: f64) -> f64 {
-    (left * right).next_down().max(0.0)
-}
-
-fn product_upper(left: f64, right: f64) -> f64 {
-    if left == 0.0 || right == 0.0 {
-        return 0.0;
-    }
-    (left * right).next_up()
+    div_up(upper_samples, CANONICAL_SAMPLE_RATE as f64)
 }
 
 fn crest_work_upper(constraint: CrestWorkConstraint, distance_upper: f64) -> Option<f64> {
@@ -218,12 +202,8 @@ fn crest_work_upper(constraint: CrestWorkConstraint, distance_upper: f64) -> Opt
     {
         return None;
     }
-    let continuous_work = product_upper(constraint.control_force_cap, distance_upper);
-    let total_upper = if impulse_work == 0.0 {
-        continuous_work
-    } else {
-        (continuous_work + impulse_work).next_up()
-    };
+    let continuous_work = mul_up(constraint.control_force_cap, distance_upper);
+    let total_upper = add_up(continuous_work, impulse_work);
     total_upper.is_finite().then_some(total_upper)
 }
 
