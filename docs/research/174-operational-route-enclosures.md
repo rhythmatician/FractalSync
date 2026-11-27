@@ -43,8 +43,9 @@ operations have their own executable tests.
 The fixture uses a 101 by 81 dyadic lattice at spacing \(2^{-11}\) in
 \([450,550]/2048\times[-41,39]/2048\). It encloses 32,180 undirected
 segments, including diagonals. For 332 deterministic samples, midpoint
-quadrature of the compiled field jet lay within the intervals. Refining from
-32 to 128 panels changed lengths by at most 0.000249. That comparison is a
+quadrature of the compiled field jet agreed with the intervals to within
+\(10^{-10}\). Refining from 32 to 128 panels changed lengths by at most
+0.000249. That comparison is a
 numerical cross-check. The enclosure comes from the coefficient arithmetic.
 
 On these same edges, a first pass using coefficient extrema and the
@@ -61,7 +62,9 @@ the minimum over the admitted graph. Dijkstra and bounded A* on the upper
 weights agree on all 32 comparisons across two neighbor sets, point and ball
 targets, and four budgets per query. The heuristic divides remaining ambient
 distance by a regional upper bound on the ruler. The outer budget radius uses
-the same ruler bound. Neither calculation requires an ideal Shore distance.
+the same ruler bound. Both use the prepared field. A within-budget upper path
+certifies a graph witness, and a lower optimum above budget excludes the
+graph. Budgets between those bounds remain unresolved.
 
 | Neighbors | Dijkstra expansions | Bounded A* expansions |
 | --- | ---: | ---: |

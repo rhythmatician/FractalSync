@@ -163,7 +163,8 @@ fn compare(
                 prune_with_bound: false,
             },
         )
-        .cost;
+        .cost
+        .expect("the frozen lower graph connects each target");
         let edges = |node: usize| {
             adjacency[node].iter().filter_map(move |edge| {
                 (!edge.diagonal || diagonal).then_some((edge.to, edge.upper))
@@ -184,7 +185,7 @@ fn compare(
         let upper = unlimited
             .cost
             .expect("the frozen fixture connects each target");
-        assert!(lower.is_some_and(|length| length <= upper));
+        assert!(lower <= upper);
         let mut caps = Vec::new();
         for budget in [f64::INFINITY, upper, upper - 1.0 / QUANTA, 0.0] {
             let radius_upper = region.budget_radius_upper(budget);
@@ -219,7 +220,11 @@ fn compare(
             assert_eq!(baseline.cost, bounded.cost);
             totals[0].record(baseline.counts);
             totals[1].record(bounded.counts);
-            caps.push(json!({"budget": budget.is_finite().then_some(budget), "accepted": bounded.cost.is_some()}));
+            let upper_witness = bounded.cost.is_some();
+            let excluded_by_lower = lower > budget;
+            assert!(!(upper_witness && excluded_by_lower));
+            caps.push(json!({"budget": budget.is_finite().then_some(budget),
+                "upperCostWitness": upper_witness, "lowerCostExcludes": excluded_by_lower}));
         }
         outcomes.push(json!({"start": point(start), "targetCenter": point(center), "radiusSteps": radius_steps,
             "lower": lower, "upper": upper, "budgets": caps}));
@@ -258,7 +263,8 @@ fn main() -> Result<(), String> {
     println!(
         "{}",
         json!({"fieldIdentity": format!("{:016x}", field.identity()),
-        "window": [point(0), point(NODES - 1)], "shape": [WIDTH, HEIGHT], "edges": edges,
+            "metricScope": "exactPreparedSplineInWindow",
+            "window": [point(0), point(NODES - 1)], "shape": [WIDTH, HEIGHT], "edges": edges,
             "nominalWindowFeasibility": {"start": start, "target": target, "actionBudget": 0.05,
                 "oneSecond": short, "hundredSeconds": long},
         "searches": [compare(&region, &adjacency, false), compare(&region, &adjacency, true)]})
