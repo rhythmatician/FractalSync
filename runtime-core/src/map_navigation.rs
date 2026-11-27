@@ -13,6 +13,7 @@ use serde::Serialize;
 #[doc(hidden)]
 pub mod search;
 
+use crate::distance_field::{RasterNavigationRegion, RasterWaypoint};
 use crate::intrinsic_bounds::{
     ambient_target_lower_bound, point_lower_bound, CrossingEvidence, IntrinsicMetric,
 };
@@ -60,6 +61,21 @@ pub struct MapNavigationReport {
     pub certificate_queries: usize,
     pub baseline: MapRouteSearch,
     pub bounded: MapRouteSearch,
+    pub raster_waypoint_search: RasterWaypointSearch,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum RasterWaypointSearch {
+    Unavailable,
+    NoWitness,
+    #[serde(rename_all = "camelCase")]
+    Witness {
+        /// Original replay index and zero-based frame supplying the target waypoint.
+        route_index: usize,
+        frame_index: usize,
+        length_upper: f64,
+    },
 }
 
 /// Compare input order with a stable ordering by the remaining ideal distance
@@ -183,6 +199,13 @@ pub fn evaluate_map_navigation(
             .unwrap_or(0.0)
             .total_cmp(&candidate_lower_bounds[right].unwrap_or(0.0))
     });
+    let raster_waypoint_search = search_raster_waypoints(
+        config,
+        &prefixes,
+        &candidate_indices,
+        target_center,
+        target_radius,
+    );
     Ok(MapNavigationReport {
         metric: "ideal_mandelbrot_distance_graph",
         epsilon: metric.epsilon,
@@ -196,7 +219,94 @@ pub fn evaluate_map_navigation(
         certificate_queries,
         baseline: scan_routes(&prefixes, baseline_order, target_center, target_radius),
         bounded: scan_routes(&prefixes, bounded_order, target_center, target_radius),
+        raster_waypoint_search,
     })
+}
+
+fn search_raster_waypoints(
+    config: &ManifoldConfig,
+    prefixes: &[&[[f64; 2]]],
+    candidate_indices: &[usize],
+    center: [f64; 2],
+    radius: f64,
+) -> RasterWaypointSearch {
+    let default = ManifoldConfig::default();
+    if config.epsilon != default.epsilon || config.lambda_sq != default.lambda_sq {
+        return RasterWaypointSearch::Unavailable;
+    }
+    let Some((first, prefix)) = prefixes
+        .iter()
+        .enumerate()
+        .find(|(_, path)| !path.is_empty())
+    else {
+        return RasterWaypointSearch::Unavailable;
+    };
+    let start = prefix[0];
+    let (lo, hi) = prefixes
+        .iter()
+        .flat_map(|path| path.iter())
+        .fold((start, start), |(lo, hi), &[x, y]| {
+            ([lo[0].min(x), lo[1].min(y)], [hi[0].max(x), hi[1].max(y)])
+        });
+    let bounds = [
+        std::array::from_fn(|axis| {
+            if lo[axis] == hi[axis] {
+                lo[axis].next_down()
+            } else {
+                lo[axis]
+            }
+        }),
+        std::array::from_fn(|axis| {
+            if lo[axis] == hi[axis] {
+                hi[axis].next_up()
+            } else {
+                hi[axis]
+            }
+        }),
+    ];
+    let Some(region) = RasterNavigationRegion::for_default_profile(bounds) else {
+        return RasterWaypointSearch::Unavailable;
+    };
+
+    let mut launch_neighbors = Vec::new();
+    let mut frames = vec![(start, candidate_indices[first], 0, None)];
+    for (&route_index, path) in candidate_indices.iter().zip(prefixes) {
+        if path.len() > 1 {
+            launch_neighbors.push(frames.len());
+        }
+        for (frame_index, &position) in path.iter().enumerate().skip(1) {
+            let next = (frame_index + 1 < path.len()).then_some(frames.len() + 1);
+            frames.push((position, route_index, frame_index, next));
+        }
+    }
+    let mut waypoints = Vec::with_capacity(frames.len());
+    waypoints.push(RasterWaypoint {
+        position: start,
+        neighbors: &launch_neighbors,
+    });
+    waypoints.extend(
+        frames
+            .iter()
+            .skip(1)
+            .map(|(position, _, _, next)| RasterWaypoint {
+                position: *position,
+                neighbors: next.as_slice(),
+            }),
+    );
+
+    match region.search_route(&waypoints, 0, center, radius, f64::INFINITY) {
+        Ok(Some(witness)) => {
+            let (_, route_index, frame_index, _) =
+                frames[*witness.path.last().expect("route includes launch")];
+            RasterWaypointSearch::Witness {
+                route_index,
+                frame_index,
+                length_upper: witness.length_upper,
+            }
+        }
+        Ok(None) => RasterWaypointSearch::NoWitness,
+        Err(_) => RasterWaypointSearch::Unavailable,
+    }
 }
 
 fn valid_prefix<'a>(route: &MapRoute<'a>) -> Result<&'a [[f64; 2]], String> {

@@ -165,4 +165,5 @@ import FractalSync.KeplerAreaDensity
 import FractalSync.KeplerKinematics
 import FractalSync.KeplerEllipseClock
 import FractalSync.AdaptiveStepComposition
+import FractalSync.SampledAction
 /-! Development-time mathematical research for FractalSync. -/

@@ -257,6 +257,32 @@ mod tests {
                 / (root_weight * rho0 + sigma0);
             along * relative_change.ln_1p() / (root_weight * across)
         }
+
+        // Exact-real Euler angle bound in the analytic normal/tangent coframe.
+        fn chord_euler_angle_bound(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> f64 {
+            let [x0, y0] = start;
+            let [x1, y1] = end;
+            let f0 = x0 + 2.0 * y0;
+            let f1 = x1 + 2.0 * y1;
+            let (rho0, sigma0) = self.scales(f0);
+            let (rho1, sigma1) = self.scales(f1);
+            let rho_ratio = rho0 / rho1;
+            let b_normal = (sigma1 / sigma0) * rho_ratio.powi(2) - 1.0;
+            let b_tangent = rho_ratio - 1.0;
+            let slope = f0 * (f1 - f0);
+            let d_tangent = -slope / rho0.powi(2);
+            let d_normal = self.normal_weight * slope / sigma0.powi(2) + 2.0 * d_tangent;
+            let start_angle = (-2.0 * (x1 - x0) + (y1 - y0)) * f0 / (rho0 * sigma0);
+            let k = turn + start_angle;
+            let r = (b_normal - (1.0 + b_normal) * d_normal)
+                .hypot(b_tangent - (1.0 + b_tangent) * d_tangent)
+                .hypot(k * b_normal.hypot(b_tangent));
+            let trial_norm = 1.0_f64.hypot(k);
+            assert!(r < trial_norm);
+            let remainder_angle = (r / (trial_norm - r)).atan();
+            let quadrature_angle = (self.chord_angle(start, end) - start_angle).abs();
+            remainder_angle + k.abs().powi(3) / 3.0 + quadrature_angle
+        }
     }
 
     fn unsigned_angle_difference(left: f64, right: f64) -> f64 {
@@ -387,8 +413,10 @@ mod tests {
             ("crossing", [-0.025, -0.01], [0.42, 0.25], -0.65),
         ] {
             let mut previous_error = f64::INFINITY;
+            let mut previous_bound = f64::INFINITY;
             for count in [8, 16, 32] {
-                let rollout = rollout(field.clone(), duration / f64::from(count), lambda_sq);
+                let dt = duration / f64::from(count);
+                let rollout = rollout(field.clone(), dt, lambda_sq);
                 let mut state = rollout.initial_state(initial, velocity).unwrap();
                 let mut axis = initial_axis;
                 let [ax, ay] = graph.coordinates(initial, axis);
@@ -396,6 +424,7 @@ mod tests {
                 let mut minimum_field = initial[0] + 2.0 * initial[1];
                 let mut graph_turn = 0.0;
                 let mut conformal_turn = 0.0;
+                let mut angle_bound = 0.0;
                 for _ in 0..count {
                     let (_, trace) = rollout
                         .attempt_step_with_trace(&mut state, [0.0; 2])
@@ -408,6 +437,11 @@ mod tests {
                     for pair in trace.endpoints().windows(2) {
                         graph_turn += graph.chord_angle(pair[0].position, pair[1].position);
                         conformal_turn += conformal.chord_angle(pair[0].position, pair[1].position);
+                        angle_bound += graph.chord_euler_angle_bound(
+                            pair[0].position,
+                            pair[1].position,
+                            dt * turn_rate / 4.0,
+                        );
                         let [x, y] = pair[1].position;
                         minimum_field = minimum_field.min(x + 2.0 * y);
                     }
@@ -424,9 +458,12 @@ mod tests {
                 let error = unsigned_angle_difference(ay.atan2(ax), expected);
                 let conformal_gap = unsigned_angle_difference(graph_turn, conformal_turn);
                 eprintln!(
-                    "{route}, {count}: angle error {error:e}, conformal gap {conformal_gap:e}"
+                    "{route}, {count}: angle error {error:e}, bound {angle_bound:e}, \
+                     conformal gap {conformal_gap:e}"
                 );
                 assert!(error < 0.65 * previous_error, "{route}, {count}: {error:e}");
+                assert!(error <= angle_bound + 1e-12);
+                assert!(angle_bound < 0.7 * previous_bound);
                 assert!(
                     conformal_gap > 0.5,
                     "{route}, {count}: {graph_turn:e} vs {conformal_turn:e}"
@@ -435,6 +472,7 @@ mod tests {
                 assert_eq!(minimum_field < 0.0, route == "crossing");
                 assert!(state.position[0] + 2.0 * state.position[1] > 0.0);
                 previous_error = error;
+                previous_bound = angle_bound;
             }
             assert!(previous_error < 0.02, "{route}: {previous_error:e}");
         }

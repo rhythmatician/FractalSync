@@ -102,4 +102,45 @@ theorem acceptedHistory_dist_le {E : Type*} [PseudoMetricSpace E] (n : ℕ)
         (dist_triangle (advance j (reference j)) (advance j (actual j)) (actual (j + 1))).trans
           (add_le_add (hstable j hj) (hlocal j hj))
 
+/-- A maximum accepted step bounds the method error for a method with an order-`order`
+local estimate. The field residual is weighted by elapsed time, while
+evaluation bounds accumulate separately. -/
+theorem acceptedHistory_dist_le_of_mesh {E : Type*} [PseudoMetricSpace E] (n order : ℕ)
+    (reference actual : ℕ → E) (advance : ℕ → E → E) (dt evaluation : ℕ → ℝ)
+    (initial rate mesh coefficient residual : ℝ)
+    (hinit : dist (reference 0) (actual 0) ≤ initial) (hinitial : 0 ≤ initial)
+    (hrate : 0 ≤ rate) (hcoefficient : 0 ≤ coefficient) (hresidual : 0 ≤ residual)
+    (hdt : ∀ j < n, 0 ≤ dt j) (hmesh : ∀ j < n, dt j ≤ mesh)
+    (hevaluation : ∀ j < n, 0 ≤ evaluation j)
+    (href : ∀ j < n, reference (j + 1) = advance j (reference j))
+    (hstable : ∀ j < n, dist (advance j (reference j)) (advance j (actual j)) ≤
+      (1 + rate * dt j) * dist (reference j) (actual j))
+    (hlocal : ∀ j < n, dist (advance j (actual j)) (actual (j + 1)) ≤
+      dt j * (coefficient * dt j ^ order + residual) + evaluation j) :
+    dist (reference n) (actual n) ≤ Real.exp (rate * ∑ j ∈ Finset.range n, dt j) *
+      (initial + (∑ j ∈ Finset.range n, dt j) * (coefficient * mesh ^ order + residual) +
+        ∑ j ∈ Finset.range n, evaluation j) := by
+  have hsum : ∑ j ∈ Finset.range n, (dt j * (coefficient * dt j ^ order + residual) +
+      evaluation j) ≤ (∑ j ∈ Finset.range n, dt j) * (coefficient * mesh ^ order + residual) +
+      ∑ j ∈ Finset.range n, evaluation j := by
+    rw [Finset.sum_mul, ← Finset.sum_add_distrib]
+    exact Finset.sum_le_sum fun j hj => add_le_add_right
+      (mul_le_mul_of_nonneg_left (add_le_add_right
+        (mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (hdt j (Finset.mem_range.mp hj))
+          (hmesh j (Finset.mem_range.mp hj)) order) hcoefficient) residual)
+        (hdt j (Finset.mem_range.mp hj))) (evaluation j)
+  calc
+    dist (reference n) (actual n) ≤ Real.exp (rate * ∑ j ∈ Finset.range n, dt j) *
+        (initial + ∑ j ∈ Finset.range n,
+          (dt j * (coefficient * dt j ^ order + residual) + evaluation j)) := by
+      simpa only [mul_zero, add_zero] using acceptedHistory_dist_le n reference actual advance dt
+        (fun j => dt j * (coefficient * dt j ^ order + residual)) (fun _ => 0) evaluation
+        initial rate hinit hinitial hrate hdt
+        (fun j hj => mul_nonneg (hdt j hj)
+          (add_nonneg (mul_nonneg hcoefficient (pow_nonneg (hdt j hj) _)) hresidual))
+        (fun _ _ => le_rfl) hevaluation href hstable
+        (fun j hj => by simpa only [mul_zero, add_zero] using hlocal j hj)
+    _ ≤ _ := mul_le_mul_of_nonneg_left
+      (by simpa only [add_assoc] using add_le_add_left hsum initial) (Real.exp_nonneg _)
+
 end FractalSync.AdaptiveStepComposition

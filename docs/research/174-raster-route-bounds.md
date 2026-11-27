@@ -160,6 +160,21 @@ The built-in raster test compares the two-route graph with Dijkstra,
 checks the budget at the outward aggregate and one representable value
 below it, and samples the compiled metric along each segment.
 
+The Debug Cockpit's **Map target comparison** also searches a graph built
+from the successful prefixes of matching replays. The shared launch
+branches into each replay, and each branch follows only consecutive
+frames. The bounding rectangle encloses the waypoints and uses the
+currently loaded default-profile raster metric. The reported result is
+a bound on the straight segments joining the waypoints. The observed
+Controls arrival and its sampled frame are reported separately.
+
+In the [common-start replay fixture](174-route-benchmark.md#controls-replays-on-the-map),
+the raster search reaches frame 698, zero-based, of the commit 1.0
+replay. Its length upper bound is about 7.47 billion because the
+certificate uses one worst-case metric factor for the whole rectangle.
+This demonstrates a certified path and shows how loose the window-wide
+upper bound can be near the default floor.
+
 ## Reproduce the built-in raster trial
 
 ```powershell

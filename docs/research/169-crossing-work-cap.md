@@ -58,3 +58,18 @@ exclusions still need certified target and metric correspondence, an applicable
 cap, and event accounting when impulses are present. The navigation and
 training consumers remain open. [Navigation bounds](https://github.com/rhythmatician/FractalSync/issues/174),
 [work-energy ledger](https://github.com/rhythmatician/FractalSync/issues/166).
+
+
+## A sampled-action condition
+
+For a finite accepted history with durations $h_i$, associate a length
+$ℓ_i$ and the speed $v_i$ used in the sampled kinetic action. If a
+certified arrival bound $B$ satisfies $B\le\sum_i ℓ_i$ and each interval
+satisfies $ℓ_i\le h_i v_i$, then the sampled action obeys
+$\sum_i h_i v_i^2/2\ge B^2/(2\sum_i h_i)$ for positive total duration.
+The Lean theorem uses weighted finite Cauchy–Schwarz, so unequal durations
+are allowed. To use it with the runtime ledger, a provider and update
+certificate must establish the per-interval length coverage for the actual
+sampled speeds. Endpoint speeds alone may miss motion between the samples.
+
+[Sampled-action proof](../../formal/FractalSync/SampledAction.lean)

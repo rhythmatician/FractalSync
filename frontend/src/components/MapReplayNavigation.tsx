@@ -24,6 +24,9 @@ interface NavigationReport {
   certificateQueries: number;
   baseline: ReplayScan;
   bounded: ReplayScan;
+  rasterWaypointSearch?:
+    | { status: 'unavailable' | 'noWitness' }
+    | { status: 'witness'; routeIndex: number; frameIndex: number; lengthUpper: number };
 }
 
 interface Props {
@@ -109,6 +112,14 @@ export function MapReplayNavigation({ routes, selected, frameIndex, inspectArriv
             <p>The first arrival took {report.baseline.queriesToFirstArrival} target checks in recording order and {report.bounded.queriesToFirstArrival} after ranking.</p>
           ) : <p>No recorded arrival</p>}
           <p>Complete scans checked {report.baseline.targetQueries} frames in recording order and {report.bounded.targetQueries} after ranking.</p>
+          {report.rasterWaypointSearch?.status === 'witness' && (
+            <p>
+              Current raster waypoint path to {routes[report.rasterWaypointSearch.routeIndex].spec.name} frame {report.rasterWaypointSearch.frameIndex + 1}.
+              {' '}Length upper bound {report.rasterWaypointSearch.lengthUpper.toPrecision(4)}.
+            </p>
+          )}
+          {report.rasterWaypointSearch?.status === 'unavailable' && <p>Current raster waypoint certificate unavailable.</p>}
+          {report.rasterWaypointSearch?.status === 'noWitness' && <p>No waypoint in the route graph certified inside the target.</p>}
           {arrivalIndex != null && arrivalFrame != null && (
             <button type="button" onClick={() => inspectArrival(arrivalIndex, arrivalFrame)}>
               Inspect arrival in {routes[arrivalIndex].spec.name}
