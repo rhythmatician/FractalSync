@@ -191,10 +191,9 @@ Controls arrival and its sampled frame are reported separately.
 
 In the [common-start replay fixture](174-route-benchmark.md#controls-replays-on-the-map),
 the raster search reaches frame 698, zero-based, of the commit 1.0
-replay. Its length upper bound is about 7.47 billion because the
-certificate uses one worst-case metric factor for the whole rectangle.
-This demonstrates a certified path and shows how loose the window-wide
-upper bound can be near the default floor.
+replay with either bound. The local edge certificate reduces the
+length upper bound from 7,466,920,211 to 475,492, about 15,700-fold.
+The bound still uses worst-case density within each edge's support.
 
 ## Reproduce the built-in raster trial
 
