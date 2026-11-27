@@ -1,6 +1,6 @@
 # Shore shortcut benchmark
 
-This mathematical fixture for [#172](https://github.com/rhythmatician/FractalSync/issues/172) compares the flat Shore segment with reflected excursions and then measures how a local circular metric changes their lengths. It is a reference for a future Rust navigation or probe test. It preserves the distinction between the intrinsic length of a proposed path, the minimum endpoint distance, and motion that Physics and Controls can realize. [Benchmark checker](../../formal/checks/check_shore_shortcuts.py).
+This fixture compares Shore arc lengths, minimizing flat excursions, and stationary paths on a circular Shore patch. It gives navigation and probe tests reference values for route ambiguity, validity restrictions, and the difference between traveled length and endpoint distance. [#172](https://github.com/rhythmatician/FractalSync/issues/172), [benchmark checker](../../formal/checks/check_shore_shortcuts.py).
 
 ## Exact reference and numerical comparison
 
@@ -64,6 +64,12 @@ S_{\sin}-\ell
 
 Here the squared speed minus one is bounded above by \((1+Bm^2)(dw/d(y/\epsilon))^2-w^2/(1+m^2)\). For \(m=1/4\), \(a=1\), and \(\ell=4\), replacing \(\pi\) by \(22/7\) gives the exact rational upper bound \(-6575/426496\). Direct integration gave \(S_{\sin}=3.978162027178\). This comparison has a strict margin independent of the amplitude solver and binary64 cancellation.
 
+## Flat validity and geodesic continuation
+
+For \(a=1\) and \(\ell=4\), restricting paths to \(r\ge 0\) keeps the positive minimizing excursion and removes its reflection. The minimum stays \(3.897669220614\) to the reported precision. Restricting paths to the closed strip \(|r|\le \epsilon/20\) removes both minimizing excursions. Every admissible path has length at least \(4/\sqrt{1+1/400}=3.995009355511\) because the tangential speed alone pays this much. The unrestricted rational sine bound above is strictly below that lower bound. Within the strip, the sine path of normalized amplitude \(1/20\) has length \(3.999045669887\), strictly below the Shore length by the same rational estimate. These inequalities give a restricted distance interval independent of any computed optimal path in the strip. [Flat all-minimizer classification](160-flat-shore.md#3-flat-shore-geodesics-and-an-exact-shortcut-threshold).
+
+The unit-speed Shore geodesic from \(y=0\) to \(y=3\epsilon\) realizes endpoint distance 3. Continuing it to \(4\epsilon\) gives traveled length 4 and endpoint distance \(3.897669220614\). A local geodesic continuation can therefore remain valid while its arc length ceases to be a shortest-distance oracle. The checker also compares six pairs on Shore with the lower bound \(2\log(1+\ell/2)\), reverses the excursion quadrature with a finer panel count, and checks the triangle inequalities for all ordered triples. [Checked Shore geodesic](160-flat-geodesics.md), [two-ended displacement bound](174-two-ended-displacement.md).
+
 ## Circular local fixture
 
 Use a circle of radius \(R\) with outer normal \(r\) and base arclength \(y=R\theta\). The map \((r,y)\mapsto(R+r)(\cos(y/R),\sin(y/R))\) has signed distance \(r\) and unique radial foot in the chosen arc and annulus. The metric has the same normal coefficient and replaces \(dy^2\) by \((1+r/R)^2dy^2\). This shows how curvature enters the length integral of the same two flat trial paths. Their domain has \(|r|<R/10\) and \(0\le y/R<\pi\).
@@ -77,6 +83,41 @@ At \(a=1\), \(\ell=4\), the sign of \(r\) makes the inward trial shorter and the
 
 These are lengths of prescribed paths in the circular metric. The curved minimizing branches and curved cut locus remain separate questions. [Curved normal-coordinate metric](160-curved-coordinate-geometry.md), [local curved-Shore bifurcation analysis](160-flat-shore.md#5-curved-shore-a-rigorous-local-cubic-root-branch).
 
+## Circular geodesic branches
+
+For the boundary-value solve, switch to the Frenet sign used in the curved-Shore analysis. Write \(x=y/\epsilon\), \(q=r/\epsilon\), \(\delta=\epsilon\kappa\), with \(\delta>0\) denoting the inward normal and \(|\delta|=\epsilon/R\). The normalized diagonal metric coefficients are
+
+\[
+M(q)=\frac{1+Bq^2}{(1+q^2)^2},\qquad
+N(q)=\frac{(1-\delta q)^2}{1+q^2}.
+\]
+
+The length Euler–Lagrange equation with \(x\) as parameter gives
+
+\[
+q''=\frac{N'}{2M}
+  +\left(\frac{N'}{N}-\frac{M'}{2M}\right)(q')^2,
+\]
+
+where primes on \(M,N\) denote derivatives with respect to \(q\). The checker bisects a bracket for \(q(\ell/2)\), integrates from \(q'(\ell/2)=0\) to \(q(\ell)=0\) by RK4, and reflects the resulting half-curve in \(x\). It repeats the solve with 128, 256, and 512 steps per half. Every RK stage stays in \(|\delta q|<0.1\) while \(|\delta|\ell<\pi\). Independent length quadrature uses ambient Cartesian velocity and the lifted graph velocity \(a\,d\sqrt{1+q^2}/dx\). The conserved tangential momentum \(N/\sqrt{M(q')^2+N}\) provides a residual check. From the middle to the finest grid, the length changes by less than \(3\times10^{-9}\) in every shot and by less than 0.5% of the saving at the flat threshold. The checker also verifies convergence of the midpoint heights. [Curved normal-coordinate metric](160-curved-coordinate-geometry.md), [local bifurcation analysis](160-flat-shore.md#5-curved-shore-a-rigorous-local-cubic-root-branch).
+
+At \(\ell=\pi\), the measured sine coefficient \(A\) approaches the signed prediction \(A_0=(8\delta/(\pi B))^{1/3}\). The reduced length expansion also gives \(\pi-S\sim 3\delta A_0/2\) by substituting the branch relation \(\delta\sim \pi B A^3/8\) into the leading terms \(-2\delta A+\pi B A^4/16\). At \(|\delta|=10^{-7}\), the amplitude ratios differed from 1 by at most \(7.3\times10^{-6}\) across \(a=0,1,3\). At that curvature the final refinement changed \(A\) by at most \(2.4\times10^{-9}\). Reversing the normal reverses the sign of the measured coefficient and preserves the length.
+
+| \(\delta\), with \(a=1\) | \(A\) | \(A/A_0\) | \(\pi-S\) |
+| ---: | ---: | ---: | ---: |
+| \(10^{-3}\) | 0.108594303 | 1.001929126 | \(1.622260468\times10^{-4}\) |
+| \(10^{-5}\) | 0.023353007 | 1.000090814 | \(3.502282304\times10^{-7}\) |
+| \(10^{-7}\) | 0.005030817 | 1.000004199 | \(7.546159253\times10^{-10}\) |
+
+At \(\ell=2.5\) and \(a=1\), the midpoint agrees with the linear prediction \(\delta[\sec(\ell/2)-1]\) within \(1.4\times10^{-5}\) relative error at \(\delta=10^{-3}\), and within \(1.4\times10^{-7}\) at \(\delta=10^{-4}\). At \(\ell=4\) both supercritical shoots are shorter than their prescribed circular trials above. Their lengths differ, and both remain below the Shore arc length 4.
+
+| \(\delta\) | Inward shot | Flat excursion | Outward shot |
+| ---: | ---: | ---: | ---: |
+| 0.001 | 3.895956792 | 3.897669221 | 3.899379268 |
+| 0.010 | 3.880441251 | 3.897669221 | 3.914658799 |
+
+The shoots give reproducible stationary-path comparisons. The conventional local result gives strict local minimality at \(\ell=\pi\) for sufficiently small nonzero \(\delta\). The supercritical shoots give candidate route lengths. Establishing the global curved minimum and finding all competing paths would require additional analysis.
+
 ## Reproduce and use
 
 Run from the repository root with the existing environment.
@@ -85,4 +126,4 @@ Run from the repository root with the existing environment.
 .venv/Scripts/python.exe formal/checks/check_shore_shortcuts.py
 ```
 
-The checker uses only the Python standard library. It gives geometric reference data for guidance and probe tests. Checking the production GeometryProvider, integration, transport, and cockpit behavior still requires embedding the reference cases in their Rust entry points. The benchmark supplies neither a proposed steering policy nor timing or work feasibility for these maneuvers. [#172 acceptance and integration scope](https://github.com/rhythmatician/FractalSync/issues/172).
+The checker uses only the Python standard library. The competing bearings and strip restriction support reporting candidate lengths and branch validity wherever guidance or probes expose a route. Comparing those values with production GeometryProvider and cockpit behavior requires tests at the Rust entry points. Any special move or reward decision needs separate evidence from controlled-motion replays, including timing and work. [#172 acceptance and integration scope](https://github.com/rhythmatician/FractalSync/issues/172).

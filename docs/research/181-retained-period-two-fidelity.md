@@ -41,4 +41,123 @@ rtk proxy .venv/Scripts/python.exe formal/fixtures/check_181_retained_period_two
 
 The [checker](../../formal/fixtures/check_181_retained_period_two.py) builds a temporary release-mode Rust consumer with `experimental-operational-field`, without loading the installed Python wheel. This run used Rust `1.98.0` on `x86_64-pc-windows-msvc`. The report retains binary query coordinates, asset and policy hashes, current source commit, both native dispositions, raw jet values and exact-reference estimates. No new asset or field policy is introduced.
 
-These maxima describe sampled errors over two retained assets and one analytic Shore region. There is no interval enclosure or whole-patch bound. Keep the experimental provider's `reference-distance-unknown` contract and #181 open for regional certificates, true-Shore evidence on independent patches, and outstanding executable correspondence and adoption work. [Prior installed-provider sampling](120-sampled-metric-validation.md) is a separate experiment on a different field implementation.
+These maxima describe sampled errors over two retained assets and one analytic Shore region. The following bounds cover two closed patches on the fine asset only. [Prior installed-provider sampling](120-sampled-metric-validation.md) is a separate experiment on a different field implementation.
+
+## Closed-patch enclosures
+
+For the fine asset, consider two closed squares of half-width $2^{-15}$ in
+Map coordinates. The deeper square is centered at $(-1,-3/16)$ and covers
+four cells around a grid vertex. The shallow square is centered at
+$(-1,-1/4+2^{-14})$ and covers two cells. Both squares lie strictly inside
+the period-two bulb away from its center. The attracting period-two
+component is the disk because its multiplier is $4(c+1)$. Its boundary
+lies on the Shore. Every path from inside the disk to the Shore must reach
+the circle, and the radial projection attains that distance. The signed
+distance inside is therefore $D=sqrt{(x+1)^2+y^2}-1/4$.
+[Period-two geometry](184-period-two-attachment.md#exact-bulb-and-shore-distance) ·
+[Douady and Hubbard, Exploring the Mandelbrot Set, chapter 14](https://pi.math.cornell.edu/~hubbard/OrsayEnglish.pdf) ·
+[Milnor, Theorem 6.5](https://arxiv.org/pdf/math/9905169#page=29)
+
+The table gives signed component-wise intervals for the reported jet minus
+the exact Shore jet at the same represented query. The checker prints all
+six components.
+
+| Component | Deeper square | Shallow square |
+| --- | ---: | ---: |
+| Value | $[-6.883,-6.782]\times 10^{-7}$ | $[-4.070,-3.403]\times 10^{-4}$ |
+| $y$ derivative | $[1.465,1.529]\times 10^{-5}$ | $[0.8268,0.9431]$ |
+| $xx$ Hessian entry | $[3.726,3.878]$ | $[958.2,1017.6]$ |
+| $yy$ Hessian entry | $[-4.876,-4.687]\times 10^{-4}$ | $[-1881.3,-1785.7]$ |
+
+Even on the deeper square, value accuracy better than $10^{-6}$ coexists
+with a Hessian error above 3.7. On the shallow square the signed field
+underestimates $D$ by over $3.4\times 10^{-4}$ and its $y$ derivative differs
+by over 0.82 **at every point**. These intervals include the evaluator error
+allowances, below $4.4\times 10^{-14}$ for value, $2.5\times 10^{-10}$ per
+gradient entry and $2.0\times 10^{-6}$ per Hessian entry across both squares.
+
+### Local length comparison on the deeper square
+
+For a common floor $\epsilon\ge0$, write $\rho_G=\sqrt{\epsilon^2+G^2}$
+for either the exact Shore field $G=D$ or the exact stored spline $G=F$.
+On the deeper square, both fields are negative with absolute value at
+least $m=0.0624$. If $|F-D|\le\delta_0$, the 1-Lipschitz dependence of
+the ruler on its scalar field gives
+$|\rho_F/\rho_D-1|\le\tau=\delta_0/m$. Using $\delta_0\le10^{-6}$ gives
+$\tau\le1/62400$. With `lambda_sq = 0`, the metric is conformal and the
+length-density ratio is bounded by $1/(1+\tau)$ and $1/(1-\tau)$.
+
+For the full graph metric, the speed at a tangent $v$ is
+$\|(v,a\nabla\rho_G\cdot v)\|_2/\rho_G$, with
+$a=\sqrt{\texttt{lambda\_sq}}/\ln 2$. Let $\delta_1$ bound
+$\|\nabla F-\nabla D\|_2$. The function
+$\phi(s)=s/\sqrt{\epsilon^2+s^2}$ has $|\phi|\le1$ and
+$|\phi'|\le1/m$ throughout the negative interval containing both fields.
+Since $\nabla\rho_G=\phi(G)\nabla G$ and $\|\nabla D\|_2=1$, the ruler
+gradient difference is bounded by $\delta_1+\tau$. The reverse triangle
+inequality bounds the difference between the two numerators by
+$\nu\|v\|_2$ for $\nu=|a|(\delta_1+\tau)$. The reference numerator is at
+least $\|v\|_2$. Combining the numerator and denominator bounds gives
+the length-density ratio
+$[(1-\nu)/(1+\tau),(1+\nu)/(1-\tau)]$.
+[Graph length](160-intrinsic-length.md) ·
+[Runtime metric](../../runtime-core/src/manifold.rs)
+
+The checker combines the exact spline and reference jet intervals to
+enclose that ratio in $[0.99974697,1.0002531]$ for $|a|\le3/2$. This
+range includes the default `lambda_sq = 1` since $\ln 2>2/3$. Integrating
+the speed bounds compares the two nominal lengths of any absolutely
+continuous path contained in the deeper square. Rounded metric evaluation
+and path quadrature need their own error bounds.
+
+### How the checker encloses the difference
+
+1. Decode the checksum-locked asset, verify the no-mask header and complete
+   stencil for every possible exact or rounded cell, and range the stored
+   polynomial on each intersected cell. Binomial expansion about the local
+   rectangle midpoint combines like powers before bounding each monomial
+   with rational arithmetic. The checker differentiates the resulting
+   tensor polynomial and uses the physical spacing for derivative units.
+   [Checked exact-real evaluator and joins](162-global-operational-field.md)
+2. Bound the reference radius by taking integer square roots on a
+   $2^{-80}$ grid. Rational interval operations then bound the exact
+   derivatives using $n=(x+1,y)/r$ and $(I-nn^{\mathsf T})/r$. For the
+   gradient and value differences, intersect the direct interval with
+   the interval inferred by integrating derivative-error bounds from the
+   center along a straight segment. The spline and reference are twice
+   continuously differentiable across those segments.
+3. Bound the error from machine normalization by writing the rounded grid
+   coordinate as an exact shifted physical point and applying the
+   cross-cell spline gains to the complete union of candidate stencils.
+   Add the source-order binary64 evaluation bound, which covers separately
+   rounded nearest-even operations with gradual underflow and no
+   contraction. The allowances begin at the coordinates passed to the
+   provider. [Cross-cell arithmetic method](181-operational-patch.md#four-cells-around-a-grid-vertex) ·
+   [Rust binary64](https://doc.rust-lang.org/std/primitive.f64.html)
+
+The compiled release probe checked all six components at 45 binary64
+points, including neighbors of grid faces. The separate arithmetic model
+predicted different exact and machine-selected cells at ten of those
+points. The probe also verifies asset round-trip bytes and the archived
+policy's center refusal. The checker rejects a box containing the center,
+a box crossing the circle, and an interior box without a full asset halo.
+The regional intervals come from the rational bounds, with the compiled
+queries checking their application to the Rust evaluator.
+
+From the repository root, using the retained fine asset described above:
+
+```powershell
+rtk proxy .venv/Scripts/python.exe formal/fixtures/check_181_period_two_patch.py tmp/geometry145-retained-fine.bin --offline
+```
+
+Computing the rational bounds for both squares took under a second on the
+verification host, apart from building and running the Rust probe. The
+report records the asset and policy hashes, evaluator source hash, Rust
+target, candidate cells, and outward-rounded interval endpoints.
+[Checker](../../formal/fixtures/check_181_period_two_patch.py)
+
+The certificate is scoped to this fine asset, two closed interior squares,
+and the declared arithmetic model. The experimental provider keeps
+`reference-distance-unknown` at runtime. Wider coverage, other assets and
+Shore components, rounded query generation before the provider, and
+downstream certificate consumption remain open in [#181](https://github.com/rhythmatician/FractalSync/issues/181).

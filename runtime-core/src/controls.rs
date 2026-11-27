@@ -853,6 +853,102 @@ mod tests {
         });
     }
 
+    #[test]
+    fn moving_impulse_uses_the_updated_metric_and_pre_impulse_velocity() {
+        use std::f64::consts::{FRAC_1_PI, LN_2, PI};
+
+        let _lock = test_mutex().lock().unwrap_or_else(|e| e.into_inner());
+        crate::geometry_provider::with_test_plane(|| {
+            let config = crate::manifold::ManifoldConfig {
+                d_ref: 1.0,
+                epsilon: 0.5,
+                lambda_sq: 1.0,
+                kappa: LN_2,
+                mu: FRAC_1_PI,
+            };
+            // D = x - 1/4, so the ruler depends on x alone and the metric is diagonal.
+            let rho_sq = |c: C| (c.re - 0.25).powi(2) + 0.25;
+            let metric = |c: C| {
+                let base = 1.0 / rho_sq(c);
+                let grad_sigma_x = -(c.re - 0.25) * base / LN_2;
+                [base + grad_sigma_x.powi(2), base]
+            };
+            let potential = |c: C| {
+                let wall_angle = PI / 2.0 * (c.norm_sqr() / 4.0).powi(4);
+                -0.5 * rho_sq(c).ln() + (1.0 / wall_angle.cos() - 1.0) / PI
+            };
+            let kinetic =
+                |g: [f64; 2], v: [f64; 2]| 0.5 * (g[0] * v[0].powi(2) + g[1] * v[1].powi(2));
+            let dot = |a: [f64; 2], b: [f64; 2]| a[0] * b[0] + a[1] * b[1];
+            let x0 = C::new(0.9, 0.2);
+            let v0 = [0.3, -0.12];
+            let dt = 0.125;
+            let controls = MotionControls {
+                direction: [0.8, 0.6],
+                throttle: 0.35,
+                brake: 0.25,
+                impulse: 0.6,
+                ..MotionControls::default()
+            };
+            let no_impulse = MotionControls {
+                impulse: 0.0,
+                ..controls
+            };
+            let (x1, (vx, vy), continuous) =
+                integrate_motion_controls(x0, (v0[0], v0[1]), &no_impulse, dt, &config).unwrap();
+            let (end, (end_vx, end_vy), mixed) =
+                integrate_motion_controls(x0, (v0[0], v0[1]), &controls, dt, &config).unwrap();
+            assert_eq!(end, x1);
+            assert!(continuous.ledger.valid && mixed.ledger.valid);
+            let v1 = [vx, vy];
+            let g0 = metric(x0);
+            let g1 = metric(x1);
+            assert!((g1[0] - g0[0]).abs() > 0.01 && dot(v1, v1) > 0.01);
+
+            let normalized = |g: [f64; 2]| {
+                let direction = controls.direction;
+                let norm = (2.0 * kinetic(g, direction)).sqrt();
+                [g[0] * direction[0] / norm, g[1] * direction[1] / norm]
+            };
+            let drive = normalized(g0).map(|q| q * controls.throttle * MAX_DRIVE_FORCE);
+            let impulse = normalized(g1).map(|q| q * controls.impulse * MAX_IMPULSE);
+            let dv = [impulse[0] / g1[0], impulse[1] / g1[1]];
+            let impulse_work = dot(v1, impulse) + 0.5 * dot(impulse, dv);
+            let stale = normalized(g0).map(|q| q * controls.impulse * MAX_IMPULSE);
+            let stale_dv = [stale[0] / g0[0], stale[1] / g0[1]];
+            let stale_work = dot(v1, stale) + 0.5 * dot(stale, stale_dv);
+            let stale_kick_velocity = [v1[0] + stale_dv[0], v1[1] + stale_dv[1]];
+            let stale_kick_work = kinetic(g1, stale_kick_velocity) - kinetic(g1, v1);
+            let stale_velocity_work = dot(v0, impulse) + 0.5 * dot(impulse, dv);
+
+            let velocity_change = [v1[0] - v0[0], v1[1] - v0[1]];
+            let initial_momentum = [g0[0] * v0[0], g0[1] * v0[1]];
+            let continuous_change = dot(initial_momentum, velocity_change)
+                + kinetic(g0, velocity_change)
+                + kinetic(g1, v1)
+                - kinetic(g0, v1)
+                + potential(x1)
+                - potential(x0);
+            let drive_work = dt * dot(v0, drive);
+            let drag_work = -2.0 * dt * controls.friction_beta() * kinetic(g0, v0);
+
+            assert!((end_vx - (v1[0] + dv[0])).abs() < 1e-12);
+            assert!((end_vy - (v1[1] + dv[1])).abs() < 1e-12);
+            assert!((mixed.ledger.impulse_work - impulse_work).abs() < 1e-12);
+            assert!((mixed.ledger.impulse_work - stale_work).abs() > 1e-3);
+            assert!((mixed.ledger.impulse_work - stale_kick_work).abs() > 1e-3);
+            assert!((mixed.ledger.impulse_work - stale_velocity_work).abs() > 1e-3);
+            assert!((mixed.ledger.control_work - drive_work).abs() < 1e-12);
+            assert!((mixed.ledger.friction_work - drag_work).abs() < 1e-12);
+            assert!((continuous.delta_total - continuous_change).abs() < 1e-12);
+            assert!((mixed.delta_total - continuous_change - impulse_work).abs() < 1e-12);
+            assert!(
+                (mixed.ledger.residual - (continuous_change - drive_work - drag_work)).abs()
+                    < 1e-12
+            );
+        });
+    }
+
     #[test]    fn version_frozen() {
         assert_eq!(CONTROLS_VERSION, "controls/2");
     }
