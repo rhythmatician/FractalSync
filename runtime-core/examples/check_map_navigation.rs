@@ -100,11 +100,19 @@ fn main() -> Result<(), String> {
         route_index,
         frame_index,
         length_upper,
+        raster_generation,
+        window,
     } = report.raster_waypoint_search
     else {
         panic!("expected a certified raster waypoint path");
     };
     assert_eq!(route_index, 3);
+    let region = runtime_core::distance_field::RasterNavigationRegion::for_default_profile(window)
+        .expect("witness window still has complete raster support");
+    assert_eq!(raster_generation, region.raster_generation());
+    let report_json = serde_json::to_value(&report).expect("serializable report");
+    assert_eq!(report_json["rasterWaypointSearch"]["rasterGeneration"], raster_generation);
+    assert_eq!(report_json["rasterWaypointSearch"]["window"], serde_json::json!(window));
     assert_eq!(Some(frame_index), report.bounded.arrivals[route_index]);
     assert!(length_upper > 0.0 && length_upper < 1_000_000.0);
     assert!(

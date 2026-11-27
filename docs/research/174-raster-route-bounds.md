@@ -250,3 +250,7 @@ window and declared action budget. The CLI still uses the main runtime
 assessment for eligibility. Turning the continuous result into a hard
 filter requires a link to committed runtime action and provider identity
 over the actual rollout.
+
+The replay report includes the certified window and the process-local raster
+generation used to price the path. The cockpit shows the generation alongside
+the witness. Use the asset hash above to identify the raster across processes.

@@ -26,7 +26,14 @@ interface NavigationReport {
   bounded: ReplayScan;
   rasterWaypointSearch?:
     | { status: 'unavailable' | 'noWitness' }
-    | { status: 'witness'; routeIndex: number; frameIndex: number; lengthUpper: number };
+    | {
+        status: 'witness';
+        routeIndex: number;
+        frameIndex: number;
+        lengthUpper: number;
+        rasterGeneration?: number;
+        window?: [[number, number], [number, number]];
+      };
 }
 
 interface Props {
@@ -116,6 +123,9 @@ export function MapReplayNavigation({ routes, selected, frameIndex, inspectArriv
             <p>
               Current raster waypoint path to {routes[report.rasterWaypointSearch.routeIndex].spec.name} frame {report.rasterWaypointSearch.frameIndex + 1}.
               {' '}Length upper bound {report.rasterWaypointSearch.lengthUpper.toPrecision(4)}.
+              {report.rasterWaypointSearch.rasterGeneration !== undefined && (
+                <> Raster generation {report.rasterWaypointSearch.rasterGeneration}.</>
+              )}
             </p>
           )}
           {report.rasterWaypointSearch?.status === 'unavailable' && <p>Current raster waypoint certificate unavailable.</p>}
