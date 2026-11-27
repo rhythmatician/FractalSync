@@ -21,7 +21,7 @@ See `docs/DOMAIN_CONTRACT.md` for the full domain contract (obligations, world f
 
 ### Versions
 - `FEATURE_VERSION` (`runtime-core/src/features.rs`): current `features/2`. History: `features/1` causal baseline (fixed transforms, frame-major), `features/2` flux-mean fix. Bumped with `shared/golden_vectors.json` regeneration in the same commit; browser and trainer refuse mismatched `feature_version` in ONNX metadata.
-- `CONTROLLER_VERSION` (`runtime-core/src/controller.rs`): current `orbit-controller/6`. Bumped with goldens/mirrors in the same commit when `OrbitController::step` semantics change; same refusal/stale-golden guards as above.
+- `CONTROLLER_VERSION` (`runtime-core/src/controller.rs`): current `orbit-controller/7`. Bumped with goldens/mirrors for the experimental two-source gesture; `OrbitController::step` is unchanged. Same refusal/stale-golden guards as above.
 
 ### Training ↔ browser contract
 Training exports ONNX (`opset 18`) + `*_metadata.json` with `input_shape`, `output_dim`, `parameter_names`, `parameter_ranges`, `feature_mean`/`feature_std`, `model_type: orbit_control`, `k_bands`, `feature_version`, `controller_version`. The browser (`frontend/src/lib/modelInference.ts`) loads them and refuses mismatched versions.

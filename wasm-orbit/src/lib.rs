@@ -33,6 +33,60 @@ fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
     serde_json::to_string(value).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+/// Experimental local target; this does not apply physical tracking.
+#[wasm_bindgen(js_name = "twoSourceGestureTarget")]
+pub fn two_source_gesture_target(
+    anchor_x: f64,
+    anchor_y: f64,
+    phase_a: f64,
+    phase_b: f64,
+    gain_a: f64,
+    gain_b: f64,
+    excursion: f64,
+    rotating: bool,
+) -> Result<Vec<f64>, JsValue> {
+    use runtime_core::two_source_gesture::{Geometry, Gesture, Source};
+    let anchor = RustComplex::new(anchor_x, anchor_y);
+    let metric = runtime_core::manifold::induced_metric(
+        anchor,
+        &runtime_core::manifold::ManifoldConfig::default(),
+    )
+    .map_err(|error| JsValue::from_str(&error))?;
+    let gesture = Gesture {
+        geometry: if rotating { Geometry::Rotating } else { Geometry::Distinct },
+        excursion,
+    };
+    gesture
+        .local_target(
+            [anchor_x, anchor_y],
+            metric,
+            Source { phase: phase_a, gain: gain_a },
+            Source { phase: phase_b, gain: gain_b },
+        )
+        .map(|target| target.to_vec())
+        .map_err(JsValue::from_str)
+}
+
+#[wasm_bindgen(js_name = "knownGesturePhases")]
+pub fn known_gesture_phases(seconds: f64, misaligned: bool) -> Result<Vec<f64>, JsValue> {
+    let phases = if misaligned {
+        runtime_core::two_source_gesture::known_phase_misaligned(seconds)
+    } else {
+        runtime_core::two_source_gesture::known_phase(seconds)
+    };
+    phases
+        .map(|(a, b)| vec![a, b])
+        .map_err(JsValue::from_str)
+}
+
+#[wasm_bindgen(js_name = "knownGestureScheduleJson")]
+pub fn known_gesture_schedule_json() -> Result<String, JsValue> {
+    model_io_json(&serde_json::json!({
+        "a_hz": runtime_core::two_source_gesture::KNOWN_A_HZ,
+        "b_segments": runtime_core::two_source_gesture::KNOWN_B_SEGMENTS,
+    }))
+}
+
 #[wasm_bindgen(js_name = "orbitControlSchemaJson")]
 pub fn orbit_control_schema_json(k_bands: usize) -> Result<String, JsValue> {
     model_io_json(&runtime_core::model_io::orbit_control_schema(k_bands))

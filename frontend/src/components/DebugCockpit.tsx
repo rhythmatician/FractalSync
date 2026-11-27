@@ -617,6 +617,7 @@ export function DebugCockpit(): JSX.Element {
       {/* LEFT: OBSERVATION-slot + variant list (Phase A: STATE/DIAG panels) */}
       <div style={{ width: 330, padding: 12, overflowY: 'auto', borderRight: '1px solid #1c1c30' }}>
         <h1 style={{ fontSize: 15, margin: '0 0 2px' }}>Mandelbrot-manifold Debug Cockpit</h1>
+        <a href="/gestureExperiment.html" style={{ color: '#9ed0ff' }}>Open two-source gesture experiment</a>
         <p style={{ fontSize: 10, color: '#667', margin: '0 0 10px' }}>
           issue #111 Phase A — read-only DebugSnapshot · Rust-authoritative physics
         </p>

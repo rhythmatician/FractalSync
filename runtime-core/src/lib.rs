@@ -28,6 +28,7 @@ pub mod controller;
 pub mod features;
 pub mod timebase;
 pub mod cycle_bank;
+pub mod two_source_gesture;
 pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
