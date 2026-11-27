@@ -206,6 +206,7 @@ class OuterStep(TypedDict):
     command: list[int]
     substeps: list[Substep]
     stored_work: int
+    ambient_polyline_length_upper: int
     mechanical_time: int
 
 
@@ -251,6 +252,7 @@ def check_profile(profile: Profile, field: Field) -> None:
         command_error = exact_command[0].error(command_x) + exact_command[1].error(command_y)
         check("held drive", command_error, dt)
         exact_outer_work = Q(0)
+        chord_squares: list[Q] = []
         assert len(outer["substeps"]) == count
         for sub in outer["substeps"]:
             assert binary64(sub["dt"]) == nearest_binary64(dt)
@@ -275,12 +277,20 @@ def check_profile(profile: Profile, field: Field) -> None:
                 abs(endpoint[i] - source[i] - represented_dt * source[i + 2])
                 for i in range(2)
             )
+            chord_squares.append(sum((endpoint[i] - source[i]) ** 2 for i in range(2)))
             drift_upper = binary64(sub["left_drift_defect_upper"])
             assert drift_defect <= drift_upper
             check("left drift defect upper", drift_upper, 100 * dt**2)
             check("substep work", abs(binary64(sub["work"]) - weighted[4]), dt**2)
             exact_outer_work += weighted[4]
             source = endpoint
+        # Bound each square root below on an exact dyadic grid, then
+        # check a near-equality against the runtime's outward total.
+        grid = 2**100
+        chord_lower = sum(Q(isqrt(floor(square * grid**2)), grid) for square in chord_squares)
+        length_upper = binary64(outer["ambient_polyline_length_upper"])
+        assert chord_lower + Q(len(chord_squares), grid) <= length_upper
+        check("ambient polyline enclosure slack", length_upper - chord_lower, Q(1, 10**17))
         stored_work = binary64(outer["stored_work"])
         check("stored outer work", abs(stored_work - previous_work - exact_outer_work), outer_dt**2)
         previous_work = stored_work
