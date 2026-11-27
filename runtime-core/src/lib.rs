@@ -33,6 +33,7 @@ pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
 pub mod intrinsic_bounds;
+pub mod map_navigation;
 pub mod shore_distance;
 #[cfg(feature = "experimental-operational-field")]
 pub mod operational_field;
@@ -42,9 +43,11 @@ pub mod manifold;
 pub mod proxies;
 pub mod controls;
 pub mod crossing_feasibility;
+pub mod curriculum_feasibility;
 pub mod debug;
 pub mod hyperbolic;
 pub mod model_io;
+pub mod map_certificates;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
 // corresponding feature flag has been enabled.

@@ -1778,6 +1778,56 @@ pub fn debug_snapshot_meta() -> JsValue {
     .unwrap_or(JsValue::NULL)
 }
 
+/// Compare default-profile cockpit replays against a selected ambient target.
+/// Position pairs and validity flags share one ordered list of recorded frames.
+#[wasm_bindgen(js_name = "mapReplayNavigation")]
+#[allow(clippy::too_many_arguments)]
+pub fn map_replay_navigation(
+    selected_route: u32,
+    goal_x: f64,
+    goal_y: f64,
+    radius: f64,
+    ranking_frame: u32,
+    positions_xy: &[f64],
+    valid_steps: &[u8],
+    route_lengths: &[u32],
+    first_velocities: &[f64],
+) -> Result<JsValue, JsValue> {
+    use runtime_core::map_navigation::{evaluate_map_navigation, MapRoute};
+
+    let error = || JsValue::from_str("Map replay frames and route lengths do not match");
+    if positions_xy.len() != valid_steps.len().saturating_mul(2)
+        || first_velocities.len() != route_lengths.len().saturating_mul(2)
+    {
+        return Err(error());
+    }
+    let positions: Vec<_> = positions_xy.chunks_exact(2).map(|p| [p[0], p[1]]).collect();
+    let mut routes = Vec::with_capacity(route_lengths.len());
+    let mut offset = 0_usize;
+    for (&length, velocity) in route_lengths.iter().zip(first_velocities.chunks_exact(2)) {
+        let next = offset.checked_add(length as usize).ok_or_else(error)?;
+        routes.push(MapRoute {
+            positions: positions.get(offset..next).ok_or_else(error)?,
+            valid_steps: valid_steps.get(offset..next).ok_or_else(error)?,
+            first_velocity: [velocity[0], velocity[1]],
+        });
+        offset = next;
+    }
+    if offset != positions.len() {
+        return Err(error());
+    }
+    let report = evaluate_map_navigation(
+        selected_route as usize,
+        [goal_x, goal_y],
+        radius,
+        ranking_frame as usize,
+        &RustManifoldConfig::default(),
+        &routes,
+    )
+    .map_err(|e| JsValue::from_str(&e))?;
+    serde_wasm_bindgen::to_value(&report).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 /// Build a read-only DebugSnapshot from explicit authoritative state.
 ///
 /// `motion_raw` is the last raw (pre-clamp) MotionControls, or null before

@@ -69,8 +69,42 @@ rtk cargo run --offline -p runtime_core --features experimental-operational-fiel
 ~~~
 
 The analytic paths and signed-work unit cases make it possible to test the
-classification without a navigation policy or participants. Actual hard
-curriculum exclusions still need a certified target and rollout metric, a
-certified or enforced speed cap for the deadline test, and an acceptance
-consumer in #138 or #110. The retained replay supplies an explicit negative
-control for missing evidence.
+classification without a navigation policy or participants. The retained
+replay supplies a negative control for missing evidence.
+
+## Training curriculum check
+
+Run `python backend/train.py --check-curriculum-feasibility curriculum.json`
+to review timed point targets before a training run. The manifest is a JSON
+array. Give each case a unique `id`, a `start` and `target` in Map coordinates,
+and `startSample` and `deadlineSample` on the same canonical audio clock.
+`intrinsicTolerance` defaults to zero. `kineticActionBudget`, when supplied,
+caps the integral of kinetic energy over the arrival interval.
+
+```json
+[
+  {
+    "id": "ideal-inside-to-outside",
+    "metric": "idealDistanceGraph",
+    "start": [0, 0],
+    "target": [2.125, 0],
+    "startSample": 48000,
+    "deadlineSample": 96000,
+    "kineticActionBudget": 2.0
+  }
+]
+```
+
+For an explicitly ideal task, `idealDistanceGraph` uses certified bounds for
+the ideal Mandelbrot Shore. The example's one-second interval needs at least
+121.16 units of kinetic action against a budget of two. Extending the deadline
+to sample 4,848,000 gives a 100-second interval and lowers the bound to 1.21,
+leaving that budget open.
+The default `runtimeMap` metric retains the candidate with insufficient
+evidence because the ideal distance bound lacks runtime metric correspondence.
+The deadline check also reports insufficient evidence without a speed cap
+that applies to the rollout. The manifest accepts no speed-cap claims.
+
+The CLI exits after writing the Rust assessment and its provenance for each
+case. `eligibleCaseIds` includes every case that survives the necessary checks
+for further review. The ordinary `--use-curriculum` orbits are untimed.

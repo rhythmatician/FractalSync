@@ -276,6 +276,16 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
     },
     "manifold_unsigned_distance": {"c": "complex", RET: "float"},
     "geometry_provider_query": {"c": "complex", "epsilon": "float", RET: "str"},
+    "evaluate_curriculum_feasibility": {
+        "start": "tuple[float, float]",
+        "target": "tuple[float, float]",
+        "metric": "str",
+        "intrinsic_tolerance": "float",
+        "start_sample": "int",
+        "deadline_sample": "int",
+        "kinetic_action_budget": "float | None",
+        RET: "str",
+    },
     "geometry_provider_version": {RET: "str"},
     "geometry_provider_scale_alpha": {RET: "float"},
 }
@@ -607,6 +617,7 @@ FUNCTION_ORDER = [
     "manifold_drag_force",
     "manifold_integrate_step",
     "geometry_provider_query",
+    "evaluate_curriculum_feasibility",
     "geometry_provider_version",
     "geometry_provider_scale_alpha",
 ]

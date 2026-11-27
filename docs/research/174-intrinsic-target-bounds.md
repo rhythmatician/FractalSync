@@ -56,7 +56,36 @@ series for logarithms and the search envelope. They require the caller to
 establish the geometric premises. The [flat-Shore benchmark](174-route-benchmark.md)
 tests cost agreement, target balls, masked edges and reopening against
 Dijkstra with upper-bounded path costs. It disables heuristic pruning when
-metric evidence is missing. Provider correspondence, actual Map query savings
-and integration into a navigation consumer remain with #174 and #138.
+metric evidence is missing.
+
+The [Mandelbrot endpoint certificate](../../runtime-core/src/map_certificates.rs)
+encloses distance to the boundary of the mathematical Mandelbrot set. The
+disk \( |c| \le 1/4 \) belongs to the set because \( |z| \le 1/2 \) is
+forward invariant. For \( |c| > 2 \), the first iterate has magnitude
+\( |c| \), and subsequent magnitudes grow by at least a factor of
+\( |c|-1 > 1 \). These disks give lower bounds by the reverse triangle
+inequality. The upper bound uses distance to explicit boundary witnesses at
+\( c=-2 \) and \( c=1/4 \). At \( -2 \) the critical orbit reaches the fixed
+point \( 2 \), while smaller real parameters escape. At \( 1/4 \) the
+invariant disk proves membership, while larger real parameters give an
+increasing critical orbit with no real fixed point. A bounded increasing
+orbit would converge to one, so those parameters escape.
+
+Inside the outer disk, the certificate can also prove that an entire square
+around the query escapes. The interval recurrence encloses all iterates for
+all parameters in the square. If every enclosed iterate has magnitude greater
+than 2 at some step, the lower norm recurrence \( r_{n+1} \ge r_n^2-2 \)
+forces divergence. The enclosed Euclidean ball then misses the Shore, so the
+square's half-side is a lower bound on the distance. The finite search can
+leave the side unresolved, in which case the interval starts at zero.
+Opposite proved sides certify a Shore crossing by continuity. These are
+conventional arguments for the provider's geometric premises. The Lean
+theorems consume the enclosures as hypotheses.
+
+The certificate applies to the ideal Map metric declared by `IntrinsicMetric`.
+Using it to prune a search or exclude a task driven by a raster, smoothed
+geometry, or retained operational field requires an independent lower
+comparison for that consumer's metric. Those providers supply no such
+comparison here.
 
 `lake build +FractalSync.IntrinsicTargetBounds --wfail` passed with the pinned Lean environment. The module contains 18 proved theorems, including two private lemmas. The transitive axiom check for all 16 public theorems reported only `propext`, `Classical.choice`, and `Quot.sound`.
