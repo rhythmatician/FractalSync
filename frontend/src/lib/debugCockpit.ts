@@ -17,7 +17,6 @@ import {
   OrbitSynthesizer,
   initOrbitSynth,
   getWasmModule,
-  loadMipPyramid,
 } from './orbitSynthesizer';
 import type { CrossingVariantSpec } from './shoreCrossingVariants';
 import { expandActions } from './shoreCrossingVariants';
@@ -60,12 +59,6 @@ export interface DebugSnapshot {
     frictionBeta: number;
     frictionPower: number;
   } | null;
-  map: {
-    pyramidLoaded: boolean;
-    shoreProximity: number | null;
-    minimapWindow: number[] | null;
-    extent: [number, number, number, number] | null;
-  };
   physics: {
     c: [number, number];
     velocity: [number, number];
@@ -331,22 +324,4 @@ export async function replayVariantAsTrajectory(
 ): Promise<CockpitTrajectory> {
   await initOrbitSynth();
   return new CockpitRecorder().recordVariant(spec);
-}
-
-/**
- * Load the canonical mip pyramid into the wasm runtime (best-effort) and
- * report whether it is available for the minimap panel. Delegates to the
- * shared loader — no separate artifact path here.
- */
-export async function ensureMinimapPyramid(): Promise<boolean> {
-  await initOrbitSynth();
-  return loadMipPyramid();
-}
-
-/**
- * The canonical pyramid extent from the last snapshot's map section, or
- * null when no pyramid is loaded.
- */
-export function pyramidExtent(snap: DebugSnapshot): [number, number, number, number] | null {
-  return snap.map.extent;
 }

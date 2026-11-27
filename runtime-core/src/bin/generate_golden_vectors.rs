@@ -43,9 +43,7 @@ struct PlayerStepCase {
     alpha0: f64,
     dt: f64,
     h: f64,
-    d_star: f64,
     max_step: f64,
-    level: usize,
     /// Per-step controls applied before each step.
     controls: Vec<[f64; 3]>, // [s, alpha, omega_scale]
     band_gates: Option<Vec<f64>>,
@@ -177,8 +175,6 @@ fn main() {
     // Case A: saturated constant controls (the frozen-c scenario) — must
     // settle at an equilibrium offset, NOT park exactly at start.
     // Case B: slowly varying controls (real model output) — must wander.
-    // Case C: no pyramid fallback path is identical to A/B here because the
-    // golden generation runs without a pyramid loaded.
     let scenarios: Vec<(&str, fn(f64) -> [f64; 3])> = vec![
         ("saturated_constant", |_i| [2.69, 0.951, 4.008]),
         ("varying", |i| {
@@ -191,9 +187,7 @@ fn main() {
     ];
     for (name, ctrl) in scenarios {
         let mut p = PlayerState::new(1, 0, 2.7, 0.95);
-        p.d_star = 0.5;
         p.max_step = 0.05;
-        p.level = 0;
         let gates = vec![0.95f64; 6];
         let mut controls = Vec::with_capacity(120);
         for i in 0..120u32 {
@@ -208,9 +202,7 @@ fn main() {
             alpha0: 0.95,
             dt: 1.0 / 60.0,
             h: 0.0,
-            d_star: 0.5,
             max_step: 0.05,
-            level: 0,
             controls,
             band_gates: Some(vec![0.95; 6]),
             c_re: final_c.re,

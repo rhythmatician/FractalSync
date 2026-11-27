@@ -7,12 +7,6 @@ describe('hyperbolic camera lookAt target', () => {
     version: 'debug-snapshot/2',
     timeSeconds: 1.0,
     action: null,
-    map: {
-      pyramidLoaded: false,
-      shoreProximity: null,
-      minimapWindow: null,
-      extent: null,
-    },
     physics: {
       c: [-0.744, 0.132],
       velocity: [-0.000023, 0.0],

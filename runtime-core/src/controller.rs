@@ -57,14 +57,16 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       of motion: ṙ + Γ(ṙ,ṙ) = -G⁻¹∇U + G⁻¹Q. The adapter fails closed on
 ///       manifold error (no silent flat-physics fallback). This is a
 ///       transitional seam, not destination Controls v2 (issue #107).
-pub const CONTROLLER_VERSION: &str = "orbit-controller/5";
+/// 6 - Retire the pyramid-backed shore-bias path; the browser and trainer
+/// use the same momentum controller.
+pub const CONTROLLER_VERSION: &str = "orbit-controller/6";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
 /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are
 /// HIGH, the interior valley at the lobe center is LOW. Without external
 /// forces c settles into the valley (domain contract: Physics runs always;
 /// Inside → settle toward lobe center). Audio energy provides the uphill
-/// push (see minimap::MUSIC_PUSH_GAIN); gravity is its constant counterforce.
+/// acceleration; gravity is its constant counterforce.
 pub const GRAVITY_ACCEL: f64 = 0.01;
 
 /// Parameters controlling the residual epicycle sums.  These values
@@ -267,11 +269,11 @@ pub fn step(
 /// Unlike [`OrbitState`], which traces a fixed closed carrier loop, the
 /// Player holds `c` as persistent state in the complex plane and moves it
 /// toward a model-driven *target* point on the Mandelbrot boundary, biased
-/// to follow the Shore's contours via [`crate::minimap::contour_biased_step`].
+/// using persistent velocity and a bounded step.
 ///
 /// This restores the audio-driven wandering behaviour that the pre-wasm
 /// TypeScript port had (`cBase = mandelbrotBoundary(s, alpha)`), while
-/// keeping the canonical Rust math and actually exercising the minimap.
+/// keeping the canonical Rust math.
 #[derive(Clone, Debug)]
 pub struct PlayerState {
     /// Current Julia parameter in the complex plane.
@@ -292,16 +294,9 @@ pub struct PlayerState {
     pub alpha: f64,
     /// Speed multiplier from the model.
     pub omega_scale: f64,
-    /// Mip level used for the contour step (0 = finest).
-    pub level: usize,
-    /// Target shore-proximity distance (0..1) the servo pulls toward.
-    pub d_star: f64,
     /// Maximum world-space step per frame.
     pub max_step: f64,
-    /// Audio energy in [0, 1] (loudness). Raises the effective target
-    /// shore-proximity: loud audio pulls c toward the Shore (domain
-    /// contract: Energy governs distance from The Shore).
-    pub energy: f64,
+
 }
 
 impl Default for PlayerState {
@@ -315,10 +310,7 @@ impl Default for PlayerState {
             s: 0.5,
             alpha: 0.5,
             omega_scale: 1.0,
-            level: 0,
-            d_star: 0.5,
             max_step: 0.05,
-            energy: 0.0,
         }
     }
 }
@@ -357,19 +349,17 @@ impl PlayerState {
         self.omega_scale = omega_scale;
     }
 
-    /// Advance the Player by dt, moving `c` toward the model-driven target
-    /// point on the boundary, biased along the Shore's contours.
+    /// Advance the Player by dt toward the model-driven target point.
     ///
     /// * `dt` – frame time in seconds.
-    /// * `h` – transient/hit signal in [0, 1]; near 1 allows crossing contours.
+    /// * `h` – retained for compatibility and ignored.
     /// * `band_gates` – optional per-band jitter modulation.
     ///
-    /// Returns the new `c`. When no mip pyramid is loaded, falls back to a
-    /// plain clamped move toward the target (still audio-driven, no loop).
+    /// Returns the new `c` after clamping the proposed movement.
     pub fn step(
         &mut self,
         dt: f64,
-        h: f64,
+        _h: f64,
         band_gates: Option<&[f64]>,
     ) -> num_complex::Complex64 {
         // Target point on the boundary the model wants to reach.
@@ -412,23 +402,9 @@ impl PlayerState {
         let proposed_re = self.velocity.re * dt;
         let proposed_im = self.velocity.im * dt;
 
-        // Bias the proposed motion along the Shore's contours. `h` gates
-        // the wall (transients make boundary crossing easy) and `energy`
-        // raises the servo's target proximity (loud → near Shore).
-        let (nr, ni) = crate::minimap::contour_biased_step(
-            self.c.re,
-            self.c.im,
-            proposed_re,
-            proposed_im,
-            h.clamp(0.0, 1.0),
-            self.d_star,
-            self.max_step,
-            self.level,
-            self.energy,
-        )
-        .unwrap_or((self.c.re + proposed_re, self.c.im + proposed_im));
-
-        self.c = num_complex::Complex64::new(nr, ni);
+        let magnitude = (proposed_re * proposed_re + proposed_im * proposed_im).sqrt();
+        let scale = if magnitude > self.max_step { self.max_step / magnitude } else { 1.0 };
+        self.c += num_complex::Complex64::new(proposed_re * scale, proposed_im * scale);
         self.c
     }
 }
@@ -468,7 +444,7 @@ pub struct OrbitController {
     /// and drag; the boundary point becomes an attractor rather than a
     /// hard position. Smooths control jitter, adds coasting.
     pub momentum: bool,
-    /// Persistent c position (used only when momentum or shore_bias is on).
+    /// Persistent c position used by momentum.
     pub c: num_complex::Complex64,
     /// Velocity state for refinement 1.
     pub velocity: num_complex::Complex64,
@@ -480,16 +456,6 @@ pub struct OrbitController {
     /// volume. Set via set_thrust() from the runtime's energy signal.
     pub thrust: f64,
     //
-    /// Refinement 2 — SHORE BIAS: route motion through the minimap's
-    /// contour_biased_step so c hugs the Shore. Requires a loaded pyramid;
-    /// silently no-ops without one.
-    pub shore_bias: bool,
-    /// Target shore-proximity for refinement 2's servo.
-    pub d_star: f64,
-    /// Max world-space step per frame for refinement 2.
-    pub max_step: f64,
-    /// Mip level for refinement 2.
-    pub level: usize,
     /// Audio energy in [0, 1] (loudness). Raises the effective target
     /// shore-proximity: loud audio pulls c toward the Shore (domain
     /// contract: Energy governs distance from The Shore).
@@ -546,10 +512,6 @@ impl Default for OrbitController {
             velocity: num_complex::Complex64::new(0.0, 0.0),
             drag: 0.90,
             thrust: 0.0,
-            shore_bias: false,
-            d_star: 0.5,
-            max_step: 0.05,
-            level: 0,
             energy: 0.0,
             manifold_physics: false,
             manifold_config: crate::manifold::ManifoldConfig::default(),
@@ -614,7 +576,6 @@ impl OrbitController {
     /// With all refinement flags off (the default), this is bit-identical
     /// to the May TS controller. Each flag layers ONE PlayerState idea:
     ///   momentum         -> c is persistent state; boundary point attracts
-    ///   shore_bias       -> motion routed through minimap contour biasing
     ///   manifold_physics -> LEGACY ADAPTER to the musically-ignorant manifold
     ///                       kernel (issue #106); transitional, not Controls v2
     pub fn step(
@@ -643,7 +604,7 @@ impl OrbitController {
         }
         let target = num_complex::Complex64::new(base.re + res_re, base.im + res_im);
 
-        if !self.momentum && !self.shore_bias && !self.manifold_physics {
+        if !self.momentum && !self.manifold_physics {
             // Baseline path: c IS the target. Bit-identical to May.
             return target;
         }
@@ -653,13 +614,6 @@ impl OrbitController {
             // (s, alpha, energy) servo into a generalized force covector for
             // the musically-ignorant manifold kernel (issue #106).
             return self.step_manifold(dt, band_gates, h);
-        }
-
-        if !self.momentum {
-            // Shore bias only: move from current c toward the target,
-            // biased along contours. No velocity state.
-            let proposed = target - self.c;
-            return self.apply_shore_bias(proposed.re, proposed.im, h);
         }
 
         // Momentum path: pull toward the target is an acceleration.
@@ -698,35 +652,7 @@ impl OrbitController {
             + num_complex::Complex64::new(a_re, a_im);
         let v_dt = self.velocity.scale(dt);
 
-        if self.shore_bias {
-            self.apply_shore_bias(v_dt.re, v_dt.im, h)
-        } else {
-            self.c = self.c + v_dt;
-            self.c
-        }
-    }
-
-    /// Route a proposed delta through the minimap contour bias (refinement 2).
-    /// Falls back to plain clamped motion when no pyramid is loaded.
-    fn apply_shore_bias(
-        &mut self,
-        du_re: f64,
-        du_im: f64,
-        h: f64,
-    ) -> num_complex::Complex64 {
-        let (nr, ni) = crate::minimap::contour_biased_step(
-            self.c.re,
-            self.c.im,
-            du_re,
-            du_im,
-            h.clamp(0.0, 1.0),
-            self.d_star,
-            self.max_step,
-            self.level,
-            self.energy,
-        )
-        .unwrap_or((self.c.re + du_re, self.c.im + du_im));
-        self.c = num_complex::Complex64::new(nr, ni);
+        self.c += v_dt;
         self.c
     }
 

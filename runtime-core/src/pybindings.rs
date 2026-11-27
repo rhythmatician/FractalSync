@@ -381,26 +381,7 @@ impl OrbitController {
         self.inner.energy = energy.clamp(0.0, 1.0);
     }
 
-    fn set_shore_bias(&mut self, on: bool) {
-        self.inner.shore_bias = on;
-    }
-
-    /// Target shore-proximity for the shore-bias servo.
-    fn set_d_star(&mut self, d_star: f64) {
-        self.inner.d_star = d_star;
-    }
-
-    /// Max world-space step per frame for shore bias.
-    fn set_max_step(&mut self, max_step: f64) {
-        self.inner.max_step = max_step;
-    }
-
-    /// Mip level for the contour step.
-    fn set_level(&mut self, level: usize) {
-        self.inner.level = level;
-    }
-
-    /// Set the persistent c position (momentum/shore-bias paths).
+    /// Set the persistent c position for momentum.
     fn set_c(&mut self, re: f64, im: f64) {
         self.inner.c = num_complex::Complex64::new(re, im);
     }
@@ -759,125 +740,6 @@ fn get_builtin_distance_field_py(name: &str) -> PyResult<(usize, usize, f64, f64
         Ok((rows, cols, xmin, xmax, ymin, ymax)) => Ok((rows, cols, xmin, xmax, ymin, ymax)),
         Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
     }
-}
-
-/// Load the baked mip pyramid (the Map's multi-scale minimaps) from files and
-/// register it as the process-wide pyramid.
-#[pyfunction]
-fn load_mip_pyramid_py(
-    f_bin_path: &str,
-    s_bin_path: &str,
-    meta_path: &str,
-) -> PyResult<(usize, f64, f64, f64, f64)> {
-    let pyr = crate::minimap::load_pyramid_from_files(f_bin_path, s_bin_path, meta_path)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-    let n = pyr.num_levels();
-    let (re_min, re_max, im_min, im_max) = (pyr.re_min, pyr.re_max, pyr.im_min, pyr.im_max);
-    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-    Ok((n, re_min, re_max, im_min, im_max))
-}
-
-/// Install a synthetic mip pyramid for parity tests and local debugging.
-///
-/// Each level plane is `widths[i] * heights[i]` floats (row-major). The same
-/// planes populate both the F (escape) and S (shore-proximity) fields of the
-/// pyramid; tests that need a separable field should call
-/// [`runtime_core.minimap_set_escape_field`] afterwards. Returns the
-/// number of levels installed.
-#[pyfunction]
-fn install_pyramid_py(
-    levels_data: Vec<Vec<f32>>,
-    widths: Vec<usize>,
-    heights: Vec<usize>,
-    re_min: f64,
-    re_max: f64,
-    im_min: f64,
-    im_max: f64,
-) -> PyResult<usize> {
-    let pyr = crate::minimap::MipPyramid::from_levels(
-        levels_data,
-        widths,
-        heights,
-        re_min,
-        re_max,
-        im_min,
-        im_max,
-    )
-    .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-    let n = pyr.num_levels();
-    crate::minimap::set_pyramid(pyr).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-    Ok(n)
-}
-
-/// Clear the process-wide pyramid (test helper).
-#[pyfunction]
-fn clear_pyramid_py() {
-    crate::minimap::clear_pyramid();
-}
-
-/// The Player's full observation at c: 4×81 greys + 8 slope values = 332.
-#[pyfunction]
-fn player_observation_py(py: Python, c_re: f64, c_im: f64) -> PyResult<Vec<f32>> {
-    crate::minimap::with_pyramid(|pyr| {
-        let pyr = pyr.ok_or_else(|| {
-            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded; call load_mip_pyramid_py first")
-        })?;
-        let c = num_complex::Complex64::new(c_re, c_im);
-        pyr.player_observation(c)
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
-            .map_err(|e| e.into())
-            .map(|obs| {
-                let _ = py;
-                obs
-            })
-    })
-}
-
-/// Slope of the shore-proximity field at c on a level.
-#[pyfunction]
-fn minimap_slope_py(c_re: f64, c_im: f64, level: usize) -> PyResult<(f64, f64)> {
-    crate::minimap::with_pyramid(|pyr| {
-        let pyr = pyr.ok_or_else(|| {
-            pyo3::exceptions::PyRuntimeError::new_err("mip pyramid not loaded")
-        })?;
-        let c = num_complex::Complex64::new(c_re, c_im);
-        pyr.slope(c, level)
-            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("c outside map extent"))
-    })
-}
-
-/// Batch shore proximity (S field) sampled at points on a mip level.
-#[pyfunction]
-fn minimap_shore_proximity_batch_py(
-    re: Vec<f64>,
-    im: Vec<f64>,
-    level: usize,
-) -> PyResult<Vec<f32>> {
-    if re.len() != im.len() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "re/im length mismatch",
-        ));
-    }
-    crate::minimap::shore_proximity_batch(&re, &im, level)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
-}
-
-/// Contour-biased integrator step for Physics. Returns (new_re, new_im).
-#[pyfunction]
-#[pyo3(signature = (c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy=0.0))]
-fn contour_biased_step_py(
-    c_re: f64,
-    c_im: f64,
-    u_re: f64,
-    u_im: f64,
-    h: f64,
-    d_star: f64,
-    max_step: f64,
-    level: usize,
-    energy: f64,
-) -> PyResult<(f64, f64)> {
-    crate::minimap::contour_biased_step(c_re, c_im, u_re, u_im, h, d_star, max_step, level, energy)
-        .map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
 /// Mandelbrot distance estimate. Accepts:
@@ -1573,7 +1435,7 @@ fn debug_terrain_patch(
 /// Deep-zoom unsigned distance field for the minimap (issue #111 feedback:
 /// the minimap is a Mandelbrot deep zoom whose zoom level follows the
 /// player). Resolution-unlimited escape-iteration estimator — resolves
-/// structure where the baked mip pyramid runs out of texels. Returns a
+/// structure at small scales. Returns a
 /// list of unsigned distances (0 inside the set), one per input point.
 #[pyfunction]
 #[pyo3(signature = (re, im))]
@@ -2451,14 +2313,6 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(sample_distance_field_py, m)?)?;
     m.add_function(wrap_pyfunction!(get_builtin_distance_field_py, m)?)?;
-    // Minimap / mip pyramid (the Player's windows onto the Map)
-    m.add_function(wrap_pyfunction!(load_mip_pyramid_py, m)?)?;
-    m.add_function(wrap_pyfunction!(install_pyramid_py, m)?)?;
-    m.add_function(wrap_pyfunction!(clear_pyramid_py, m)?)?;
-    m.add_function(wrap_pyfunction!(player_observation_py, m)?)?;
-    m.add_function(wrap_pyfunction!(minimap_slope_py, m)?)?;
-    m.add_function(wrap_pyfunction!(minimap_shore_proximity_batch_py, m)?)?;
-    m.add_function(wrap_pyfunction!(contour_biased_step_py, m)?)?;
     m.add_function(wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;
     // Alias without the _py suffix (tests and distance_utils use this name)
     m.add("mandelbrot_distance_estimate", wrap_pyfunction!(mandelbrot_distance_estimate_py, m)?)?;

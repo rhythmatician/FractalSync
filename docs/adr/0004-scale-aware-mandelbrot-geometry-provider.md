@@ -3,6 +3,14 @@
 Status: Accepted (2026-09-07) — implemented by #145
 Related: #120, #145, #84, #111, #137, #138
 
+## Amendment: retire the F/S pyramid
+
+The baked F/S mip pyramid and its Player observation and shore-bias paths
+are retired. References below to retaining the pyramid record the earlier
+decision and no longer prescribe the current implementation. The cockpit
+minimap computes its view directly. This amendment does not change the
+geometry provider or adopt the experimental operational field.
+
 This ADR records the destination architecture for the Mandelbrot geometry consumed by FractalSync Physics.
 
 It does **not** reopen the scale-relative metric adopted by issue #120. It changes the representation that supplies the signed-distance geometry from which that metric is derived.

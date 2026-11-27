@@ -38,7 +38,7 @@ fn controls(drive: f64) -> MotionControls {
 
 #[test]
 fn snapshot_version_is_pinned() {
-    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/5");
+    assert_eq!(DEBUG_SNAPSHOT_VERSION, "debug-snapshot/6");
 }
 
 #[test]
@@ -289,64 +289,6 @@ fn snapshot_reports_last_step_energy_delta() {
     let snap = ctrl.debug_snapshot().expect("snapshot");
     let delta = snap.diagnostics.last_delta_total.expect("delta recorded");
     assert!(delta.is_finite());
-}
-
-#[test]
-fn snapshot_map_is_unavailable_without_pyramid() {
-    let _g = lock();
-    runtime_core::minimap::clear_pyramid();
-    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
-        .expect("snapshot");
-    assert!(!snap.map.pyramid_loaded);
-    assert!(snap.map.shore_proximity.is_none());
-    assert!(snap.map.minimap_window.is_none());
-    assert!(snap.map.extent.is_none());
-}
-
-#[test]
-fn snapshot_map_reuses_canonical_pyramid() {
-    let _g = lock();
-    // Synthetic 2-level pyramid over the canonical bake extent.
-    let re_min = -2.0;
-    let re_max = 1.0;
-    let im_min = -1.5;
-    let im_max = 1.5;
-    let w0 = 8usize;
-    let mut l0 = Vec::with_capacity(w0 * w0);
-    for _r in 0..w0 {
-        for _c in 0..w0 {
-            l0.push(0.5f32);
-        }
-    }
-    let mut levels = vec![l0];
-    let mut widths = vec![w0];
-    let mut heights = vec![w0];
-    for size in [4usize, 1, 1, 1, 1, 1] {
-        levels.push(vec![0.75f32; size * size]);
-        widths.push(size);
-        heights.push(size);
-    }
-    let pyr = runtime_core::minimap::MipPyramid::from_levels(
-        levels, widths, heights, re_min, re_max, im_min, im_max,
-    )
-    .expect("synthetic pyramid");
-    runtime_core::minimap::set_pyramid(pyr).expect("install pyramid");
-
-    let snap = snapshot_from_state(Complex64::new(0.0, 0.0), (0.0, 0.0), None, None, &ManifoldConfig::default(), None)
-        .expect("snapshot");
-
-    assert!(snap.map.pyramid_loaded);
-    assert_eq!(
-        snap.map.extent,
-        Some([re_min, re_max, im_min, im_max]),
-        "extent comes from the canonical pyramid"
-    );
-    let window = snap.map.minimap_window.expect("9x9 window present");
-    assert_eq!(window.len(), 81, "window is the canonical 9x9 grid");
-    let s = snap.map.shore_proximity.expect("S at c present");
-    assert!((0.0..=1.0).contains(&s));
-
-    runtime_core::minimap::clear_pyramid();
 }
 
 #[test]
@@ -683,55 +625,4 @@ fn debug_snapshot_serializes_camel_case() {
     let json = serde_json::to_string(&snap).expect("serialize");
     assert!(json.contains("\"timeSeconds\""), "wire format is camelCase: {json}");
     assert!(json.contains("\"signedDistance\""), "wire format is camelCase: {json}");
-    assert!(json.contains("\"pyramidLoaded\""), "wire format is camelCase: {json}");
-}
-
-#[test]
-fn shore_proximity_batch_matches_single_samples() {
-    let _g = lock();
-    // Synthetic pyramid over the canonical bake extent.
-    let w0 = 8usize;
-    let mut levels = vec![vec![0.5f32; w0 * w0]];
-    let mut widths = vec![w0];
-    let mut heights = vec![w0];
-    for size in [4usize, 1, 1, 1, 1, 1] {
-        levels.push(vec![0.75f32; size * size]);
-        widths.push(size);
-        heights.push(size);
-    }
-    let pyr = runtime_core::minimap::MipPyramid::from_levels(
-        levels,
-        widths,
-        heights,
-        -2.0,
-        1.0,
-        -1.5,
-        1.5,
-    )
-    .expect("synthetic pyramid");
-    runtime_core::minimap::set_pyramid(pyr).expect("install pyramid");
-
-    // Batch of points spanning the extent; batch values must equal the
-    // canonical single-point sampler (same field, same level).
-    let pts = [
-        (-2.0, -1.5),
-        (0.0, 0.0),
-        (0.9, 1.4),
-        (-1.0, 0.5),
-    ];
-    let (re, im): (Vec<f64>, Vec<f64>) = pts.iter().copied().unzip();
-    let batch = runtime_core::minimap::shore_proximity_batch(&re, &im, 0)
-        .expect("batch sample");
-    assert_eq!(batch.len(), pts.len());
-    for ((r, i), &b) in pts.iter().zip(batch.iter()) {
-        let single = runtime_core::minimap::with_pyramid(|p| {
-            p.and_then(|pyr| pyr.shore_proximity_at(Complex64::new(*r, *i), 0))
-        });
-        assert_eq!(Some(b), single, "batch must match single at ({r},{i})");
-    }
-
-    // Length mismatch is an error.
-    assert!(runtime_core::minimap::shore_proximity_batch(&re[..2].to_vec(), &im, 0).is_err());
-
-    runtime_core::minimap::clear_pyramid();
 }

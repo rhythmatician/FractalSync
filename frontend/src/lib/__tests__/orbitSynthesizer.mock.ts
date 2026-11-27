@@ -43,9 +43,6 @@ class MockOrbitController {
   drag = 0.9;
   thrust = 0.0;
   energy = 0.0;
-  shore_bias = false;
-  d_star = 0.5;
-  max_step = 0.05;
   manifold_physics = false;
   manifold_drag = 0.1;
   manifold_error: string | null = null;
@@ -200,10 +197,9 @@ class MockOrbitController {
         }
       : null;
     return {
-      version: 'debug-snapshot/2',
+      version: 'debug-snapshot/6',
       timeSeconds: this.step_time_seconds,
       action,
-      map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
       physics: {
         c,
         velocity: v,
@@ -248,7 +244,7 @@ class MockOrbitController {
         im += gate * 0.05 * Math.sin(phase);
       }
     }
-    if (!this.momentum && !this.shore_bias) {
+    if (!this.momentum) {
       // Baseline path: c IS the target (bit-identical to May).
       this.c_re = re;
       this.c_im = im;
@@ -287,8 +283,6 @@ class MockPlayerState {
   v_re = 0;
   v_im = 0;
   drag = 0.9;
-  level: number;
-  d_star: number;
   max_step: number;
 
   constructor(lobe: number, sub_lobe: number, s: number, alpha: number) {
@@ -297,8 +291,6 @@ class MockPlayerState {
     this.s = s;
     this.alpha = alpha;
     this.omega_scale = 1.0;
-    this.level = 0;
-    this.d_star = 0.5;
     this.max_step = 0.05;
     // Start on the boundary at (s, alpha).
     const start = lobePoint(lobe, sub_lobe, alpha * TWO_PI, s);
@@ -310,12 +302,6 @@ class MockPlayerState {
     return Math.sqrt(this.v_re * this.v_re + this.v_im * this.v_im);
   }
 
-  set_level(v: number) {
-    this.level = v;
-  }
-  set_d_star(v: number) {
-    this.d_star = v;
-  }
   set_max_step(v: number) {
     this.max_step = v;
   }
@@ -356,7 +342,7 @@ class MockPlayerState {
     this.v_im = this.v_im * this.drag + aIm;
     let uRe = this.v_re * dt;
     let uIm = this.v_im * dt;
-    // Clamp to max_step (no pyramid in mock → plain clamped motion).
+    // Clamp to max_step, matching the legacy PlayerState.
     const mag = Math.sqrt(uRe * uRe + uIm * uIm);
     if (mag > this.max_step && mag > 0) {
       const scale = this.max_step / mag;
@@ -479,14 +465,14 @@ export default {
       default_residual_omega_scale: 2.0,
       default_base_omega: 1.0,
       default_orbit_seed: 1337,
-      controller_version: 'orbit-controller/5',
+      controller_version: 'orbit-controller/6',
       feature_version: 'features/2',
       analysis_pipeline_version: 'analysis-pipeline/1',
       controls_version: 'controls/2',
     };
   },
   debugSnapshotMeta() {
-    return { version: 'debug-snapshot/2', canonicalDt: 1024 / 48000 };
+    return { version: 'debug-snapshot/6', canonicalDt: 1024 / 48000 };
   },
   ManifoldConfig: class MockManifoldConfig {
     static defaults() { return new this(0.1, 1e-4, 1, 1, 1 / Math.PI); }
@@ -526,12 +512,6 @@ export default {
       }
     }
     return { n, center: [cx, cy] as [number, number], half, positions, upperZ, signed, realm };
-  },
-  minimapShoreProximityBatch(re: number[], _im: number[], _level: number) {
-    // Mock S field over the canonical extent: a smooth ramp toward the
-    // Shore band at x=0.25 (shape only — the real field comes from the
-    // Rust pyramid). Points outside the extent clamp to the edge value.
-    return Float32Array.from(re.map((x) => Math.max(0, Math.min(1, 1 - Math.abs(x - 0.25) * 2))));
   },
   deepZoomField(re: number[], im: number[]) {
     // Mock deep-zoom DEM: unsigned distance to the boundary (0 inside),

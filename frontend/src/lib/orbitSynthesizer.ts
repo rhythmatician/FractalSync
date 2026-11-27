@@ -69,9 +69,6 @@ interface WasmOrbitController {
   set_drag(drag: number): void;
   set_thrust(thrust: number): void;
   set_energy(energy: number): void;
-  set_shore_bias(on: boolean): void;
-  set_d_star(d_star: number): void;
-  set_max_step(max_step: number): void;
   set_manifold_physics?(on: boolean): void;
   set_manifold_config?(c: unknown): void;
   set_manifold_drag?(d: number): void;
@@ -221,8 +218,6 @@ interface WasmPlayerState {
   readonly c_re: number;
   readonly c_im: number;
   readonly speed: number;
-  set_level(v: number): void;
-  set_d_star(v: number): void;
   set_max_step(v: number): void;
   apply_controls(s: number, alpha: number, omega_scale: number): void;
   set_lobe(lobe: number, sub_lobe: number): void;
@@ -412,62 +407,6 @@ export function createAnalysisTimebase(): import('./analysisTimebase').WasmAnaly
   return new m.AnalysisTimebase();
 }
 
-/**
- * Load the mip pyramid (minimaps) into the wasm runtime so the Player's
- * contour-biased stepper can follow the Shore. Fetches the baked artifacts
- * from the backend API and calls the wasm `set_mip_pyramid` binding.
- *
- * Best-effort: if the artifacts are unavailable, the Player falls back to
- * plain clamped motion (still audio-driven, no closed loop).
- */
-export async function loadMipPyramid(): Promise<boolean> {
-  const m = requireWasm();
-  if (typeof (m as any).set_mip_pyramid !== 'function') {
-    console.warn('[orbitSynthesizer] wasm build has no set_mip_pyramid; minimap disabled');
-    return false;
-  }
-  try {
-    const metaResp = await fetch('/api/minimap/meta', { credentials: 'same-origin' });
-    if (!metaResp.ok) {
-      console.warn('[orbitSynthesizer] mip pyramid metadata unavailable:', metaResp.status);
-      return false;
-    }
-    const meta = await metaResp.json();
-
-    const [fResp, sResp] = await Promise.all([
-      fetch('/api/minimap/field/F', { credentials: 'same-origin' }),
-      fetch('/api/minimap/field/S', { credentials: 'same-origin' }),
-    ]);
-    if (!fResp.ok || !sResp.ok) {
-      console.warn('[orbitSynthesizer] mip pyramid field unavailable');
-      return false;
-    }
-
-    const [fBuf, sBuf] = await Promise.all([fResp.arrayBuffer(), sResp.arrayBuffer()]);
-    const fFlat = new Float32Array(fBuf);
-    const sFlat = new Float32Array(sBuf);
-
-    const widths = new Uint32Array(meta.F.mip_widths);
-    const heights = new Uint32Array(meta.F.mip_heights);
-
-    (m as any).set_mip_pyramid(
-      fFlat,
-      sFlat,
-      widths,
-      heights,
-      meta.re_min,
-      meta.re_max,
-      meta.im_min,
-      meta.im_max
-    );
-    console.log('[orbitSynthesizer] mip pyramid loaded:', widths.length, 'levels');
-    return true;
-  } catch (err) {
-    console.warn('[orbitSynthesizer] failed to load mip pyramid:', err);
-    return false;
-  }
-}
-
 function requireWasm(): WasmModule {
   if (!wasm) {
     throw new Error(
@@ -591,29 +530,6 @@ export class OrbitSynthesizer {
       s.set_drag(drag);
     } else {
       s.drag = drag;
-    }
-  }
-
-  /** Refinement 2: shore bias via minimap contour stepping. Default OFF. */
-  setShoreBias(on: boolean, dStar = 0.5, maxStep = 0.05): void {
-    // wasm-bindgen exposes Rust setters as JS property setters; try the
-    // method form first (mock/test doubles), fall back to properties.
-    const s = this.state as unknown as {
-      shore_bias: boolean;
-      d_star: number;
-      max_step: number;
-      set_shore_bias?: (on: boolean) => void;
-      set_d_star?: (d: number) => void;
-      set_max_step?: (m: number) => void;
-    };
-    if (typeof s.set_shore_bias === 'function' && typeof s.set_d_star === 'function' && typeof s.set_max_step === 'function') {
-      s.set_shore_bias(on);
-      s.set_d_star(dStar);
-      s.set_max_step(maxStep);
-    } else {
-      s.shore_bias = on;
-      s.d_star = dStar;
-      s.max_step = maxStep;
     }
   }
 
