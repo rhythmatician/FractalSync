@@ -6,11 +6,13 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import sys
 import subprocess
 import logging
 from datetime import datetime
+from pathlib import Path
 import traceback
 
 import torch
@@ -136,16 +138,6 @@ def _runtime_analysis_pipeline_version() -> str:
 
 def main():
     """Main training function."""
-    # Configure logging so ControlTrainer messages are visible
-    os.makedirs("logs", exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(levelname)s] %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler("logs/train.log"),
-        ],
-    )
     parser = argparse.ArgumentParser(
         description="Train orbit-based control signal model"
     )
@@ -169,6 +161,12 @@ def main():
         "--use-curriculum",
         action="store_true",
         help="Use curriculum learning with Mandelbrot orbits",
+    )
+    parser.add_argument(
+        "--check-curriculum-feasibility",
+        type=Path,
+        metavar="MANIFEST",
+        help="Report necessary bounds for timed curriculum targets in a JSON manifest and exit",
     )
     parser.add_argument(
         "--curriculum-weight",
@@ -419,6 +417,27 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.check_curriculum_feasibility is not None:
+        from src.curriculum_feasibility import check_curriculum_feasibility
+
+        try:
+            report = check_curriculum_feasibility(args.check_curriculum_feasibility)
+        except (ImportError, OSError, ValueError) as error:
+            parser.error(f"curriculum feasibility check failed: {error}")
+        print(json.dumps(report, indent=2, allow_nan=False))
+        return
+
+    # Configure logging so ControlTrainer messages are visible.
+    os.makedirs("logs", exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler("logs/train.log"),
+        ],
+    )
 
     if not args.skip_parity_check:
         _run_preflight_parity()
