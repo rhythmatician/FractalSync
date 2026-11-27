@@ -151,6 +151,12 @@ mod tests {
         Arc::new(PreparedField::new([-0.5; 2], 0.01, [101; 2], coefficients.collect()).unwrap())
     }
 
+    fn sheared_shore() -> Arc<PreparedField> {
+        let coefficients = (0..101)
+            .flat_map(|y| (0..101).map(move |x| -1.5 + f64::from(x) * 0.01 + f64::from(y) * 0.02));
+        Arc::new(PreparedField::new([-0.5; 2], 0.01, [101; 2], coefficients.collect()).unwrap())
+    }
+
     fn rollout(field: Arc<PreparedField>, dt: f64, lambda_sq: f64) -> FrozenRollout {
         let config = ManifoldConfig {
             epsilon: EPSILON,
@@ -172,6 +178,61 @@ mod tests {
         } else {
             dy * (dx * (start[0] + end[0]) / ruler_squared).ln_1p() / (2.0 * dx)
         }
+    }
+
+    // Independent coframe in the oriented normal/tangent basis of F(x, y) = x + 2y.
+    struct AffineGraphMetric {
+        normal_weight: f64,
+    }
+
+    impl AffineGraphMetric {
+        fn new(lambda_sq: f64) -> Self {
+            Self {
+                normal_weight: 1.0 + 5.0 * lambda_sq / std::f64::consts::LN_2.powi(2),
+            }
+        }
+
+        fn scales(&self, field_value: f64) -> (f64, f64) {
+            (
+                EPSILON.hypot(field_value),
+                EPSILON.hypot(self.normal_weight.sqrt() * field_value),
+            )
+        }
+
+        fn coordinates(&self, [x, y]: [f64; 2], [dx, dy]: [f64; 2]) -> [f64; 2] {
+            let (rho, sigma) = self.scales(x + 2.0 * y);
+            let gradient_length = 5.0_f64.sqrt();
+            [
+                sigma * (dx + 2.0 * dy) / (rho * rho * gradient_length),
+                (-2.0 * dx + dy) / (rho * gradient_length),
+            ]
+        }
+
+        fn chord_angle(&self, [x0, y0]: [f64; 2], [x1, y1]: [f64; 2]) -> f64 {
+            let f0 = x0 + 2.0 * y0;
+            let f1 = x1 + 2.0 * y1;
+            let across = f1 - f0;
+            let along = -2.0 * (x1 - x0) + (y1 - y0);
+            let (rho0, sigma0) = self.scales(f0);
+            if across == 0.0 {
+                return along * f0 / (rho0 * sigma0);
+            }
+
+            // Evaluate the log of the endpoint ratio after rationalizing the
+            // difference of square roots, so close endpoints keep precision.
+            let (rho1, sigma1) = self.scales(f1);
+            let root_weight = self.normal_weight.sqrt();
+            let relative_change = across
+                * (f1 + f0)
+                * (root_weight / (rho1 + rho0) + self.normal_weight / (sigma1 + sigma0))
+                / (root_weight * rho0 + sigma0);
+            along * relative_change.ln_1p() / (root_weight * across)
+        }
+    }
+
+    fn unsigned_angle_difference(left: f64, right: f64) -> f64 {
+        let delta = left - right;
+        delta.sin().atan2(delta.cos()).abs()
     }
 
     #[test]
@@ -211,6 +272,72 @@ mod tests {
             // would keep an exact metric-unit norm and leave this angle error.
             assert!((theta - angle).abs() > 0.1);
             previous_error = error;
+        }
+    }
+
+    #[test]
+    fn moving_sheared_transport_refines_toward_the_analytic_chord_angles() {
+        let field = sheared_shore();
+        let lambda_sq = 0.7;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let conformal = AffineGraphMetric::new(0.0);
+        let initial_axis = [0.9, -0.1];
+        let duration = 0.32;
+        for (route, initial, velocity, turn_rate) in [
+            ("positive", [0.04, 0.05], [-0.12, 0.4], 0.9),
+            ("crossing", [-0.025, -0.01], [0.42, 0.25], -0.65),
+        ] {
+            let mut previous_error = f64::INFINITY;
+            for count in [8, 16, 32] {
+                let rollout = rollout(field.clone(), duration / f64::from(count), lambda_sq);
+                let mut state = rollout.initial_state(initial, velocity).unwrap();
+                let mut axis = initial_axis;
+                let [ax, ay] = graph.coordinates(initial, axis);
+                let initial_angle = ay.atan2(ax);
+                let mut minimum_field = initial[0] + 2.0 * initial[1];
+                let mut graph_turn = 0.0;
+                let mut conformal_turn = 0.0;
+                for _ in 0..count {
+                    let (_, trace) = rollout
+                        .attempt_step_with_trace(&mut state, [0.0; 2])
+                        .unwrap();
+                    assert_eq!(trace.endpoints().len(), 5);
+                    let frame = rollout
+                        .transport_endpoint_chords(&trace, axis, turn_rate)
+                        .unwrap();
+                    axis = frame.axis;
+                    for pair in trace.endpoints().windows(2) {
+                        graph_turn += graph.chord_angle(pair[0].position, pair[1].position);
+                        conformal_turn += conformal.chord_angle(pair[0].position, pair[1].position);
+                        let [x, y] = pair[1].position;
+                        minimum_field = minimum_field.min(x + 2.0 * y);
+                    }
+                    let [ax, ay] = graph.coordinates(state.position, frame.axis);
+                    let [bx, by] = graph.coordinates(state.position, frame.companion);
+                    assert!((ax.hypot(ay) - 1.0).abs() < 2e-13);
+                    assert!((bx.hypot(by) - 1.0).abs() < 2e-13);
+                    assert!((ax * bx + ay * by).abs() < 2e-13);
+                    assert!(ax * by - ay * bx > 0.0);
+                }
+
+                let [ax, ay] = graph.coordinates(state.position, axis);
+                let expected = initial_angle + duration * turn_rate + graph_turn;
+                let error = unsigned_angle_difference(ay.atan2(ax), expected);
+                let conformal_gap = unsigned_angle_difference(graph_turn, conformal_turn);
+                eprintln!(
+                    "{route}, {count}: angle error {error:e}, conformal gap {conformal_gap:e}"
+                );
+                assert!(error < 0.65 * previous_error, "{route}, {count}: {error:e}");
+                assert!(
+                    conformal_gap > 0.5,
+                    "{route}, {count}: {graph_turn:e} vs {conformal_turn:e}"
+                );
+                assert_ne!(minimum_field, 0.0);
+                assert_eq!(minimum_field < 0.0, route == "crossing");
+                assert!(state.position[0] + 2.0 * state.position[1] > 0.0);
+                previous_error = error;
+            }
+            assert!(previous_error < 0.02, "{route}: {previous_error:e}");
         }
     }
 
@@ -286,13 +413,8 @@ mod tests {
 
     #[test]
     fn analytic_sheared_metric_gives_an_oriented_unit_frame() {
-        let coefficients = (0..101)
-            .flat_map(|y| (0..101).map(move |x| -1.5 + f64::from(x) * 0.01 + f64::from(y) * 0.02));
-        let field = Arc::new(
-            PreparedField::new([-0.5; 2], 0.01, [101; 2], coefficients.collect()).unwrap(),
-        );
         let lambda_sq = 0.7;
-        let rollout = rollout(field, 0.2, lambda_sq);
+        let rollout = rollout(sheared_shore(), 0.2, lambda_sq);
         let point = [0.04, 0.05];
         let mut state = rollout.initial_state(point, [0.0; 2]).unwrap();
         let (_, trace) = rollout
