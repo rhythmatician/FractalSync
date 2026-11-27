@@ -85,6 +85,118 @@ pub struct Gesture {
     pub excursion: f64,
 }
 
+/// Experimental bounded pursuit of a reference through the normal Controls seam.
+pub struct GestureTracker {
+    position: num_complex::Complex64,
+    velocity: (f64, f64),
+    config: crate::manifold::ManifoldConfig,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct TrackingSample {
+    pub reference: [f64; 2],
+    pub position: [f64; 2],
+    pub velocity: [f64; 2],
+    pub metric_lag: f64,
+    pub throttle: f64,
+    pub saturated: bool,
+    pub energy: f64,
+    pub control_work: f64,
+    pub friction_work: f64,
+    pub energy_residual: f64,
+}
+
+impl GestureTracker {
+    pub fn new(position: [f64; 2], velocity: [f64; 2]) -> Result<Self, String> {
+        if !position
+            .iter()
+            .chain(velocity.iter())
+            .all(|v| v.is_finite())
+            || position[0].hypot(position[1]) >= 2.0
+        {
+            return Err("invalid initial tracking state".into());
+        }
+        Ok(Self {
+            position: num_complex::Complex64::new(position[0], position[1]),
+            velocity: (velocity[0], velocity[1]),
+            config: Default::default(),
+        })
+    }
+
+    /// One fixed-time Physics step. A failed geometry query leaves state untouched.
+    pub fn step(&mut self, reference: [f64; 2], dt: f64) -> Result<TrackingSample, String> {
+        if !reference.iter().all(|v| v.is_finite())
+            || reference[0].hypot(reference[1]) >= 2.0
+            || !dt.is_finite()
+            || dt <= 0.0
+            || dt > 0.02
+        {
+            return Err("invalid reference or tracking step".into());
+        }
+        let error = [
+            reference[0] - self.position.re,
+            reference[1] - self.position.im,
+        ];
+        let command = [
+            4.0 * error[0] - 2.0 * self.velocity.0,
+            4.0 * error[1] - 2.0 * self.velocity.1,
+        ];
+        let metric = crate::manifold::induced_metric(self.position, &self.config)?;
+        let norm = |v: [f64; 2]| {
+            (v[0] * (metric[0][0] * v[0] + metric[0][1] * v[1])
+                + v[1] * (metric[1][0] * v[0] + metric[1][1] * v[1]))
+                .sqrt()
+        };
+        let effort = norm(command);
+        if !effort.is_finite() {
+            return Err("invalid tracking metric".into());
+        }
+        let direction_norm = command[0].hypot(command[1]);
+        let direction = if direction_norm > 0.0 {
+            [command[0] / direction_norm, command[1] / direction_norm]
+        } else {
+            [0.0; 2]
+        };
+        let controls = crate::controls::MotionControls {
+            direction,
+            throttle: effort.min(1.0),
+            brake: 0.0,
+            grip: 0.5,
+            impulse: 0.0,
+        };
+        let (position, velocity, info) = crate::controls::integrate_motion_controls(
+            self.position,
+            self.velocity,
+            &controls,
+            dt,
+            &self.config,
+        )?;
+        let end_metric = crate::manifold::induced_metric(position, &self.config)?;
+        let end_error = [reference[0] - position.re, reference[1] - position.im];
+        let lag = (end_error[0]
+            * (end_metric[0][0] * end_error[0] + end_metric[0][1] * end_error[1])
+            + end_error[1] * (end_metric[1][0] * end_error[0] + end_metric[1][1] * end_error[1]))
+            .sqrt();
+        if !lag.is_finite() {
+            return Err("invalid tracking lag".into());
+        }
+        self.position = position;
+        self.velocity = velocity;
+        Ok(TrackingSample {
+            reference,
+            position: [position.re, position.im],
+            velocity: [velocity.0, velocity.1],
+            metric_lag: lag,
+            throttle: controls.throttle,
+            saturated: effort > 1.0,
+            energy: info.total,
+            control_work: info.ledger.control_work,
+            friction_work: info.ledger.friction_work,
+            energy_residual: info.ledger.residual,
+        })
+    }
+}
+
 impl Gesture {
     /// Intended displacement in a metric-orthonormal tangent frame.
     pub fn displacement(&self, a: Source, b: Source) -> Result<[f64; 2], &'static str> {

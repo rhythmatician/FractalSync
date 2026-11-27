@@ -114,3 +114,45 @@ fn local_mapping_preserves_intrinsic_length_at_anchor() {
         )
         .is_err());
 }
+
+#[test]
+fn tracking_a_fixed_reference_uses_bounded_controls_and_physics() {
+    use runtime_core::two_source_gesture::GestureTracker;
+    let _guard = runtime_core::distance_field::global_test_mutex()
+        .lock()
+        .unwrap();
+    runtime_core::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
+    let mut tracker = GestureTracker::new([-0.5, 0.1], [0.0, 0.0]).unwrap();
+    let target = [-0.4, 0.1];
+    let initial = (target[0] + 0.5_f64).abs();
+    let mut sample = tracker.step(target, 0.01).unwrap();
+    for _ in 0..199 {
+        sample = tracker.step(target, 0.01).unwrap();
+    }
+    assert!(
+        (sample.position[0] - target[0]).abs() < initial,
+        "{sample:?}"
+    );
+    assert!((0.0..=1.0).contains(&sample.throttle));
+    assert!(sample.energy.is_finite() && sample.control_work.is_finite());
+    assert_ne!(
+        sample.position, target,
+        "Physics must realize the target, not assign it"
+    );
+}
+
+#[test]
+fn rejected_reference_does_not_advance_tracker() {
+    use runtime_core::two_source_gesture::GestureTracker;
+    let _guard = runtime_core::distance_field::global_test_mutex()
+        .lock()
+        .unwrap();
+    runtime_core::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
+    let mut tracker = GestureTracker::new([-0.5, 0.1], [0.0, 0.0]).unwrap();
+    let mut control = GestureTracker::new([-0.5, 0.1], [0.0, 0.0]).unwrap();
+    assert!(tracker.step([f64::NAN, 0.0], 0.01).is_err());
+    let after = tracker.step([-0.4, 0.1], 0.01).unwrap();
+    let expected = control.step([-0.4, 0.1], 0.01).unwrap();
+    assert_eq!(after.position, expected.position);
+    assert_eq!(after.velocity, expected.velocity);
+}
