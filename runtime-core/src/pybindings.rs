@@ -985,6 +985,42 @@ fn geometry_provider_query(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<S
     serde_json::to_string(&jet).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
 }
 
+/// Evaluate an explicitly scheduled curriculum target using Rust geometry.
+#[pyfunction]
+#[pyo3(signature = (start, target, metric, intrinsic_tolerance, start_sample, deadline_sample, kinetic_action_budget=None))]
+fn evaluate_curriculum_feasibility(
+    start: (f64, f64),
+    target: (f64, f64),
+    metric: &str,
+    intrinsic_tolerance: f64,
+    start_sample: u64,
+    deadline_sample: u64,
+    kinetic_action_budget: Option<f64>,
+) -> PyResult<String> {
+    use crate::curriculum_feasibility::{check_curriculum_target, CurriculumMetric, CurriculumTarget};
+    let metric = match metric {
+        "runtimeMap" => CurriculumMetric::RuntimeMap,
+        "idealDistanceGraph" => CurriculumMetric::IdealDistanceGraph,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "unknown curriculum metric",
+            ))
+        }
+    };
+    let report = check_curriculum_target(CurriculumTarget {
+        start: [start.0, start.1],
+        target: [target.0, target.1],
+        metric,
+        intrinsic_tolerance,
+        start_sample,
+        deadline_sample,
+        kinetic_action_budget,
+    })
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&report)
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+}
+
 #[pyfunction]
 fn geometry_provider_version() -> String {
     crate::geometry_provider::GEOMETRY_PROVIDER_VERSION.to_string()
@@ -2338,6 +2374,7 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(manifold_wall_force, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_christoffel_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(geometry_provider_query, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_curriculum_feasibility, m)?)?;
     m.add_function(wrap_pyfunction!(geometry_provider_version, m)?)?;
     m.add_function(wrap_pyfunction!(geometry_provider_scale_alpha, m)?)?;
     m.add_function(wrap_pyfunction!(manifold_geodesic_acceleration, m)?)?;

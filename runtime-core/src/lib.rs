@@ -43,6 +43,7 @@ pub mod manifold;
 pub mod proxies;
 pub mod controls;
 pub mod crossing_feasibility;
+pub mod curriculum_feasibility;
 pub mod debug;
 pub mod hyperbolic;
 pub mod model_io;

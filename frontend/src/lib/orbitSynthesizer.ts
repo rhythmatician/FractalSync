@@ -78,6 +78,17 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  mapReplayNavigation?(
+    selectedRoute: number,
+    targetX: number,
+    targetY: number,
+    radius: number,
+    rankingFrame: number,
+    positions: Float64Array,
+    validSteps: Uint8Array,
+    routeLengths: Uint32Array,
+    firstVelocities: Float64Array,
+  ): unknown;
   decodeOrbitControlJson(values: Float64Array, kBands: number): string;
   decodeControlsV2Json(values: Float64Array): string;
   decodeLegacyVisualJson(values: Float64Array, audioReactive: boolean, rms: number, onset: number): string;

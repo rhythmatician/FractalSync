@@ -18,12 +18,13 @@ use crate::map_certificates::{
     certify_mandelbrot_endpoint, displacement_lower, MandelbrotEndpoint,
 };
 
-/// Positions and step-success flags of a Controls replay, including its
-/// common starting position. Supply 1 for a successful step and 0 for a
-/// failed step. Only the uninterrupted successful prefix can witness arrival.
+/// A Controls replay with its first recorded velocity. Supply 1 for a
+/// successful step and 0 for a failed step. Only the uninterrupted successful
+/// prefix can witness arrival.
 pub struct MapRoute<'a> {
     pub positions: &'a [[f64; 2]],
     pub valid_steps: &'a [u8],
+    pub first_velocity: [f64; 2],
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -48,6 +49,8 @@ pub struct MapNavigationReport {
     pub anisotropy: f64,
     pub start_lower_bound: Option<f64>,
     pub start_crossing_certified: bool,
+    /// Original indices for the matching launch. The scans index into this list.
+    pub candidate_indices: Vec<usize>,
     pub candidate_lower_bounds: Vec<Option<f64>>,
     pub valid_prefix_lengths: Vec<usize>,
     pub ranking_frame: usize,
@@ -62,17 +65,25 @@ pub struct MapNavigationReport {
 /// the same witnessed arrivals. It also records how many comparisons each
 /// order took to surface its first witness.
 ///
-/// Route data must come from Controls replays sharing the starting state and
-/// physics profile. This diagnostic only sees positions and step outcomes.
+/// Compare replays matching the selected route's first recorded position and
+/// velocity. All inputs must share the supplied physics profile.
 pub fn evaluate_map_navigation(
-    start: [f64; 2],
+    selected_route: usize,
     target_center: [f64; 2],
     target_radius: f64,
     ranking_frame: usize,
     config: &ManifoldConfig,
     candidates: &[MapRoute<'_>],
 ) -> Result<MapNavigationReport, String> {
+    let selected = candidates
+        .get(selected_route)
+        .ok_or("Select a Map replay with recorded frames")?;
+    let &start = selected
+        .positions
+        .first()
+        .ok_or("Select a Map replay with recorded frames")?;
     if !finite_point(start)
+        || !finite_point(selected.first_velocity)
         || !finite_point(target_center)
         || !target_radius.is_finite()
         || target_radius < 0.0
@@ -90,10 +101,16 @@ pub fn evaluate_map_navigation(
             "Map navigation requires a finite positive ruler floor and finite anisotropy".into(),
         );
     }
-    let prefixes = candidates
-        .iter()
-        .map(|route| valid_prefix(route, start))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut candidate_indices = Vec::new();
+    let mut prefixes = Vec::new();
+    for (index, route) in candidates.iter().enumerate() {
+        if route.positions.first() == Some(&start)
+            && route.first_velocity == selected.first_velocity
+        {
+            candidate_indices.push(index);
+            prefixes.push(valid_prefix(route)?);
+        }
+    }
 
     let mut certificate_queries = 0;
     let mut certify = |point| {
@@ -169,6 +186,7 @@ pub fn evaluate_map_navigation(
         anisotropy: metric.a,
         start_lower_bound,
         start_crossing_certified,
+        candidate_indices,
         candidate_lower_bounds,
         valid_prefix_lengths: prefixes.iter().map(|path| path.len()).collect(),
         ranking_frame,
@@ -178,14 +196,11 @@ pub fn evaluate_map_navigation(
     })
 }
 
-fn valid_prefix<'a>(route: &MapRoute<'a>, start: [f64; 2]) -> Result<&'a [[f64; 2]], String> {
-    if route.positions.first() != Some(&start)
-        || route.positions.len() != route.valid_steps.len()
+fn valid_prefix<'a>(route: &MapRoute<'a>) -> Result<&'a [[f64; 2]], String> {
+    if route.positions.len() != route.valid_steps.len()
         || route.valid_steps.iter().any(|&flag| flag > 1)
     {
-        return Err(
-            "Map routes need the common start and one binary success flag per frame".into(),
-        );
+        return Err("Map routes need one binary success flag per frame".into());
     }
     let length = route
         .valid_steps
@@ -246,7 +261,7 @@ mod tests {
         let aborted = [START, [0.25, 0.0], TARGET, TARGET];
         let initial = [START];
         let report = evaluate_map_navigation(
-            START,
+            0,
             TARGET,
             0.0,
             2,
@@ -255,24 +270,39 @@ mod tests {
                 MapRoute {
                     positions: &stuck,
                     valid_steps: &[1, 1, 1],
+                    first_velocity: [0.0, 0.0],
                 },
                 MapRoute {
                     positions: &hit,
                     valid_steps: &[1, 1, 1],
+                    first_velocity: [1.0, 0.0],
+                },
+                MapRoute {
+                    positions: &hit,
+                    valid_steps: &[1, 1, 1],
+                    first_velocity: [0.0, 0.0],
                 },
                 MapRoute {
                     positions: &aborted,
                     valid_steps: &[1, 1, 0, 1],
+                    first_velocity: [0.0, 0.0],
+                },
+                MapRoute {
+                    positions: &[TARGET],
+                    valid_steps: &[1],
+                    first_velocity: [0.0, 0.0],
                 },
                 MapRoute {
                     positions: &initial,
                     valid_steps: &[1],
+                    first_velocity: [0.0, 0.0],
                 },
             ],
         )
         .unwrap();
         assert!(report.start_crossing_certified);
         assert!(report.start_lower_bound.unwrap() > 0.0);
+        assert_eq!(report.candidate_indices, [0, 2, 3, 5]);
         assert_eq!(report.valid_prefix_lengths, [3, 3, 2, 1]);
         assert_eq!(report.baseline.arrivals, [None, Some(2), None, None]);
         assert_eq!(report.bounded.arrivals, report.baseline.arrivals);
@@ -288,7 +318,7 @@ mod tests {
         // upper ruler, so a valid ambient target can have no usable bound.
         let path = [START, TARGET];
         let report = evaluate_map_navigation(
-            START,
+            0,
             TARGET,
             f64::MAX,
             1,
@@ -297,10 +327,12 @@ mod tests {
                 MapRoute {
                     positions: &path,
                     valid_steps: &[1, 1],
+                    first_velocity: [0.0, 0.0],
                 },
                 MapRoute {
                     positions: &path,
                     valid_steps: &[1, 1],
+                    first_velocity: [0.0, 0.0],
                 },
             ],
         )
@@ -313,16 +345,17 @@ mod tests {
     }
 
     #[test]
-    fn replay_from_a_different_start_is_rejected() {
+    fn selected_route_requires_recorded_frames() {
         assert!(evaluate_map_navigation(
-            START,
+            0,
             TARGET,
             0.0,
             0,
             &ManifoldConfig::default(),
             &[MapRoute {
-                positions: &[TARGET],
-                valid_steps: &[1]
+                positions: &[],
+                valid_steps: &[],
+                first_velocity: [0.0, 0.0],
             }],
         )
         .is_err());

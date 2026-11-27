@@ -35,6 +35,7 @@ import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVaria
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import { JuliaSensitivityBookmark } from './JuliaSensitivityBookmark';
+import { MapReplayNavigation } from './MapReplayNavigation';
 import {
   MINIMAP_SIZE,
   paintMinimap,
@@ -623,6 +624,19 @@ export function DebugCockpit(): JSX.Element {
         {!ready && !error && <p style={{ fontSize: 12 }}>initializing wasm…</p>}
 
         <div hidden={playerView}><JuliaSensitivityBookmark /></div>
+
+        {!playerView && cockpitMode === 'REPLAY' && runs && (
+          <MapReplayNavigation
+            routes={runs}
+            selected={selected}
+            frameIndex={frameIdx}
+            inspectArrival={(runIndex, arrivalFrame) => {
+              setSelected(runIndex);
+              setFrameIdx(arrivalFrame);
+              setPlaying(false);
+            }}
+          />
+        )}
 
         {runs && (
           <div style={{ marginBottom: 12 }}>

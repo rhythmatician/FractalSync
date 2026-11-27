@@ -41,12 +41,15 @@ rtk proxy cargo run --release --manifest-path runtime-core/Cargo.toml --example 
 
 ## Controls replays on the Map
 
-The Debug Cockpit can compare its existing Controls v2 replays against a
-closed ambient target ball. The diagnostic uses routes with a shared starting
-state and physics profile. It ranks the routes by the lower bound from a
-shared recorded frame to the target, then scans each successful prefix for
-the first recorded state in the ball. A missing bound receives zero priority
-and tied candidates keep their input order.
+The Debug Cockpit compares its Controls v2 replays against a closed ambient
+target ball. In Replay, choose a route, pause at a comparison frame, and open
+**Map target comparison**. Rust selects the replays that match the first
+recorded position and velocity, sampled after the first Controls step. These
+replays use the default physics profile. It ranks the routes by the remaining
+ideal lower bound at the displayed frame and scans each successful prefix for
+the first sampled state in the ball. An unavailable bound has zero priority,
+and ties keep recording order. Select **Inspect arrival** to open the first
+witness in the ranked scan.
 
 The [native fixture](../../runtime-core/examples/check_map_navigation.rs)
 replays the four common-start commit variants with the default Rust manifold

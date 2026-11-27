@@ -17,12 +17,16 @@ fn drive(throttle: f64, brake: f64, grip: f64) -> MotionControls {
     }
 }
 
-fn replay(commit: f64) -> (Vec<[f64; 2]>, Vec<u8>) {
+fn replay(commit: f64) -> (Vec<[f64; 2]>, Vec<u8>, [f64; 2]) {
     let mut controller = OrbitController::default();
     let mut positions = Vec::with_capacity(1220);
     let mut valid = Vec::with_capacity(1220);
+    let mut first_velocity = [0.0; 2];
     let mut record = |controls| {
         let c = controller.step_with_controls(DT, &controls);
+        if positions.is_empty() {
+            first_velocity = [controller.velocity.re, controller.velocity.im];
+        }
         positions.push([c.re, c.im]);
         valid.push(u8::from(controller.manifold_error.is_none()));
     };
@@ -38,24 +42,26 @@ fn replay(commit: f64) -> (Vec<[f64; 2]>, Vec<u8>) {
     for _ in 0..300 {
         record(drive(0.4, 0.6, 1.0));
     }
-    (positions, valid)
+    (positions, valid, first_velocity)
 }
 
 fn main() -> Result<(), String> {
     let replays = THROTTLES.map(replay);
-    let candidates = replays.each_ref().map(|(positions, valid_steps)| MapRoute {
-        positions,
-        valid_steps,
-    });
+    let candidates = replays
+        .each_ref()
+        .map(|(positions, valid_steps, first_velocity)| MapRoute {
+            positions,
+            valid_steps,
+            first_velocity: *first_velocity,
+        });
     let start = candidates[0].positions[0];
     let config = OrbitController::default().manifold_config;
     let target = [0.26, 0.0];
     let radius = 0.005;
     let ranking_frame = 650;
-    let report =
-        evaluate_map_navigation(start, target, radius, ranking_frame, &config, &candidates)?;
-    let last_positions = replays.each_ref().map(|(path, _)| path.last());
-    let ranking_positions = replays.each_ref().map(|(path, _)| path[ranking_frame]);
+    let report = evaluate_map_navigation(0, target, radius, ranking_frame, &config, &candidates)?;
+    let last_positions = replays.each_ref().map(|(path, _, _)| path.last());
+    let ranking_positions = replays.each_ref().map(|(path, _, _)| path[ranking_frame]);
     println!(
         "{}",
         json!({
