@@ -12,6 +12,7 @@ saved to checkpoints/c_traces/.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Sequence
@@ -207,14 +208,9 @@ def collect_c_traces(
 
             out = model(x)
             parsed = model.parse_output(out)
-            n = x.shape[0]
-            # Audio energy + transient signals (same features the runtime uses).
-            feat2 = x.view(n, -1, 6) if x.shape[1] % 6 == 0 else x.view(n, -1, 1)
-            _rms_ct = feat2[:, :, 2].mean(dim=1) if feat2.shape[2] >= 3 else torch.zeros(n, device=x.device)
-            _onset_ct = feat2[:, :, 4].mean(dim=1) if feat2.shape[2] >= 5 else torch.zeros(n, device=x.device)
-            energy_ct = torch.sigmoid(_rms_ct)          # [0,1] loudness
-            thrust_ct = energy_ct * 0.06                 # tangential inertia
-            h_ct = torch.clamp(_onset_ct, 0.0, 1.0)      # transient gate
+            # The browser uses the same Rust audio drive calculation.
+            feature_rows: list[list[float]] = x.tolist()
+            has_legacy_layout = x.shape[1] > 0 and x.shape[1] % 6 == 0
 
             # Domain-randomized start (90%: boundary, 10%: dust) seeded per file.
             _seed = abs(hash(audio_file.stem)) % (1 << 31)
@@ -242,19 +238,27 @@ def collect_c_traces(
             )
             ctrl.set_momentum(True)
             ctrl.set_drag(0.90)
-            ctrl.set_thrust(float(thrust_ct[0]))
-            ctrl.set_energy(float(energy_ct[0]))
             ctrl.set_c(float(_ic_re), float(_ic_im))
             c_list: list[complex] = []
-            for i in range(n):
+            for i, row in enumerate(feature_rows):
                 if i > 0:
                     ctrl.apply_controls(
                         float(parsed["s_target"][i]), float(parsed["alpha"][i])
                     )
-                    ctrl.set_thrust(float(thrust_ct[i]))
-                    ctrl.set_energy(float(energy_ct[i]))
+                # Preserve neutral averages for non-legacy layouts.
+                rms, onset = 0.0, 0.0
+                if has_legacy_layout:
+                    averages: dict[str, float] = json.loads(
+                        runtime_core.legacy_audio_feature_averages_json(row)
+                    )
+                    rms, onset = averages["rms"], averages["onset"]
+                drive: dict[str, float] = json.loads(
+                    runtime_core.legacy_orbit_drive_inputs_json(rms, onset)
+                )
+                ctrl.set_thrust(drive["thrust"])
+                ctrl.set_energy(drive["energy"])
                 gates = [float(g) for g in parsed["band_gates"][i]]
-                re, im = ctrl.step(1.0 / 60.0, gates, float(h_ct[i]))
+                re, im = ctrl.step(1.0 / 60.0, gates, drive["transient"])
                 c_list.append(complex(re, im))
             traces[audio_file.stem] = np.asarray(c_list, dtype=np.complex128)
 
