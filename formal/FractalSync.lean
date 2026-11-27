@@ -160,4 +160,8 @@ import FractalSync.ConformalTransportError
 import FractalSync.ConcreteFourSubstepRungeKutta
 import FractalSync.OperationalWindowExit
 
+import FractalSync.KeplerAreaClock
+import FractalSync.KeplerAreaDensity
+import FractalSync.KeplerKinematics
+import FractalSync.KeplerEllipseClock
 /-! Development-time mathematical research for FractalSync. -/
