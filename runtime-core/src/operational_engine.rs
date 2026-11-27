@@ -5,6 +5,9 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+mod frame_transport;
+pub use frame_transport::TransportedFrame;
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Integrator {
     Euler,
@@ -191,13 +194,19 @@ impl MechanicalEndpoint {
 pub struct AcceptedStepTrace {
     endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
     len: usize,
+    rollout_policy: Arc<[ReferenceCut]>,
+    field_id: u64,
+    physics_profile_id: u64,
 }
 
 impl AcceptedStepTrace {
-    fn new(state: &MechanicalState) -> Self {
+    fn new(state: &MechanicalState, rollout: &FrozenRollout) -> Self {
         Self {
             endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
             len: 1,
+            rollout_policy: rollout.cuts.clone(),
+            field_id: state.field_id,
+            physics_profile_id: state.physics_profile_id,
         }
     }
 
@@ -234,6 +243,8 @@ pub(super) fn is_pinned() -> bool {
 }
 
 pub(super) fn check_query(c: Complex64, epsilon: f64) -> Result<(), String> {
+    #[cfg(test)]
+    fixture_queries::record_query(c);
     CONTEXT.with(|context| {
         if let Some(context) = context.borrow_mut().as_mut() {
             context.queries += 1;
@@ -415,7 +426,7 @@ impl FrozenRollout {
         state: &mut MechanicalState,
         control: [f64; 2],
     ) -> Result<(QueryWork, AcceptedStepTrace), String> {
-        let mut trace = AcceptedStepTrace::new(state);
+        let mut trace = AcceptedStepTrace::new(state, self);
         let work = self.attempt_step_inner(state, control, Some(&mut trace))?;
         Ok((work, trace))
     }
@@ -609,6 +620,9 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
         v.0 * (q.0 + drag.0) + v.1 * (q.1 + drag.1),
     ])
 }
+
+#[cfg(test)]
+mod fixture_queries;
 
 #[cfg(test)]
 mod tests {
