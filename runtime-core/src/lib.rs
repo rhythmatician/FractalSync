@@ -33,6 +33,7 @@ pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
 pub mod intrinsic_bounds;
+pub mod map_navigation;
 pub mod shore_distance;
 #[cfg(feature = "experimental-operational-field")]
 pub mod operational_field;
