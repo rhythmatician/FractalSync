@@ -157,3 +157,8 @@ sample of 1.25 from coefficients bounded in magnitude by one.
 The tests also cover missing stencil support, a nonfinite coefficient, a
 bilinear tile, subnormal coefficients, an overflowing cast, raster replacement
 and a prepared-field override.
+
+Lean checks the continuous first-radius and target inequalities given a
+local displacement envelope. The raster coefficient and rounded-matrix
+estimates supply that premise under the numerical conditions above.
+[First-exit proof](../../formal/FractalSync/OperationalWindowExit.lean)
