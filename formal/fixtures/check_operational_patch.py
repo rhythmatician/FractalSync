@@ -365,14 +365,7 @@ def compiled_queries(asset_path: Path, points: list[tuple[Q, Q]], offline: bool)
     return [[Q(struct.unpack(">d", bytes.fromhex(word))[0]) for word in row.split()] for row in rows]
 
 
-def main() -> None:
-    if not __debug__:
-        raise RuntimeError("Verification requires Python assertions")
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("asset", type=Path)
-    parser.add_argument("--offline", action="store_true", help="Build the compiled probe with cached dependencies")
-    args = parser.parse_args()
-    asset_path = args.asset.resolve()
+def retained_asset(asset_path: Path) -> tuple[bytes, tuple[int, int], tuple[Q, Q], Q]:
     source = (ROOT / "runtime-core/src/operational_field.rs").read_text(encoding="utf-8")
     fragment = source[source.index("    pub fn query(&self"):source.index("#[cfg(test)]")]
     assert sha256(fragment.encode()).hexdigest() == SOURCE_SHA, "review changed runtime operation graph"
@@ -383,9 +376,21 @@ def main() -> None:
     assert asset[:8] == b"FSOP0001"
     ox, oy, h, nx, ny, mask = struct.unpack_from("<3d3Q", asset, 8)
     assert mask == 0 and len(asset) == 56 + 8 * nx * ny
-    assert 2 <= CELL[0] < nx - 3 and 2 <= CELL[1] < ny - 3
     origin, spacing = (Q(ox), Q(oy)), Q(h)
     assert spacing > 0
+    return asset, (nx, ny), origin, spacing
+
+
+def main() -> None:
+    if not __debug__:
+        raise RuntimeError("Verification requires Python assertions")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("asset", type=Path)
+    parser.add_argument("--offline", action="store_true", help="Build the compiled probe with cached dependencies")
+    args = parser.parse_args()
+    asset_path = args.asset.resolve()
+    asset, (nx, ny), origin, spacing = retained_asset(asset_path)
+    assert 2 <= CELL[0] < nx - 3 and 2 <= CELL[1] < ny - 3
     coefficients = [
         coefficient_at(asset, nx, x, y)
         for y in range(CELL[1] - 2, CELL[1] + 4)
