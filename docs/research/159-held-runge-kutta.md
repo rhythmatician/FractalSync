@@ -223,3 +223,38 @@ this local interval remain separate work.
 No runtime implementation, parameter, provider contract, dependency pin or
 audit rule changes in this increment. The geometric obligations and draft
 status of PR #164 remain unchanged.
+
+## Executable fixture addresses
+
+The release-mode Rust regression decodes the pinned 256 binary64
+coefficients, verifies the asset byte round trip, and runs 16 outer steps
+for each of the one- and four-substep profiles on the horizon $1/576$.
+It uses the runtime Controls drive at each outer anchor and holds the
+resulting covector during that step.
+[Literal asset](../../formal/fixtures/operational-quadratic.json)
+
+A test-only recorder at the operational provider entry measures every
+attempted stage and endpoint query, including repeated queries for
+forces and energy. The recorder count agrees with the reported query
+work. The test separately checks three interpolated positions per outer
+step. For each tested coordinate, an independently indexed sparse asset
+with only the predicted 36 addresses produces the same jet as the full
+asset. On one query per visited cell, removing any one of those addresses
+refuses the query. A frozen reference refusal at the actual second-stage
+position rolls back the full state in both profiles.
+[Compiled regression](../../runtime-core/src/operational_engine/fixture_queries.rs)
+
+The one-substep run recorded 368 provider calls and the four-substep run
+recorded 1,472. Each run added 48 interpolation probes. All of those
+coordinates selected the same cell in this fixture. The separate
+constant-field rollback tests use missing support at intermediate stages
+and at a weighted outer endpoint.
+
+```powershell
+rtk cargo test --release -p runtime_core --features experimental-operational-field --lib literal_quadratic_rk_queries_require_exactly_the_predicted_stencil -- --nocapture
+```
+
+This exercises the actual machine-selected stencil on a fixed finite
+run. The Lean halo certificate covers exact-real stages and an admitted
+query displacement. A uniform bound relating all rounded stages to
+those exact-real stages remains open in [#181](https://github.com/rhythmatician/FractalSync/issues/181).

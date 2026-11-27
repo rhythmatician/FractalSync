@@ -234,6 +234,8 @@ pub(super) fn is_pinned() -> bool {
 }
 
 pub(super) fn check_query(c: Complex64, epsilon: f64) -> Result<(), String> {
+    #[cfg(test)]
+    fixture_queries::record_query(c);
     CONTEXT.with(|context| {
         if let Some(context) = context.borrow_mut().as_mut() {
             context.queries += 1;
@@ -609,6 +611,9 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
         v.0 * (q.0 + drag.0) + v.1 * (q.1 + drag.1),
     ])
 }
+
+#[cfg(test)]
+mod fixture_queries;
 
 #[cfg(test)]
 mod tests {
