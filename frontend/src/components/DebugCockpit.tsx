@@ -21,7 +21,6 @@ import * as THREE from 'three';
 import {
   CockpitRecorder,
   CANONICAL_DT,
-  DEFAULT_TERRAIN_HALF,
   planTerrainLod,
   riderSurfaceHeight,
   sampleTerrainPatch,
@@ -527,11 +526,12 @@ export function DebugCockpit(): JSX.Element {
     const trail = trajectory.snapshots
       .slice(from, frameIdx + 1)
       .map((s) => [s.physics.c[0], s.physics.c[1]] as [number, number]);
+    const planarSpeed = Math.hypot(...frame.physics.velocity);
     const input: MinimapPaintInput = {
       trail,
       currentC: [frame.physics.c[0], frame.physics.c[1]],
-      // Zoom-with-scale: the window tracks the current LOD patch extent.
-      footprintHalf: sceneRefs.current.lodHalf ?? DEFAULT_TERRAIN_HALF,
+      // Use the current target extent even between terrain mesh rebuilds.
+      footprintHalf: planTerrainLod(frame.physics.rho, planarSpeed).half,
       // FOV triangle: heading from the authoritative planar velocity (the
       // same rule placeRider uses), FOV from the cockpit camera.
       heading:

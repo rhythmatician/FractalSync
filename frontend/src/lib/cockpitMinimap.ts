@@ -2,12 +2,16 @@
  * Cockpit minimap panel renderer (issue #111 Phase A).
  *
  * Renders a Mandelbrot deep zoom centered on the player, with the zoom
- * level matching the in-game horizontal zoom. Self-contained TypeScript
- * escape-time renderer — no wasm, no Python backend dependency.
+ * level following the cockpit terrain scale. The background uses WebGL2
+ * when available, with a CPU fallback.
  *
  * The panel shows: the Mandelbrot set (Shore = boundary), the recent
  * trajectory trail, the current c, and the 3D viewport footprint.
  */
+
+import { createMinimapBackground } from './minimapBackground';
+
+let drawBackground: ReturnType<typeof createMinimapBackground> | undefined;
 
 /** Panel canvas size in pixels (square). 256 for crisp high-res navigation. */
 export const MINIMAP_SIZE = 256;
@@ -68,9 +72,7 @@ export function fovTriangleC(
 
 /**
  * Paint one minimap frame. Renders a Mandelbrot deep zoom centered on the
- * player, with the zoom level matching the in-game horizontal zoom ratio
- * (the terrain patch half-extent). Self-contained TypeScript escape-time
- * renderer — no wasm, no Python backend dependency.
+ * player, using the current target terrain extent.
  */
 export function paintMinimap(
   canvas: HTMLCanvasElement,
@@ -89,7 +91,18 @@ export function paintMinimap(
   const imMin = cy - half;
   const imMax = cy + half;
 
-  // Render the Mandelbrot set via escape-time iteration.
+  if (drawBackground === undefined) drawBackground = createMinimapBackground();
+  if (!drawBackground?.(ctx, size, input.currentC, half)) {
+    paintCpuBackground(ctx, size, reMin, reMax, imMin, imMax);
+  }
+
+  return paintOverlays(ctx, size, input, reMin, reMax, imMin, imMax);
+}
+
+function paintCpuBackground(
+  ctx: CanvasRenderingContext2D, size: number,
+  reMin: number, reMax: number, imMin: number, imMax: number,
+) {
   const image = ctx.createImageData(size, size);
   const maxIter = 192;
   const bailout = 4.0;
@@ -128,6 +141,13 @@ export function paintMinimap(
     }
   }
   ctx.putImageData(image, 0, 0);
+}
+
+function paintOverlays(
+  ctx: CanvasRenderingContext2D, size: number, input: MinimapPaintInput,
+  reMin: number, reMax: number, imMin: number, imMax: number,
+) {
+  const [cx, cy] = input.currentC;
 
   // World -> pixel transform (row 0 = im_max).
   const toPx = (x: number, y: number): [number, number] => [
