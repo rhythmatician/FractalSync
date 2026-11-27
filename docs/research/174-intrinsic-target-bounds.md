@@ -41,6 +41,22 @@ If a route can reach a point \(y\) and then an accepted endpoint with certified 
 
 The radius follows from the checked logarithmic displacement estimate, nonnegativity of remaining cost, and the upper ruler certificate. This is an outer envelope. A point inside it still needs a valid route and valid geometry. Restricted path domains can impose additional costs or remove routes. [Intrinsic sublevel geometry](../../formal/FractalSync/IntrinsicTopology.lean).
 
-The checked scope is the finite-dimensional ideal metric and real arithmetic. Rust navigation integration, numerical outward rounding, provider and topology evidence, graph-cost correspondence, and A* versus Dijkstra tests remain open for #174. The module supplies no Controls or dynamical reachability result.
+## Rust implementation and benchmark
+
+The [Rust bounds](../../runtime-core/src/intrinsic_bounds.rs) accept certified
+endpoint radius intervals, upper rulers, and a lower displacement. They
+combine the compatible two-ended expression with a conservative radial
+contribution. The radial lower bound integrates a piecewise lower bound on the
+density. The canonical radial formula is also returned separately as a
+diagnostic estimate. A Euclidean target ball widens the ruler and radius
+enclosures to cover the whole set, and drops the center's crossing assumption.
+
+The numerical bounds use outward-rounded binary64 arithmetic with bounded
+series for logarithms and the search envelope. They require the caller to
+establish the geometric premises. The [flat-Shore benchmark](174-route-benchmark.md)
+tests cost agreement, target balls, masked edges and reopening against
+Dijkstra with upper-bounded path costs. It disables heuristic pruning when
+metric evidence is missing. Provider correspondence, actual Map query savings
+and integration into a navigation consumer remain with #174 and #138.
 
 `lake build +FractalSync.IntrinsicTargetBounds --wfail` passed with the pinned Lean environment. The module contains 18 proved theorems, including two private lemmas. The transitive axiom check for all 16 public theorems reported only `propext`, `Classical.choice`, and `Quot.sound`.
