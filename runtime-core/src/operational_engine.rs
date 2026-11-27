@@ -166,6 +166,53 @@ pub struct MechanicalState {
     pub physics_profile_id: u64,
 }
 
+const RK4_PROFILE_SUBSTEPS: usize = 4;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MechanicalEndpoint {
+    pub position: [f64; 2],
+    pub velocity: [f64; 2],
+    pub mechanical_time: f64,
+}
+
+impl MechanicalEndpoint {
+    fn from_state(state: &MechanicalState) -> Self {
+        Self {
+            position: state.position,
+            velocity: state.velocity,
+            mechanical_time: state.mechanical_time,
+        }
+    }
+}
+
+/// Start and discrete endpoints of one committed experimental Physics step.
+/// These samples carry no between-endpoint path or parallel-transport certificate.
+#[derive(Debug)]
+pub struct AcceptedStepTrace {
+    endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
+    len: usize,
+}
+
+impl AcceptedStepTrace {
+    fn new(state: &MechanicalState) -> Self {
+        Self {
+            endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
+            len: 1,
+        }
+    }
+
+    fn push(&mut self, endpoint: MechanicalEndpoint) {
+        self.endpoints[self.len] = endpoint;
+        self.len += 1;
+    }
+
+    /// Start, checked internal substep endpoints, and committed outer endpoint.
+    /// Internal times use offsets from the start on the rollout's f64 mechanical clock.
+    pub fn endpoints(&self) -> &[MechanicalEndpoint] {
+        &self.endpoints[..self.len]
+    }
+}
+
 fn serialize_identity<S: serde::Serializer>(id: &u64, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(&format!("{id:016x}"))
 }
@@ -358,6 +405,27 @@ impl FrozenRollout {
         state: &mut MechanicalState,
         control: [f64; 2],
     ) -> Result<QueryWork, String> {
+        self.attempt_step_inner(state, control, None)
+    }
+
+    /// Returns the trace after the entire step commits.
+    /// Capturing it adds no geometry evaluations.
+    pub fn attempt_step_with_trace(
+        &self,
+        state: &mut MechanicalState,
+        control: [f64; 2],
+    ) -> Result<(QueryWork, AcceptedStepTrace), String> {
+        let mut trace = AcceptedStepTrace::new(state);
+        let work = self.attempt_step_inner(state, control, Some(&mut trace))?;
+        Ok((work, trace))
+    }
+
+    fn attempt_step_inner(
+        &self,
+        state: &mut MechanicalState,
+        control: [f64; 2],
+        mut trace: Option<&mut AcceptedStepTrace>,
+    ) -> Result<QueryWork, String> {
         self.last_work.set(QueryWork {
             geometry_evaluations: 0,
             coefficient_reads_upper_bound: 0,
@@ -393,7 +461,7 @@ impl FrozenRollout {
                     (c, v, work)
                 }
                 Integrator::Rk4 | Integrator::Rk4FourSubsteps => {
-                    rk4_profile_advance(self.profile.method, c, v, q, beta, dt, config)?
+                    rk4_profile_advance(&self.profile, c, v, q, trace.as_deref_mut())?
                 }
             };
             let energy = checked_endpoint(position, velocity, config)?;
@@ -418,33 +486,44 @@ impl FrozenRollout {
         {
             return Err("nonfinite proposed mechanical ledger".into());
         }
+        if let Some(trace) = trace {
+            trace.push(MechanicalEndpoint::from_state(&next));
+        }
         *state = next;
         Ok(counts)
     }
 }
 
 fn rk4_profile_advance(
-    method: Integrator,
+    profile: &PhysicsProfile,
     mut c: Complex64,
     mut v: (f64, f64),
     q: (f64, f64),
-    beta: f64,
-    dt: f64,
-    config: &ManifoldConfig,
+    mut trace: Option<&mut AcceptedStepTrace>,
 ) -> Result<(Complex64, (f64, f64), f64), String> {
-    let count = if method == Integrator::Rk4FourSubsteps {
-        4
+    let count = if profile.method == Integrator::Rk4FourSubsteps {
+        RK4_PROFILE_SUBSTEPS
     } else {
         1
     };
+    let substep_dt = profile.dt / count as f64;
     let mut work = 0.0;
     for step in 0..count {
-        let (next, velocity, increment) = rk4_advance(c, v, q, beta, dt / count as f64, config)?;
+        let (next, velocity, increment) =
+            rk4_advance(c, v, q, profile.beta, substep_dt, &profile.config)?;
         // Internal endpoints are temporary, but require the same complete
         // differential and energy checks as the final outer endpoint.
         if step + 1 < count {
-            checked_endpoint(next, velocity, config)
+            checked_endpoint(next, velocity, &profile.config)
                 .map_err(|e| format!("RK substep {} endpoint: {e}", step + 1))?;
+            if let Some(trace) = trace.as_deref_mut() {
+                trace.push(MechanicalEndpoint {
+                    position: [next.re, next.im],
+                    velocity: [velocity.0, velocity.1],
+                    mechanical_time: trace.endpoints[0].mechanical_time
+                        + (step + 1) as f64 * substep_dt,
+                });
+            }
         }
         c = next;
         v = velocity;
@@ -614,6 +693,70 @@ mod tests {
         };
         PhysicsProfile::new(config, 0.2, 2.0, method).unwrap()
     }
+
+    #[test]
+    fn mechanical_trace_reports_committed_endpoints_at_the_integrator_times() {
+        let field = constant(None);
+        for (method, times) in [
+            (Integrator::Euler, &[7.0, 7.2][..]),
+            (Integrator::Rk4, &[7.0, 7.2][..]),
+            (
+                Integrator::Rk4FourSubsteps,
+                &[7.0, 7.05, 7.1, 7.15, 7.2][..],
+            ),
+        ] {
+            let rollout = FrozenRollout::new(field.clone(), profile(method), vec![]).unwrap();
+            let mut initial = rollout.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
+            initial.mechanical_time = 7.0;
+            let mut plain = initial;
+            let plain_work = rollout.attempt_step(&mut plain, [0.0; 2]).unwrap();
+            let mut traced = initial;
+            let (work, trace) = rollout
+                .attempt_step_with_trace(&mut traced, [0.0; 2])
+                .unwrap();
+            assert_eq!(work, plain_work);
+            assert_eq!(traced, plain);
+            let endpoints = trace.endpoints();
+            assert_eq!(endpoints.len(), times.len());
+            for (endpoint, &time) in endpoints.iter().zip(times) {
+                assert_eq!(endpoint.mechanical_time, time);
+                if method == Integrator::Rk4FourSubsteps {
+                    let elapsed = time - initial.mechanical_time;
+                    let expected_velocity = 0.1 * (-2.0 * elapsed).exp();
+                    let expected_position = 0.4 + (0.1 - expected_velocity) / 2.0;
+                    assert!((endpoint.velocity[0] - expected_velocity).abs() < 1e-7);
+                    assert!((endpoint.position[0] - expected_position).abs() < 1e-7);
+                }
+            }
+            let start = endpoints.first().unwrap();
+            assert_eq!(start.position, initial.position);
+            assert_eq!(start.velocity, initial.velocity);
+            let end = endpoints.last().unwrap();
+            assert_eq!(end.position, traced.position);
+            assert_eq!(end.velocity, traced.velocity);
+            assert_eq!(end.mechanical_time, traced.mechanical_time);
+            if method == Integrator::Rk4FourSubsteps {
+                let single = PhysicsProfile::new(
+                    rollout.profile().config().clone(),
+                    0.05,
+                    2.0,
+                    Integrator::Rk4,
+                )
+                .unwrap();
+                let substep_rollout = FrozenRollout::new(field.clone(), single, vec![]).unwrap();
+                let mut substep = substep_rollout
+                    .initial_state(initial.position, initial.velocity)
+                    .unwrap();
+                for endpoint in &endpoints[1..] {
+                    substep_rollout
+                        .attempt_step(&mut substep, [0.0; 2])
+                        .unwrap();
+                    assert_eq!(endpoint.position, substep.position);
+                    assert_eq!(endpoint.velocity, substep.velocity);
+                }
+            }
+        }
+    }
     #[test]
     fn four_substeps_improve_drag_accuracy_and_roll_back_internal_refusals() {
         let method = Integrator::Rk4FourSubsteps;
@@ -630,10 +773,17 @@ mod tests {
         let blocked = FrozenRollout::new(constant(Some(0.40702)), profile(method), vec![]).unwrap();
         let mut state = blocked.initial_state([0.4, 0.0], [0.1, 0.0]).unwrap();
         let before = serde_json::to_string(&state).unwrap();
-        assert!(blocked
-            .attempt_step(&mut state, [0.0; 2])
-            .unwrap_err()
-            .contains("RK stage 2"));
+        let error = blocked.attempt_step(&mut state, [0.0; 2]).unwrap_err();
+        assert!(error.contains("RK stage 2"));
+        assert_eq!(serde_json::to_string(&state).unwrap(), before);
+        let work = blocked.last_evaluation_work();
+        assert_eq!(
+            blocked
+                .attempt_step_with_trace(&mut state, [0.0; 2])
+                .unwrap_err(),
+            error
+        );
+        assert_eq!(blocked.last_evaluation_work(), work);
         assert_eq!(serde_json::to_string(&state).unwrap(), before);
     }
     #[test]

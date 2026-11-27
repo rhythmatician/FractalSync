@@ -260,7 +260,7 @@ fn radial_gap_lower(metric: IntrinsicMetric, lo: f64, hi: f64) -> f64 {
 // rounded to nearest, including subnormal results and overflow. The
 // transcendental bounds below use arithmetic series instead of libm's
 // target-dependent rounding. Some exact cases preserve zero and equality.
-fn add_down(left: f64, right: f64) -> f64 {
+pub(crate) fn add_down(left: f64, right: f64) -> f64 {
     if left == 0.0 || right == 0.0 {
         left + right
     } else {
@@ -276,7 +276,7 @@ pub(crate) fn add_up(left: f64, right: f64) -> f64 {
     }
 }
 
-fn sub_down(left: f64, right: f64) -> f64 {
+pub(crate) fn sub_down(left: f64, right: f64) -> f64 {
     if left <= right {
         0.0
     } else if right == 0.0 || left <= 2.0 * right {
