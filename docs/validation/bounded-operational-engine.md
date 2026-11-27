@@ -152,6 +152,13 @@ bearing uses the compiled start metric. Potential barriers, travel time,
 continuous Physics correspondence, and human driving are outside the
 geometric result.
 
+An optional `nominalTiming` takes canonical `startSample` and
+`deadlineSample` and a `kineticActionBudget`. Its `nominalFeasibility`
+uses the lower bound for all paths confined to the window. It can rule
+out the action budget even when the graph offers a geometric route.
+The deadline check has insufficient evidence without a speed cap.
+No action estimate or route status is fed back into the rollout.
+
 The browser check initializes a rollout near the cusp and commits a Physics
 step. Chromium found a 79-vertex route from that committed position to the
 `0.001`-radius target. It certified 16,518 edges and refused two. The graph

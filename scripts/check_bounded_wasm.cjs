@@ -21,6 +21,7 @@ const engine = new BoundedOperationalRollout(asset, policy, 0.1, 0.02, 0, 0, 0, 
 const routeQuery = {
   window: [[-0.125, -0.125], [0.125, 0.125]], gridSteps: 4,
   target: { center: [0.125, 0], radius: 0 },
+  nominalTiming: { startSample: 480, deadlineSample: 48_480, kineticActionBudget: 0.005 },
 };
 assert.throws(() => engine.route_guidance(JSON.stringify(routeQuery)), /rollout not started/);
 const before = JSON.parse(engine.start(0, 0, 0.1, 0));
@@ -37,6 +38,8 @@ assert.deepEqual(route.path[0], after.position);
 assert.deepEqual(route.path.at(-1), routeQuery.target.center);
 assert.ok(route.graphLengthLower <= route.routeLengthUpper && route.routeLengthUpper < 0.125);
 assert.ok(route.nextDirection[0] > 0 && Math.abs(route.nextDirection[1]) < 1e-12);
+assert.equal(route.nominalFeasibility.kineticActionStatus, "ruledOut");
+assert.equal(route.nominalFeasibility.deadlineStatus, "insufficientEvidence");
 assert.equal(engine.state(), saved);
 assert.throws(() => engine.step(1e300, 0));
 assert.equal(engine.state(), saved);

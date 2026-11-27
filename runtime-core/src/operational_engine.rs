@@ -8,7 +8,10 @@ use std::sync::Arc;
 mod frame_transport;
 mod route_guidance;
 pub use frame_transport::TransportedFrame;
-pub use route_guidance::{AmbientTarget, OperationalRouteGuidance, OperationalRouteRequest, OperationalRouteStatus};
+pub use route_guidance::{
+    AmbientTarget, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
+    OperationalRouteStatus,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Integrator {

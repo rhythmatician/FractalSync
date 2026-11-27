@@ -28,6 +28,7 @@ fn request(center: [f64; 2]) -> OperationalRouteRequest {
             radius: 0.0,
         },
         length_budget: None,
+        nominal_timing: None,
     }
 }
 
@@ -36,6 +37,7 @@ fn guidance_from_a_committed_position_supports_off_grid_points_and_arrival() {
     let engine = engine(vec![]);
     let state = engine.initial_state([-0.484375, 0.375], [0.0; 2]).unwrap();
     let target = [0.484375, 0.375];
+    let saved_work = engine.last_evaluation_work();
     let report = engine.route_guidance(&state, request(target)).unwrap();
     assert_eq!(report.status, OperationalRouteStatus::RouteFound);
     assert_eq!(report.path.first(), Some(&state.position));
@@ -67,6 +69,7 @@ fn guidance_from_a_committed_position_supports_off_grid_points_and_arrival() {
     assert_eq!(reached.status, OperationalRouteStatus::Reached);
     assert!(reached.next_direction.is_none());
     assert_eq!(reached.route_length_upper, Some(0.0));
+    assert_eq!(engine.last_evaluation_work(), saved_work);
 }
 
 #[test]
@@ -115,4 +118,46 @@ fn a_full_refusal_barrier_leaves_navigation_without_a_graph_witness() {
     assert!(report.graph_length_lower.is_none());
     assert!(report.next_direction.is_none());
     assert!(report.refused_edges > 0);
+}
+
+#[test]
+fn timed_guidance_assesses_action_under_the_nominal_window_premise() {
+    use crate::crossing_feasibility::FeasibilityStatus;
+    use crate::timebase::CANONICAL_SAMPLE_RATE;
+
+    let engine = engine(vec![]);
+    let state = engine.initial_state([-0.4375, 0.375], [0.0; 2]).unwrap();
+    let target = [0.4375, 0.375];
+    let timing = NominalRouteTiming {
+        start_sample: 20,
+        deadline_sample: 20 + CANONICAL_SAMPLE_RATE as u64,
+        kinetic_action_budget: Some(0.1),
+    };
+    let report = engine
+        .route_guidance(
+            &state,
+            OperationalRouteRequest {
+                nominal_timing: Some(timing),
+                ..request(target)
+            },
+        )
+        .unwrap();
+    let check = report.nominal_feasibility.unwrap();
+    assert_eq!(report.status, OperationalRouteStatus::RouteFound);
+    assert_eq!(check.status, FeasibilityStatus::RuledOut);
+    assert_eq!(
+        check.deadline_status,
+        FeasibilityStatus::InsufficientEvidence
+    );
+    let invalid = engine.route_guidance(
+        &state,
+        OperationalRouteRequest {
+            nominal_timing: Some(NominalRouteTiming {
+                deadline_sample: 19,
+                ..timing
+            }),
+            ..request(target)
+        },
+    );
+    assert!(invalid.is_err());
 }

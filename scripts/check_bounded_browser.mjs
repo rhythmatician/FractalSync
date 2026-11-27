@@ -47,6 +47,7 @@ try {
     const request = {
       window: [[450 / 2048, -41 / 2048], [550 / 2048, 39 / 2048]], gridSteps: 64,
       target: { center: [537 / 2048, -1 / 2048], radius: 0.001 },
+      nominalTiming: { startSample: 48, deadlineSample: 48_048, kineticActionBudget: 0.05 },
     };
     engine.start(452 / 2048, -1 / 2048, 0.001, 0);
     const saved = engine.step(0, 0);
@@ -62,6 +63,10 @@ try {
     const arrived = route.path.at(-1);
     if (Math.hypot(arrived[0] - request.target.center[0], arrived[1] - request.target.center[1]) > request.target.radius) {
       throw new Error('Route ended outside the target ball');
+    }
+    if (route.nominalFeasibility?.kineticActionStatus !== 'ruledOut'
+        || route.nominalFeasibility.deadlineStatus !== 'insufficientEvidence') {
+      throw new Error('Unexpected nominal timing assessment');
     }
     return { ...engineReport, route, route_ms };
   }, mode === '--verify-cusp-route');

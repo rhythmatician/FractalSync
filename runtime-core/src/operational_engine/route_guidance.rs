@@ -2,6 +2,9 @@
 
 use super::frame_transport::MetricFactor;
 use super::{CANONICAL_REFERENCE_POINTS, FrozenRollout, MechanicalState};
+use crate::crossing_feasibility::{
+    FeasibilityAssessment, FeasibilityLimits, LengthLowerBound, evaluate_feasibility,
+};
 use crate::intrinsic_bounds::{add_up, mul_up};
 use crate::map_certificates::displacement_lower;
 use crate::map_navigation::search::{SearchLimits, search};
@@ -28,6 +31,39 @@ pub struct OperationalRouteRequest {
     pub grid_steps: usize,
     pub target: AmbientTarget,
     pub length_budget: Option<f64>,
+    /// Necessary conditions for a timed task confined to the nominal window.
+    pub nominal_timing: Option<NominalRouteTiming>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NominalRouteTiming {
+    pub start_sample: u64,
+    pub deadline_sample: u64,
+    pub kinetic_action_budget: Option<f64>,
+}
+
+impl NominalRouteTiming {
+    fn assess(self, length: f64) -> Result<FeasibilityAssessment, &'static str> {
+        let duration = self
+            .deadline_sample
+            .checked_sub(self.start_sample)
+            .ok_or("deadline sample precedes route start sample")?;
+        if self
+            .kinetic_action_budget
+            .is_some_and(|b| !b.is_finite() || b < 0.0)
+        {
+            return Err("route kinetic action budget must be finite and nonnegative");
+        }
+        Ok(evaluate_feasibility(
+            LengthLowerBound::Certified(length),
+            duration,
+            FeasibilityLimits {
+                kinetic_action_budget: self.kinetic_action_budget,
+                ..Default::default()
+            },
+        ))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -49,6 +85,8 @@ pub struct OperationalRouteGuidance {
     pub window: [[f64; 2]; 2],
     pub status: OperationalRouteStatus,
     pub nominal_window_length_lower: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nominal_feasibility: Option<FeasibilityAssessment>,
     pub graph_length_lower: Option<f64>,
     pub route_length_upper: Option<f64>,
     pub path: Vec<[f64; 2]>,
@@ -102,10 +140,17 @@ impl FrozenRollout {
         let ambient_lower = region
             .target_lower_bound(start, target.center, target.radius)
             .ok_or("invalid Map route target length bound")?;
-        let (metric, _) = self.evaluate(|config| {
+        let nominal_feasibility = request
+            .nominal_timing
+            .map(|timing| timing.assess(ambient_lower))
+            .transpose()?;
+        let previous_work = self.last_work.get();
+        let metric_query = self.evaluate(|config| {
             let c = Complex64::new(start[0], start[1]);
             MetricFactor::new(crate::manifold::induced_metric(c, config)?)
-        })?;
+        });
+        self.last_work.set(previous_work);
+        let (metric, _) = metric_query?;
         let mut report = OperationalRouteGuidance {
             metric_scope: "exactPreparedSplineInWindow",
             field_id: format!("{:016x}", self.field_id()),
@@ -114,6 +159,7 @@ impl FrozenRollout {
             window: request.window,
             status: OperationalRouteStatus::NoCertifiedRoute,
             nominal_window_length_lower: ambient_lower,
+            nominal_feasibility,
             graph_length_lower: None,
             route_length_upper: None,
             path: Vec::new(),
