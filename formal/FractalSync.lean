@@ -158,3 +158,4 @@ import FractalSync.StableRadialProfile
 import FractalSync.OperationalRouteBounds
 
 /-! Development-time mathematical research for FractalSync. -/
+import FractalSync.ConformalTransportError
