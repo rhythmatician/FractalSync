@@ -274,6 +274,8 @@ class ManifoldConfig:
 
 
 class EnergyInfo:
+    @property
+    def ledger_json(self) -> str: ...
 
     @property
     def delta_kinetic(self): ...

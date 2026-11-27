@@ -315,6 +315,9 @@ pub struct EnergyInfo {
     pub delta_total: f64,
     #[pyo3(get)]
     pub delta_kinetic: f64,
+    /// JSON serialization of the authoritative per-step work ledger.
+    #[pyo3(get)]
+    pub ledger_json: String,
 }
 
 impl From<RustEnergyInfo> for EnergyInfo {
@@ -325,6 +328,7 @@ impl From<RustEnergyInfo> for EnergyInfo {
             total: e.total,
             delta_total: e.delta_total,
             delta_kinetic: e.delta_kinetic,
+            ledger_json: serde_json::to_string(&e.ledger).unwrap_or_else(|_| "null".to_string()),
         }
     }
 }

@@ -26,6 +26,7 @@ import {
   riderSurfaceHeight,
   sampleTerrainPatch,
   type CockpitTrajectory,
+  type DebugSnapshot,
 } from '../lib/debugCockpit';
 import {
   ManualDriver,
@@ -35,6 +36,7 @@ import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVaria
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import juliaFragment from '../../../shared/shaders/julia.frag?raw';
+import { JuliaSensitivityBookmark } from './JuliaSensitivityBookmark';
 import {
   MINIMAP_SIZE,
   minimapView,
@@ -66,6 +68,29 @@ import {
   poincareToSceneVector,
   HYPERBOLIC_VISUAL_SCALE,
 } from '../lib/hyperbolicCamera';
+
+export function EnergyLedgerPanel({ frame }: { frame: DebugSnapshot }) {
+  return (
+  <Panel title="WORK / ENERGY LEDGER">
+    {frame.energyLedger ? <>
+      <Row label="step validity" value={frame.energyLedger.valid ? 'valid endpoints' : 'INVALID'} kind="DIAG" />
+      <Row label="drive work" value={frame.energyLedger.controlWork} kind="DIAG" />
+      <Row label="friction work" value={frame.energyLedger.frictionWork} kind="DIAG" />
+      <Row label="impulse work" value={frame.energyLedger.impulseWork} kind="DIAG" />
+      <Row label="step residual" value={frame.energyLedger.residual} kind="DIAG" />
+      <Row label="provider" value={`${frame.energyLedger.endGeometry.provider_version} / ${frame.energyLedger.endGeometry.validity}`} kind="DIAG" />
+    </> : <Row label="step ledger" value="unavailable" kind="DIAG" />}
+    {frame.accumulatedEnergyLedger && <>
+      <Row label="run validity" value={frame.accumulatedEnergyLedger.valid ? 'valid' : 'INVALID'} kind="DIAG" />
+      <Row label="run steps" value={frame.accumulatedEnergyLedger.steps} kind="DIAG" />
+      <Row label="run drive work" value={frame.accumulatedEnergyLedger.controlWork} kind="DIAG" />
+      <Row label="run friction work" value={frame.accumulatedEnergyLedger.frictionWork} kind="DIAG" />
+      <Row label="run impulse work" value={frame.accumulatedEnergyLedger.impulseWork} kind="DIAG" />
+      <Row label="run residual" value={frame.accumulatedEnergyLedger.residual} kind="DIAG" />
+    </>}
+  </Panel>
+  );
+}
 
 type Badge = 'STATE' | 'ACTION' | 'DIAG';
 
@@ -743,6 +768,8 @@ export function DebugCockpit(): JSX.Element {
         {error && <p style={{ color: '#f66', fontSize: 12 }}>{error}</p>}
         {!ready && !error && <p style={{ fontSize: 12 }}>initializing wasm…</p>}
 
+        <div hidden={playerView}><JuliaSensitivityBookmark /></div>
+
         {runs && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: '#778', marginBottom: 4 }}>RECORDED TRAJECTORIES (Controls v2 replays)</div>
@@ -805,7 +832,8 @@ export function DebugCockpit(): JSX.Element {
           </Panel>
         )}
 
-        {!playerView && diag && (
+        {!playerView && frame && <EnergyLedgerPanel frame={frame} />}
+{!playerView && diag && (
           <Panel title="DIAGNOSTICS">
             <Row label="step clock (s)" value={frame?.timeSeconds} kind="STATE" digits={4} />
             <Row label="fd step" value={diag.derivativeStep} kind="DIAG" digits={9} />

@@ -118,7 +118,7 @@ impl SingularityKind {
 /// The invariant is that D, grad_D, and hessian_D come from one coherent
 /// local representation (scale-aware local stencil), not independent heuristics
 /// or nested finite differences of sigma.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GeometryJet {
     /// Signed distance D(c): <0 inside M, >0 outside, 0 on the Shore.
     #[serde(rename = "D")]
@@ -431,6 +431,15 @@ pub fn query_geometry(
     c: Complex64,
     epsilon: f64,
 ) -> Result<GeometryJet, String> {
+#[cfg(test)]
+if TEST_PLANE.with(|active| active.get()) {
+return Ok(GeometryJet {
+d: c.re - 0.25, grad_d: [1.0, 0.0], hessian_d: [[0.0; 2]; 2],
+resolved_scale: 0.0, requested_scale: GEOMETRY_SCALE_ALPHA * epsilon,
+validity: GeometryValidity::Regular, singularity: SingularityKind::None,
+provider_version: "test-analytic-plane/1".into(), tile_id: "analytic".into(), is_bridge: false,
+});
+}
     #[cfg(feature = "experimental-operational-field")]
     if let Some(field) = crate::operational_field::ACTIVE.with(|active| active.borrow().clone()) {
         crate::operational_engine::check_query(c, epsilon)?;
@@ -449,6 +458,17 @@ pub fn query_geometry(
         });
     }
     query_bridge_geometry_with_alpha(c, epsilon, GEOMETRY_SCALE_ALPHA)
+}
+#[cfg(test)]
+thread_local! { static TEST_PLANE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+
+#[cfg(test)]
+pub(crate) fn with_test_plane(f: impl FnOnce()) {
+    struct Reset;
+    impl Drop for Reset { fn drop(&mut self) { TEST_PLANE.with(|active| active.set(false)); } }
+    TEST_PLANE.with(|active| assert!(!active.replace(true)));
+    let _reset = Reset;
+    f();
 }
 
 /// Explicit bridge query (same as `query_geometry`).

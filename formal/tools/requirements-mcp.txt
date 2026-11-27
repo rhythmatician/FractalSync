@@ -1,0 +1,2 @@
+# Optional authoring tool only. Lean proof CI does not need Python or this server.
+lean-lsp-mcp @ git+https://github.com/oOo0oOo/lean-lsp-mcp.git@7932203d79db213852db215835bd79c943bb99b0
