@@ -129,12 +129,10 @@ claimed by the current proof files.
 
 ## Relationship to the existing Lean issues
 
-The pinned package has **1,813 explicit theorem and lemma declarations** in
-155 result modules and fourteen analysis-support modules. The current
-`lake build --wfail` and transitive axiom audit pass. The audit covers 3,996
-declarations and reports only `propext`, `Classical.choice`, and `Quot.sound`.
-See the [formal inventory](../../formal/README.md) for statement-level scope
-and [verification record](verification.md) for earlier checkpoints.
+The pinned package passes `lake build --wfail` and the transitive axiom audit.
+See the [formal inventory](../../formal/README.md) for current counts and the
+scope of each statement, and the [verification record](verification.md) for
+earlier checkpoints.
 
 The optional Lean LSP server is registered in the repository
 [Codex configuration](../../.codex/config.toml). A fresh configured session

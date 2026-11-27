@@ -29,6 +29,8 @@ The target tolerance can be measured in either metric. If every target lies in t
 
 ## Edges and budgets
 
+The [two-ended displacement bound](174-two-ended-displacement.md) strengthens both one-ended bounds for a fixed goal. It proves consistency with exact rulers and upper-bounding graph edges. It also gives a lower bound under compatible ruler enclosures, and the flat-Shore graph experiment compares the stronger heuristic against Dijkstra.
+
 For an edge \(x\to y\) with cost \(c\ge D(x,y)\), Lean checks \(D_T(x)\le c+D_T(y)\). It also checks the same inequality for the lower bound \(h(x)=\max(0,f(x)-u_T,\ell_T-f(x))\) formed with an exact source profile and one fixed target interval covering every accepted endpoint. The scalar interval-gap change is bounded by \(|f(x)-f(y)|\), which the existing radial calibration bounds by \(D(x,y)\). Using independently varying source intervals or combining this term with the logarithmic bound needs a separate consistency argument. A sufficient edge-cost premise is an upper bound on the intrinsic length of an admissible matching path. [Intrinsic triangle inequality](../../formal/FractalSync/IntrinsicMetric.lean).
 
 If a route can reach a point \(y\) and then an accepted endpoint with certified prefix and suffix costs summing to at most \(B\), that point satisfies \(D(x,y)+D_T(y)\le B\). Each point of this combined sublevel lies in the ambient closed ball

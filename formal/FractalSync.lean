@@ -152,6 +152,7 @@ import FractalSync.ConformalRulerContracts
 import FractalSync.ExteriorNavigation
 import FractalSync.OrbitTrapSelection
 import FractalSync.IntrinsicTargetBounds
+import FractalSync.TwoEndedDisplacement
 import FractalSync.ShoreCrossingWorkBound
 import FractalSync.StableRadialProfile
 
