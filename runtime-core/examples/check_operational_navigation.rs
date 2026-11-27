@@ -9,9 +9,7 @@ use runtime_core::operational_field::{OperationalNavigationRegion, PreparedField
 use runtime_core::timebase::CANONICAL_SAMPLE_RATE;
 use serde_json::{Value, json};
 
-#[path = "support/map_search.rs"]
-mod map_search;
-use map_search::{Counts, SearchLimits, search};
+use runtime_core::map_navigation::search::{Counts, SearchLimits, search};
 
 const WIDTH: usize = 101;
 const HEIGHT: usize = 81;

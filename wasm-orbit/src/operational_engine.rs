@@ -1,6 +1,7 @@
 use runtime_core::manifold::ManifoldConfig;
 use runtime_core::operational_engine::{
-    reference_policy_for_field, FrozenRollout, Integrator, MechanicalState, PhysicsProfile,
+    FrozenRollout, Integrator, MechanicalState, OperationalRouteRequest, PhysicsProfile,
+    reference_policy_for_field,
 };
 use runtime_core::operational_field::PreparedField;
 use std::sync::Arc;
@@ -98,5 +99,20 @@ impl BoundedOperationalRollout {
             .as_ref()
             .ok_or_else(|| JsValue::from_str("rollout not started"))?;
         serde_json::to_string(state).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Chart a finite window from the current experimental rollout position.
+    pub fn route_guidance(&self, request: &str) -> Result<String, JsValue> {
+        let state = self
+            .state
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("rollout not started"))?;
+        let request: OperationalRouteRequest =
+            serde_json::from_str(request).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let guidance = self
+            .rollout
+            .route_guidance(state, request)
+            .map_err(|e| JsValue::from_str(&e))?;
+        serde_json::to_string(&guidance).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }

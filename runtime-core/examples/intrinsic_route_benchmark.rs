@@ -7,9 +7,7 @@ use runtime_core::intrinsic_bounds::{
     point_lower_bound, search_envelope_radius,
 };
 
-#[path = "support/map_search.rs"]
-mod map_search;
-use map_search::{Counts, SearchLimits, SearchResult, search};
+use runtime_core::map_navigation::search::{Counts, SearchLimits, SearchResult, search};
 
 const WIDTH: usize = 65;
 const HEIGHT: usize = 33;
