@@ -21,6 +21,7 @@ struct Recording {
 #[derive(Serialize)]
 struct RkSubstep {
     dt: u64,
+    left_drift_defect_upper: u64,
     stages: [[u64; 4]; 4],
     slopes: [[u64; 5]; 4],
     end: [u64; 4],
@@ -53,6 +54,7 @@ impl From<&RkSubstepTrace> for RkSubstep {
     fn from(trace: &RkSubstepTrace) -> Self {
         Self {
             dt: trace.duration.to_bits(),
+            left_drift_defect_upper: trace.left_drift_defect_upper().unwrap().to_bits(),
             stages: trace.stages.map(|stage| stage.map(f64::to_bits)),
             slopes: trace.slopes.map(|slope| slope.map(f64::to_bits)),
             end: trace.end.map(f64::to_bits),

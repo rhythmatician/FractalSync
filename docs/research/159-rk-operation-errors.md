@@ -284,3 +284,18 @@ for the independent checker, whose bounds apply to the pinned runs.
 
 A uniform arithmetic bound across targets, profiles, or meshes, accuracy
 of the reported total energy, and production field fidelity remain open.
+
+## Committed chord displacement defect
+
+The public RK substep trace can bound the ambient difference between its
+committed chord and left-endpoint drift. For each axis it encloses the
+subtraction of the represented endpoint positions and the product of the
+represented duration and start velocity. It subtracts those intervals
+outward and sums the component magnitudes. This gives an upper bound on
+the L1 discrepancy in ambient coordinates.
+
+The independent rational checker verifies all 80 committed substeps. The
+largest outward bounds in the one- and four-substep profiles were
+4.40e-9 and 2.75e-10 ambient units per substep, respectively. The bound
+covers the endpoints. A sampled-action certificate still needs to account
+for the metric and the path inside each panel.
