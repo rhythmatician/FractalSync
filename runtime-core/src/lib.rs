@@ -32,6 +32,7 @@ pub mod visual_metrics;
 pub mod distance_field;
 pub mod minimap;
 pub mod geometry_provider;
+pub mod shore_distance;
 #[cfg(feature = "experimental-operational-field")]
 pub mod operational_field;
 #[cfg(feature = "experimental-operational-field")]
