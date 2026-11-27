@@ -172,3 +172,16 @@ rtk proxy cargo test --release -p runtime_core --features experimental-operation
 [Compiled calibration](../../runtime-core/src/operational_engine/frame_transport.rs) ·
 [Transport issue](https://github.com/rhythmatician/FractalSync/issues/179) ·
 [Gesture-epoch issue](https://github.com/rhythmatician/FractalSync/issues/170)
+
+## Varying signed turn rates on accepted chords
+
+The prepared-field diagnostic accepts one signed rate per chord in the
+committed endpoint trace. It uses the profile duration divided by the
+chord count, so even a large absolute timestamp that rounds away the clock
+advance leaves the transport duration intact. In the stationary calibration,
+a chord of duration `h` with rate `ω` rotates the normalized Euler frame by
+`atan(h ω)`. The regression exercises positive, zero, and negative rates,
+checks bit-for-bit equality with the held-rate entry point for a constant
+schedule, and checks that malformed schedules leave the next valid result
+unchanged. The pose and gesture epoch needed by the harmonic statistic
+remain a separate runtime input.

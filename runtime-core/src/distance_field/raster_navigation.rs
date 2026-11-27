@@ -19,6 +19,7 @@ pub struct RasterNavigationRegion {
     bounds: [[f64; 2]; 2],
     raster_generation: u64,
     rho_upper: f64,
+    length_per_displacement_upper: f64,
 }
 
 impl RasterNavigationRegion {
@@ -54,13 +55,20 @@ impl RasterNavigationRegion {
         let stencil_upper = sample_magnitude_upper(field, stencil_bounds)?;
         // The two-point difference is at most 2 * stencil_upper. The
         // gradient limit leaves room for rounding in the metric's rank-one term.
-        if div_up(stencil_upper, step_lower) > f64::from(1 << 18) {
+        let gradient_upper = div_up(stencil_upper, step_lower);
+        if gradient_upper > f64::from(1 << 18) {
             return None;
         }
         Some(Self {
             bounds,
             raster_generation: slot.generation,
             rho_upper,
+            // The compiled metric is bounded above by (2 + 6 * gradient_upper)^2 / rho^2.
+            // The rounded ruler is at least epsilon / 2.
+            length_per_displacement_upper: div_up(
+                add_up(4.0, mul_up(12.0, gradient_upper)),
+                config.epsilon,
+            ),
         })
     }
 
@@ -81,6 +89,34 @@ impl RasterNavigationRegion {
                 .is_some_and(|stamp| stamp.loaded && stamp.generation == self.raster_generation)
     }
 
+    /// Outward upper bound on the straight segment's length in this region's
+    /// default raster metric. Both endpoints must lie in the certified window.
+    /// The caller must keep the provider and profile fixed during use.
+    pub fn segment_length_upper(&self, start: [f64; 2], end: [f64; 2]) -> Option<f64> {
+        if !self.is_current() || !self.contains(start) || !self.contains(end) {
+            return None;
+        }
+        let [dx, dy] = std::array::from_fn(|axis| {
+            if start[axis] == end[axis] {
+                0.0
+            } else {
+                (end[axis] - start[axis]).abs().next_up()
+            }
+        });
+        let square = add_up(mul_up(dx, dx), mul_up(dy, dy));
+        let displacement = if square == 0.0 {
+            0.0
+        } else {
+            square.sqrt().next_up()
+        };
+        Some(mul_up(displacement, self.length_per_displacement_upper))
+    }
+
+    fn contains(&self, point: [f64; 2]) -> bool {
+        let [lo, hi] = self.bounds;
+        (0..2).all(|axis| lo[axis] <= point[axis] && point[axis] <= hi[axis])
+    }
+
     /// Lower bound for arrival anywhere in a closed ambient target ball,
     /// including paths that first leave this window. For an exiting path,
     /// the length already accumulated at the boundary supplies the bound.
@@ -91,11 +127,7 @@ impl RasterNavigationRegion {
         radius: f64,
     ) -> Option<f64> {
         let [lo, hi] = self.bounds;
-        if !self.is_current()
-            || !radius.is_finite()
-            || radius < 0.0
-            || !(0..2).all(|axis| lo[axis] <= start[axis] && start[axis] <= hi[axis])
-        {
+        if !self.is_current() || !radius.is_finite() || radius < 0.0 || !self.contains(start) {
             return None;
         }
         let exit = (0..2).fold(f64::INFINITY, |distance, axis| {

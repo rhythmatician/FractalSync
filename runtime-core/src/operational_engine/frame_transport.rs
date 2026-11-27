@@ -26,6 +26,31 @@ impl FrozenRollout {
         initial_direction: [f64; 2],
         turn_rate: f64,
     ) -> Result<TransportedFrame, String> {
+        self.transport_chords(
+            trace,
+            initial_direction,
+            std::iter::repeat_n(turn_rate, trace.endpoints().len() - 1),
+        )
+    }
+
+    /// Apply the same diagnostic transport with a signed turn rate in radians
+    /// per mechanical second held separately on each committed endpoint chord.
+    /// Rates are ordered by the trace's endpoints and must cover every chord.
+    pub fn transport_endpoint_chords_with_rates(
+        &self,
+        trace: &AcceptedStepTrace,
+        initial_direction: [f64; 2],
+        turn_rates: &[f64],
+    ) -> Result<TransportedFrame, String> {
+        self.transport_chords(trace, initial_direction, turn_rates.iter().copied())
+    }
+
+    fn transport_chords(
+        &self,
+        trace: &AcceptedStepTrace,
+        initial_direction: [f64; 2],
+        turn_rates: impl ExactSizeIterator<Item = f64> + Clone,
+    ) -> Result<TransportedFrame, String> {
         // The policy allocation is owned by this rollout and retained by
         // the trace. Fingerprints alone do not establish its provenance.
         if !Arc::ptr_eq(&trace.rollout_policy, &self.cuts)
@@ -35,11 +60,15 @@ impl FrozenRollout {
             return Err("FrozenIdentity: trace belongs to another rollout".into());
         }
         let endpoints = trace.endpoints();
+        let chord_count = endpoints.len() - 1;
+        if turn_rates.len() != chord_count {
+            return Err("expected one turn rate per accepted chord".into());
+        }
         // Use the integration duration even when adding it to the absolute
         // mechanical clock rounded away part or all of the interval.
-        let h = self.profile.dt / (endpoints.len() - 1) as f64;
-        let turn = h * turn_rate;
-        if h <= 0.0 || !turn.is_finite() {
+        let h = self.profile.dt / chord_count as f64;
+        let turns = turn_rates.map(|rate| h * rate);
+        if h <= 0.0 || turns.clone().any(|turn| !turn.is_finite()) {
             return Err("unsupported chord duration or turn rate".into());
         }
 
@@ -54,7 +83,7 @@ impl FrozenRollout {
             let mut metric =
                 MetricFactor::new(manifold::induced_metric_from_jet(&start_jet, config)?)?;
             let mut axis = metric.unit(initial_direction)?;
-            for pair in endpoints.windows(2) {
+            for (pair, turn) in endpoints.windows(2).zip(turns) {
                 let [dx, dy] = std::array::from_fn(|i| pair[1].position[i] - pair[0].position[i]);
                 let gamma = manifold::christoffel_symbols_from_jet(&start_jet, config)?;
                 let connection = gamma.map(|[[g00, g01], [g10, g11]]| {
@@ -553,6 +582,53 @@ mod tests {
             .unwrap();
         assert_eq!(retry.axis, zero.axis);
         assert_eq!(retry.companion, zero.companion);
+    }
+
+    #[test]
+    fn per_chord_signed_turns_follow_each_accepted_duration() {
+        let dt = 0.2;
+        let rollout = rollout(flat_shore(), dt, 0.7);
+        let mut state = rollout.initial_state([0.04, 0.05], [0.0; 2]).unwrap();
+        state.mechanical_time = 1e16;
+        let (_, trace) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let direction = [1.0, 0.0];
+        let reference = rollout
+            .transport_endpoint_chords(&trace, direction, 0.0)
+            .unwrap();
+        let rates = [5.0, 0.0, -2.0, 4.0];
+        let frame = rollout
+            .transport_endpoint_chords_with_rates(&trace, direction, &rates)
+            .unwrap();
+        let h = dt / rates.len() as f64;
+        let expected: f64 = rates.iter().map(|rate| (h * rate).atan()).sum();
+        let angle =
+            (frame.axis[1] / reference.companion[1]).atan2(frame.axis[0] / reference.axis[0]);
+        assert!((angle - expected).abs() < 2e-13);
+
+        let held_rate = 3.0;
+        let held = rollout
+            .transport_endpoint_chords(&trace, direction, held_rate)
+            .unwrap();
+        let scheduled = rollout
+            .transport_endpoint_chords_with_rates(&trace, direction, &[held_rate; 4])
+            .unwrap();
+        assert_eq!(held, scheduled);
+
+        for invalid in [&rates[..3], &[0.0; 5][..], &[0.0, 0.0, 0.0, f64::NAN]] {
+            assert!(
+                rollout
+                    .transport_endpoint_chords_with_rates(&trace, direction, invalid)
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            rollout
+                .transport_endpoint_chords_with_rates(&trace, direction, &rates)
+                .unwrap(),
+            frame
+        );
     }
 
     #[test]

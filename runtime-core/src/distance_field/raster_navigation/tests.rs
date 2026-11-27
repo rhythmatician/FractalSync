@@ -8,8 +8,81 @@ use crate::distance_field::{
 };
 use crate::geometry_provider::{query_geometry, rho_from_jet, with_test_plane};
 use crate::manifold::induced_metric;
+use crate::map_navigation::search::{search, SearchLimits};
 use crate::timebase::CANONICAL_SAMPLE_RATE;
 use num_complex::Complex64;
+
+#[test]
+fn default_raster_segment_witnesses_supply_graph_edge_costs() {
+    let _guard = global_test_mutex()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    load_builtin_distance_field("default").unwrap();
+    let region =
+        RasterNavigationRegion::for_default_profile([[-1.5, -0.45], [-0.4, 0.45]]).unwrap();
+    let points = [[-1.0, 0.0], [-0.9, 0.2], [-0.85, 0.05], [-0.7, 0.1]];
+    let target = points[3];
+    assert_eq!(region.segment_length_upper(points[0], points[0]), Some(0.0));
+    assert_eq!(region.segment_length_upper(points[0], [0.0, 0.0]), None);
+    assert_eq!(
+        region.segment_length_upper(points[0], [f64::NAN, 0.0]),
+        None
+    );
+
+    let edge_cost = |from: usize, to: usize| {
+        let [x, y] = points[from];
+        let [dx, dy] = [points[to][0] - x, points[to][1] - y];
+        let upper = region
+            .segment_length_upper(points[from], points[to])
+            .unwrap();
+        for step in 0..=64 {
+            let t = f64::from(step) / 64.0;
+            let metric = induced_metric(
+                Complex64::new(x + t * dx, y + t * dy),
+                &ManifoldConfig::default(),
+            )
+            .unwrap();
+            let speed =
+                (metric[0][0] * dx * dx + 2.0 * metric[0][1] * dx * dy + metric[1][1] * dy * dy)
+                    .sqrt();
+            assert!(speed.is_finite() && speed <= upper);
+        }
+        upper
+    };
+    let graph = [
+        vec![(1, edge_cost(0, 1)), (2, edge_cost(0, 2))],
+        vec![(3, edge_cost(1, 3))],
+        vec![(3, edge_cost(2, 3))],
+        vec![],
+    ];
+    let run = |bounded: bool, budget| {
+        search(
+            points.len(),
+            0,
+            |node| node == 3,
+            |node| graph[node].iter().copied(),
+            |node| {
+                bounded
+                    .then(|| region.target_lower_bound(points[node], target, 0.0))
+                    .flatten()
+            },
+            |_| true,
+            SearchLimits {
+                budget,
+                prune_with_bound: bounded,
+            },
+        )
+    };
+    let baseline = run(false, f64::INFINITY);
+    let bounded = run(true, f64::INFINITY);
+    assert_eq!(baseline.path, [0, 2, 3]);
+    assert_eq!(bounded.path, baseline.path);
+    assert_eq!(bounded.cost, baseline.cost);
+    assert_eq!(run(true, bounded.cost.unwrap() / 2.0).cost, None);
+
+    clear_distance_field();
+    assert_eq!(region.segment_length_upper(points[0], points[2]), None);
+}
 
 #[test]
 fn default_raster_point_ball_and_exit_action() {

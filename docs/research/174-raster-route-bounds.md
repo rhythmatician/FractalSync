@@ -119,11 +119,32 @@ or an active prepared-field override. Continuous provider identity during
 an external rollout remains a caller premise. The result describes ambient
 arrival under the default runtime metric. True Shore correspondence,
 intrinsic target tolerance, and compiled kinetic evaluation or RK4
-trajectory error require separate evidence. #174 still needs a default
-provider upper route witness and a search over certified edges. Applying
-#169 to a rollout still requires evidence for its accepted target,
+trajectory error require separate evidence. Applying #169 to a rollout
+still requires evidence for its accepted target,
 provider and profile identity, and an actual action budget or speed cap.
 The curriculum does not consume this certificate.
+
+## Straight-segment route witnesses
+
+For two points in the certified window, the whole straight segment stays
+in the window by convexity. Let \(G_*\) be the outward bound on the
+magnitude of each compiled centered gradient component. The rounded
+scale gradient satisfies \(|g_i|\le 4G_*/\widehat\rho\). This uses
+\(|D|\le\widehat\rho\) and the same scale-gradient denominator and
+rounding allowance as the lower bound. The base term satisfies
+\(b\le 2/\widehat\rho^2\). With the entry errors bounded by \(b/64\),
+the matrix quadratic form is at most
+\((4+32G_*^2)\|v\|^2/\widehat\rho^2\). Taking the square root and
+using \(\widehat\rho\ge\varepsilon/2\) bounds length by
+\((4+12G_*)/\varepsilon\) times ambient displacement.
+
+`segment_length_upper` multiplies an outward displacement enclosure by
+this factor. The built-in raster test supplies these costs to both
+Dijkstra and bounded A* on a two-route graph. It checks agreement on the
+accepted route and a budget for which neither candidate fits, and samples
+the compiled metric along each segment as a numerical check. For a
+certified upper bound on a concatenated witness, sum the edge bounds
+outward. The graph search reports ordinary binary64 costs.
 
 ## Reproduce the built-in raster trial
 
