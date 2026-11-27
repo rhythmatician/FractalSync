@@ -110,3 +110,17 @@ is not the single geometry-query metric in the provisional target. Browser
 timers are quantized, the sample was not cache-stressed, and the measurements
 do not establish a hard deadline. WASM initialization, fetch and asset decoding
 took `21.5`, `98.3`, and `136.3 ms` respectively, outside the timed calls.
+
+## Committed mechanical endpoints
+
+The experimental Rust method `FrozenRollout::attempt_step_with_trace` returns
+the starting state, checked internal endpoints, and final committed endpoint
+with their mechanical times. Euler and single-step RK4 expose two endpoints.
+Four-substep RK4 exposes five. The step must pass its ordinary endpoint and
+ledger checks to return the trace. A second-substep refusal leaves the prior
+state intact and returns an error. The trace uses fixed storage and shares the
+ordinary step's geometry evaluations.
+
+These endpoints give #179 a source for transport experiments along accepted
+integration steps. The trace samples the discrete rollout. A continuous path
+or a transport error bound between samples requires separate analysis.

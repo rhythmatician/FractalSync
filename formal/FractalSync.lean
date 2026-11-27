@@ -155,5 +155,6 @@ import FractalSync.IntrinsicTargetBounds
 import FractalSync.TwoEndedDisplacement
 import FractalSync.ShoreCrossingWorkBound
 import FractalSync.StableRadialProfile
+import FractalSync.OperationalRouteBounds
 
 /-! Development-time mathematical research for FractalSync. -/

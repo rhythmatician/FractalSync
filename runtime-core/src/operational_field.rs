@@ -2,7 +2,11 @@
 //! Coefficients are samples, not interpolation coefficients. Fidelity must be
 //! measured separately; smoothness never certifies Mandelbrot membership.
 
+mod bernstein;
 pub mod verification;
+mod navigation;
+
+pub use navigation::{OperationalLengthInterval, OperationalNavigationRegion};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FieldJet {

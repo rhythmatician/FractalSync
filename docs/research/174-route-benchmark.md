@@ -1,6 +1,6 @@
 # Intrinsic bounds on a flat-Shore route graph
 
-The Rust bounds reduced vertex expansions on the same graph used by Dijkstra. Bounded A* found exactly the same accepted costs under every tested budget. Search time rose on this cheap synthetic graph because evaluating a bound costs more than visiting a few neighbors. The experiment exercises [#174](https://github.com/rhythmatician/FractalSync/issues/174) with the target membership contract from [#138](https://github.com/rhythmatician/FractalSync/issues/138).
+The Rust bounds reduced vertex expansions on the same graph used by Dijkstra. Bounded A* found exactly the same accepted costs under every tested budget. Search time rose on this cheap synthetic graph because evaluating a bound costs more than visiting a few neighbors. The experiment exercises [#174](https://github.com/rhythmatician/FractalSync/issues/174) with the target membership contract from [#138](https://github.com/rhythmatician/FractalSync/issues/138). A separate comparison encloses edges in the nominal metric of the retained prepared Map. [Retained Map experiment](174-operational-route-enclosures.md)
 
 ## Graph and search
 

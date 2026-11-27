@@ -135,6 +135,28 @@ impl PreparedField {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operational_field::basis;
+
+    #[test]
+    fn bernstein_controls_match_the_literal_evaluator_basis() {
+        const BINOMIAL: [u32; 6] = [1, 5, 10, 10, 5, 1];
+        // Before division by 120 both calculations are exact dyadic values.
+        // More than six points identify each degree-five polynomial.
+        for i in 0_u32..=8 {
+            let weights = basis(f64::from(i) / 8.0)[0];
+            for (j, actual) in weights.into_iter().enumerate() {
+                let expected: u32 = WEIGHTS
+                    .iter()
+                    .enumerate()
+                    .map(|(k, row)| {
+                        let k = k as u32;
+                        u32::from(row[j]) * BINOMIAL[k as usize] * i.pow(k) * (8 - i).pow(5 - k)
+                    })
+                    .sum();
+                assert_eq!(actual, f64::from(expected) / (120.0 * 8.0_f64.powi(5)));
+            }
+        }
+    }
 
     #[test]
     fn bernstein_cell_bounds_preserve_affine_jets_and_remove_coefficient_halo_range() {

@@ -108,3 +108,11 @@ that applies to the rollout. The manifest accepts no speed-cap claims.
 The CLI exits after writing the Rust assessment and its provenance for each
 case. `eligibleCaseIds` includes every case that survives the necessary checks
 for further review. The ordinary `--use-curriculum` orbits are untimed.
+
+An offline retained-field trial also applies the action inequality to paths
+that stay within a declared window in the nominal spline metric. The first
+target needs at least 0.59214 units of action in one second and 0.00592 over
+100 seconds. This supports a regional exclusion under an action budget of
+0.05 and the stated metric and containment premises. Default `runtimeMap`
+curriculum still needs evidence that those premises apply to the rollout.
+[Retained Map experiment](174-operational-route-enclosures.md)
