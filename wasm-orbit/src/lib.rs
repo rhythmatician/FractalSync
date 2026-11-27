@@ -4,6 +4,41 @@
 
 use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen]
+pub struct CockpitRope(runtime_core::cockpit_rope::CockpitRope);
+
+#[wasm_bindgen]
+impl CockpitRope {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self(Default::default())
+    }
+
+    pub fn step_analog(&mut self, x: f64, y: f64, rho: f64, aim_x: f64, aim_y: f64, grip: f64, reel_rate: f64, dt: f64) -> Vec<f64> {
+        self.0.step_analog([x, y], rho, [aim_x, aim_y], grip, reel_rate, dt).to_vec()
+    }
+
+    pub fn state(&self) -> Vec<f64> {
+        self.0.state().to_vec()
+    }
+
+    pub fn reset(&mut self) {
+        self.0 = Default::default();
+    }
+
+    pub fn rider_space_points(&self, x: f64, y: f64, z: f64) -> Vec<f64> {
+        self.0.rider_space_points([x, y], z).to_vec()
+    }
+
+    pub fn positions(&self) -> Vec<f64> {
+        self.0.positions().to_vec()
+    }
+
+    pub fn step(&mut self, x: f64, y: f64, rho: f64, aim_x: f64, aim_y: f64, held: bool, reel: bool, dt: f64) -> Vec<f64> {
+        self.0.step([x, y], rho, [aim_x, aim_y], held, reel, dt).to_vec()
+    }
+}
+
 #[cfg(feature = "experimental-operational-field")]
 mod operational_engine;
 use js_sys::Array;

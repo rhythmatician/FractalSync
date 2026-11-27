@@ -387,7 +387,7 @@ export default {
   JuliaViewState: class MockJuliaViewState {
     zoom = 1.0; rotation = 0.0; harmony_cooldown = 0; harmony_armed = true;
     color = { anchor_hue: 0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 };
-    apply_controls(c: unknown) {
+    applyControls(c: unknown) {
       const ctrl = c as { zoom_delta?: number; rotation_delta?: number; hue_delta?: number; chroma_delta?: number; lightness_delta?: number; accent_delta?: number; harmony_shift?: number };
       const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
       const wrap01 = (v: number) => ((v % 1) + 1) % 1;

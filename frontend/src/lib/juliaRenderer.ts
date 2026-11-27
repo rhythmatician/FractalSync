@@ -21,12 +21,16 @@ export interface VisualParameters {
   colorBright: number; // treated as light intensity mix [0,1]
   zoom: number;
   speed: number;
+  rotation?: number;
+  accent?: number;
+  harmony?: string;
 }
 
 export class JuliaRenderer {
   private gl: WebGLRenderingContext;
   private program!: WebGLProgram;
   private canvas: HTMLCanvasElement;
+  private resolutionScale = 1;
 
   private currentParams: VisualParameters;
   private targetParams: VisualParameters;
@@ -41,6 +45,7 @@ export class JuliaRenderer {
   private uTimeLocation: WebGLUniformLocation | null = null;
 
   private uZoomLocation: WebGLUniformLocation | null = null;
+  private uPresentationLocation: WebGLUniformLocation | null = null;
   private uHueLocation: WebGLUniformLocation | null = null;
   private uSatLocation: WebGLUniformLocation | null = null;
 
@@ -175,7 +180,7 @@ export class JuliaRenderer {
   /**
    * Initialize WebGL program and uniforms. Must be awaited before calling `start()`.
    */
-  async init(): Promise<void> {
+  async init(fragmentSource?: string): Promise<void> {
     const gl = this.gl;
 
     const vertexShaderSource = `
@@ -186,12 +191,14 @@ export class JuliaRenderer {
     `;
 
     // Fetch canonical fragment shader from backend API
-    const resp = await fetch('/api/shader/julia.frag');
-    if (!resp.ok) {
-      throw new Error('Failed to fetch fragment shader from /api/shader/julia.frag: ' + resp.status);
+    if (fragmentSource === undefined) {
+      const resp = await fetch('/api/shader/julia.frag');
+      if (!resp.ok) {
+        throw new Error('Failed to fetch fragment shader from /api/shader/julia.frag: ' + resp.status);
+      }
+      fragmentSource = await resp.text();
     }
-    const fragRaw = await resp.text();
-    const fragmentShaderSource = fragRaw.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
+    const fragmentShaderSource = fragmentSource.replace('__BASE_SPAN__', this.BASE_SPAN.toFixed(6));
 
     const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertexShaderSource);
     const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
@@ -211,6 +218,7 @@ export class JuliaRenderer {
     this.uTimeLocation = gl.getUniformLocation(this.program, 'u_time');
 
     this.uZoomLocation = gl.getUniformLocation(this.program, 'u_zoom');
+    this.uPresentationLocation = gl.getUniformLocation(this.program, 'u_presentation');
     this.uHueLocation = gl.getUniformLocation(this.program, 'u_hue');
     this.uSatLocation = gl.getUniformLocation(this.program, 'u_sat');
 
@@ -286,14 +294,18 @@ export class JuliaRenderer {
     return shader;
   }
 
+  setResolutionScale(scale: number): void {
+    this.resolutionScale = scale;
+  }
+
   resize(): void {
     const gl = this.gl;
     const canvas = this.canvas;
 
     // Use DPR for sharper output (your old code effectively ignored DPR).
-    const dpr = Math.min(window.devicePixelRatio || 1, 2); // clamp for perf
-    const displayWidth = Math.floor(canvas.clientWidth * dpr);
-    const displayHeight = Math.floor(canvas.clientHeight * dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * this.resolutionScale;
+    const displayWidth = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    const displayHeight = Math.max(1, Math.floor(canvas.clientHeight * dpr));
 
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
       canvas.width = displayWidth;
@@ -342,6 +354,12 @@ export class JuliaRenderer {
     this.currentParams.colorSat += (this.targetParams.colorSat - this.currentParams.colorSat) * smoothing;
     this.currentParams.colorBright += (this.targetParams.colorBright - this.currentParams.colorBright) * smoothing;
 
+    const rotation = this.currentParams.rotation ?? 0;
+    const delta = (this.targetParams.rotation ?? 0) - rotation;
+    this.currentParams.rotation = rotation + Math.atan2(Math.sin(delta), Math.cos(delta)) * smoothing;
+    const accent = this.currentParams.accent ?? 0;
+    this.currentParams.accent = accent + ((this.targetParams.accent ?? 0) - accent) * smoothing;
+    this.currentParams.harmony = this.targetParams.harmony;
     this.currentParams.zoom += (this.targetParams.zoom - this.currentParams.zoom) * smoothing;
     this.currentParams.speed += (this.targetParams.speed - this.currentParams.speed) * smoothing;
   }
@@ -370,6 +388,8 @@ export class JuliaRenderer {
     gl.uniform1f(this.uTimeLocation!, time);
 
     gl.uniform1f(this.uZoomLocation!, Math.max(params.zoom, 1e-6));
+    const harmonyOffset = params.harmony === 'opponent' ? 0.5 : params.harmony === 'analogous' ? 1 / 12 : 0;
+    gl.uniform3f(this.uPresentationLocation, params.rotation ?? 0, params.accent ?? 0, harmonyOffset);
     gl.uniform1f(this.uHueLocation!, this.wrap01(params.colorHue));
     gl.uniform1f(this.uSatLocation!, Math.max(0, Math.min(1, params.colorSat)));
 

@@ -1244,6 +1244,7 @@ class ControlTrainer:
             predicted_controls = self.model(features)
 
             # Parse control signals
+            view_loss = predicted_controls.new_zeros(())
             parsed = self.model.parse_output(predicted_controls)
             # Controls v2 (issue #107): destination manifold rollout
             # MotionControls -> generalized forces/impulses/PSD friction -> manifold Physics -> c(t)
@@ -1251,20 +1252,13 @@ class ControlTrainer:
             # This path is the causal PlayerPolicy training surface: a fixed ControlsV2 tensor drives the
             # same Rust integration the browser runs (controls_integrate_step), so the trainer and runtime
             # share one pipeline (ADR 0001). No (s,alpha,omega_scale) legacy adapter is used here.
-            if getattr(self.model, "controls_version", "orbit_control") == "controls/2":
+            if getattr(self.model, "controls_version", "orbit_control") in ("controls/2", "controls/2+tether"):
                 directionX = parsed["directionX"]
                 directionY = parsed["directionY"]
                 throttle = parsed["throttle"]
                 brake = parsed["brake"]
                 grip = parsed["grip"]
                 impulse = parsed["impulse"]
-                zoomDelta = parsed["zoomDelta"]
-                rotationDelta = parsed["rotationDelta"]
-                hueDelta = parsed["hueDelta"]
-                chromaDelta = parsed["chromaDelta"]
-                lightnessDelta = parsed["lightnessDelta"]
-                accentDelta = parsed["accentDelta"]
-                harmonyShift = parsed["harmonyShift"]
                 # For logging, synthesize s/alpha/omega proxies from motion (not used for physics)
                 s_target = throttle.squeeze(-1) * 2.8 + 0.2
                 alpha = (
@@ -1357,6 +1351,17 @@ class ControlTrainer:
                     raise RuntimeError(
                         f"ControlsV2 manifold rollout failed: {_e2}"
                     ) from _e2
+                if "tetherAimX" in parsed:
+                    from .tether_rollout import tether_rollout
+
+                    tether_actions = torch.stack(
+                        [parsed[key].reshape(-1) for key in
+                         ("tetherAimX", "tetherAimY", "tetherGrip", "tetherReel")],
+                        dim=-1,
+                    )
+                    c_complex = tether_rollout(
+                        c_complex, tether_actions, segment_ids, canonical_hop_dt(), 1e-4
+                    )
                 # Audio-feature correlations for the new Controls surface (musically informed but Physics-ignorant)
                 try:
                     n_fpf = self.feature_extractor.num_features_per_frame()
@@ -1385,15 +1390,11 @@ class ControlTrainer:
                 transient_impact_loss = self._sanitize_scalar(transient_impact_loss)
                 loudness_distance_loss = self._sanitize_scalar(loudness_distance_loss)
                 temporal_change_tensor = torch.zeros_like(spectral_flux)
-                # Julia view deltas are part of the 13-channel contract (Rust clamps to MAX_*_DELTA).
-                _ = (
-                    zoomDelta,
-                    rotationDelta,
-                    hueDelta,
-                    chromaDelta,
-                    lightnessDelta,
-                    accentDelta,
-                    harmonyShift,
+                from .view_training import VIEW_CHANNELS, view_training_loss
+
+                view_actions = torch.stack([parsed[key].reshape(-1) for key in VIEW_CHANNELS], dim=1)
+                view_loss = view_training_loss(
+                    view_actions, c_complex, segment_ids, spectral_rms, spectral_centroid, spectral_flux
                 )
                 _skip_legacy_render = True
             elif self.use_cspace_proxies:
@@ -1744,7 +1745,7 @@ class ControlTrainer:
             control_loss_val = self._sanitize_scalar(control_loss_val)
 
             # Total loss
-            total_batch_loss = (
+            total_batch_loss = view_loss + (
                 self.correlation_weights["timbre_color"] * timbre_color_loss
                 + self.correlation_weights["transient_impact"] * transient_impact_loss
                 + self.correlation_weights["loudness_distance"] * loudness_distance_loss

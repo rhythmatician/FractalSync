@@ -223,6 +223,7 @@ def main():
         default=4,
         help="Number of DataLoader workers",
     )
+    parser.add_argument("--full-songs", action="store_true", help="Train on each audio file from start to finish")
     parser.add_argument(
         "--max-files",
         type=int,
@@ -408,7 +409,7 @@ def main():
         "--controls-version",
         type=str,
         default="orbit_control",
-        choices=["controls/2", "orbit_control"],
+        choices=["controls/2", "controls/2+tether", "orbit_control"],
         help="Controls contract version: controls/2 (13-channel unified) or orbit_control (legacy 3+k)",
     )
     parser.add_argument(
@@ -492,6 +493,7 @@ def execute_training_workflow(args):
         feature_extractor=feature_extractor,
         window_frames=args.window_frames,
         max_files=args.max_files,
+        full_songs=args.full_songs,
         cache_dir="data/cache",
     )
 
@@ -651,7 +653,7 @@ def execute_training_workflow(args):
     except Exception as e:
         print(f"Warning: Could not get git hash: {e}")
 
-    is_controls_v2 = getattr(model, "controls_version", "orbit_control") == "controls/2"
+    is_controls_v2 = args.controls_version in ("controls/2", "controls/2+tether")
     if is_controls_v2:
         onnx_model_filename = f"model_controls_v2_{timestamp}.onnx"
     else:
@@ -662,7 +664,7 @@ def execute_training_workflow(args):
         model.eval()
         if is_controls_v2:
             meta = {
-                "model_type": "controls_v2",
+                "model_type": "controls_v2_tether" if args.controls_version.endswith("+tether") else "controls_v2",
                 "controls_version": _runtime_controls_version(),
                 "output_dim": model.output_dim,
                 "epoch": args.epochs,

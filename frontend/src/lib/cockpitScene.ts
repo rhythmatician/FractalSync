@@ -112,7 +112,7 @@ function getGridTexture(): THREE.CanvasTexture | null {
   return proceduralGridTexture;
 }
 
-export function buildTerrainMesh(patch: TerrainPatch): THREE.Mesh {
+export function buildTerrainMesh(patch: TerrainPatch, previousMaterial?: THREE.MeshStandardMaterial) {
   const n = patch.n;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(n * n * 3);
@@ -168,7 +168,7 @@ export function buildTerrainMesh(patch: TerrainPatch): THREE.Mesh {
   geometry.computeVertexNormals();
 
   const gridTex = getGridTexture();
-  const material = new THREE.MeshStandardMaterial({
+  const material = previousMaterial ?? new THREE.MeshStandardMaterial({
     vertexColors: true,
     ...(gridTex ? { map: gridTex } : {}),
     roughness: 0.72,

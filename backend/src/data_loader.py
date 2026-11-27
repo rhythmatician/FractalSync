@@ -42,6 +42,7 @@ class AudioDataset:
         window_frames: int = 10,
         max_files: Optional[int] = None,
         cache_dir: Optional[str] = "data/cache",
+        full_songs: bool = False,
     ):
         """
         Initialize dataset.
@@ -66,6 +67,7 @@ class AudioDataset:
             )
         self.window_frames = window_frames
         self.max_files = max_files
+        self.full_songs = full_songs
         self.cache_dir = Path(cache_dir) if cache_dir else None
 
         self.feature_extractor = feature_extractor or FeatureExtractor(
@@ -132,6 +134,8 @@ class AudioDataset:
             # file. Invalidate caches when the pipeline changes.
             "pipeline_version": PIPELINE_VERSION,
         }
+        if self.full_songs:
+            cache_payload["full_songs"] = True
         cache_key = hashlib.sha1(
             json.dumps(cache_payload, sort_keys=True).encode()
         ).hexdigest()
@@ -163,7 +167,7 @@ class AudioDataset:
         # source — a production-path divergence the component tests cannot
         # see (the #93 class, one layer deeper).
         audio, source_rate_raw = librosa.load(
-            str(audio_file), sr=None, mono=True, duration=5 * 60
+            str(audio_file), sr=None, mono=True, duration=None if self.full_songs else 5 * 60
         )
         source_rate = int(source_rate_raw)
 

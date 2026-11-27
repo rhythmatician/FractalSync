@@ -106,7 +106,7 @@ describe('JuliaViewState parity (WASM vs Rust)', () => {
     ];
     for (const d of deltas) {
       const c = new Controls(...d);
-      state.apply_controls(c);
+      state.applyControls(c);
     }
 
     const expected = rustExpected();
@@ -125,7 +125,7 @@ describe('JuliaViewState parity (WASM vs Rust)', () => {
     const color2: any = (mod as any).ColorIntent ? new (mod as any).ColorIntent(0.0, 0.18, 0.55, 'analogous', 0.35) : { anchor_hue: 0, chroma: 0.18, lightness: 0.55, harmony: 'analogous', accent_weight: 0.35 };
     const state2: any = new State(1.0, 0.0, color2, 0, true);
     for (const d of deltas) {
-      state2.apply_controls(new Controls(...d));
+      state2.applyControls(new Controls(...d));
     }
     expect(state2.zoom).toBeCloseTo(state.zoom, 12);
   });

@@ -81,6 +81,14 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  CockpitRope?: new () => {
+    positions?(): Float64Array;
+    step_analog?(x: number, y: number, rho: number, aimX: number, aimY: number, grip: number, reel: number, dt: number): Float64Array;
+    reset?(): void;
+    rider_space_points?(x: number, y: number, z: number): Float64Array;
+    free(): void;
+    step(x: number, y: number, rho: number, aimX: number, aimY: number, held: boolean, reel: boolean, dt: number): Float64Array;
+  };
   decodeOrbitControlJson(values: Float64Array, kBands: number): string;
   decodeControlsV2Json(values: Float64Array): string;
   decodeLegacyVisualJson(values: Float64Array, audioReactive: boolean, rms: number, onset: number): string;
@@ -329,10 +337,11 @@ export interface JuliaViewStateHandle {
   readonly color: { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number };
   readonly harmony_cooldown: number;
   readonly harmony_armed: boolean;
-  apply_controls(controls: JuliaViewControlsHandle): void;
+  applyControls(controls: JuliaViewControlsHandle): void;
 }
 
 export interface JuliaViewControlsHandle {
+  free?(): void;
   readonly zoom_delta: number;
   readonly rotation_delta: number;
   readonly hue_delta: number;

@@ -1,5 +1,6 @@
 precision highp float;
 
+uniform vec3 u_presentation; // rotation, accent weight, harmony hue offset
 uniform vec2  u_juliaSeed;
 uniform vec2  u_resolution;
 uniform float u_time;
@@ -355,7 +356,9 @@ vec3 shadePixel(vec2 fragCoord) {
   vec2 uv = (fragCoord - 0.5 * u_resolution) / minRes;
 
   float span = __BASE_SPAN__ / max(u_zoom, 1.0e-6);
-  vec2 z0 = uv * span;
+  float cs = cos(u_presentation.x);
+  float sn = sin(u_presentation.x);
+  vec2 z0 = mat2(cs, sn, -sn, cs) * uv * span;
 
   // Frame diagonal in complex-plane units (used to normalize dem like python)
   float spanX = span * (u_resolution.x / minRes);
@@ -402,6 +405,9 @@ vec3 shadePixel(vec2 fragCoord) {
   vec3 rgb_thetas = vec3(hueShift, hueShift + 0.15, hueShift + 0.25);
 
   vec3 base = sinPalette(tColor, rgb_thetas);
+  vec3 accentColor = sinPalette(tColor, rgb_thetas + u_presentation.z);
+  base = mix(base, accentColor, u_presentation.y * smoothstep(0.25, 0.75, tColor));
+  base *= 1.0 + 0.25 * u_presentation.y * tColor;
 
   // Saturation control (not in python; keeps your UI meaningful)
   base = mix(vec3(0.5), base, clamp(u_sat, 0.0, 1.0));

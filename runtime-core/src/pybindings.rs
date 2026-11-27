@@ -2370,6 +2370,44 @@ fn compute_runtime_visual_metrics(py: Python,
     Ok(pyobj.into())
 }
 
+#[pyfunction]
+fn tether_schema_json() -> PyResult<String> {
+    Ok(serde_json::to_string(&crate::model_io::tether_schema()).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?)
+}
+
+#[pyfunction]
+fn tether_rho(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<f64> {
+    crate::manifold::regularized_distance(num_complex::Complex64::new(c.real(), c.imag()), epsilon).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+#[pyclass]
+#[derive(Default)]
+struct CockpitRope(crate::cockpit_rope::CockpitRope);
+
+#[pymethods]
+impl CockpitRope {
+    #[new]
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn step_analog(&mut self, x: f64, y: f64, rho: f64, aim_x: f64, aim_y: f64, grip: f64, reel_rate: f64, dt: f64) -> [f64; 2] {
+        self.0.step_analog([x, y], rho, [aim_x, aim_y], grip, reel_rate, dt)
+    }
+
+    fn state(&self) -> [f64; 7] {
+        self.0.state()
+    }
+
+    fn fork(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    fn reset(&mut self) {
+        self.0 = Default::default();
+    }
+}
+
 #[pymodule]
 #[allow(deprecated)]
 fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -2418,6 +2456,9 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<CycleMode>()?;
     m.add_class::<CycleBank>()?;
+    m.add_class::<CockpitRope>()?;
+    m.add_function(wrap_pyfunction!(tether_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(tether_rho, m)?)?;
     m.add_class::<MotionControls>()?;
     m.add_class::<JuliaViewControls>()?;
     m.add_class::<ControlsV2>()?;

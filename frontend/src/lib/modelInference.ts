@@ -3,17 +3,12 @@
  */
 
 import * as ort from 'onnxruntime-web';
-import { OrbitSynthesizer, type Complex, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls, decodeOrbitControl, decodeControlsV2, legacyAudioFeatureAverages, decodeLegacyVisual, orbitVisualParameters, modelOutputKind, legacyOrbitDriveInputs, controlsV2VisualParameters } from './orbitSynthesizer';
+import { currentSnapshot } from "./debugCockpit";
+import { getWasmModule, OrbitSynthesizer, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls, decodeOrbitControl, decodeControlsV2, legacyAudioFeatureAverages, decodeLegacyVisual, orbitVisualParameters, modelOutputKind, legacyOrbitDriveInputs, controlsV2VisualParameters } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
-export interface VisualParameters {
-  juliaSeed: Complex;
-  colorHue: number;
-  colorSat: number;
-  colorBright: number;
-  zoom: number;
-  speed: number;
-}
+import type { VisualParameters } from './juliaRenderer';
+export type { VisualParameters } from './juliaRenderer';
 
 export interface ModelMetadata {
   input_shape: number[];
@@ -57,6 +52,7 @@ export class ModelInference {
   private isOrbitModel: boolean = false;
   // Controls v2 synthesis (destination manifold seam, issue #107)
   private isControlsV2: boolean = false;
+  private tether?: InstanceType<NonNullable<ReturnType<typeof getWasmModule>['CockpitRope']>>;
   private juliaViewState: JuliaViewStateHandle | null = null;
   
   // Audio-reactive post-processing toggle (MR #8 / commit 75c1a43)
@@ -165,7 +161,7 @@ export class ModelInference {
         this.metadata = await response.json() as ModelMetadata;
 
         // Check model contract: controls/2 takes precedence (Rust-authoritative, issue #107)
-        const outputKind = modelOutputKind(this.metadata.model_type, this.metadata.controls_version);
+        const outputKind = modelOutputKind(this.metadata.model_type === 'controls_v2_tether' ? 'controls_v2' : this.metadata.model_type, this.metadata.controls_version);
         this.isControlsV2 = outputKind === 'controls_v2';
         this.isOrbitModel = outputKind === 'orbit_control';
 
@@ -173,6 +169,15 @@ export class ModelInference {
           // Controls v2 path: unified 13-channel action surface -> manifold physics -> c, Julia view deltas -> view state
           const kBands = this.metadata.k_bands ?? 6;
           this.orbitSynthesizer = new OrbitSynthesizer(kBands);
+          this.tether?.free();
+          this.tether = undefined;
+          if (this.metadata.model_type === 'controls_v2_tether') {
+            const Tether = getWasmModule().CockpitRope;
+            if (!Tether || typeof Tether.prototype.step_analog !== 'function') {
+              throw new Error('Tether models require updated runtime WASM');
+            }
+            this.tether = new Tether();
+          }
           // Controls version contract (issue #107): model must have been trained against the same Controls semantics this runtime runs.
           const runtimeControlsVersion = getControlsVersion();
           const modelControlsVersion = this.metadata.controls_version;
@@ -395,7 +400,7 @@ export class ModelInference {
       // Controls v2 path: 13-channel unified action surface (issue #107)
       // MotionControls -> manifold physics; JuliaViewControls -> persistent view state (Rust authority)
       // params layout: directionX,Y,throttle,brake,grip,impulse, zoomDelta,rotationDelta,hueDelta,chromaDelta,lightnessDelta,accentDelta,harmonyShift
-      const decoded = decodeControlsV2(params);
+      const decoded = decodeControlsV2(this.tether ? params.slice(0, 13) : params);
       const motion = decoded.motion;
       const view = {
         zoom_delta: decoded.view.zoomDelta,
@@ -408,7 +413,14 @@ export class ModelInference {
       };
       const dt = tick.dtSeconds;
       // Apply motion via manifold physics (musically ignorant, no h/energy)
-      const c = this.orbitSynthesizer.stepWithControls(dt, motion);
+      let c = this.orbitSynthesizer.stepWithControls(dt, motion);
+      if (this.tether) {
+        const analog = this.tether.step_analog;
+        if (!analog || params.length !== 17) throw new Error('Invalid tether policy output');
+        const { physics } = currentSnapshot(this.orbitSynthesizer);
+        const [real, imag] = analog.call(this.tether, ...physics.c, physics.rho, params[13], params[14], params[15], params[16], dt);
+        c = { real, imag };
+      }
       // Apply view deltas via Rust authority (ADR 0001): no JS duplicate of clamps/rates/harmony logic.
       // The JS mirror is deleted; the canonical semantics live in runtime-core/src/controls.rs
       // (JuliaViewState::apply_controls) and are consumed via WASM. This satisfies the #107
@@ -416,10 +428,14 @@ export class ModelInference {
       const jvs: JuliaViewStateHandle | null = this.juliaViewState;
       if (jvs) {
         const viewControls = createJuliaViewControls(view);
-        jvs.apply_controls(viewControls);
+        jvs.applyControls(viewControls);
+        viewControls.free?.();
         const color = jvs.color;
         const zoom = jvs.zoom;
         visualParams = JSON.parse(controlsV2VisualParameters(c, decoded, [color.anchor_hue, color.chroma, color.lightness, zoom])) as VisualParameters;
+        visualParams.rotation = jvs.rotation;
+        visualParams.accent = color.accent_weight;
+        visualParams.harmony = color.harmony;
       } else {
         visualParams = JSON.parse(controlsV2VisualParameters(c, decoded)) as VisualParameters;
       }
