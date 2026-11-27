@@ -124,3 +124,52 @@ ordinary step's geometry evaluations.
 These endpoints give #179 a source for transport experiments along accepted
 integration steps. The trace samples the discrete rollout. A continuous path
 or a transport error bound between samples requires separate analysis.
+
+## Read-only Map route guidance
+
+`FrozenRollout::route_guidance` and the experimental WASM method
+`BoundedOperationalRollout.route_guidance` start from the current mechanical
+position. The WASM method accepts a JSON request with `window` as two
+coordinate corners, `gridSteps`, a `target` with `center` and `radius`, and
+an optional `lengthBudget`. Both the start and center must lie in the
+window, and the window must fit in the open mechanical disk and the prepared
+field's chart. A radius of zero specifies a point. The lattice attaches an
+off-grid start and target to the corners of their containing cells. It uses
+up to 64 intervals per axis, each at most two spline cells wide.
+
+The planner uses the prepared field's [Bernstein edge enclosures](../research/174-operational-route-enclosures.md).
+It refuses a whole candidate edge if its coordinate box lacks a stencil
+or overlaps a frozen refusal box or canonical reference point. Bounding by
+the box may also refuse edges that miss the unsupported region. It checks
+ambient arrival independently of the metric. When rounding leaves a point
+ambiguous at the ball boundary, it can inform the lower bound but cannot
+witness arrival. The search orders equal priorities by node index.
+
+The report distinguishes arrival, a route witness, a graph-budget
+exclusion, and absence of a certified route. The cost bracket applies to
+the admitted finite graph in the exact stored-spline metric. The returned
+bearing uses the compiled start metric. Potential barriers, travel time,
+continuous Physics correspondence, and human driving are outside the
+geometric result.
+
+An optional `nominalTiming` takes canonical `startSample` and
+`deadlineSample` and a `kineticActionBudget`. Its `nominalFeasibility`
+uses the lower bound for all paths confined to the window. It can rule
+out the action budget even when the graph offers a geometric route.
+The deadline check has insufficient evidence without a speed cap.
+No action estimate or route status is fed back into the rollout.
+
+The browser check initializes a rollout near the cusp and commits a Physics
+step. Chromium found a 79-vertex route from that committed position to the
+`0.001`-radius target. It certified 16,518 edges and refused two. The graph
+minimum lies between 6.80863 and the chosen route's upper length of 35.50192
+in the stated metric. Sharing repeated cell enclosures within one request
+reduced this local query from 606.4 ms to 60.0 ms and produced the same route
+report. Those are single-machine timings after asset and WASM loading. The
+test confirms that routing leaves the mechanical state unchanged. Use the
+checksum-locked fine asset and policy above to reproduce it.
+
+```powershell
+rtk proxy wasm-pack build wasm-orbit --target web --out-dir ../tmp/map-guidance-web -- --features experimental-operational-field
+rtk proxy node scripts/check_bounded_browser.mjs tmp/geometry145-retained-fine.bin docs/validation/bounded-reference-policy.json frontend/node_modules/playwright/index.mjs tmp/map-guidance-browser.json tmp/map-guidance-web --verify-cusp-route
+```

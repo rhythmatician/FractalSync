@@ -84,14 +84,14 @@ impl FrozenRollout {
 }
 
 /// Orientation-preserving upper Cholesky factor, so |L v|² = g(v, v).
-struct MetricFactor {
+pub(super) struct MetricFactor {
     x_scale: f64,
     shear: f64,
     y_scale: f64,
 }
 
 impl MetricFactor {
-    fn new(metric: [[f64; 2]; 2]) -> Result<Self, String> {
+    pub(super) fn new(metric: [[f64; 2]; 2]) -> Result<Self, String> {
         let x_scale = metric[0][0].sqrt();
         let shear = metric[0][1] / x_scale;
         let y_squared = metric[1][1] - shear * shear;
@@ -113,7 +113,7 @@ impl MetricFactor {
         [self.x_scale * x + self.shear * y, self.y_scale * y]
     }
 
-    fn unit(&self, v: [f64; 2]) -> Result<[f64; 2], String> {
+    pub(super) fn unit(&self, v: [f64; 2]) -> Result<[f64; 2], String> {
         let [x, y] = self.coordinates(v);
         let length = x.hypot(y);
         if !length.is_finite() || length <= f64::MIN_POSITIVE {

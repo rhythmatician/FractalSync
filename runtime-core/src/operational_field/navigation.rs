@@ -8,6 +8,7 @@ use super::PreparedField;
 use crate::intrinsic_bounds::{add_down, add_up, div_down, div_up, mul_down, mul_up, sub_down};
 use crate::manifold::ManifoldConfig;
 use crate::map_certificates::displacement_lower;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OperationalLengthInterval {
@@ -104,6 +105,29 @@ impl OperationalNavigationRegion<'_> {
         start: [f64; 2],
         end: [f64; 2],
     ) -> Option<OperationalLengthInterval> {
+        self.segment_bounds_using(start, end, |cell| self.field.bernstein_cell_bounds(cell))
+    }
+
+    /// Reuse cell enclosures while building one graph over this region.
+    pub(crate) fn segment_evaluator(
+        &self,
+    ) -> impl FnMut([f64; 2], [f64; 2]) -> Option<OperationalLengthInterval> + '_ {
+        let mut cells = BTreeMap::new();
+        move |start, end| {
+            self.segment_bounds_using(start, end, |cell| {
+                *cells
+                    .entry(cell)
+                    .or_insert_with(|| self.field.bernstein_cell_bounds(cell))
+            })
+        }
+    }
+
+    fn segment_bounds_using(
+        &self,
+        start: [f64; 2],
+        end: [f64; 2],
+        mut cell_bounds: impl FnMut([usize; 2]) -> Option<([f64; 2], [f64; 2])>,
+    ) -> Option<OperationalLengthInterval> {
         if !self.contains(start) || !self.contains(end) {
             return None;
         }
@@ -117,7 +141,7 @@ impl OperationalNavigationRegion<'_> {
         let mut gradient = [0.0_f64; 2];
         for y in first[1]..=last[1] {
             for x in first[0]..=last[0] {
-                let ([lo, hi], upper) = self.field.bernstein_cell_bounds([x, y])?;
+                let ([lo, hi], upper) = cell_bounds([x, y])?;
                 value_lower = value_lower.min(lo);
                 value_upper = value_upper.max(hi);
                 gradient[0] = gradient[0].max(upper[0]);

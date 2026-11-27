@@ -340,10 +340,14 @@ pub fn kinetic_energy(
     c: Complex64,
     config: &ManifoldConfig,
 ) -> Result<f64, String> {
-    let g = induced_metric(c, config)?;
+    Ok(kinetic_energy_from_metric(v, induced_metric(c, config)?))
+}
+
+/// Kinetic energy at a velocity using the metric already sampled at its position.
+pub fn kinetic_energy_from_metric(v: (f64, f64), g: [[f64; 2]; 2]) -> f64 {
     let gv0 = g[0][0] * v.0 + g[0][1] * v.1;
     let gv1 = g[1][0] * v.0 + g[1][1] * v.1;
-    Ok(0.5 * (v.0 * gv0 + v.1 * gv1))
+    0.5 * (v.0 * gv0 + v.1 * gv1)
 }
 
 /// Native potential U = kappa * sigma(c)

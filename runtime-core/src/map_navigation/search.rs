@@ -4,7 +4,7 @@ use std::collections::BinaryHeap;
 #[derive(Clone, Copy, PartialEq)]
 struct Candidate {
     priority: f64,
-    pub cost: f64,
+    cost: f64,
     node: usize,
 }
 
@@ -46,6 +46,7 @@ impl Counts {
 pub struct SearchResult {
     pub cost: Option<f64>,
     pub counts: Counts,
+    pub path: Vec<usize>,
 }
 
 pub struct SearchLimits {
@@ -64,6 +65,7 @@ pub fn search<Edges: IntoIterator<Item = (usize, f64)>>(
 ) -> SearchResult {
     let mut queue = BinaryHeap::new();
     let mut costs = vec![f64::INFINITY; nodes];
+    let mut previous = vec![usize::MAX; nodes];
     let mut expanded = vec![false; nodes];
     let mut bounds = vec![None; nodes];
     let mut counts = Counts::default();
@@ -95,9 +97,17 @@ pub fn search<Edges: IntoIterator<Item = (usize, f64)>>(
             continue;
         }
         if target(node) {
+            let mut path = vec![node];
+            let mut parent = node;
+            while parent != start {
+                parent = previous[parent];
+                path.push(parent);
+            }
+            path.reverse();
             return SearchResult {
                 cost: Some(cost),
                 counts,
+                path,
             };
         }
         counts.expanded += 1;
@@ -106,9 +116,14 @@ pub fn search<Edges: IntoIterator<Item = (usize, f64)>>(
             let new_cost = cost + weight;
             if new_cost < costs[neighbour] {
                 costs[neighbour] = new_cost;
+                previous[neighbour] = node;
                 push(&mut queue, &mut counts, neighbour, new_cost);
             }
         }
     }
-    SearchResult { cost: None, counts }
+    SearchResult {
+        cost: None,
+        counts,
+        path: Vec::new(),
+    }
 }
