@@ -531,6 +531,16 @@ impl Default for OrbitController {
 }
 
 impl OrbitController {
+    /// Set the audio thrust that builds tangential momentum.
+    pub fn set_thrust(&mut self, thrust: f64) {
+        self.thrust = thrust.clamp(0.0, 0.2);
+    }
+
+    /// Set the normalized audio energy used by the Shore servo.
+    pub fn set_energy(&mut self, energy: f64) {
+        self.energy = energy.clamp(0.0, 1.0);
+    }
+
     pub fn new(s: f64, alpha: f64, omega: f64) -> Self {
         Self {
             theta: 0.0,

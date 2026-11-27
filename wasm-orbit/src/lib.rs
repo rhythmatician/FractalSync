@@ -772,14 +772,14 @@ impl OrbitController {
     /// Audio thrust for momentum: sustained energy builds inertia.
     #[wasm_bindgen(setter)]
     pub fn set_thrust(&mut self, thrust: f64) {
-        self.inner.thrust = thrust;
+        self.inner.set_thrust(thrust);
     }
 
     /// Audio energy in [0, 1]: raises the servo's target shore-proximity
     /// (loud audio pulls c toward the Shore).
     #[wasm_bindgen(setter)]
     pub fn set_energy(&mut self, energy: f64) {
-        self.inner.energy = energy.clamp(0.0, 1.0);
+        self.inner.set_energy(energy);
     }
 
     /// Advance one frame; returns the new c. `h` is the transient signal

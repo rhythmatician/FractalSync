@@ -372,13 +372,13 @@ impl OrbitController {
 
     /// Audio thrust magnitude for momentum: sustained energy builds inertia.
     fn set_thrust(&mut self, thrust: f64) {
-        self.inner.thrust = thrust;
+        self.inner.set_thrust(thrust);
     }
 
     /// Audio energy in [0, 1]: raises the servo's target shore-proximity
     /// (loud audio pulls c toward the Shore).
     fn set_energy(&mut self, energy: f64) {
-        self.inner.energy = energy.clamp(0.0, 1.0);
+        self.inner.set_energy(energy);
     }
 
     /// Set the persistent c position for momentum.
