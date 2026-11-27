@@ -4,17 +4,11 @@
 
 import * as ort from 'onnxruntime-web';
 import { currentSnapshot } from "./debugCockpit";
-import { getWasmModule, OrbitSynthesizer, type Complex, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls, decodeOrbitControl, decodeControlsV2, legacyAudioFeatureAverages, decodeLegacyVisual, orbitVisualParameters, modelOutputKind, legacyOrbitDriveInputs, controlsV2VisualParameters } from './orbitSynthesizer';
+import { getWasmModule, OrbitSynthesizer, type JuliaViewStateHandle, initOrbitSynth, loadMipPyramid, getControllerVersion, getFeatureVersion, getAnalysisPipelineVersion, getControlsVersion, createJuliaViewState, createJuliaViewControls, decodeOrbitControl, decodeControlsV2, legacyAudioFeatureAverages, decodeLegacyVisual, orbitVisualParameters, modelOutputKind, legacyOrbitDriveInputs, controlsV2VisualParameters } from './orbitSynthesizer';
 import type { AnalysisTick } from './analysisTimebase';
 
-export interface VisualParameters {
-  juliaSeed: Complex;
-  colorHue: number;
-  colorSat: number;
-  colorBright: number;
-  zoom: number;
-  speed: number;
-}
+import type { VisualParameters } from './juliaRenderer';
+export type { VisualParameters } from './juliaRenderer';
 
 export interface ModelMetadata {
   input_shape: number[];
@@ -432,17 +426,16 @@ export class ModelInference {
       // (JuliaViewState::apply_controls) and are consumed via WASM. This satisfies the #107
       // requirement that deterministic shared action-to-view-state semantics belong in Rust.
       const jvs: JuliaViewStateHandle | null = this.juliaViewState;
-      if (this.tether) {
-        // Tether training scores the Julia seed. Use the cockpit presentation
-        // so untrained view deltas cannot accumulate during the audition.
-        visualParams = JSON.parse(controlsV2VisualParameters(c, decoded, [0.58, 0.75, 0.6, 1])) as VisualParameters;
-      } else if (jvs) {
+      if (jvs) {
         const viewControls = createJuliaViewControls(view);
         jvs.applyControls(viewControls);
         viewControls.free?.();
         const color = jvs.color;
         const zoom = jvs.zoom;
         visualParams = JSON.parse(controlsV2VisualParameters(c, decoded, [color.anchor_hue, color.chroma, color.lightness, zoom])) as VisualParameters;
+        visualParams.rotation = jvs.rotation;
+        visualParams.accent = color.accent_weight;
+        visualParams.harmony = color.harmony;
       } else {
         visualParams = JSON.parse(controlsV2VisualParameters(c, decoded)) as VisualParameters;
       }
