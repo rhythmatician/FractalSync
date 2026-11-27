@@ -8,16 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { calibrateJuliaSensitivity } from './julia_sensitivity_calibration.mjs';
+import { BOXES, RESOLUTIONS, compareBoxResolutions } from './julia_sensitivity_refinement.mjs';
 
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(frontend, '..');
 const heldOut = process.argv[2] === '--held-out';
+const refinement = process.argv[2] === '--refinement';
 const contours = process.argv[2] === '--contours';
 const defaultOutput = heldOut ? 'tmp/julia-151/held-out.json'
+  : refinement ? 'tmp/julia-171/refinement.json'
   : contours ? 'tmp/navigation-185/julia-motion.json' : 'tmp/julia-151/results.json';
-const outputArgument = heldOut ? process.argv[3] : contours ? process.argv[4] : process.argv[2];
+const outputArgument = heldOut || refinement ? process.argv[3] : contours ? process.argv[4] : process.argv[2];
 const output = resolve(outputArgument ?? resolve(root, defaultOutput));
-const replayFile = heldOut ? undefined : process.argv[3];
+const replayFile = heldOut || refinement ? undefined : process.argv[3];
 if (contours) assert.ok(replayFile, 'Expected the contour_controls_trial JSON path');
 const replayBytes = replayFile ? await readFile(resolve(replayFile)) : null;
 const replay = replayBytes ? JSON.parse(replayBytes) : null;
@@ -36,17 +39,18 @@ const paths = contours
   })) : [];
 const shaderPath = 'shared/shaders/julia.frag';
 const fragment = await readFile(resolve(root, shaderPath));
-const resolution = heldOut ? 160 : 80;
+const resolutions = refinement ? RESOLUTIONS : [heldOut ? 160 : 80];
 const spacings = [0.02, 0.01, 0.005, 0.0025, 0.00125];
 const presentation = { zoom: 1, colorHue: 0.58, colorSat: 0.75, colorBright: 0.6, speed: 0 };
-const states = heldOut ? [
+const heldOutStates = [
   { name: 'held-out-cardioid', c: [-0.31, 0.19] },
   { name: 'held-out-period-two', c: [-1.04, -0.13] },
   { name: 'held-out-attachment', c: [-0.75, 0] },
   { name: 'held-out-period-three', c: [-0.122561, -0.744862] },
   { name: 'held-out-exterior-collar', c: [0.27, 0.012] },
   { name: 'held-out-distant', c: [1.1, -0.31] },
-] : [
+];
+const initialStates = [
   { name: 'real-axis-center', c: [0, 0] },
   { name: 'wide-cardioid', c: [-0.17, 0.09] },
   { name: 'period-two', c: [-0.98, 0.09] },
@@ -55,6 +59,7 @@ const states = heldOut ? [
   { name: 'outside-wide', c: [1.2, 0.25] },
   { name: 'provider-cut-locus', c: [-1.001, 0] },
 ];
+const states = refinement ? [...initialStates, ...heldOutStates] : heldOut ? heldOutStates : initialStates;
 
 const python = process.env.FRACTALSYNC_PYTHON ?? resolve(root, process.platform === 'win32'
   ? '.venv/Scripts/python.exe' : '.venv/bin/python');
@@ -101,7 +106,7 @@ json.dump({
 
 function queryGeometry(points, metrics) {
   const child = spawnSync(python, ['-c', geometrySource], {
-    cwd: root, input: JSON.stringify({ points, metrics }), encoding: 'utf8', timeout: 180_000,
+    cwd: root, input: JSON.stringify({ points, metrics }), encoding: 'utf8', timeout: refinement ? 600_000 : 180_000,
     maxBuffer: 8 * 1024 * 1024,
   });
   if (child.error) throw child.error;
@@ -193,10 +198,11 @@ try {
   const page = await browser.newPage({
     viewport: { width: 320, height: 240 }, deviceScaleFactor: 1,
   });
-  await page.goto(`${server.resolvedUrls.local[0]}__julia_sensitivity__.html`);
-  const result = await page.evaluate(async ({ states, resolution, presentation, paths, contours }) => {
+  async function evaluatePanel({ states, resolution, presentation, paths, contours, refinement }) {
     const { JuliaRenderer } = await import('/src/lib/juliaRenderer.ts');
     const { dot, sensitivitySpectrum } = await import('/scripts/julia_sensitivity_spectrum.mjs');
+    const { BOXES, boxAverage, floatTarget, differenceColumns, observe, operatorDifference } =
+      await import('/scripts/julia_sensitivity_refinement.mjs');
     const canvas = document.createElement('canvas');
     canvas.width = resolution;
     canvas.height = resolution;
@@ -209,10 +215,12 @@ try {
     if (!gl) throw new Error('WebGL unavailable');
     gl.disable(gl.DITHER);
     const components = 3 * resolution ** 2;
-    const render = c => {
+    const floatFramebuffer = refinement ? floatTarget(gl, resolution) : null;
+    const render = (c, useFloat = false) => {
+      if (refinement) gl.bindFramebuffer(gl.FRAMEBUFFER, useFloat ? floatFramebuffer : null);
       renderer.renderFrozen({ ...presentation, juliaSeed: { real: c[0], imag: c[1] } });
-      const rgba = new Uint8Array(resolution ** 2 * 4);
-      gl.readPixels(0, 0, resolution, resolution, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      const rgba = useFloat ? new Float32Array(resolution ** 2 * 4) : new Uint8Array(resolution ** 2 * 4);
+      gl.readPixels(0, 0, resolution, resolution, gl.RGBA, useFloat ? gl.FLOAT : gl.UNSIGNED_BYTE, rgba);
       if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL readback error');
       return rgba;
     };
@@ -222,6 +230,12 @@ try {
     render([0.29, -0.04]);
     const renderAgain = render(states[0].c);
     if (!before.every((byte, j) => byte === renderAgain[j])) throw new Error('Frozen frame changed');
+    if (refinement) {
+      const firstFloat = render(states[0].c, true);
+      render([0.29, -0.04], true);
+      const repeatedFloat = render(states[0].c, true);
+      if (!firstFloat.every((value, j) => value === repeatedFloat[j])) throw new Error('Frozen float frame changed');
+    }
 
     const program = gl.getParameter(gl.CURRENT_PROGRAM);
     const uniforms = {};
@@ -285,15 +299,18 @@ try {
       state.baseline_rgba_sha256 = await hash(render(state.c));
       for (const metric of state.metrics) {
         let previous;
+        let priorObservations;
         for (const step of metric.steps) {
           if (step.status !== 'ready') {
             previous = undefined;
+            priorObservations = undefined;
             continue;
           }
           step.gpu_seed_f32 = step.endpoints.map(({ c }) => c.map(Math.fround));
           if ([0, 2].some(k => step.gpu_seed_f32[k].every((v, j) => v === step.gpu_seed_f32[k + 1][j]))) {
             step.status = 'gpu-seed-collision';
             previous = undefined;
+            priorObservations = undefined;
             continue;
           }
           step.gpu_relative_displacement_error = [0, 2].map(k => {
@@ -304,6 +321,7 @@ try {
           if (Math.max(...step.gpu_relative_displacement_error) > 0.05) {
             step.status = 'gpu-seed-imprecise';
             previous = undefined;
+            priorObservations = undefined;
             continue;
           }
           const pixels = step.endpoints.map(({ c }) => render(c));
@@ -327,6 +345,49 @@ try {
             ];
           }
           step.pair_diagnostics = pairs.map(({ direction, ...diagnostics }) => diagnostics);
+          if (refinement) {
+            const floatPixels = step.endpoints.map(({ c }) => render(c, true));
+            const boxComponents = 3 * BOXES ** 2;
+            const columns = {
+              raw_float: differenceColumns(floatPixels, step.h, components, 4, 1),
+              box_rgb8: differenceColumns(pixels.map(p => boxAverage(p, resolution, 1 / 255)),
+                step.h, boxComponents, 3, 1),
+              box_float: differenceColumns(floatPixels.map(p => boxAverage(p, resolution, 1)),
+                step.h, boxComponents, 3, 1),
+            };
+            const observations = {};
+            for (const [kind, values] of Object.entries(columns)) {
+              const budget = kind === 'box_rgb8' ? step.quantization_operator_budget : 0;
+              observations[kind] = observe(values, budget, priorObservations?.[kind]);
+            }
+            for (const [pooled, raw] of [[observations.box_rgb8, spectrum],
+              [observations.box_float, observations.raw_float]]) {
+              if (pooled.eigenvalues.some((value, j) => value - raw.eigenvalues[j] > 1e-12 * raw.eigenvalues[1])) {
+                throw new Error('Equal-area averaging increased an eigenvalue');
+              }
+            }
+            let maxCodeDifference = 0;
+            let colorsAboveHalfCode = 0;
+            for (const [p, samples] of floatPixels.entries()) {
+              for (let k = 0; k < samples.length; k++) {
+                const value = samples[k];
+                if (!(value >= 0 && value <= 1)) throw new Error('Float sample out of shader color range');
+                if (k % 4 === 3) continue;
+                const differenceCodes = Math.abs(value * 255 - pixels[p][k]);
+                maxCodeDifference = Math.max(maxCodeDifference, differenceCodes);
+                colorsAboveHalfCode += Number(differenceCodes > 0.50001);
+              }
+            }
+            step.float_target_comparison = {
+              max_rgb8_difference_codes: maxCodeDifference,
+              fraction_above_half_code_plus_1e_5: colorsAboveHalfCode / (4 * components),
+              raw_operator_difference: operatorDifference([v, w], columns.raw_float),
+              box_operator_difference: operatorDifference(columns.box_rgb8, columns.box_float),
+            };
+            const { columns: _rawFloatColumns, ...rawFloat } = observations.raw_float;
+            step.observations = { ...observations, raw_float: rawFloat };
+            priorObservations = observations;
+          }
           if (previous) {
             const eigenShift = step.eigenvalues.map((value, j) => relative(value, previous.step.eigenvalues[j]));
             const axisAngle = Math.acos(Math.min(1, Math.abs(dot(axis, previous.axis)))) * 180 / Math.PI;
@@ -349,23 +410,34 @@ try {
     }
     return { renderer: rendererInfo, repeatable_baseline: true, states,
       [contours ? 'contour_motion' : 'attachment_motion']: motion };
-  }, { states: centerRows, resolution, presentation, paths, contours });
+  }
+  const panels = [];
+  for (const resolution of resolutions) {
+    if (refinement) console.log(`Rendering matched ${resolution}×${resolution} viewport`);
+    await page.goto(`${server.resolvedUrls.local[0]}__julia_sensitivity__.html`);
+    const result = await page.evaluate(evaluatePanel, { states: centerRows, resolution, presentation, paths, contours, refinement });
+    panels.push({ resolution, ...result });
+  }
+  if (refinement) compareBoxResolutions(panels);
+  const { resolution: firstResolution, ...result } = panels[0];
   const provenance = {
-    panel: heldOut ? 'held-out' : 'initial',
+    panel: refinement ? 'matched refinement' : heldOut ? 'held-out' : 'initial',
     chromium: browser.version(),
     shader: { path: shaderPath, sha256: createHash('sha256').update(fragment).digest('hex'),
       bailout_squared: 1e10, supersampling: false },
-    resolution: [resolution, resolution],
+    resolution: refinement ? undefined : [firstResolution, firstResolution],
+    resolutions: refinement ? resolutions : undefined,
     zoom_one_span: 2.7,
     presentation: { ...presentation, center: [0, 0], rotation: 0, time: 0 },
-    representation: 'mean-normalized RGB8 framebuffer/1; ignore alpha; bottom-up WebGL order',
+    representation: refinement ? `Raw and ${BOXES}×${BOXES} fixed-viewport box means of RGB8 and RGBA32F; mean-normalized RGB; ignore alpha; bottom-up WebGL order`
+      : 'mean-normalized RGB8 framebuffer/1; ignore alpha; bottom-up WebGL order',
     spacings,
     [contours ? 'contour_trial_sha256' : 'attachment_fixture_sha256']:
       replayBytes ? createHash('sha256').update(replayBytes).digest('hex') : undefined,
     geometry: { ...geometry, points: undefined },
   };
   await mkdir(dirname(output), { recursive: true });
-  await writeFile(output, JSON.stringify({ provenance, calibration, ...result }, null, 2) + '\n');
+  await writeFile(output, JSON.stringify({ provenance, calibration, ...(refinement ? { panels } : result) }, null, 2) + '\n');
   for (const state of result.states) {
     if (!state.metrics.length) console.log(`${state.name}: excluded ${state.geometry.jet?.validity ?? state.geometry.error}`);
     for (const metric of state.metrics) {
