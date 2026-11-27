@@ -45,6 +45,7 @@ pub mod crossing_feasibility;
 pub mod debug;
 pub mod hyperbolic;
 pub mod model_io;
+pub mod map_certificates;
 
 // Conditional bindings.  Only compile the Python or WASM API if the
 // corresponding feature flag has been enabled.
