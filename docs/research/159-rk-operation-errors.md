@@ -53,9 +53,9 @@ T=\frac1{576},\qquad h=\frac{T}{m}.
 
 The source state is the stored outer state. The held covector is the exact
 fixture drive constructed at that source, and stays fixed throughout the
-four stages. The initial phase is the fixture's exact initial phase; initial
-stored work is zero. Errors in initial-state construction or control
-construction require separate evidence and are not newly certified here.
+four stages. The initial phase is the fixture's exact initial phase and
+initial stored work is zero. In the finite check below, the RHS and power
+comparisons include the effect of rounding in the constructed drive.
 
 This increment uses **one RK substep per outer interval**. The preceding
 exact-real results for every positive internal substep count remain unchanged.
@@ -189,8 +189,75 @@ machine clock is a separate implementation obligation.
 
 The [verification record](verification.md) and [module inventory](../../formal/README.md)
 give the checked package boundary. This completes the conditional local-error
-bridge for the stated one-substep profile. Production field fidelity,
-compiled provider correspondence, actual IEEE residual certificates, rounded
-control construction, perturbed internal-substep composition, changing
-commands, impulses, steering, and continuation beyond this local interval
-remain separate implementation or research work.
+bridge for the stated one-substep profile.
+
+## Measured binary64 residuals for the literal fixture
+
+The release regression exports the raw binary64 words of the command at each
+outer anchor, all four states and slopes of each successful RK substep, its
+weighted endpoint and work, and the accumulated outer work. It ties the
+recorded states to the attempted provider queries and accepted mechanical
+endpoints. Both profiles use 16 outer steps on the horizon `1/576`.
+[Rust fixture regression](../../runtime-core/src/operational_engine/fixture_queries.rs)
+
+The independent checker decodes the recorded words as exact dyadics and
+differentiates the six spline polynomials as rational monomials using the
+literal fixture coefficients. It encloses the ruler jets, normalized drive,
+acceleration, and power on a grid of `2^-100` with integer arithmetic. It
+rounds products and reciprocals outward, bounds square roots with integer
+square roots, and bounds the sine and cosine of the wall angle with alternating
+Taylor sums on `[0, 1]`. The π interval comes from the alternating series for
+`16 atan(1/5) − 4 atan(1/239)`. The tangent of `4 atan(1/5)` is `120/119`,
+and subtracting `atan(1/239)` gives an angle in `(0, π/2)` with tangent one.
+[Exact spline evaluator](../../formal/fixtures/check_operational_patch.py)
+[Recorded-trace checker](../../formal/fixtures/check_181_rounded_rk.py)
+
+At the initial position `(1/2, 1/2)`, exact division by the stored spacing
+gives cell `(4, 4)`. The corresponding binary64 division rounds to `5` on
+each axis and the machine reads cell `(5, 5)`. The residual bounds include
+this difference because the checker selects the cell using the exact quotient.
+[Literal spacing](../../formal/fixtures/operational-quadratic.json)
+
+For RHS and power residuals, the checker uses the exact drive from the
+recorded outer anchor, held across all of that step's stages. This includes
+command construction error in the measured residual. Stage construction,
+weighted endpoints, and stored work increments are compared by exact rational
+arithmetic using the recorded slopes and the ideal rational step. The sum of
+the two coordinate error bounds in each plane bounds its Euclidean error.
+[Exact held dynamics](../../formal/FractalSync/ConcreteHeldControl.lean)
+[Exact held power](../../formal/FractalSync/ConcreteHeldPower.lean)
+
+These are upward-rounded bounds from the Windows x86-64 release run with Rust 1.98.0.
+
+| Residual | One substep, 64 stages | Four substeps, 256 stages |
+| --- | ---: | ---: |
+| Held drive | `3.08e-16` | `3.02e-16` |
+| Mechanical RHS | `7.58e-16` | `1.060e-15` |
+| Signed power | `9.3e-17` | `1.15e-16` |
+| Intermediate phase construction | `1.05e-16` | `1.11e-16` |
+| Weighted mechanical endpoint | `9.5e-17` | `1.01e-16` |
+| Weighted substep work | `1e-18` | `1e-18` |
+| Stored outer work increment | `1e-18` | `1e-18` |
+
+The checker verifies the `h` and `h²` budgets at each substep with
+`h = 1/(576*16*substep_count)`. It uses the outer step squared for the
+stored outer work increment. The one-substep run supplies the numerical
+premises of `exists_phase_work_certificate` at `m = 16`. Its exact-time
+affine phase and work traces therefore have bounds `3/256` and `11/144`
+against the theorem's reference. The four-substep run verifies local
+residuals with one drive per outer step. A perturbed composition theorem
+for that holding pattern remains open.
+[One-substep phase and work theorem](../../formal/FractalSync/ConcretePerturbedRungeKuttaWork.lean)
+
+From the repository root with the project virtual environment available:
+
+```powershell
+$env:FRACTALSYNC_RK_FIXTURE_TRACE = Join-Path $env:TEMP 'fractalsync-181-rk-bits.json'
+rtk cargo test --release -p runtime_core --features experimental-operational-field --lib literal_quadratic_rk_queries_require_exactly_the_predicted_stencil
+.venv/Scripts/python.exe formal/fixtures/check_181_rounded_rk.py $env:FRACTALSYNC_RK_FIXTURE_TRACE
+```
+
+This check applies to the finite trace exported by the release regression.
+A uniform arithmetic bound across targets, profiles, or meshes, the accuracy
+of the reported total energy and machine clock, and production field fidelity
+remain open.

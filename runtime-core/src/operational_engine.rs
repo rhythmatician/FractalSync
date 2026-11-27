@@ -560,21 +560,26 @@ fn rk4_advance(
 ) -> Result<(Complex64, (f64, f64), f64), String> {
     let initial = [c.re, c.im, v.0, v.1];
     let k1 = rhs(initial, q, beta, config).map_err(|e| format!("RK stage 1: {e}"))?;
-    let k2 = rhs(advance(initial, k1, dt / 2.0), q, beta, config)
-        .map_err(|e| format!("RK stage 2: {e}"))?;
-    let k3 = rhs(advance(initial, k2, dt / 2.0), q, beta, config)
-        .map_err(|e| format!("RK stage 3: {e}"))?;
-    let k4 =
-        rhs(advance(initial, k3, dt), q, beta, config).map_err(|e| format!("RK stage 4: {e}"))?;
+    let second = advance(initial, k1, dt / 2.0);
+    let k2 = rhs(second, q, beta, config).map_err(|e| format!("RK stage 2: {e}"))?;
+    let third = advance(initial, k2, dt / 2.0);
+    let k3 = rhs(third, q, beta, config).map_err(|e| format!("RK stage 3: {e}"))?;
+    let fourth = advance(initial, k3, dt);
+    let k4 = rhs(fourth, q, beta, config).map_err(|e| format!("RK stage 4: {e}"))?;
     let mut end = initial;
     for i in 0..4 {
         end[i] += dt / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
     }
-    Ok((
-        Complex64::new(end[0], end[1]),
-        (end[2], end[3]),
-        dt / 6.0 * (k1[4] + 2.0 * k2[4] + 2.0 * k3[4] + k4[4]),
-    ))
+    let work = dt / 6.0 * (k1[4] + 2.0 * k2[4] + 2.0 * k3[4] + k4[4]);
+    #[cfg(test)]
+    fixture_queries::record_substep(
+        dt,
+        [initial, second, third, fourth],
+        [k1, k2, k3, k4],
+        end,
+        work,
+    );
+    Ok((Complex64::new(end[0], end[1]), (end[2], end[3]), work))
 }
 fn checked_endpoint(
     position: Complex64,

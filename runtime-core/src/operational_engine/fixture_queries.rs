@@ -1,6 +1,7 @@
 use super::{FrozenRollout, Integrator, PhysicsProfile, ReferenceCut};
 use crate::{controls::MotionControls, manifold::ManifoldConfig, operational_field::PreparedField};
 use num_complex::Complex64;
+use serde::Serialize;
 use std::{
     cell::RefCell,
     collections::BTreeSet,
@@ -9,21 +10,72 @@ use std::{
 };
 
 thread_local! {
-    static QUERIES: RefCell<Option<Vec<[f64; 2]>>> = const { RefCell::new(None) };
+    static RECORDING: RefCell<Option<Recording>> = const { RefCell::new(None) };
+}
+
+#[derive(Default)]
+struct Recording {
+    queries: Vec<[f64; 2]>,
+    substeps: Vec<RkSubstep>,
+}
+
+#[derive(Serialize)]
+struct RkSubstep {
+    dt: u64,
+    stages: [[u64; 4]; 4],
+    slopes: [[u64; 5]; 4],
+    end: [u64; 4],
+    work: u64,
+}
+
+#[derive(Serialize)]
+struct OuterStep {
+    command: [u64; 2],
+    substeps: Vec<RkSubstep>,
+    stored_work: u64,
+}
+
+#[derive(Serialize)]
+struct ProfileTrace {
+    substeps: usize,
+    steps: Vec<OuterStep>,
 }
 
 pub(super) fn record_query(c: Complex64) {
-    QUERIES.with(|queries| {
-        if let Some(points) = queries.borrow_mut().as_mut() {
-            points.push([c.re, c.im]);
+    RECORDING.with(|recording| {
+        if let Some(recording) = recording.borrow_mut().as_mut() {
+            recording.queries.push([c.re, c.im]);
         }
     });
 }
 
-fn record<T>(f: impl FnOnce() -> T) -> (T, Vec<[f64; 2]>) {
-    QUERIES.with(|queries| assert!(queries.replace(Some(Vec::new())).is_none()));
+pub(super) fn record_substep(
+    dt: f64,
+    stages: [[f64; 4]; 4],
+    slopes: [[f64; 5]; 4],
+    end: [f64; 4],
+    work: f64,
+) {
+    RECORDING.with(|recording| {
+        if let Some(recording) = recording.borrow_mut().as_mut() {
+            recording.substeps.push(RkSubstep {
+                dt: dt.to_bits(),
+                stages: stages.map(|stage| stage.map(f64::to_bits)),
+                slopes: slopes.map(|slope| slope.map(f64::to_bits)),
+                end: end.map(f64::to_bits),
+                work: work.to_bits(),
+            });
+        }
+    });
+}
+
+fn record<T>(f: impl FnOnce() -> T) -> (T, Recording) {
+    RECORDING.with(|recording| assert!(recording.replace(Some(Recording::default())).is_none()));
     let result = f();
-    (result, QUERIES.with(|queries| queries.take().unwrap()))
+    (
+        result,
+        RECORDING.with(|recording| recording.take().unwrap()),
+    )
 }
 
 #[derive(serde::Deserialize)]
@@ -67,6 +119,11 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
     let bytes = PreparedField::new(origin, h, shape, coefficients.clone())
         .unwrap()
         .asset_bytes();
+    // The machine quotient at the initial phase is 5 on each axis.
+    assert_eq!(
+        expected_addresses([0.5; 2], origin, h, shape)[0],
+        3 * shape[0] + 3
+    );
     let field = Arc::new(PreparedField::from_asset_bytes(&bytes).unwrap());
     assert_eq!(field.asset_bytes(), bytes);
 
@@ -108,6 +165,7 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
         throttle: 0.5,
         ..MotionControls::default()
     };
+    let mut histories = Vec::new();
     for (method, substeps) in [(Integrator::Rk4, 1), (Integrator::Rk4FourSubsteps, 4)] {
         let profile =
             PhysicsProfile::new(config.clone(), 1.0 / (576.0 * 16.0), 1.0, method).unwrap();
@@ -116,12 +174,16 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
         let mut state = initial;
         let mut first_stage_two = None;
         let mut provider_queries = 0;
+        let mut steps = Vec::new();
+        assert_eq!(initial.integrated_work, 0.0);
         for _ in 0..16 {
             let before = state;
             let command = rollout.drive_covector(state.position, &drive).unwrap();
-            let (accepted, positions) =
+            let (accepted, recording) =
                 record(|| rollout.attempt_step_with_trace(&mut state, command));
             let (work, trace) = accepted.unwrap();
+            let positions = recording.queries;
+            assert_eq!(recording.substeps.len(), substeps);
             assert_eq!(work.geometry_evaluations, positions.len());
             assert_eq!(work.coefficient_reads_upper_bound, 36 * positions.len());
             assert!(positions.len() >= 5 * substeps);
@@ -131,6 +193,25 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
             for endpoint in trace.endpoints() {
                 assert!(positions.contains(&endpoint.position));
             }
+            for (recorded, endpoints) in recording.substeps.iter().zip(trace.endpoints().windows(2))
+            {
+                let phase = |endpoint: &super::MechanicalEndpoint| {
+                    let [x, y] = endpoint.position;
+                    let [vx, vy] = endpoint.velocity;
+                    [x, y, vx, vy].map(f64::to_bits)
+                };
+                assert_eq!(recorded.stages[0], phase(&endpoints[0]));
+                assert_eq!(recorded.end, phase(&endpoints[1]));
+                assert!(recorded
+                    .stages
+                    .iter()
+                    .all(|s| positions.contains(&[s[0], s[1]].map(f64::from_bits))));
+            }
+            steps.push(OuterStep {
+                command: command.map(f64::to_bits),
+                substeps: recording.substeps,
+                stored_work: state.integrated_work.to_bits(),
+            });
             if first_stage_two.is_none() {
                 first_stage_two = positions
                     .iter()
@@ -168,7 +249,11 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
             "{error}"
         );
         assert_eq!(state, before);
+        histories.push(ProfileTrace { substeps, steps });
         println!("{method:?}: {provider_queries} provider queries and 48 interpolation probes");
     }
     println!("Verified {} distinct cell stencils", verified_cells.len());
+    if let Some(path) = std::env::var_os("FRACTALSYNC_RK_FIXTURE_TRACE") {
+        serde_json::to_writer(std::fs::File::create(path).unwrap(), &histories).unwrap();
+    }
 }

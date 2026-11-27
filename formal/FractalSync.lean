@@ -156,5 +156,6 @@ import FractalSync.TwoEndedDisplacement
 import FractalSync.ShoreCrossingWorkBound
 import FractalSync.StableRadialProfile
 import FractalSync.OperationalRouteBounds
+import FractalSync.ConformalTransportError
 
 /-! Development-time mathematical research for FractalSync. -/

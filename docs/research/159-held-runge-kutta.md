@@ -254,7 +254,9 @@ and at a weighted outer endpoint.
 rtk cargo test --release -p runtime_core --features experimental-operational-field --lib literal_quadratic_rk_queries_require_exactly_the_predicted_stencil -- --nocapture
 ```
 
-This exercises the actual machine-selected stencil on a fixed finite
-run. The Lean halo certificate covers exact-real stages and an admitted
-query displacement. A uniform bound relating all rounded stages to
-those exact-real stages remains open in [#181](https://github.com/rhythmatician/FractalSync/issues/181).
+This exercises the actual machine-selected stencil on a fixed finite run.
+The rounded-stage checker also bounds the local mechanics and work residuals
+for both profiles. Its one-substep trace meets the local-error theorem's
+numerical premises. Uniform rounded-stage bounds remain open in #181.
+[Measured binary64 residuals](159-rk-operation-errors.md#measured-binary64-residuals-for-the-literal-fixture)
+[#181](https://github.com/rhythmatician/FractalSync/issues/181)
