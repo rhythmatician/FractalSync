@@ -337,10 +337,11 @@ export interface JuliaViewStateHandle {
   readonly color: { anchor_hue: number; chroma: number; lightness: number; harmony: string; accent_weight: number };
   readonly harmony_cooldown: number;
   readonly harmony_armed: boolean;
-  apply_controls(controls: JuliaViewControlsHandle): void;
+  applyControls(controls: JuliaViewControlsHandle): void;
 }
 
 export interface JuliaViewControlsHandle {
+  free?(): void;
   readonly zoom_delta: number;
   readonly rotation_delta: number;
   readonly hue_delta: number;

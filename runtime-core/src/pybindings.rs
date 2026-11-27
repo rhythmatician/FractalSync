@@ -78,7 +78,7 @@ fn controls_v2_schema_json() -> PyResult<String> {
 #[pyfunction]
 fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> PyResult<String> {
     let averages = crate::model_io::audio_feature_averages(&values, features_per_frame)
-        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&averages)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -86,7 +86,7 @@ fn audio_feature_averages_json(values: Vec<f64>, features_per_frame: usize) -> P
 #[pyfunction]
 fn legacy_audio_feature_averages_json(values: Vec<f64>) -> PyResult<String> {
     let averages = crate::model_io::legacy_audio_feature_averages(&values)
-        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&averages)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -106,7 +106,7 @@ fn legacy_visual_export_ranges_json() -> PyResult<String> {
 #[pyfunction]
 fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<String> {
     let decoded = crate::model_io::decode_orbit_control(&values, k_bands)
-        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -114,7 +114,7 @@ fn decode_orbit_control_json(values: Vec<f64>, k_bands: usize) -> PyResult<Strin
 #[pyfunction]
 fn decode_controls_v2_json(values: Vec<f64>) -> PyResult<String> {
     let decoded = crate::model_io::decode_controls_v2(&values)
-        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -132,7 +132,7 @@ fn decode_legacy_visual_json(
         _ => return Err(pyo3::exceptions::PyValueError::new_err("rms and onset must be supplied together")),
     };
     let decoded = crate::model_io::decode_legacy_visual(&values, audio)
-        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&decoded)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -152,7 +152,7 @@ fn orbit_visual_parameters_json(
         &controls,
         crate::model_io::AudioFeatureAverages { rms, onset },
     )
-    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&visual)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -162,7 +162,7 @@ fn legacy_orbit_drive_inputs_json(rms: f64, onset: f64) -> PyResult<String> {
     let inputs = crate::model_io::legacy_orbit_drive_inputs(
         crate::model_io::AudioFeatureAverages { rms, onset },
     )
-    .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&inputs)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }
@@ -179,7 +179,7 @@ fn controls_v2_visual_parameters_json(
         .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     let visual = crate::model_io::controls_v2_visual_parameters(
         [c_re, c_im], &controls, presentation,
-    ).map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    ).map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&visual)
         .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))
 }

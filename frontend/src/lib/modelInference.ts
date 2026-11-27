@@ -434,7 +434,8 @@ export class ModelInference {
       const jvs: JuliaViewStateHandle | null = this.juliaViewState;
       if (jvs) {
         const viewControls = createJuliaViewControls(view);
-        jvs.apply_controls(viewControls);
+        jvs.applyControls(viewControls);
+        viewControls.free?.();
         const color = jvs.color;
         const zoom = jvs.zoom;
         visualParams = JSON.parse(controlsV2VisualParameters(c, decoded, [color.anchor_hue, color.chroma, color.lightness, zoom])) as VisualParameters;
