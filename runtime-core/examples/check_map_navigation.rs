@@ -106,7 +106,7 @@ fn main() -> Result<(), String> {
     };
     assert_eq!(route_index, 3);
     assert_eq!(Some(frame_index), report.bounded.arrivals[route_index]);
-    assert!(length_upper.is_finite() && length_upper > 0.0);
+    assert!(length_upper > 0.0 && length_upper < 1_000_000.0);
     assert!(
         report.bounded.queries_to_first_arrival.unwrap()
             < report.baseline.queries_to_first_arrival.unwrap()

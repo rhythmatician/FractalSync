@@ -299,3 +299,24 @@ step map, a method defect, a time-scaled field residual, and an evaluation
 defect. Each actual interval supplies its own gain and step length. This
 formulation still requires local error bounds comparing the committed update
 with the reference at the same two timestamps.
+
+### What an adaptive run must measure
+
+Set the largest accepted interval to $m$, the elapsed time to $T$, and the
+method order to $p$. If an interval of duration $h_i$ has local method
+defect at most $C h_i^{p+1}$ and field residual at most $\eta$, the checked
+history bound is
+
+\[
+e_{\mathrm{final}}\le e^{LT}
+\left(e_{\mathrm{initial}}+T(Cm^p+\eta)+\sum_i r_i\right),
+\]
+
+where $r_i$ is the evaluation and storage allowance on that interval. For
+step-size comparisons at a fixed horizon, report $\sum_i r_i$ alongside
+$m$ and $T\eta$. A uniform per-interval allowance $r_*$ contributes up
+to $N r_*$ for $N$ accepted intervals. The method term can shrink while
+that budget grows. The theorem also requires the stability allowance
+$1+L h_i$ on each reference and committed pair. A stage residual measured
+on one fixture supplies neither a regional stability constant nor a
+uniform residual for every candidate step in an adaptive run.

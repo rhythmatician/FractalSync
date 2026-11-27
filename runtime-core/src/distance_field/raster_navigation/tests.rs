@@ -219,6 +219,31 @@ fn default_raster_point_ball_and_exit_action() {
 }
 
 #[test]
+fn a_local_signed_ruler_tightens_constant_raster_edges() {
+    let _guard = global_test_mutex()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let start = [-0.05, 0.0];
+    let end = [0.05, 0.0];
+    let config = ManifoldConfig::default();
+    for value in [-0.125, 0.125] {
+        set_distance_field_from_vec(vec![value; 36], 6, 6, -1.5, 1.5, -1.5, 1.5).unwrap();
+        let region =
+            RasterNavigationRegion::for_default_profile([[-0.1, -0.1], [0.1, 0.1]]).unwrap();
+        let regional = mul_up(
+            displacement_upper(start, end),
+            region.length_per_displacement_upper,
+        );
+        let local = region.segment_length_upper(start, end).unwrap();
+        let metric = induced_metric(Complex64::new(0.0, 0.0), &config).unwrap();
+        let reference = (end[0] - start[0]) * metric[0][0].sqrt();
+        assert!(reference <= local);
+        assert!(local < 2.0 && local < regional / 100.0);
+    }
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+}
+
+#[test]
 fn overshoot_and_incomplete_support_are_visible() {
     let _guard = global_test_mutex()
         .lock()
@@ -230,6 +255,11 @@ fn overshoot_and_incomplete_support_are_visible() {
     let center = Complex64::new(0.0, 0.0);
     let sampled = sample_signed_distance_field(&[center]).unwrap()[0];
     assert_eq!(sampled, 1.25);
+    {
+        let slot = DIST_FIELD.read().unwrap();
+        let [lo, hi] = sample_range(slot.field.as_ref().unwrap(), bounds).unwrap();
+        assert!(lo <= f64::from(sampled) && f64::from(sampled) <= hi);
+    }
     let epsilon = ManifoldConfig::default().epsilon;
     let naive = (1.0 + epsilon * epsilon).sqrt();
     let actual = rho_from_jet(&query_geometry(center, epsilon).unwrap(), epsilon);

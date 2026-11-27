@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,882 explicit proved theorem/lemma declarations** across 166 result modules
+**1,883 explicit proved theorem/lemma declarations** across 166 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -254,8 +254,8 @@ by the separate transitive audit.
 | `KeplerAreaClock` | 14 | Normalized integral clock, exact inverse existence and uniqueness, stability, and distortion |
 | `KeplerEllipseClock` | 9 | Elliptical fan specialization, flat reduction, and phase and anomaly bounds |
 | `AdaptiveStepComposition` | 4 | Per-step error, elapsed-time and mesh envelopes, and metric-space local error composition |
-| `SampledAction` | 1 | Kinetic-action obstruction for accepted intervals with certified length coverage |
-| **Total** | **1,882** | Explicit theorem and lemma declarations |
+| `SampledAction` | 2 | Kinetic-action obstruction for accepted intervals with exact or residual-aware length coverage |
+| **Total** | **1,883** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1504,7 +1504,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The audit covers all project declarations, including the 1,882 stated theorem/lemma declarations,
+The audit covers all project declarations, including the 1,883 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

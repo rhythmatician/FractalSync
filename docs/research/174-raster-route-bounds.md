@@ -138,13 +138,34 @@ the matrix quadratic form is at most
 using \(\widehat\rho\ge\varepsilon/2\) bounds length by
 \((4+12G_*)/\varepsilon\) times ambient displacement.
 
-`segment_length_upper` multiplies an outward displacement enclosure by
-this factor. `RasterNavigationRegion::search_route` takes a caller-supplied
+`segment_length_upper` also encloses center and stencil samples using
+the raster coefficients that support the segment's bounding rectangle.
+For coefficient extrema `lo` and `hi`, the ideal interpolant ranges
+from at least `lo - (9/32)(hi - lo)` to at most
+`hi + (9/32)(hi - lo)`. The tensor weights sum to one and have
+negative mass at most `(25/16 - 1)/2 = 9/32`. The binary64 error
+allowance of `2^-26` times the maximum coefficient magnitude covers
+the same kernel, sum and division errors bounded above. In particular,
+with the numerator and normalizer error `delta = 2^-30`, normalization
+adds at most `(1 + 25/16) delta / (1 - delta)` times that magnitude,
+before the final binary64 round. Outward binary64 endpoints followed by
+the sampler's monotone binary32 cast enclose the actual returned samples.
+
+The center interval supplies a lower bound on `abs(D)` when it stays
+on one side of zero. The rounded ruler dominates that bound, so it also
+raises the lower bound on the adaptive step. The stencil interval's
+width divided by twice this minimum step bounds the centered gradient.
+Substituting these bounds into `(2 + 6 G*) / rho` gives a local metric
+factor. The implementation takes the smaller of the local factor and
+the original regional factor. If a local scan cannot certify its
+arithmetic, the regional factor still applies.
+
+`RasterNavigationRegion::search_route` takes a caller-supplied
 directed waypoint graph in the certified window. It uses these edge
 bounds, rounds their running sum upward and uses the remaining
 target length lower bound to order and prune the search. The returned
 path carries its length upper bound and raster generation. The method
-checks that generation before and after search.
+holds that generation under a single read lock while pricing edges.
 
 Arrival requires a waypoint whose outward ambient displacement from the
 target center is within the radius. Equality of coordinates suffices for
@@ -170,10 +191,9 @@ Controls arrival and its sampled frame are reported separately.
 
 In the [common-start replay fixture](174-route-benchmark.md#controls-replays-on-the-map),
 the raster search reaches frame 698, zero-based, of the commit 1.0
-replay. Its length upper bound is about 7.47 billion because the
-certificate uses one worst-case metric factor for the whole rectangle.
-This demonstrates a certified path and shows how loose the window-wide
-upper bound can be near the default floor.
+replay with either bound. The local edge certificate reduces the
+length upper bound from 7,466,920,211 to 475,492, about 15,700-fold.
+The bound still uses worst-case density within each edge's support.
 
 ## Reproduce the built-in raster trial
 
