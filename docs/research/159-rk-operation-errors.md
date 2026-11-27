@@ -299,3 +299,9 @@ largest outward bounds in the one- and four-substep profiles were
 4.40e-9 and 2.75e-10 ambient units per substep, respectively. The bound
 covers the endpoints. A sampled-action certificate still needs to account
 for the metric and the path inside each panel.
+
+The trace also encloses the Euclidean length of the polygon through the
+committed RK substep endpoints. The independent checker brackets each
+chord length on an exact dyadic grid and verifies that the outward total
+covers the upper end of that bracket. This measures reconstructed ambient
+travel. Intrinsic length requires bounds on the metric along the chords.

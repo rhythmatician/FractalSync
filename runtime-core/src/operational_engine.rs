@@ -210,6 +210,19 @@ pub struct RkSubstepTrace {
 }
 
 impl RkSubstepTrace {
+    /// Outward Euclidean length bound for the reconstructed straight chord.
+    pub fn ambient_chord_length_upper(&self) -> Option<f64> {
+        let start = self.stages[0];
+        let [x, y] = std::array::from_fn(|axis| {
+            let delta = (self.end[axis] - start[axis]).abs();
+            if self.end[axis] == start[axis] { 0.0 } else { delta.next_up() }
+        });
+        use crate::intrinsic_bounds::{add_up, mul_up};
+        let square = add_up(mul_up(x, x), mul_up(y, y));
+        let length = if square == 0.0 { 0.0 } else { square.sqrt().next_up() };
+        length.is_finite().then_some(length)
+    }
+
     /// Outward L1 bound on the ambient chord's deviation from left-endpoint
     /// drift, using the represented duration, start velocity, and positions.
     /// This does not enclose the between-endpoint trajectory or metric length.
@@ -272,6 +285,18 @@ impl AcceptedStepTrace {
     /// Euler has no RK stages. These samples require separate error enclosures.
     pub fn rk_substeps(&self) -> &[RkSubstepTrace] {
         &self.rk_substeps
+    }
+
+    /// Outward ambient length of the polygon through committed RK substep
+    /// endpoints. Euler traces have no RK evidence.
+    pub fn ambient_rk_polyline_length_upper(&self) -> Option<f64> {
+        if self.rk_substeps.is_empty() {
+            return None;
+        }
+        let total = self.rk_substeps.iter().try_fold(0.0, |sum, step| {
+            Some(crate::intrinsic_bounds::add_up(sum, step.ambient_chord_length_upper()?))
+        })?;
+        total.is_finite().then_some(total)
     }
 }
 
