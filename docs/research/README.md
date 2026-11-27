@@ -98,6 +98,15 @@ GeometryProvider, Julia renderer, Controls, or floating-point implementation.
 | #169 | [Shore-crossing work cap](169-crossing-work-cap.md) | Lean checks path-length and speed-time work caps and the corresponding necessary energy conditions for a crossing. |
 | #174 | [Intrinsic target bounds](174-intrinsic-target-bounds.md) | Lean checks exact target-set infima, consistent lower bounds, and tolerance and search-radius rules for navigation. |
 
+## Musical gesture geometry
+
+The [Kepler gesture study](kepler-musical-gestures.md) derives a normalized
+swept-area clock for an ellipse in a normal chart. Lean checks its unique
+inverse, flat reduction, and distortion and residual bounds under an
+enclosure of the pullback area density on the radial fan. The note also
+separates the prescribed gesture from the potential and forcing needed to
+realize it in Physics.
+
 ## Reproducible experiments
 
 | Area | Evidence |

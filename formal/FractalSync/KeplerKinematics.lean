@@ -1,8 +1,8 @@
-import Mathlib
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv
+import Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus
 
-/-! Research candidate. Not kernel checked in the authoring environment.
-These are scalar identities, not a formalization of the exponential map. -/
-namespace FractalSync.KeplerGestures
+/-! Exact-real scalar kinematics of the focus-relative ellipse. -/
+namespace FractalSync.KeplerKinematics
 
 theorem clock_positive (e c : ℝ) (he : 0 ≤ e) (he' : e < 1)
     (hc : c ≤ 1) : 0 < 1 - e*c := by
@@ -22,6 +22,7 @@ theorem focus_radius_sq (a b e c s : ℝ)
     _ = a^2*(1-e*c)^2 := by
       rw [hb]
       linear_combination (a^2*(1-e^2))*hunit
+    _ = _ := by ring
 
 theorem focus_determinant (a b e c s : ℝ) (hunit : c^2+s^2=1) :
     a*(c-e)*(b*c) - b*s*(-a*s) = a*b*(1-e*c) := by
@@ -55,4 +56,22 @@ theorem area_clock_ratio_bounds (l u x y : ℝ)
 theorem feedforward_balance (a u drag : ℝ) :
     -u + (a+u+drag) - drag = a := by ring
 
-end FractalSync.KeplerGestures
+/-- Unwrapped classical mean anomaly. -/
+noncomputable def meanAnomaly (e x : ℝ) : ℝ := x - e * Real.sin x
+
+theorem hasDerivAt_meanAnomaly (e x : ℝ) :
+    HasDerivAt (meanAnomaly e) (1 - e * Real.cos x) x :=
+  (hasDerivAt_id x).sub ((Real.hasDerivAt_sin x).const_mul e)
+
+theorem integral_classical_rate (e x : ℝ) :
+    (∫ u in (0 : ℝ)..x, 1 - e * Real.cos u) = meanAnomaly e x := by
+  rw [intervalIntegral.integral_eq_sub_of_hasDerivAt
+    (fun u _ => hasDerivAt_meanAnomaly e u)
+    ((continuous_const.sub (continuous_const.mul Real.continuous_cos)).intervalIntegrable _ _)]
+  simp [meanAnomaly]
+
+theorem integral_classical_rate_period (e : ℝ) :
+    (∫ u in (0 : ℝ)..(2 * Real.pi), 1 - e * Real.cos u) = 2 * Real.pi := by
+  simp [integral_classical_rate, meanAnomaly]
+
+end FractalSync.KeplerKinematics
