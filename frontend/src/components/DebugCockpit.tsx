@@ -691,6 +691,7 @@ export function DebugCockpit(): JSX.Element {
           <Panel title="DIAGNOSTICS">
             <Row label="step clock (s)" value={frame?.timeSeconds} kind="STATE" digits={4} />
             <Row label="fd step" value={diag.derivativeStep} kind="DIAG" digits={9} />
+            <Row label="Intrinsic Shore distance (raster estimate)" value={diag.geometry?.shoreDistanceEstimate?.value} kind="DIAG" />
             <Row label="last dE" value={diag.lastDeltaTotal} kind="DIAG" />
             <Row label="crest U (ceiling)" value={diag.crestPotential} kind="STATE" />
             <Row label="integrator" value={diag.valid ? 'ok' : `FAIL: ${diag.lastError ?? ''}`} kind="DIAG" />
