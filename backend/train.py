@@ -223,6 +223,7 @@ def main():
         default=4,
         help="Number of DataLoader workers",
     )
+    parser.add_argument("--full-songs", action="store_true", help="Train on each audio file from start to finish")
     parser.add_argument(
         "--max-files",
         type=int,
@@ -492,6 +493,7 @@ def execute_training_workflow(args):
         feature_extractor=feature_extractor,
         window_frames=args.window_frames,
         max_files=args.max_files,
+        full_songs=args.full_songs,
         cache_dir="data/cache",
     )
 
