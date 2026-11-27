@@ -1,5 +1,10 @@
 # Mathematical research progress
 
+Issue #247: [Gesture execution and development](247-gesture-execution-development.md)
+derives target motion and phase-gauge dependence, distinguishes traversal clocks,
+and proposes matched tracking and perceptual comparisons. Lean checks the local
+product and phase-chain rules; the experiments have not yet been performed.
+
 This directory records proof-oriented work on foundational issues
 [#157](https://github.com/rhythmatician/FractalSync/issues/157) and
 [#159](https://github.com/rhythmatician/FractalSync/issues/159), and research issues
