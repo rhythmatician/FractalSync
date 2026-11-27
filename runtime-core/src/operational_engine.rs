@@ -5,6 +5,9 @@ use serde::Serialize;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+mod frame_transport;
+pub use frame_transport::TransportedFrame;
+
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Integrator {
     Euler,
@@ -191,6 +194,8 @@ impl MechanicalEndpoint {
 pub struct AcceptedStepTrace {
     endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
     len: usize,
+    field_id: u64,
+    physics_profile_id: u64,
 }
 
 impl AcceptedStepTrace {
@@ -198,6 +203,8 @@ impl AcceptedStepTrace {
         Self {
             endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
             len: 1,
+            field_id: state.field_id,
+            physics_profile_id: state.physics_profile_id,
         }
     }
 
