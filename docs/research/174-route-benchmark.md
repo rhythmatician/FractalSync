@@ -38,3 +38,35 @@ Run the [fixture](../../runtime-core/examples/intrinsic_route_benchmark.rs) with
 ~~~powershell
 rtk proxy cargo run --release --manifest-path runtime-core/Cargo.toml --example intrinsic_route_benchmark
 ~~~
+
+## Controls replays on the Map
+
+The Debug Cockpit can compare its existing Controls v2 replays against a
+closed ambient target ball. The diagnostic uses routes with a shared starting
+state and physics profile. It ranks the routes by the lower bound from a
+shared recorded frame to the target, then scans each successful prefix for
+the first recorded state in the ball. A missing bound receives zero priority
+and tied candidates keep their input order.
+
+The [native fixture](../../runtime-core/examples/check_map_navigation.rs)
+replays the four common-start commit variants with the default Rust manifold
+configuration. The target is centered at `[0.26, 0]` with radius `0.005`.
+Ranking uses zero-based frame 650. Each candidate is still outside the target
+at that frame. Both scans find the same arrivals at zero-based frame 917 for
+commit 0.8 and frame 698 for commit 1.0.
+
+| Order | Commit throttles in scan order | First arrival surfaced | Target checks to first arrival | Total target checks | Endpoint certificate queries |
+| --- | --- | --- | ---: | ---: | ---: |
+| Input | 0.05, 0.4, 0.8, 1.0 | commit 0.8 | 3,358 | 4,057 | 0 |
+| By bound | 1.0, 0.8, 0.05, 0.4 | commit 1.0 | 699 | 4,057 | 6 |
+
+Target checks are ambient membership comparisons on already recorded frames.
+The counts exclude generating the replays and validating their prefixes. They
+measure the work to surface the first recorded witness in this menu.
+The ideal Mandelbrot distance graph supplies the bounds. Its relation to
+operational edge costs remains unverified, so the diagnostic leaves every
+candidate eligible and performs the same complete coverage scan in both orders.
+
+~~~powershell
+rtk proxy cargo run --offline --release -p runtime_core --example check_map_navigation
+~~~

@@ -19,8 +19,8 @@ fn drive(throttle: f64, brake: f64, grip: f64) -> MotionControls {
 
 fn replay(commit: f64) -> (Vec<[f64; 2]>, Vec<u8>) {
     let mut controller = OrbitController::default();
-    let mut positions = Vec::with_capacity(1221);
-    let mut valid = Vec::with_capacity(1221);
+    let mut positions = Vec::with_capacity(1220);
+    let mut valid = Vec::with_capacity(1220);
     let mut record = |controls| {
         let c = controller.step_with_controls(DT, &controls);
         positions.push([c.re, c.im]);
@@ -51,7 +51,7 @@ fn main() -> Result<(), String> {
     let config = OrbitController::default().manifold_config;
     let target = [0.26, 0.0];
     let radius = 0.005;
-    let ranking_frame = 760;
+    let ranking_frame = 650;
     let report =
         evaluate_map_navigation(start, target, radius, ranking_frame, &config, &candidates)?;
     let last_positions = replays.each_ref().map(|(path, _)| path.last());
@@ -73,7 +73,26 @@ fn main() -> Result<(), String> {
         report.baseline.target_queries,
         report.bounded.target_queries
     );
-    assert_eq!(report.baseline.first_arrival_route, Some(3));
+    assert_eq!(
+        report
+            .baseline
+            .arrivals
+            .iter()
+            .map(Option::is_some)
+            .collect::<Vec<_>>(),
+        [false, false, true, true]
+    );
+    assert!(report
+        .baseline
+        .arrivals
+        .iter()
+        .flatten()
+        .all(|&frame| frame > ranking_frame));
+    assert_eq!(report.baseline.first_arrival_route, Some(2));
     assert_eq!(report.bounded.first_arrival_route, Some(3));
+    assert!(
+        report.bounded.queries_to_first_arrival.unwrap()
+            < report.baseline.queries_to_first_arrival.unwrap()
+    );
     Ok(())
 }
