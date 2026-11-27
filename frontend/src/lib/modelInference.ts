@@ -432,7 +432,11 @@ export class ModelInference {
       // (JuliaViewState::apply_controls) and are consumed via WASM. This satisfies the #107
       // requirement that deterministic shared action-to-view-state semantics belong in Rust.
       const jvs: JuliaViewStateHandle | null = this.juliaViewState;
-      if (jvs) {
+      if (this.tether) {
+        // Tether training scores the Julia seed. Use the cockpit presentation
+        // so untrained view deltas cannot accumulate during the audition.
+        visualParams = JSON.parse(controlsV2VisualParameters(c, decoded, [0.58, 0.75, 0.6, 1])) as VisualParameters;
+      } else if (jvs) {
         const viewControls = createJuliaViewControls(view);
         jvs.applyControls(viewControls);
         viewControls.free?.();
