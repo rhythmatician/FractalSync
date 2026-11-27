@@ -69,9 +69,6 @@ interface WasmOrbitController {
   set_drag(drag: number): void;
   set_thrust(thrust: number): void;
   set_energy(energy: number): void;
-  set_shore_bias(on: boolean): void;
-  set_d_star(d_star: number): void;
-  set_max_step(max_step: number): void;
   set_manifold_physics?(on: boolean): void;
   set_manifold_config?(c: unknown): void;
   set_manifold_drag?(d: number): void;
@@ -221,8 +218,6 @@ interface WasmPlayerState {
   readonly c_re: number;
   readonly c_im: number;
   readonly speed: number;
-  set_level(v: number): void;
-  set_d_star(v: number): void;
   set_max_step(v: number): void;
   apply_controls(s: number, alpha: number, omega_scale: number): void;
   set_lobe(lobe: number, sub_lobe: number): void;
@@ -535,29 +530,6 @@ export class OrbitSynthesizer {
       s.set_drag(drag);
     } else {
       s.drag = drag;
-    }
-  }
-
-  /** Refinement 2: shore bias via minimap contour stepping. Default OFF. */
-  setShoreBias(on: boolean, dStar = 0.5, maxStep = 0.05): void {
-    // wasm-bindgen exposes Rust setters as JS property setters; try the
-    // method form first (mock/test doubles), fall back to properties.
-    const s = this.state as unknown as {
-      shore_bias: boolean;
-      d_star: number;
-      max_step: number;
-      set_shore_bias?: (on: boolean) => void;
-      set_d_star?: (d: number) => void;
-      set_max_step?: (m: number) => void;
-    };
-    if (typeof s.set_shore_bias === 'function' && typeof s.set_d_star === 'function' && typeof s.set_max_step === 'function') {
-      s.set_shore_bias(on);
-      s.set_d_star(dStar);
-      s.set_max_step(maxStep);
-    } else {
-      s.shore_bias = on;
-      s.d_star = dStar;
-      s.max_step = maxStep;
     }
   }
 

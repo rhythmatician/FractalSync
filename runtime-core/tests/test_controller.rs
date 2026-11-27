@@ -218,7 +218,6 @@ fn test_player_state_starts_on_boundary() {
 fn test_player_state_moves_toward_target() {
     // Without a pyramid, PlayerState falls back to clamped motion toward the
     // model-driven target. Changing alpha should pull c toward the new point.
-    runtime_core::minimap::clear_pyramid();
     let mut p = PlayerState::new(1, 0, 1.0, 0.0);
     let start = p.c;
     // Move the target to alpha=0.5 (opposite side of the cardioid).
@@ -236,7 +235,6 @@ fn test_player_state_moves_toward_target() {
 fn test_player_state_does_not_trace_closed_loop() {
     // With a fixed target and no gates, the momentum integrator still
     // converges: friction bleeds velocity, c settles near the target.
-    runtime_core::minimap::clear_pyramid();
     let mut p = PlayerState::new(1, 0, 1.0, 0.5);
     for _ in 0..600 {
         p.step(1.0 / 60.0, 0.0, None);
@@ -259,7 +257,6 @@ fn test_player_state_has_momentum() {
     // The frozen-c regression: with a barely-moving target, a pure servo
     // parks at its fixed point. The momentum integrator must keep moving
     // when the model's controls vary frame-to-frame (as real output does).
-    runtime_core::minimap::clear_pyramid();
     let mut p = PlayerState::new(1, 0, 2.7, 0.95);
     let mut total_travel = 0.0f64;
     let mut prev = p.c;

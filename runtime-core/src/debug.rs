@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 /// Version of the DebugSnapshot contract. Bump on any field/grouping change,
 /// in the same commit as binding + UI updates.
-pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/5";
+pub const DEBUG_SNAPSHOT_VERSION: &str = "debug-snapshot/6";
 
 /// Canonical analysis-tick cadence (issue #91): HOP_LENGTH / SAMPLE_RATE.
 /// Derived from the timebase authority — not restated (ADR 0001).
@@ -118,24 +118,6 @@ pub struct PhysicsSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// Map section (canonical minimap, issue #88)
-// ---------------------------------------------------------------------------
-
-/// Map section: read-only view of the canonical mip pyramid. No new map math.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MapSnapshot {
-    /// Whether a mip pyramid is currently loaded.
-    pub pyramid_loaded: bool,
-    /// Shore proximity S(c) in [0,1] at the current c (sensitivity, NOT distance).
-    pub shore_proximity: Option<f32>,
-    /// The Player's canonical 9x9 minimap window at c (row-major, row 0 = north).
-    pub minimap_window: Option<Vec<f32>>,
-    /// Pyramid extent [re_min, re_max, im_min, im_max].
-    pub extent: Option<[f64; 4]>,
-}
-
-// ---------------------------------------------------------------------------
 // Diagnostics section
 // ---------------------------------------------------------------------------
 
@@ -212,8 +194,6 @@ pub struct DebugSnapshot {
     pub accumulated_energy_ledger: Option<AccumulatedEnergyLedger>,
     /// Action section (None before the first step).
     pub action: Option<ActionSnapshot>,
-    /// Map section (canonical minimap state).
-    pub map: MapSnapshot,
     /// Physics section (authoritative world truth).
     pub physics: PhysicsSnapshot,
     /// Diagnostics section.
@@ -378,22 +358,6 @@ pub fn snapshot_from_state(
         }
     });
 
-    // ---- Map section: canonical pyramid only ----
-    let map = crate::minimap::with_pyramid(|pyr| match pyr {
-        None => MapSnapshot {
-            pyramid_loaded: false,
-            shore_proximity: None,
-            minimap_window: None,
-            extent: None,
-        },
-        Some(p) => MapSnapshot {
-            pyramid_loaded: true,
-            shore_proximity: p.shore_proximity_at(c, 0),
-            minimap_window: p.minimap(c, 0, 4),
-            extent: Some([p.re_min, p.re_max, p.im_min, p.im_max]),
-        },
-    });
-
     // ---- Diagnostics section (ADR 0004: scale-aware geometry provider) ----
     let jet = crate::geometry_provider::query_geometry(c, config.epsilon)
         .unwrap_or_else(|_| crate::geometry_provider::GeometryJet {
@@ -436,7 +400,6 @@ pub fn snapshot_from_state(
         energy_ledger: None,
         accumulated_energy_ledger: None,
         action,
-        map,
         physics,
         diagnostics,
     })

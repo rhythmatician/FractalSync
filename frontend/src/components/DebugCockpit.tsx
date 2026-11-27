@@ -517,7 +517,7 @@ export function DebugCockpit(): JSX.Element {
     transformRiderToHyperbolic(refs.rider, frame, smoothedHeading, hyperbolicFrame);
   }, [runs, selected, manualRun, cockpitMode, frameIdx, frame, riderReady]);
 
-  // Minimap panel: repaint from the canonical pyramid when the frame moves.
+  // Repaint the minimap when the frame moves.
   useEffect(() => {
     const canvas = minimapRef.current;
     const trajectory = cockpitMode === 'MANUAL' ? manualRun : runs?.[selected];

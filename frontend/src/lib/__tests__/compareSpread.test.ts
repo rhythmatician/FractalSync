@@ -12,7 +12,6 @@ describe('compare low sigma vs high sigma in hyperbolic mode', () => {
       version: 'debug-snapshot/1',
       timeSeconds: 1.0,
       action: null,
-      map: { pyramidLoaded: false, shoreProximity: null, minimapWindow: null, extent: null },
       physics: {
         c: [cx, cy],
         velocity: [0.0, 0.0],

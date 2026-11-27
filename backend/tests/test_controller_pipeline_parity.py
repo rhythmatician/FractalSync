@@ -45,6 +45,31 @@ DT = canonical_hop_dt()
 class TestControllerPipelineParity:
     """Trainer mirror vs runtime controller at the CANONICAL timestep."""
 
+    def test_momentum_matches_runtime_with_thrust_and_energy(self):
+        n = 24
+        s = torch.linspace(0.5, 1.2, n)
+        alpha = torch.linspace(0.1, 0.7, n)
+        gates = torch.zeros((n, 6))
+        thrust = torch.linspace(0.001, 0.02, n)
+        energy = torch.linspace(0.1, 0.9, n)
+        initial = torch.full((n,), complex(-0.4, 0.2), dtype=torch.complex64)
+        ctrl = runtime_core.OrbitController(float(s[0]), float(alpha[0]), 1.0)
+        ctrl.set_momentum(True)
+        ctrl.set_drag(0.9)
+        ctrl.set_c(-0.4, 0.2)
+        expected = []
+        for i in range(n):
+            ctrl.apply_controls(float(s[i]), float(alpha[i]))
+            ctrl.set_thrust(float(thrust[i]))
+            ctrl.set_energy(float(energy[i]))
+            re, im = ctrl.step(DT, gates[i].tolist())
+            expected.append(complex(re, im))
+        actual = orbit_controller_momentum_sequence(
+            s, alpha, 1.0, gates, torch.zeros(n, dtype=torch.int64), DT,
+            thrust=thrust, initial_c=initial, energy=energy,
+        )
+        assert actual.detach().numpy() == pytest.approx(expected, abs=1e-5)
+
     def test_canonical_dt_is_hop_duration(self):
         """The contract-derived dt must be the canonical hop duration —
         this is the value the browser supplies via AnalysisTick.dtSeconds."""

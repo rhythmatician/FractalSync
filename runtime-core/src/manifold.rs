@@ -26,7 +26,6 @@
 //! differential jet { D, grad D, H_D } per query; Physics derives rho,
 //! sigma, G, Gamma analytically via chain rule. This replaces the legacy
 //! fixed-raster 1024² field plus nested finite differences of sampled sigma.
-//! The 2048² F/S mip pyramid remains separate Player/cartography evidence.
 
 use num_complex::Complex64;
 
@@ -69,10 +68,7 @@ impl Default for ManifoldConfig {
 
 /// Signed geometric distance to the Mandelbrot boundary (canonical authority).
 /// D(c) < 0 inside M, D(c) > 0 outside M, D(c) == 0 on The Shore.
-/// Distinct from unsigned geometric distance d(c)=|D(c)| and from the
-/// Shore-proximity sensitivity S(c)=|\u2207F|/(|\u2207F|+G0) carried by the minimap
-/// (mip pyramid) \u2014 see `crate::minimap`. S is a sensitivity/proximity proxy,
-/// not geometric distance; d and D are geometric.
+/// Distinct from unsigned geometric distance d(c)=|D(c)|.
 ///
 /// This now delegates to the scale-aware GeometryProvider jet (ADR 0004).
 /// The provider samples the signed field through a coherent local representation
@@ -1097,9 +1093,6 @@ mod tests {
         let d_signed = signed_distance(c).unwrap();
         let d_abs = unsigned_distance(c).unwrap();
         assert!((d_abs - d_signed.abs()).abs() < 1e-12);
-        // S is carried by the minimap mip pyramid (S=G/(G+G0)), not by this module.
-        // The absence of an S alias here is intentional — callers must not label S
-        // as geometric distance.
     }
 
     #[test]

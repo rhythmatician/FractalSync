@@ -14,12 +14,6 @@ describe('hyperbolic mesh, trail, and rider transformation', () => {
     version: 'debug-snapshot/2',
     timeSeconds: 1.0,
     action: null,
-    map: {
-      pyramidLoaded: false,
-      shoreProximity: null,
-      minimapWindow: null,
-      extent: null,
-    },
     physics: {
       c: [-0.25, 0.0],
       velocity: [0.1, 0.0],

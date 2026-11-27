@@ -161,10 +161,8 @@ def collect_c_traces(
 ) -> Dict[str, np.ndarray]:
     """Run the model over each training file and record its c(t) path.
 
-    Replays through the CANONICAL Rust OrbitController (momentum + shore
-    bias) with the mip pyramid loaded, so the plot shows exactly the physics
-    the browser executes — including the Shore wall (transient-gated
-    boundary crossing), the fractal tilt, and the energy servo.
+    Replays through the Rust OrbitController with the browser's momentum
+    settings, so the plot follows the same controller path.
 
     Args:
         model: the trained AudioToControlModel (eval mode expected).
@@ -246,9 +244,6 @@ def collect_c_traces(
             ctrl.set_drag(0.90)
             ctrl.set_thrust(float(thrust_ct[0]))
             ctrl.set_energy(float(energy_ct[0]))
-            ctrl.set_shore_bias(False)
-            ctrl.set_d_star(0.5)
-            ctrl.set_max_step(0.05)
             ctrl.set_c(float(_ic_re), float(_ic_im))
             c_list: list[complex] = []
             for i in range(n):

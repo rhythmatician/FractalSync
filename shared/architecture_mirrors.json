@@ -50,12 +50,10 @@
             "kind": "differentiable_mirror",
             "rust_authority": "runtime-core/src/controller.rs (synthesize, PlayerState::step), runtime-core/src/proxies.rs (mandelbrot_cardioid_proximity)",
             "why_outside_rust": "python:autograd",
-            "reason": "Differentiable PyTorch surrogates so gradients flow during training. The Rust bindings are non-differentiable; the oracle path (orbit_controller_oracle_sequence / _ContourStep) defers the per-frame contour step to the Rust binding and only the backward pass is a surrogate.",
+            "reason": "Differentiable PyTorch surrogates allow gradients to flow during training.",
             "parity": [
                 "scripts/preflight_parity.py check (b) mirror parity",
                 "scripts/preflight_parity.py check (e) orbit mirror parity",
-                "scripts/preflight_parity.py check (e3) shore-biased dynamics parity",
-                "scripts/preflight_parity.py check (e4) trainer-oracle consistency",
                 "backend/tests/test_golden_parity.py",
                 "backend/tests/test_synthesis_parity.py",
                 "backend/tests/test_controller_pipeline_parity.py (production-path: canonical dt, dt required)"

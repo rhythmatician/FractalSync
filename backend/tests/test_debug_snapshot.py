@@ -33,8 +33,8 @@ def _config(rc):
 class TestDebugSnapshotFromState:
     def test_snapshot_has_versioned_sections(self, rc):
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
-        assert snap["version"] == "debug-snapshot/5"
-        for section in ("timeSeconds", "map", "physics", "diagnostics"):
+        assert snap["version"] == "debug-snapshot/6"
+        for section in ("timeSeconds", "physics", "diagnostics"):
             assert section in snap
         # observation is deliberately absent until #108 (Phase B).
         assert "observation" not in snap
@@ -115,12 +115,6 @@ class TestDebugSnapshotFromState:
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0, last_delta_total=0.125)
         assert snap["diagnostics"]["lastDeltaTotal"] == pytest.approx(0.125)
 
-    def test_map_unavailable_without_pyramid(self, rc):
-        rc.clear_pyramid_py()
-        snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
-        assert snap["map"]["pyramidLoaded"] is False
-        assert snap["map"]["shoreProximity"] is None
-        assert snap["map"]["minimapWindow"] is None
 
 
 class TestDebugTerrainPatch:
@@ -234,7 +228,6 @@ class TestWireFormat:
         snap = rc.debug_snapshot_from_state(0.0, 0.0, 0.0, 0.0)
         assert "timeSeconds" in snap
         assert "signedDistance" in snap["physics"]
-        assert "pyramidLoaded" in snap["map"]
         assert "derivativeStep" in snap["diagnostics"]
 
     def test_crest_potential_is_rust_owned(self, rc):

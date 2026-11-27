@@ -30,9 +30,7 @@ interface PlayerStepCase {
   alpha0: number;
   dt: number;
   h: number;
-  d_star: number;
   max_step: number;
-  level: number;
   controls: [number, number, number][];
   band_gates: number[] | null;
   c_re: number;
@@ -55,7 +53,6 @@ describe('Golden-vector parity (TS mock vs Rust canonical)', () => {
   it('PlayerState momentum trajectories match Rust step-for-step', () => {
     for (const tc of golden.player_step_cases) {
       const p = new mock.PlayerState(1, 0, tc.s0, tc.alpha0);
-      p.set_d_star(tc.d_star);
       p.set_max_step(tc.max_step);
       let last = { real: p.c_re, imag: p.c_im };
       for (const [s, alpha, omega] of tc.controls) {
