@@ -284,6 +284,7 @@ FUNCTION_TYPES: dict[str, dict[str, str]] = {
         "start_sample": "int",
         "deadline_sample": "int",
         "kinetic_action_budget": "float | None",
+        "default_raster_window": "tuple[tuple[float, float], tuple[float, float]] | None",
         RET: "str",
     },
     "geometry_provider_version": {RET: "str"},

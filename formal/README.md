@@ -1,7 +1,7 @@
 # Lean research contracts
 
 This is a development-time mathematical proof package. It currently contains
-**1,879 explicit proved theorem/lemma declarations** across 165 result modules
+**1,880 explicit proved theorem/lemma declarations** across 165 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -253,8 +253,8 @@ by the separate transitive audit.
 | `KeplerAreaDensity` | 7 | Radial pullback-density averaging, bounds, and the signed fan-area rate |
 | `KeplerAreaClock` | 14 | Normalized integral clock, exact inverse existence and uniqueness, stability, and distortion |
 | `KeplerEllipseClock` | 9 | Elliptical fan specialization, flat reduction, and phase and anomaly bounds |
-| `AdaptiveStepComposition` | 2 | Per-step error budget and elapsed-time envelope for accepted heterogeneous intervals |
-| **Total** | **1,879** | Explicit theorem and lemma declarations |
+| `AdaptiveStepComposition` | 3 | Per-step error budget, elapsed-time envelope, and metric-space local error composition |
+| **Total** | **1,880** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1503,7 +1503,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The audit covers all project declarations, including the 1,879 stated theorem/lemma declarations,
+The audit covers all project declarations, including the 1,880 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

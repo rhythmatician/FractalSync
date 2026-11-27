@@ -293,3 +293,9 @@ scheduled outer step. The budget is over real numbers and requires separate
 rounding evidence for a stored implementation.
 
 [Accepted-step composition proof](../../formal/FractalSync/AdaptiveStepComposition.lean)
+
+The metric-space formulation derives the accepted-history inequality from a
+step map, a method defect, a time-scaled field residual, and an evaluation
+defect. Each actual interval supplies its own gain and step length. This
+formulation still requires local error bounds comparing the committed update
+with the reference at the same two timestamps.

@@ -80,8 +80,56 @@ fn default_raster_segment_witnesses_supply_graph_edge_costs() {
     assert_eq!(bounded.cost, baseline.cost);
     assert_eq!(run(true, bounded.cost.unwrap() / 2.0).cost, None);
 
+    let neighbors: [&[usize]; 4] = [&[1, 2], &[3], &[3], &[]];
+    let waypoints = std::array::from_fn::<_, 4, _>(|index| RasterWaypoint {
+        position: points[index],
+        neighbors: neighbors[index],
+    });
+    let directed_upper = add_up(graph[0][1].1, graph[2][0].1);
+    assert!(directed_upper > bounded.cost.unwrap());
+    let find = |start, center, radius, budget| {
+        region.search_route(&waypoints, start, center, radius, budget)
+    };
+    let witness = find(0, target, 0.0, directed_upper).unwrap().unwrap();
+    assert_eq!(witness.path, bounded.path);
+    assert_eq!(witness.length_upper, directed_upper);
+    assert_eq!(witness.raster_generation, region.raster_generation());
+    assert_eq!(find(0, target, 0.0, directed_upper.next_down()), Ok(None));
+    assert_eq!(find(3, points[0], 0.0, f64::INFINITY), Ok(None));
+    assert_eq!(
+        find(0, [points[0][0] + 0.01, points[0][1]], 0.02, 0.0)
+            .unwrap()
+            .unwrap()
+            .path,
+        [0]
+    );
+    let boundary = [RasterWaypoint {
+        position: [-1.5, 0.0],
+        neighbors: &[],
+    }];
+    assert_eq!(
+        region.target_lower_bound(boundary[0].position, target, 0.0),
+        Some(0.0)
+    );
+    assert_eq!(
+        region.search_route(&boundary, 0, target, 0.0, 0.0),
+        Ok(None)
+    );
+    let invalid = [RasterWaypoint {
+        position: points[0],
+        neighbors: &[1],
+    }];
+    assert_eq!(
+        region.search_route(&invalid, 0, target, 0.0, f64::INFINITY),
+        Err(RasterRouteError::InvalidInput)
+    );
+
     clear_distance_field();
     assert_eq!(region.segment_length_upper(points[0], points[2]), None);
+    assert_eq!(
+        find(0, target, 0.0, f64::INFINITY),
+        Err(RasterRouteError::StaleRegion)
+    );
 }
 
 #[test]

@@ -139,12 +139,26 @@ using \(\widehat\rho\ge\varepsilon/2\) bounds length by
 \((4+12G_*)/\varepsilon\) times ambient displacement.
 
 `segment_length_upper` multiplies an outward displacement enclosure by
-this factor. The built-in raster test supplies these costs to both
-Dijkstra and bounded A* on a two-route graph. It checks agreement on the
-accepted route and a budget for which neither candidate fits, and samples
-the compiled metric along each segment as a numerical check. For a
-certified upper bound on a concatenated witness, sum the edge bounds
-outward. The graph search reports ordinary binary64 costs.
+this factor. `RasterNavigationRegion::search_route` takes a caller-supplied
+directed waypoint graph in the certified window. It uses these edge
+bounds, rounds their running sum upward and uses the remaining
+target length lower bound to order and prune the search. The returned
+path carries its length upper bound and raster generation. The method
+checks that generation before and after search.
+
+Arrival requires a waypoint whose outward ambient displacement from the
+target center is within the radius. Equality of coordinates suffices for
+a point target. For a positive radius, rounding can leave some points
+near the boundary unaccepted. A zero remaining lower bound can occur
+at the edge of the window and says nothing about waypoint membership.
+An empty result means the graph yielded no certified witness within
+budget. A continuous trajectory could use another route or fit the
+budget with tighter segment bounds. The crossing action and deadline
+assessment uses the target length lower bound separately.
+
+The built-in raster test compares the two-route graph with Dijkstra,
+checks the budget at the outward aggregate and one representable value
+below it, and samples the compiled metric along each segment.
 
 ## Reproduce the built-in raster trial
 
@@ -183,3 +197,21 @@ Lean checks the continuous first-radius and target inequalities given a
 local displacement envelope. The raster coefficient and rounded-matrix
 estimates supply that premise under the numerical conditions above.
 [First-exit proof](../../formal/FractalSync/OperationalWindowExit.lean)
+
+## Timed curriculum diagnostic
+
+The training CLI accepts an optional `defaultRasterWindow` on `runtimeMap`
+manifest cases. Give the minimum and maximum corners of the window, for
+example `[[-1.5, -0.45], [-0.4, 0.45]]`. This opts into loading the built-in
+raster and reporting a conditional continuous-path assessment for the
+default Physics profile. Both the task start and the target center must lie
+in the certified window. The point length lower bound includes paths that
+exit the window. Subtracting the intrinsic arrival tolerance with downward
+rounding gives the lower bound for the task's intrinsic arrival ball.
+
+The report includes `defaultRasterDiagnostic.continuousAssessment` only when
+the certificate applies. Its kinetic-action result uses the task's sample
+window and declared action budget. The CLI still uses the main runtime
+assessment for eligibility. Turning the continuous result into a hard
+filter requires a link to committed runtime action and provider identity
+over the actual rollout.
