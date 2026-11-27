@@ -75,6 +75,9 @@ pub enum RasterWaypointSearch {
         route_index: usize,
         frame_index: usize,
         length_upper: f64,
+        /// Process-local generation of the raster used to price the path.
+        raster_generation: u64,
+        window: [[f64; 2]; 2],
     },
 }
 
@@ -302,6 +305,8 @@ fn search_raster_waypoints(
                 route_index,
                 frame_index,
                 length_upper: witness.length_upper,
+                raster_generation: witness.raster_generation,
+                window: bounds,
             }
         }
         Ok(None) => RasterWaypointSearch::NoWitness,
