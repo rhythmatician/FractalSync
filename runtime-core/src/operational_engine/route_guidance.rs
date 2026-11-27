@@ -1,7 +1,7 @@
 //! Read-only route guidance in the nominal geometry of a frozen prepared field.
 
 use super::frame_transport::MetricFactor;
-use super::{CANONICAL_REFERENCE_POINTS, FrozenRollout, MechanicalState};
+use super::{AcceptedStepTrace, CANONICAL_REFERENCE_POINTS, FrozenRollout, MechanicalState};
 use crate::crossing_feasibility::{
     FeasibilityAssessment, FeasibilityLimits, LengthLowerBound, evaluate_feasibility,
 };
@@ -107,6 +107,39 @@ pub struct OperationalRouteGuidance {
 }
 
 impl FrozenRollout {
+    /// Enclose the reconstructed polygon through accepted endpoints in the
+    /// nominal exact-real spline metric on the supplied window. Each chord
+    /// must pass the same chart and reference checks as a route edge.
+    pub fn nominal_accepted_polyline_length(
+        &self,
+        trace: &AcceptedStepTrace,
+        window: [[f64; 2]; 2],
+    ) -> Option<OperationalLengthInterval> {
+        self.check_trace_identity(trace).ok()?;
+        let region = self
+            .field
+            .navigation_region(window, self.profile.config())?;
+        let mut evaluator = region.segment_evaluator();
+        trace.endpoints().windows(2).try_fold(
+            OperationalLengthInterval {
+                lower: 0.0,
+                upper: 0.0,
+            },
+            |total, endpoints| {
+                let [a, b] = [endpoints[0].position, endpoints[1].position];
+                if !self.chart_edge_is_clear(chord_bounds(a, b)) {
+                    return None;
+                }
+                let length = evaluator.bounds(a, b)?;
+                let lower = add_down(total.lower, length.lower);
+                let upper = add_up(total.upper, length.upper);
+                upper
+                    .is_finite()
+                    .then_some(OperationalLengthInterval { lower, upper })
+            },
+        )
+    }
+
     /// Give geometric guidance from the current state. The length bracket and
     /// budget status concern the admitted window graph in the exact prepared
     /// spline metric. The bearing uses the compiled metric at the start.
@@ -374,10 +407,7 @@ impl RouteGraph {
         }
         let a = self.points[from];
         let b = self.points[to];
-        let bbox = [
-            [a[0].min(b[0]), a[1].min(b[1])],
-            [a[0].max(b[0]), a[1].max(b[1])],
-        ];
+        let bbox = chord_bounds(a, b);
         let length = engine
             .chart_edge_is_clear(bbox)
             .then(|| {
@@ -453,6 +483,13 @@ fn target_relation(point: [f64; 2], target: AmbientTarget) -> TargetRelation {
     } else {
         TargetRelation::BoundaryUncertain
     }
+}
+
+fn chord_bounds(a: [f64; 2], b: [f64; 2]) -> [[f64; 2]; 2] {
+    [
+        [a[0].min(b[0]), a[1].min(b[1])],
+        [a[0].max(b[0]), a[1].max(b[1])],
+    ]
 }
 
 #[cfg(test)]
