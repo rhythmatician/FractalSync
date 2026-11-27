@@ -235,6 +235,76 @@ mod tests {
         delta.sin().atan2(delta.cos()).abs()
     }
 
+    fn simpson_integral(f: impl Fn(f64) -> f64, start: f64, end: f64, panels: u32) -> f64 {
+        let step = (end - start) / f64::from(panels);
+        let interior: f64 = (1..panels)
+            .map(|i| {
+                let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
+                weight * f(start + f64::from(i) * step)
+            })
+            .sum();
+        step * (f(start) + interior + f(end)) / 3.0
+    }
+
+    // Recover the positive-normal free geodesic from speed and the conserved
+    // tangential momentum. Return its position, connection angle, and flight time.
+    fn positive_free_geodesic(
+        graph: &AffineGraphMetric,
+        start: [f64; 2],
+        velocity: [f64; 2],
+        duration: f64,
+        panels: u32,
+    ) -> ([f64; 2], f64, f64) {
+        let gradient_length = 5.0_f64.sqrt();
+        let [x, y] = start;
+        let field_start = x + 2.0 * y;
+        let tangent_start = (-2.0 * x + y) / gradient_length;
+        let (rho_start, _) = graph.scales(field_start);
+        let [normal_speed, tangent_speed] = graph.coordinates(start, velocity);
+        assert!(normal_speed > 0.0);
+        let speed = normal_speed.hypot(tangent_speed);
+        let momentum = tangent_speed / rho_start;
+
+        let time_per_field = |field_value| {
+            let (rho, sigma) = graph.scales(field_value);
+            let normal_speed = (speed.powi(2) - (momentum * rho).powi(2)).sqrt();
+            sigma / (gradient_length * rho * rho * normal_speed)
+        };
+        let flight_time =
+            |field_value| simpson_integral(time_per_field, field_start, field_value, panels);
+
+        let mut lo = field_start;
+        let mut hi = 0.32;
+        // On this positive-field interval, rho increases. The far endpoint
+        // therefore bounds the normalized tangential speed before the turn.
+        assert!(momentum.abs() * graph.scales(hi).0 < 0.7 * speed);
+        assert!(flight_time(hi) > duration);
+        for _ in 0..52 {
+            let mid = (lo + hi) / 2.0;
+            if flight_time(mid) < duration {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        let field_end = (lo + hi) / 2.0;
+        let (rho_end, _) = graph.scales(field_end);
+        let normal_end = field_end / gradient_length;
+        let tangent_end = tangent_start
+            + simpson_integral(
+                |f| momentum * graph.scales(f).0.powi(2) * time_per_field(f),
+                field_start,
+                field_end,
+                panels,
+            );
+        let end = [
+            (normal_end - 2.0 * tangent_end) / gradient_length,
+            (2.0 * normal_end + tangent_end) / gradient_length,
+        ];
+        let angle = (momentum * rho_end / speed).asin() - (momentum * rho_start / speed).asin();
+        (end, angle, flight_time(field_end))
+    }
+
     #[test]
     fn endpoint_chord_transport_refines_toward_the_conformal_connection_angle() {
         let field = flat_shore();
@@ -339,6 +409,80 @@ mod tests {
             }
             assert!(previous_error < 0.02, "{route}: {previous_error:e}");
         }
+    }
+
+    #[test]
+    fn moving_sheared_transport_refines_toward_the_continuous_free_geodesic() {
+        let field = sheared_shore();
+        let lambda_sq = ManifoldConfig::default().lambda_sq;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let start = [0.04, 0.05];
+        let velocity = [-0.12, 0.4];
+        let initial_axis = [0.9, -0.1];
+        let duration = 0.16;
+        let turn_rate = 0.9;
+        let (coarse_end, coarse_angle, _) =
+            positive_free_geodesic(&graph, start, velocity, duration, 512);
+        let (reference_end, reference_connection, reference_clock) =
+            positive_free_geodesic(&graph, start, velocity, duration, 1024);
+        let reference_position_change =
+            (reference_end[0] - coarse_end[0]).hypot(reference_end[1] - coarse_end[1]);
+        let reference_angle_change = (reference_connection - coarse_angle).abs();
+        eprintln!(
+            "reference panels doubled: position {reference_position_change:e}, angle {reference_angle_change:e}"
+        );
+        assert!(reference_position_change < 1e-11);
+        assert!(reference_angle_change < 1e-11);
+        assert!((reference_clock - duration).abs() < 1e-14);
+
+        let [ax, ay] = graph.coordinates(start, initial_axis);
+        let reference_angle = ay.atan2(ax) + reference_connection + duration * turn_rate;
+        let mut previous_position_error = f64::INFINITY;
+        let mut previous_angle_error = f64::INFINITY;
+        for count in [4, 8, 16] {
+            let rollout = rollout(field.clone(), duration / f64::from(count), lambda_sq);
+            let mut state = rollout.initial_state(start, velocity).unwrap();
+            let mut axis = initial_axis;
+            let mut chord_connection = 0.0;
+            for _ in 0..count {
+                let (_, trace) = rollout
+                    .attempt_step_with_trace(&mut state, [0.0; 2])
+                    .unwrap();
+                axis = rollout
+                    .transport_endpoint_chords(&trace, axis, turn_rate)
+                    .unwrap()
+                    .axis;
+                for pair in trace.endpoints().windows(2) {
+                    chord_connection += graph.chord_angle(pair[0].position, pair[1].position);
+                }
+            }
+
+            let [x, y] = state.position;
+            let position_error = (x - reference_end[0]).hypot(y - reference_end[1]);
+            let [ax, ay] = graph.coordinates(state.position, axis);
+            let angle_error = unsigned_angle_difference(ay.atan2(ax), reference_angle);
+            let chord_error = (chord_connection - reference_connection).abs();
+            let clock_error = (state.mechanical_time - reference_clock).abs();
+            eprintln!(
+                "{count}: position {position_error:e}, angle {angle_error:e}, chord angle {chord_error:e}, clock {clock_error:e}"
+            );
+            assert!(clock_error < 1e-14, "{count}: {clock_error:e}");
+            assert!(
+                position_error < 0.2 * previous_position_error,
+                "{count}: {position_error:e}"
+            );
+            assert!(
+                angle_error < 0.65 * previous_angle_error,
+                "{count}: {angle_error:e}"
+            );
+            previous_position_error = position_error;
+            previous_angle_error = angle_error;
+        }
+        assert!(
+            previous_position_error < 2e-9,
+            "{previous_position_error:e}"
+        );
+        assert!(previous_angle_error < 0.01, "{previous_angle_error:e}");
     }
 
     #[test]

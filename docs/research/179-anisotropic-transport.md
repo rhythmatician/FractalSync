@@ -110,6 +110,61 @@ The conformal angle differs from the full graph angle by 1.37 radians on
 the positive-side route and 1.49 radians on the crossing route at these
 resolutions.
 
+## Continuous free geodesic on the affine fixture
+
+The affine metric also gives a continuous reference trajectory through
+conservation of speed \(V\) and tangent momentum \(p\). The latter follows
+because the metric coefficients are independent of \(v\). With the mechanical
+potential, wall strength, drag and control set to zero, these constants are
+\[
+ V^2=a^2 \dot u^2+b^2\dot v^2,\qquad p=b^2\dot v.
+\]
+Before a normal turning point, let \(\eta=\operatorname{sgn}(\dot u)\). Then
+\[
+ \dot F=\eta\frac{\sqrt5\,\rho^2}{s}\sqrt{V^2-p^2\rho^2},
+ \qquad \dot v=p\rho^2 .
+\]
+Inverting the flight-time integral of \(1/\dot F\) from \(F(0)\) gives
+\(F(T)\). Integrating \(p\rho^2/\dot F\) over the same field interval gives
+the tangent displacement. Dividing the angle rate \(\alpha(\dot z)\) by
+\(\dot F\) gives \(\eta\,d\arcsin(p\rho/V)/dF\), so the total angle
+increment for held turn rate \(\omega\) is
+\[
+ \eta\bigl[\arcsin(p\rho(T)/V)-\arcsin(p\rho(0)/V)\bigr]+\omega T.
+\]
+
+The compiled test uses the default \(\lambda^2=1\), the fixture floor
+\(\epsilon=0.08\), initial position \((0.04,0.05)\), initial velocity
+\((-0.12,0.4)\), and \(\omega=0.9\) over \(T=0.16\) mechanical seconds.
+The normal branch is increasing. The flight-time bracket ends at \(F=0.32\),
+where \(|p|\rho/V < 0.7\) bounds the ratio throughout the bracket. The
+reference uses bisection and composite Simpson integration of the conserved
+quantities. Doubling the integration panels from 512 to 1,024 changes the
+reference endpoint and angle by less than \(10^{-11}\). The reference
+quadrature uses the scalar metric formulas directly. At \(T=0.16\), it
+gives \(F(T)\approx 0.271622591187\), endpoint
+\((-0.010211568875,0.140917080031)\), and a connection angle increment of
+\(0.251911410360\) radians before adding the held turn.
+
+The compiled transport angle uses the analytic coframe at the compiled
+endpoint, and the continuous angle uses the same coframe field at the
+reference endpoint. The position error measures the two endpoints in
+Euclidean coordinates. An additional angle comparison integrates the exact
+one-form along the committed chords and measures the gap to the continuous
+reference.
+
+| Outer steps | Chords | Endpoint position error | Transport angle error (rad) | Chord-to-continuous angle gap (rad) |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 16 | \(2.05444\times10^{-8}\) | 0.00973903 | \(3.46158\times10^{-5}\) |
+| 8 | 32 | \(1.30852\times10^{-9}\) | 0.00490345 | \(8.66566\times10^{-6}\) |
+| 16 | 64 | \(8.25603\times10^{-11}\) | 0.00246011 | \(2.16716\times10^{-6}\) |
+
+The final mechanical clock matched the reconstructed reference time of
+0.16 seconds to binary64 precision at all three resolutions. These are
+numerical observations for this free geodesic before its turn. A certified
+error bound would require quadrature and floating-point enclosures as well
+as the trajectory hypotheses above.
+
 ```powershell
 rtk proxy cargo test --release -p runtime_core --features experimental-operational-field --lib frame_transport -- --nocapture
 ```
