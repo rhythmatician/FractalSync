@@ -76,14 +76,39 @@ by over 0.82 **at every point**. These intervals include the evaluator error
 allowances, below $4.4\times 10^{-14}$ for value, $2.5\times 10^{-10}$ per
 gradient entry and $2.0\times 10^{-6}$ per Hessian entry across both squares.
 
-For a common floor $\epsilon\ge0$, the reference ruler
-$\sqrt{\epsilon^2+D^2}$ is at least $0.0624$ on the deeper square. The
-1-Lipschitz dependence of this ruler on its scalar field gives relative
-ruler error at most $1/62400$ there for the exact stored spline. For a path
-contained in that square, this gives a reciprocal length-density factor
-between $1/(1+1/62400)$ and $1/(1-1/62400)$ when replacing the exact Shore
-field with the exact stored spline at the same floor. The comparison
-requires path containment. The scalar bound gives no comparable Hessian bound.
+### Local length comparison on the deeper square
+
+For a common floor $\epsilon\ge0$, write $\rho_G=\sqrt{\epsilon^2+G^2}$
+for either the exact Shore field $G=D$ or the exact stored spline $G=F$.
+On the deeper square, both fields are negative with absolute value at
+least $m=0.0624$. If $|F-D|\le\delta_0$, the 1-Lipschitz dependence of
+the ruler on its scalar field gives
+$|\rho_F/\rho_D-1|\le\tau=\delta_0/m$. Using $\delta_0\le10^{-6}$ gives
+$\tau\le1/62400$. With `lambda_sq = 0`, the metric is conformal and the
+length-density ratio is bounded by $1/(1+\tau)$ and $1/(1-\tau)$.
+
+For the full graph metric, the speed at a tangent $v$ is
+$\|(v,a\nabla\rho_G\cdot v)\|_2/\rho_G$, with
+$a=\sqrt{\texttt{lambda\_sq}}/\ln 2$. Let $\delta_1$ bound
+$\|\nabla F-\nabla D\|_2$. The function
+$\phi(s)=s/\sqrt{\epsilon^2+s^2}$ has $|\phi|\le1$ and
+$|\phi'|\le1/m$ throughout the negative interval containing both fields.
+Since $\nabla\rho_G=\phi(G)\nabla G$ and $\|\nabla D\|_2=1$, the ruler
+gradient difference is bounded by $\delta_1+\tau$. The reverse triangle
+inequality bounds the difference between the two numerators by
+$\nu\|v\|_2$ for $\nu=|a|(\delta_1+\tau)$. The reference numerator is at
+least $\|v\|_2$. Combining the numerator and denominator bounds gives
+the length-density ratio
+$[(1-\nu)/(1+\tau),(1+\nu)/(1-\tau)]$.
+[Graph length](160-intrinsic-length.md) ·
+[Runtime metric](../../runtime-core/src/manifold.rs)
+
+The checker combines the exact spline and reference jet intervals to
+enclose that ratio in $[0.99974697,1.0002531]$ for $|a|\le3/2$. This
+range includes the default `lambda_sq = 1` since $\ln 2>2/3$. Integrating
+the speed bounds compares the two nominal lengths of any absolutely
+continuous path contained in the deeper square. Rounded metric evaluation
+and path quadrature need their own error bounds.
 
 ### How the checker encloses the difference
 

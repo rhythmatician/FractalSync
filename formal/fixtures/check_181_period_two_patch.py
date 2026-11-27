@@ -213,6 +213,27 @@ def anchored_errors(
     return gaps
 
 
+def deep_graph_density_ratio(
+    reference_value: Interval, gaps: list[Interval]
+) -> Interval:
+    # Both scalar fields are negative throughout the box. Bound the slope
+    # of s / sqrt(epsilon^2 + s^2) by 1 / |s| on their entire range.
+    depth = Q(624, 10000)
+    assert reference_value[1] < -depth and gaps[0][1] < 0
+    relative_ruler_error = max(map(abs, gaps[0])) / depth
+    dx, dy = (max(map(abs, interval)) for interval in gaps[1:3])
+    _, gradient_error = radius_bounds((Q(0), dx**2 + dy**2))
+    ruler_gradient_error = gradient_error + relative_ruler_error
+    # For |a| <= 3/2, use the reverse triangle inequality on the
+    # augmented tangent and bound its reference norm below by |v|.
+    numerator_error = Q(3, 2) * ruler_gradient_error
+    assert relative_ruler_error < 1 and numerator_error < 1
+    return (
+        (1 - numerator_error) / (1 + relative_ruler_error),
+        (1 + numerator_error) / (1 - relative_ruler_error),
+    )
+
+
 def outward(value: Q, lower: bool) -> str:
     with localcontext() as context:
         context.prec = 8
@@ -307,7 +328,6 @@ def main() -> None:
                 assert region[0] <= lo <= hi <= region[1]
 
         if name == "deep":
-            assert reference[0][1] < -Q(624, 10000)
             assert max(map(abs, gaps[0])) < Q(1, 10**6) and gaps[3][0] > 3
         else:
             assert gaps[0][1] < -Q(3, 10000) and gaps[2][0] > Q(4, 5)
@@ -326,6 +346,13 @@ def main() -> None:
                 )
             ),
         }
+        if name == "deep":
+            lo, hi = deep_graph_density_ratio(reference[0], exact_gaps)
+            assert Q(9997, 10000) < lo <= hi < Q(10003, 10000)
+            report[name]["nominal_graph_density_ratio_abs_a_le_1_5"] = [
+                outward(lo, True),
+                outward(hi, False),
+            ]
     assert next(results, None) is None
     print(
         json.dumps(
