@@ -154,7 +154,7 @@ impl OperationalNavigationRegion<'_> {
         &self,
         start: [f64; 2],
         end: [f64; 2],
-        mut cell_bounds: impl FnMut([usize; 2]) -> Option<([f64; 2], [f64; 2])>,
+        cell_bounds: impl FnMut([usize; 2]) -> Option<([f64; 2], [f64; 2])>,
     ) -> Option<OperationalLengthInterval> {
         if !self.contains(start) || !self.contains(end) {
             return None;
@@ -163,6 +163,42 @@ impl OperationalNavigationRegion<'_> {
             [start[0].min(end[0]), start[1].min(end[1])],
             [start[0].max(end[0]), start[1].max(end[1])],
         ];
+        let delta = std::array::from_fn(|i| {
+            if bounds[0][i] == bounds[1][i] {
+                0.0
+            } else {
+                (bounds[1][i] - bounds[0][i]).next_up()
+            }
+        });
+        let (upper, rho_upper) = self.enclose_speed(bounds, delta, cell_bounds)?;
+        let lower = div_down(displacement_lower(start, end)?, rho_upper);
+        Some(OperationalLengthInterval { lower, upper })
+    }
+
+    /// Bound speed in a caller-certified tube using absolute component caps
+    /// on the ambient velocity. The full position box needs spline support.
+    pub(crate) fn tube_speed_upper(
+        &self,
+        bounds: [[f64; 2]; 2],
+        velocity_abs_upper: [f64; 2],
+    ) -> Option<f64> {
+        self.enclose_speed(bounds, velocity_abs_upper, |cell| {
+            self.field.bernstein_cell_bounds(cell)
+        })
+        .map(|(speed, _)| speed)
+    }
+
+    fn enclose_speed(
+        &self,
+        bounds: [[f64; 2]; 2],
+        delta: [f64; 2],
+        mut cell_bounds: impl FnMut([usize; 2]) -> Option<([f64; 2], [f64; 2])>,
+    ) -> Option<(f64, f64)> {
+        if !bounds.into_iter().all(|corner| self.contains(corner))
+            || !delta.into_iter().all(|cap| cap.is_finite() && cap >= 0.0)
+        {
+            return None;
+        }
         let [first, last] = self.field.navigation_cells(bounds)?;
         let mut value_lower = f64::INFINITY;
         let mut value_upper = f64::NEG_INFINITY;
@@ -176,12 +212,6 @@ impl OperationalNavigationRegion<'_> {
                 gradient[1] = gradient[1].max(upper[1]);
             }
         }
-        if start == end {
-            return Some(OperationalLengthInterval {
-                lower: 0.0,
-                upper: 0.0,
-            });
-        }
 
         let d_max = value_lower.abs().max(value_upper.abs());
         let d_min = value_lower.max(-value_upper).max(0.0);
@@ -191,14 +221,9 @@ impl OperationalNavigationRegion<'_> {
             .max(self.epsilon)
             .max(d_min);
         let rho_upper = ruler_upper(d_max, self.epsilon);
-        let displacement = displacement_lower(start, end)?;
-        let delta = std::array::from_fn::<_, 2, _>(|i| {
-            if bounds[0][i] == bounds[1][i] {
-                0.0
-            } else {
-                (bounds[1][i] - bounds[0][i]).next_up()
-            }
-        });
+        if delta == [0.0; 2] {
+            return Some((0.0, rho_upper));
+        }
         let displacement_squared = add_up(mul_up(delta[0], delta[0]), mul_up(delta[1], delta[1]));
         let field_rate = add_up(mul_up(gradient[0], delta[0]), mul_up(gradient[1], delta[1]));
         let ruler_rate = mul_up(field_rate, div_up(d_max, rho_lower).min(1.0));
@@ -210,10 +235,7 @@ impl OperationalNavigationRegion<'_> {
             .sqrt()
             .next_up();
         let upper = div_up(numerator, rho_lower);
-        let lower = div_down(displacement, rho_upper);
-        upper
-            .is_finite()
-            .then_some(OperationalLengthInterval { lower, upper })
+        upper.is_finite().then_some((upper, rho_upper))
     }
 
     /// Lower bound over paths that stay in this window to any point of the
