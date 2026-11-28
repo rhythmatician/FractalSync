@@ -59,7 +59,7 @@ pub const DEFAULT_ORBIT_SEED: u64 = 1337;
 ///       transitional seam, not destination Controls v2 (issue #107).
 /// 6 - Retire the pyramid-backed shore-bias path; the browser and trainer
 /// use the same momentum controller.
-pub const CONTROLLER_VERSION: &str = "orbit-controller/8";
+pub const CONTROLLER_VERSION: &str = "orbit-controller/6";
 
 /// Gravity: restoring acceleration toward the valley floor at the origin,
 /// per frame at |c| = 1. The Map is a landscape — the Shore ridges are

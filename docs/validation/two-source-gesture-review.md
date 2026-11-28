@@ -2,7 +2,7 @@
 
 The known-phase preview offers a direct target and a bounded Physics comparison. Enable **Render Physics motion** before starting the second passage and keep the starting anchor, source settings and Julia presentation fixed for the comparison. The first-order mapping is local, and perceptibility remains a question for the live review.
 
-The repository's canonical-math version rule advances `CONTROLLER_VERSION` to `orbit-controller/8` for this experiment, although the existing controller step is unchanged. Models stamped with an older controller version will be rejected until they are updated under the project's model contract.
+The experiment uses the existing model compatibility version.
 
 Build the Wasm bundle from `wasm-orbit` with `wasm-pack build --target web --out-dir ../frontend/src/wasm --out-name orbit_synth_wasm`. Start the shader API using `.venv\Scripts\python.exe -m uvicorn api.server:app --app-dir backend --host 127.0.0.1 --port 8000` and the frontend using `npm --prefix frontend run dev`. Open `http://localhost:3000/gestureExperiment.html`, or follow the link in the debug cockpit. The shader API must be running. Audio starts only after the Start passage button is pressed.
 
@@ -23,5 +23,7 @@ The default anchor is only a starting point. If a target leaves the Map or geome
 Use **Export diagnostic record** during or after each passage. In Physics mode, the record includes the intended target and realized position for each 20 ms step, along with metric lag, throttle saturation, energy, control work, friction work and residual. Settings changes take effect at the first step whose audio time reaches the recorded change. If integration falls more than one second behind audio, the passage stops and records the error.
 
 **Replay Julia motion** plays back the most recent passage's visual parameters in memory with the original timing. Replay is silent and uses the current viewport. **Save Julia frame** exports the current preview or replay frame as a PNG. Save the trace and representative frames before starting another passage. Record the human observations and renderer environment alongside them.
+
+The trace retains at most 36,000 samples, 36,000 frames and 2,048 events. The export counts omitted entries in `droppedSamples`, `droppedFrames` and `droppedEvents`.
 
 The browser smoke check uses a 700 × 450 viewport for the Physics comparison and software WebGL. Set `GESTURE_FULL_PASSAGE=1` when running `node frontend/scripts/check_gesture_experiment.cjs` to exercise the departure and return over 25 seconds. This checks execution and capture. A Domain Expert still needs to make the listening and playability judgment, and CycleBank binding and free navigation remain separate work.

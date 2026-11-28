@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import { getWasmModule, initOrbitSynth } from '../lib/orbitSynthesizer';
+import { BoundedGestureRecord } from '../lib/boundedGestureRecord';
 
 type Schedule = { a_hz: number; b_segments: { start_seconds: number; frequency_hz: number }[] };
 type Source = 'a' | 'b' | 'off';
@@ -43,7 +44,11 @@ export function GestureExperiment() {
   const rendererRef = useRef<JuliaRenderer | null>(null);
   const runRef = useRef<Passage | null>(null);
   const startingRef = useRef(false);
-  const recordRef = useRef<{ startedAt: string; events: unknown[]; samples: unknown[]; frames: RenderedFrame[] } | null>(null);
+  const recordRef = useRef<{
+    startedAt: string;
+    trace: BoundedGestureRecord<unknown, unknown>;
+    visual: BoundedGestureRecord<null, RenderedFrame>;
+  } | null>(null);
   const visibleFrame = useRef<RenderedFrame | null>(null);
   const replayFrame = useRef(0);
   const [replaying, setReplaying] = useState(false);
@@ -63,7 +68,7 @@ export function GestureExperiment() {
     if (run) {
       const change = { audioTime: run.audio.currentTime, settings: value };
       run.changes.push(change);
-      recordRef.current?.events.push({ type: 'settings', ...change });
+      recordRef.current?.trace.addEvent({ type: 'settings', ...change });
     }
     setSettings(value);
   }
@@ -107,7 +112,7 @@ export function GestureExperiment() {
     const run = runRef.current;
     runRef.current = null;
     if (run) {
-      recordRef.current?.events.push({ type: 'stop', audioTime: run.audio.currentTime });
+      recordRef.current?.trace.addEvent({ type: 'stop', audioTime: run.audio.currentTime });
       cancelAnimationFrame(run.frame);
       run.release();
       await run.audio.close();
@@ -130,7 +135,11 @@ export function GestureExperiment() {
       if (!mountedRef.current) { await audio.close(); return; }
       const startAt = audio.currentTime + 0.1;
       visibleFrame.current = null;
-      recordRef.current = { startedAt: new Date().toISOString(), events: [{ type: 'start', audioTime: startAt, settings: settingsRef.current, tracking }], samples: [], frames: [] };
+      recordRef.current = {
+        startedAt: new Date().toISOString(),
+        trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current, tracking }),
+        visual: new BoundedGestureRecord(null),
+      };
       setHasRecord(true);
       // The sine modulators and Rust phase calculation share this audio clock.
       function layer(frequency: number, modulation: number, segments?: Schedule['b_segments']) {
@@ -193,7 +202,7 @@ export function GestureExperiment() {
               const sample = JSON.parse(physics.step(reference.target[0], reference.target[1])) as { position: number[] };
               realized = sample.position;
               completedSteps++;
-              recordRef.current?.samples.push({ stepTime, audioTime, ...reference, physics: sample, settings: physicsSettings });
+              recordRef.current?.trace.addSample({ stepTime, audioTime, ...reference, physics: sample, settings: physicsSettings });
               if (performance.now() >= deadline) break;
             }
             displayed = current.condition === 'audio' ? origin : realized;
@@ -205,7 +214,7 @@ export function GestureExperiment() {
             run.changes.length = 0;
             const reference = referenceAt(current, elapsed);
             displayed = reference.target;
-            recordRef.current?.samples.push({ elapsed, audioTime, ...reference, settings: current });
+            recordRef.current?.trace.addSample({ elapsed, audioTime, ...reference, settings: current });
           }
           const frame: RenderedFrame = {
             elapsed,
@@ -214,9 +223,9 @@ export function GestureExperiment() {
             colorHue: current.hue, colorSat: 0.8, colorBright: 0.9, zoom: current.zoom, speed: 0 } };
           rendererRef.current?.renderFrozen(frame.params);
           visibleFrame.current = frame;
-          recordRef.current?.frames.push(frame);
+          recordRef.current?.visual.addSample(frame);
           if (elapsed - lastDisplay > 0.1) { setTime(elapsed); lastDisplay = elapsed; }
-        } catch (cause) { recordRef.current?.events.push({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
+        } catch (cause) { recordRef.current?.trace.addEvent({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
         run.frame = requestAnimationFrame(animate);
       };
       run.frame = requestAnimationFrame(animate);
@@ -229,7 +238,7 @@ export function GestureExperiment() {
   }
 
   function replay() {
-    const frames = recordRef.current?.frames;
+    const frames = recordRef.current?.visual.samples;
     if (!frames?.length || runRef.current || startingRef.current) return;
     if (replaying) {
       cancelAnimationFrame(replayFrame.current);
@@ -262,11 +271,18 @@ export function GestureExperiment() {
   }
 
   function exportRecord() {
-    if (!recordRef.current) return;
+    const record = recordRef.current;
+    if (!record) return;
     const blob = new Blob([JSON.stringify({
       format: 'fractal-sync-gesture-diagnostic/1',
       source: 'Known synthetic phases',
-      ...recordRef.current,
+      startedAt: record.startedAt,
+      events: record.trace.events,
+      samples: record.trace.samples,
+      droppedEvents: record.trace.droppedEvents,
+      droppedSamples: record.trace.droppedSamples,
+      frames: record.visual.samples,
+      droppedFrames: record.visual.droppedSamples,
     }, null, 2)], { type: 'application/json' });
     download(blob, 'gesture-diagnostic.json');
   }

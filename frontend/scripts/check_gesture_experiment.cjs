@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('http://127.0.0.1:3000/gestureExperiment.html');
+  await page.goto(`${process.env.GESTURE_BASE_URL || 'http://127.0.0.1:3000'}/gestureExperiment.html`);
   await page.getByRole('button', { name: 'Start passage' }).waitFor({ state: 'visible', timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('button')?.disabled, { timeout: 30000 });
   const binding = await page.evaluate(async () => {
@@ -36,6 +36,7 @@ const { chromium } = require('playwright');
   const download = await downloadPromise;
   const record = JSON.parse(await require('node:fs/promises').readFile(await download.path(), 'utf8'));
   if (record.format !== 'fractal-sync-gesture-diagnostic/1' || !record.samples.length ||
+      record.droppedEvents !== 0 || record.droppedSamples !== 0 ||
       !record.events.some(event => event.type === 'settings') || !record.events.some(event => event.type === 'stop')) {
     throw new Error('Incomplete diagnostic record');
   }
