@@ -360,7 +360,7 @@ impl FrozenRollout {
         Ok(report)
     }
 
-    fn chart_edge_is_clear(&self, [lo, hi]: [[f64; 2]; 2]) -> bool {
+    pub(super) fn chart_edge_is_clear(&self, [lo, hi]: [[f64; 2]; 2]) -> bool {
         let avoids_canonical = !CANONICAL_REFERENCE_POINTS
             .iter()
             .any(|&p| in_box(p, [lo, hi]));

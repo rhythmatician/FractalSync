@@ -239,9 +239,14 @@ fn valid_nonnegative(value: f64) -> bool {
     value.is_finite() && value >= 0.0
 }
 
-fn action_floor(length_lower: f64, duration_upper: f64) -> f64 {
-    // Multiplication by 2 is exact over the range of canonical durations.
-    mul_down(length_lower, div_down(length_lower, 2.0 * duration_upper))
+pub(crate) fn action_floor(length_lower: f64, duration_upper: f64) -> f64 {
+    let twice_duration = 2.0 * duration_upper;
+    let half_mean_speed = if twice_duration.is_finite() {
+        div_down(length_lower, twice_duration)
+    } else {
+        mul_down(0.5, div_down(length_lower, duration_upper))
+    };
+    mul_down(length_lower, half_mean_speed)
 }
 
 fn seconds_upper(samples: u64) -> f64 {

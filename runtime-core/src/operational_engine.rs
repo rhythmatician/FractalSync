@@ -1,3 +1,4 @@
+use crate::intrinsic_bounds::{add_down, add_up, mul_down, mul_up};
 use crate::manifold::{self, ManifoldConfig};
 use crate::operational_field::PreparedField;
 use num_complex::Complex64;
@@ -8,13 +9,15 @@ use std::sync::Arc;
 mod frame_transport;
 mod gesture_harmonics;
 pub use gesture_harmonics::{compare_gesture_harmonics, GestureHarmonicMoment};
+mod reference_tube_action;
 mod route_guidance;
 pub use frame_transport::{
     GestureEpochId, GestureSample, TransportedFrame, TransportedGestureEpoch,
 };
+pub use reference_tube_action::{NominalReferenceTubeAction, ReferenceMotionPanel};
 pub use route_guidance::{
-    AmbientTarget, NominalChordAction, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
-    OperationalRouteStatus,
+    AmbientTarget, NominalChordAction, NominalRouteTiming, OperationalRouteGuidance,
+    OperationalRouteRequest, OperationalRouteStatus,
 };
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
@@ -205,6 +208,8 @@ pub struct RkSubstepTrace {
     pub duration: f64,
     pub stages: [[f64; 4]; 4],
     pub slopes: [[f64; 5]; 4],
+    /// Compiled kinetic energy evaluated from the left-stage provider jet.
+    pub left_kinetic_energy: Option<f64>,
     pub end: [f64; 4],
     pub work: f64,
 }
@@ -215,11 +220,19 @@ impl RkSubstepTrace {
         let start = self.stages[0];
         let [x, y] = std::array::from_fn(|axis| {
             let delta = (self.end[axis] - start[axis]).abs();
-            if self.end[axis] == start[axis] { 0.0 } else { delta.next_up() }
+            if self.end[axis] == start[axis] {
+                0.0
+            } else {
+                delta.next_up()
+            }
         });
         use crate::intrinsic_bounds::{add_up, mul_up};
         let square = add_up(mul_up(x, x), mul_up(y, y));
-        let length = if square == 0.0 { 0.0 } else { square.sqrt().next_up() };
+        let length = if square == 0.0 {
+            0.0
+        } else {
+            square.sqrt().next_up()
+        };
         length.is_finite().then_some(length)
     }
 
@@ -244,6 +257,13 @@ impl RkSubstepTrace {
         }
         bound.is_finite().then_some(bound)
     }
+}
+
+/// Outward enclosure of the exact weighted sum of represented kinetic samples.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CompiledSampledAction {
+    pub lower: f64,
+    pub upper: f64,
 }
 
 /// Start and discrete endpoints of one committed experimental Physics step.
@@ -287,6 +307,29 @@ impl AcceptedStepTrace {
         &self.rk_substeps
     }
 
+    /// Encloses the sampled action on the represented RK durations.
+    /// Returns no evidence for Euler or unusable samples.
+    pub fn compiled_sampled_action(&self) -> Option<CompiledSampledAction> {
+        let steps = self.rk_substeps();
+        if steps.is_empty() {
+            return None;
+        }
+        let mut action = CompiledSampledAction {
+            lower: 0.0,
+            upper: 0.0,
+        };
+        for step in steps {
+            let kinetic = step.left_kinetic_energy?;
+            let duration = step.duration;
+            if !duration.is_finite() || duration <= 0.0 || !kinetic.is_finite() || kinetic < 0.0 {
+                return None;
+            }
+            action.lower = add_down(action.lower, mul_down(duration, kinetic));
+            action.upper = add_up(action.upper, mul_up(duration, kinetic));
+        }
+        action.upper.is_finite().then_some(action)
+    }
+
     /// Outward ambient length of the polygon through committed RK substep
     /// endpoints. Euler traces have no RK evidence.
     pub fn ambient_rk_polyline_length_upper(&self) -> Option<f64> {
@@ -294,7 +337,10 @@ impl AcceptedStepTrace {
             return None;
         }
         let total = self.rk_substeps.iter().try_fold(0.0, |sum, step| {
-            Some(crate::intrinsic_bounds::add_up(sum, step.ambient_chord_length_upper()?))
+            Some(crate::intrinsic_bounds::add_up(
+                sum,
+                step.ambient_chord_length_upper()?,
+            ))
         })?;
         total.is_finite().then_some(total)
     }
@@ -640,13 +686,15 @@ fn rk4_advance(
     trace: Option<&mut Vec<RkSubstepTrace>>,
 ) -> Result<(Complex64, (f64, f64), f64), String> {
     let initial = [c.re, c.im, v.0, v.1];
-    let k1 = rhs(initial, q, beta, config).map_err(|e| format!("RK stage 1: {e}"))?;
+    let mut left_kinetic_energy = None;
+    let sample = trace.is_some().then_some(&mut left_kinetic_energy);
+    let k1 = rhs(initial, q, beta, config, sample).map_err(|e| format!("RK stage 1: {e}"))?;
     let second = advance(initial, k1, dt / 2.0);
-    let k2 = rhs(second, q, beta, config).map_err(|e| format!("RK stage 2: {e}"))?;
+    let k2 = rhs(second, q, beta, config, None).map_err(|e| format!("RK stage 2: {e}"))?;
     let third = advance(initial, k2, dt / 2.0);
-    let k3 = rhs(third, q, beta, config).map_err(|e| format!("RK stage 3: {e}"))?;
+    let k3 = rhs(third, q, beta, config, None).map_err(|e| format!("RK stage 3: {e}"))?;
     let fourth = advance(initial, k3, dt);
-    let k4 = rhs(fourth, q, beta, config).map_err(|e| format!("RK stage 4: {e}"))?;
+    let k4 = rhs(fourth, q, beta, config, None).map_err(|e| format!("RK stage 4: {e}"))?;
     let mut end = initial;
     for i in 0..4 {
         end[i] += dt / 6.0 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
@@ -657,6 +705,7 @@ fn rk4_advance(
             duration: dt,
             stages: [initial, second, third, fourth],
             slopes: [k1, k2, k3, k4],
+            left_kinetic_energy,
             end,
             work,
         });
@@ -684,7 +733,13 @@ fn checked_endpoint(
 fn advance(s: [f64; 4], k: [f64; 5], dt: f64) -> [f64; 4] {
     std::array::from_fn(|i| s[i] + dt * k[i])
 }
-fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result<[f64; 5], String> {
+fn rhs(
+    s: [f64; 4],
+    q: (f64, f64),
+    beta: f64,
+    config: &ManifoldConfig,
+    left_kinetic_energy: Option<&mut Option<f64>>,
+) -> Result<[f64; 5], String> {
     let c = Complex64::new(s[0], s[1]);
     let v = (s[2], s[3]);
     if !s.iter().all(|v| v.is_finite()) || c.norm_sqr() >= 4.0 {
@@ -693,6 +748,11 @@ fn rhs(s: [f64; 4], q: (f64, f64), beta: f64, config: &ManifoldConfig) -> Result
     let geometry = crate::geometry_provider::query_geometry(c, config.epsilon)?;
     if geometry.validity != crate::geometry_provider::GeometryValidity::Regular {
         return Err("RK geometry not regular".into());
+    }
+    if let Some(sample) = left_kinetic_energy {
+        *sample = manifold::induced_metric_from_jet(&geometry, config)
+            .ok()
+            .map(|metric| manifold::kinetic_energy_from_metric(v, metric));
     }
     let curvature = manifold::geodesic_acceleration(v, c, config)?;
     let potential = manifold::potential_force(c, config)?;
@@ -856,6 +916,17 @@ mod tests {
                         end.velocity[1]
                     ],
                 );
+                let expected_kinetic = rollout
+                    .evaluate(|config| {
+                        manifold::kinetic_energy(
+                            (start.velocity[0], start.velocity[1]),
+                            Complex64::new(start.position[0], start.position[1]),
+                            config,
+                        )
+                    })
+                    .unwrap()
+                    .0;
+                assert_eq!(substep.left_kinetic_energy, Some(expected_kinetic));
                 for (stage, slope) in substep.stages.iter().zip(substep.slopes) {
                     assert_eq!([slope[0], slope[1]], [stage[2], stage[3]]);
                 }
@@ -868,6 +939,17 @@ mod tests {
                     });
                     assert_eq!(*stage, expected);
                 }
+            }
+            let expected_action: f64 = substeps
+                .iter()
+                .map(|step| step.duration * step.left_kinetic_energy.unwrap())
+                .sum();
+            if method == Integrator::Euler {
+                assert_eq!(trace.compiled_sampled_action(), None);
+            } else {
+                let bounds = trace.compiled_sampled_action().unwrap();
+                assert!(0.0 < bounds.lower && bounds.lower <= expected_action);
+                assert!(expected_action <= bounds.upper);
             }
             let endpoints = trace.endpoints();
             assert_eq!(endpoints.len(), times.len());
