@@ -43,6 +43,7 @@ class AudioToControlModel(nn.Module):
         recurrent: bool = False,
         gru_hidden_dim: int = 128,
         controls_version: str = "orbit_control",
+        observe_location: bool = False,
     ):
         """
         Initialize control signal model.
@@ -78,6 +79,13 @@ class AudioToControlModel(nn.Module):
         self.input_dim = self.features_per_frame * window_frames
 
         self.controls_version = controls_version
+        self.location_dim = 0
+        self.location_version: str | None = None
+        if observe_location:
+            if controls_version != "controls/2":
+                raise ValueError("Player location requires ControlsV2")
+            from runtime_core import player_location_schema
+            self.location_version, self.location_dim = player_location_schema()
         schema_kind = "controls_v2" if controls_version == "controls/2" else "orbit_control"
         self.output_schema = output_schema(schema_kind, k_bands)
         self.output_dim = len(self.output_schema)
@@ -123,6 +131,7 @@ class AudioToControlModel(nn.Module):
             self.encoder = nn.Sequential(*encoder_layers)
             head_input_dim = prev_dim
 
+        head_input_dim += self.location_dim
         # Control signal heads
         if self.controls_version == "controls/2":
             # 13-channel ControlsV2: motion 6 + view 7. Activations match Rust parameter_ranges:
@@ -213,7 +222,7 @@ class AudioToControlModel(nn.Module):
         _, hidden = self.gru(encoded_frames)  # hidden: (1, B, H)
         return hidden.squeeze(0)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, player_location: torch.Tensor | None = None) -> torch.Tensor:
         """
         Forward pass predicting control signals.
 
@@ -237,6 +246,10 @@ class AudioToControlModel(nn.Module):
 
         # Encode features
         encoded = self._encode(x)
+        if self.location_dim:
+            if player_location is None or player_location.shape != (x.shape[0], self.location_dim):
+                raise ValueError("Expected one pre-action location observation per audio window")
+            encoded = torch.cat((encoded, player_location), dim=1)
 
         if self.controls_version == "controls/2":
             # 13-channel ControlsV2: directionX,Y (tanh), throttle/brake/grip/impulse (sigmoid), 7 view deltas (tanh)

@@ -47,7 +47,10 @@ export function terrainProjectionUniforms(mesh: THREE.Mesh, patch: TerrainPatch)
   // Fragment derivatives compute normals from the projected triangle. No
   // camera-dependent CPU normal rebuild and no stale Euclidean lighting.
   material.flatShading = true;
-  material.onBeforeCompile = shader => {
+  const previous = material.onBeforeCompile.bind(material);
+  const cacheKey = material.customProgramCacheKey();
+  material.onBeforeCompile = (shader, renderer) => {
+    previous(shader, renderer);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `
 attribute vec3 upperHalfPosition;
@@ -72,7 +75,7 @@ vPatchUv = uv;
 #endif
 `);
   };
-  material.customProgramCacheKey = () => 'hyperbolic-terrain/1';
+  material.customProgramCacheKey = () => cacheKey + ':hyperbolic-terrain/1';
   material.needsUpdate = true;
   // The CPU bounding sphere describes the source mesh, not the GPU projection.
   mesh.frustumCulled = false;

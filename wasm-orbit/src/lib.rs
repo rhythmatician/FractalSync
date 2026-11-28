@@ -99,6 +99,43 @@ impl GesturePhysics {
     }
 }
 
+#[wasm_bindgen(js_name = "juliaEffectHeadings")]
+pub fn julia_effect_headings(x: f64, y: f64) -> Vec<f64> {
+    runtime_core::model_io::fixed_point_effect_headings(RustComplex::new(x, y))
+        .map_or_else(Vec::new, |headings| headings.to_vec())
+}
+
+#[wasm_bindgen(js_name = "juliaEffectContours")]
+pub fn julia_effect_contours(positions: &[f64]) -> Vec<f32> {
+    positions.chunks_exact(3).flat_map(|p| {
+        runtime_core::model_io::fixed_point_inverse_contours(RustComplex::new(p[0], p[1]))
+            .map_or([0.0; 4], |[scale, cosine, sine]| [scale, cosine, sine, 1.0])
+    }).collect()
+}
+
+#[wasm_bindgen(js_name = "playerLocationVersion")]
+pub fn player_location_version() -> String {
+    runtime_core::model_io::PLAYER_LOCATION_VERSION.into()
+}
+
+/// Sample the same marked spiral for both bands on a fixed diagnostic patch.
+#[wasm_bindgen(js_name = "juliaSpiralTextureJson")]
+pub fn julia_spiral_texture_json() -> Result<String, JsValue> {
+    use runtime_core::julia_spiral_overlay::{sample, CENTER, HALF};
+    const SIZE: usize = 41;
+    let mut samples = Vec::with_capacity(SIZE * SIZE);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let offset = |index| HALF * (2.0 * index as f64 / (SIZE - 1) as f64 - 1.0);
+            let point = RustComplex::new(CENTER[0] + offset(x), CENTER[1] + offset(y));
+            samples.push(sample(point).map(|bands| bands.map(|b| [b.rate.re, b.rate.im, b.residual])));
+        }
+    }
+    model_io_json(&serde_json::json!({
+        "center": CENTER, "half": HALF, "size": SIZE, "samples": samples,
+    }))
+}
+
 /// Experimental local target; this does not apply physical tracking.
 #[wasm_bindgen(js_name = "twoSourceGestureTarget")]
 pub fn two_source_gesture_target(
@@ -998,6 +1035,13 @@ impl OrbitController {
     pub fn step_with_controls(&mut self, dt: f64, motion: &MotionControls) -> Complex {
         let c = self.inner.step_with_controls(dt, &motion.clone().into());
         c.into()
+    }
+
+    #[wasm_bindgen(js_name = "playerLocationObservation")]
+    pub fn player_location_observation(&self) -> Vec<f64> {
+        runtime_core::model_io::player_location_observation(
+            self.inner.c, self.inner.planar_velocity, &self.inner.manifold_config,
+        ).to_vec()
     }
 }
 

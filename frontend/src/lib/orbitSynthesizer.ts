@@ -63,6 +63,7 @@ interface WasmMotionControls {
 }
 
 interface WasmOrbitController {
+  playerLocationObservation?(): Float64Array;
   readonly theta: number;
   apply_controls(s: number, alpha: number): void;
   set_momentum(on: boolean): void;
@@ -91,6 +92,10 @@ interface WasmModule {
     navigate(x: number, y: number): string;
     free(): void;
   };
+  juliaEffectHeadings(x: number, y: number): Float64Array;
+  juliaEffectContours(positions: Float64Array): Float32Array;
+  playerLocationVersion(): string;
+  juliaSpiralTextureJson(): string;
   twoSourceGestureTarget(anchorX: number, anchorY: number, phaseA: number, phaseB: number, gainA: number, gainB: number, excursion: number, rotating: boolean): Float64Array;
   knownGesturePhases(seconds: number, misaligned: boolean): Float64Array;
   knownGestureScheduleJson(): string;
@@ -373,6 +378,10 @@ export function getWasmModule(): WasmModule & Partial<JuliaWasmExtension> {
   return requireWasm() as WasmModule & Partial<JuliaWasmExtension>;
 }
 
+export function getPlayerLocationVersion(): string {
+  return getWasmModule().playerLocationVersion();
+}
+
 export function createJuliaViewState(): JuliaViewStateHandle {
   const m = getWasmModule();
   if (typeof m.JuliaViewState !== 'function') {
@@ -465,6 +474,11 @@ export function createInitialState(_config: OrbitConfig): OrbitState {
  * wandering and actually exercises the minimap (issue #88).
  */
 export class OrbitSynthesizer {
+  playerLocationObservation(): Float32Array {
+    const observation = this.state.playerLocationObservation?.();
+    if (!observation) throw new Error('Wasm has no Player location observation binding');
+    return Float32Array.from(observation);
+  }
   private kBands: number;
   private state: WasmOrbitController;
 

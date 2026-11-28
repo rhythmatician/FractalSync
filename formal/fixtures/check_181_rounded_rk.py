@@ -166,6 +166,14 @@ def drive(jet: Jet) -> Vector:
     return along_x / denominator, ux * uy / denominator
 
 
+def nominal_kinetic_energy(phase: Phase, jet: Jet) -> Interval:
+    _, _, vx, vy = phase
+    velocity = (Interval.point(vx), Interval.point(vy))
+    ruler_rate = dot(velocity, jet["grad"])
+    # Exact metric for this fixture: (I + grad(rho) grad(rho)^T) / rho^2.
+    return (dot(velocity, velocity) + ruler_rate**2) / (TWO * jet["rho"]**2)
+
+
 def rhs(phase: Phase, jet: Jet, command: Vector) -> tuple[Interval, Interval, Interval]:
     rho, u = jet["rho"], jet["grad"]
     hxx, hxy, hyy = jet["hessian"]
@@ -195,6 +203,7 @@ def rhs(phase: Phase, jet: Jet, command: Vector) -> tuple[Interval, Interval, In
 
 class Substep(TypedDict):
     dt: int
+    left_kinetic_energy: int
     left_drift_defect_upper: int
     stages: list[list[int]]
     slopes: list[list[int]]
@@ -206,6 +215,7 @@ class OuterStep(TypedDict):
     command: list[int]
     substeps: list[Substep]
     stored_work: int
+    compiled_sampled_action: list[int]
     ambient_polyline_length_upper: int
     mechanical_time: int
 
@@ -252,6 +262,8 @@ def check_profile(profile: Profile, field: Field) -> None:
         command_error = exact_command[0].error(command_x) + exact_command[1].error(command_y)
         check("held drive", command_error, dt)
         exact_outer_work = Q(0)
+        exact_compiled_action = Q(0)
+        nominal_action = Interval.point(0)
         chord_squares: list[Q] = []
         assert len(outer["substeps"]) == count
         for sub in outer["substeps"]:
@@ -273,6 +285,12 @@ def check_profile(profile: Profile, field: Field) -> None:
             expected_end = tuple(source[i] + weighted[i] for i in range(4))
             check("weighted endpoint", phase_error(endpoint, expected_end), dt**2)
             represented_dt = binary64(sub["dt"])
+            kinetic = binary64(sub["left_kinetic_energy"])
+            assert kinetic >= 0
+            exact_kinetic = nominal_kinetic_energy(source, field.ruler_jet(source[0], source[1]))
+            check("left kinetic energy", exact_kinetic.error(kinetic), Q(1, 10**15))
+            exact_compiled_action += represented_dt * kinetic
+            nominal_action += Interval.point(represented_dt) * exact_kinetic
             drift_defect = sum(
                 abs(endpoint[i] - source[i] - represented_dt * source[i + 2])
                 for i in range(2)
@@ -291,6 +309,11 @@ def check_profile(profile: Profile, field: Field) -> None:
         length_upper = binary64(outer["ambient_polyline_length_upper"])
         assert chord_lower + Q(len(chord_squares), grid) <= length_upper
         check("ambient polyline enclosure slack", length_upper - chord_lower, Q(1, 10**17))
+        action_lower, action_upper = map(binary64, outer["compiled_sampled_action"])
+        assert action_lower <= exact_compiled_action <= action_upper
+        check("compiled sampled action enclosure width", action_upper - action_lower, Q(1, 10**18))
+        check("compiled to nominal sampled action", nominal_action.error(exact_compiled_action),
+              Q(1, 10**15) * rounded_outer_dt)
         stored_work = binary64(outer["stored_work"])
         check("stored outer work", abs(stored_work - previous_work - exact_outer_work), outer_dt**2)
         previous_work = stored_work

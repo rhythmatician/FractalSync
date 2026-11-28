@@ -207,6 +207,17 @@ def collect_c_traces(
                 if next(model.parameters()).device.type != "cpu":
                     x = x.to(next(model.parameters()).device)
 
+                if model.location_dim:
+                    from .location_rollout import location_conditioned_rollout
+
+                    _, positions = location_conditioned_rollout(
+                        model,
+                        x,
+                        torch.zeros(x.shape[0], dtype=torch.long),
+                        torch.zeros(x.shape[0], dtype=torch.complex128),
+                    )
+                    traces[audio_file.stem] = np.asarray(positions, dtype=np.complex128)
+                    continue
                 out = model(x)
                 parsed = model.parse_output(out)
                 # The browser uses the same Rust audio drive calculation.

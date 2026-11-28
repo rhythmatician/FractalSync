@@ -101,3 +101,91 @@ target length. Production use still needs independent bounds for
 the initial speed gap and speed growth on each RK interval.
 
 [Sampled-action proof](../../formal/FractalSync/SampledAction.lean)
+
+## Travel in a certified reference tube
+
+For a frozen prepared field, `nominal_reference_tube_action` accepts
+one independently established position box and absolute ambient
+velocity cap per committed RK substep. It requires the represented
+substep durations, ends covered by their boxes, complete spline
+support, and boxes clear of reference cuts. The boxes and caps
+must also contain the continuous reference motion between the ends.
+
+The Bernstein cell bounds enclose the signed field and its gradient
+through each box. With speed component caps (V_x,V_y), bound the
+field rate by (|D_x|V_x+|D_y|V_y) using the gradient bounds. The
+same outward metric expression as for chord enclosure then bounds
+the reference's intrinsic speed. Multiply by the substep duration
+and subtract a lower enclosure of the duration times the speed
+implied by the recorded compiled left kinetic energy. The positive
+part, summed upward, bounds the length missed by those samples.
+This compares the supplied continuous path in the exact nominal
+spline metric with the compiled sampled-action weights.
+With a certified arrival length for the same path and interval,
+`sampled_action_lower` subtracts the missed-length allowance
+outward and applies the weighted action inequality using the
+upward sum of the represented substep durations.
+
+The constant-field fixture switches off forces and friction. Its
+reference travels on a horizontal straight line at ambient speed
+one quarter, so its intrinsic length and position tube follow
+analytically. The fixture checks the length bound and refuses
+incomplete panels, negative caps, and a box touching a reference cut.
+Two more analytic fixtures use the quintic B-spline's
+linear reproduction with dyadic coefficients to obtain the affine
+field \(D(x,y)=x\). With drag and forces disabled, its diagonal
+metric is independent of \(y\), and the \(x\) derivative of
+\(G_{yy}\) vanishes at \(x=0\). The transverse geodesic stays at
+\(x=0\) and moves along \(y\) at ambient speed \(1/4\). Its tube
+contains off-axis positions where the metric varies.
+
+In the conformal profile (`lambda_sq = 0`), the second geodesic
+holds (y) fixed and follows `x(t) = sinh(t/2)/2`. The metric
+changes along the path, and the reference intrinsic speed is
+exactly \(1/2\). The four substeps cover \(1/64\) second. For
+`u = t/2 ≤ 1/128`, the series gives `cosh(u) ≤ 1 + u²`.
+Use the resulting dyadic velocity cap and its time integral to
+bound the position and velocity throughout the step independently
+of the RK endpoints. The length upper bound is within \(5\times10^{-7}\)
+of the exact reference length, and the sampled-action floor is within
+\(3\times10^{-7}\) of the recorded action.
+## Constructing a tube from nominal acceleration bounds
+
+The nominal prepared-field constructor derives acceleration caps for
+each ambient component over a position box and a componentwise velocity
+range. It uses the held control recorded in the committed trace and
+the frozen profile for the reference equation. It requires complete
+spline support, a box inside the mechanical disk and clear of reference
+cuts, and a supported force model.
+
+With an initial position interval \(X\), velocity interval \(V\),
+an absolute acceleration bound \(A\), and substep duration \(h\),
+the terminal velocity lies in \(V+[-hA,hA]\) and the terminal position
+lies in \(X+hV+[-h^2A/2,h^2A/2]\). The full substep tube includes the
+range of \(tV\) for \(0\le t\le h\). All endpoints round outward.
+Strict containment in the proposed acceleration domain rules out
+a first exit. Terminal reference intervals become the initial
+intervals for the next substep. The compiled positions are included in
+the output boxes for comparison and never replace the propagated
+reference intervals.
+
+The driven quadratic spline fixture has nonzero held control and damping.
+It starts with declared position and velocity uncertainty, constructs
+all four panels, and applies the compiled-action allowance. A smaller
+domain is refused. These bounds certify the uninterrupted nominal
+reference under the stated initial uncertainty. Curriculum exclusion
+still needs a certified arrival set and a task-level action comparison.
+
+## Compiled kinetic samples on accepted RK panels
+
+Each accepted RK substep records the kinetic energy evaluated from its first
+stage's compiled geometry sample and velocity. The evaluator uses the same
+metric and quadratic form as the mechanical energy calculation. It reuses
+the stage's geometry query. The trace's sampled action is an outward
+enclosure of the sum of represented duration times represented kinetic
+energy. It is unavailable if any sample or duration is unusable.
+
+The reference-tube calculation uses these compiled samples directly.
+It subtracts a lower enclosure of the speed implied by each compiled
+kinetic sample when bounding missed length. The resulting allowance
+and sampled action therefore refer to the same represented values.

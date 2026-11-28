@@ -24,6 +24,8 @@ See `docs/DOMAIN_CONTRACT.md` for the full domain contract (obligations, world f
 - `CONTROLLER_VERSION` (`runtime-core/src/controller.rs`): current `orbit-controller/6`. The experimental two-source gesture is separate from `OrbitController::step`. Same refusal/stale-golden guards as above.
 
 ### Training ↔ browser contract
+Training with `--controls-version controls/2` exports a versioned `player_location` input alongside `audio_features`. Rust packs the pre-action position and Cartesian velocity, the signed log-scale and angle response on two axes of the local metric-orthonormal frame, and a directional validity flag. The rates describe the deep inverse-return response of the marked repelling fixed-point branch. They are zero with validity off when the branch or geometry is unavailable. Training advances the Rust integrator between observations within each clip. ONNX inference reads its own current state before applying the returned controls.
+
 Training exports ONNX (`opset 18`) + `*_metadata.json` with `input_shape`, `output_dim`, `parameter_names`, `parameter_ranges`, `feature_mean`/`feature_std`, `model_type: orbit_control`, `k_bands`, `feature_version`, `controller_version`. The browser (`frontend/src/lib/modelInference.ts`) loads them and refuses mismatched versions.
 
 ## Repository layout

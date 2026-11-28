@@ -49,6 +49,13 @@ impl Interval {
         }
     }
 
+    fn difference(self, other: Self) -> Self {
+        Self {
+            lo: (self.lo - other.hi).next_down(),
+            hi: (self.hi - other.lo).next_up(),
+        }
+    }
+
     fn difference_abs_upper(self, other: Self) -> f64 {
         (self.hi - other.lo).max(other.hi - self.lo).next_up()
     }
@@ -62,6 +69,14 @@ impl PreparedField {
         &self,
         [cell_x, cell_y]: [usize; 2],
     ) -> Option<([f64; 2], [f64; 2])> {
+        self.bernstein_cell_derivatives::<false>([cell_x, cell_y])
+            .map(|(value, gradient, _)| (value, gradient))
+    }
+
+    pub(super) fn bernstein_cell_derivatives<const HESSIAN: bool>(
+        &self,
+        [cell_x, cell_y]: [usize; 2],
+    ) -> Option<([f64; 2], [f64; 2], [f64; 3])> {
         let [width, height] = self.shape;
         if cell_x < 2 || cell_x >= width - 3 || cell_y < 2 || cell_y >= height - 3 {
             return None;
@@ -81,7 +96,7 @@ impl PreparedField {
         let coefficient_min = stencil.iter().flatten().copied().fold(center, f64::min);
         let coefficient_max = stencil.iter().flatten().copied().fold(center, f64::max);
         if coefficient_min == coefficient_max {
-            return Some(([center, center], [0.0, 0.0]));
+            return Some(([center, center], [0.0; 2], [0.0; 3]));
         }
 
         // Centering commutes with the transform by partition of unity. It
@@ -125,10 +140,39 @@ impl PreparedField {
             }
         }
         let gradient = differences.map(|delta| ((5.0 * delta).next_up() / self.spacing).next_up());
+        let mut hessian = [0.0_f64; 3];
+        if HESSIAN {
+            // Differentiating the Bernstein control net again gives factors
+            // 5*4 on pure differences and 5*5 on mixed differences.
+            for (y, row) in controls.iter().enumerate() {
+                for (x, &control) in row.iter().enumerate() {
+                    if x >= 2 {
+                        let first = control.difference(row[x - 1]);
+                        let prior = row[x - 1].difference(row[x - 2]);
+                        hessian[0] = hessian[0].max(first.difference_abs_upper(prior));
+                    }
+                    if x >= 1 && y >= 1 {
+                        let first = control.difference(row[x - 1]);
+                        let prior = controls[y - 1][x].difference(controls[y - 1][x - 1]);
+                        hessian[1] = hessian[1].max(first.difference_abs_upper(prior));
+                    }
+                    if y >= 2 {
+                        let first = control.difference(controls[y - 1][x]);
+                        let prior = controls[y - 1][x].difference(controls[y - 2][x]);
+                        hessian[2] = hessian[2].max(first.difference_abs_upper(prior));
+                    }
+                }
+            }
+            for (bound, weight) in hessian.iter_mut().zip([20.0, 25.0, 20.0]) {
+                *bound = (((weight * *bound).next_up() / self.spacing).next_up() / self.spacing)
+                    .next_up();
+            }
+        }
         gradient
             .into_iter()
+            .chain(hessian)
             .all(f64::is_finite)
-            .then_some((values, gradient))
+            .then_some((values, gradient, hessian))
     }
 }
 
@@ -203,6 +247,23 @@ mod tests {
             }
         }
         assert!(value[0] > -10.0 && value[1] < 10.0);
+    }
+
+    #[test]
+    fn bernstein_derivatives_bound_all_hessian_components_of_a_quadratic() {
+        let spacing = 0.25;
+        let coefficients = (0..110)
+            .map(|i| {
+                let x = f64::from(i % 10) * spacing;
+                let y = f64::from(i / 10) * spacing;
+                x * x + 3.0 * x * y + 4.0 * y * y
+            })
+            .collect();
+        let field = PreparedField::new([0.0; 2], spacing, [10, 11], coefficients).unwrap();
+        let (_, _, hessian) = field.bernstein_cell_derivatives::<true>([4, 3]).unwrap();
+        for (bound, expected) in hessian.into_iter().zip([2.0, 3.0, 8.0]) {
+            assert!(expected <= bound && bound < expected + 1e-10, "{hessian:?}");
+        }
     }
 
     #[test]

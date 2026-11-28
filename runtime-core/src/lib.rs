@@ -27,6 +27,7 @@ pub mod geometry;
 pub mod controller;
 pub mod features;
 pub mod timebase;
+pub mod julia_spiral_overlay;
 pub mod cycle_bank;
 pub mod two_source_gesture;
 pub mod visual_metrics;

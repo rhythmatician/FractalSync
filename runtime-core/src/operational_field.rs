@@ -2,6 +2,7 @@
 //! Coefficients are samples, not interpolation coefficients. Fidelity must be
 //! measured separately; smoothness never certifies Mandelbrot membership.
 
+mod acceleration;
 mod bernstein;
 pub mod verification;
 mod navigation;

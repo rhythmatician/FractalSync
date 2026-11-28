@@ -368,3 +368,75 @@ pub fn model_output_kind(
         ModelOutputKind::LegacyVisual
     }
 }
+/// Versioned pre-action location input for the state-aware ControlsV2 policy.
+pub const PLAYER_LOCATION_VERSION: &str = "player-location/1";
+pub const PLAYER_LOCATION_DIM: usize = 9;
+
+/// Complex coefficient for deep inverse-return log-scale and turn.
+fn marked_repelling_multiplier(c: num_complex::Complex64) -> Option<num_complex::Complex64> {
+    let discriminant = 1.0 - 4.0 * c;
+    if discriminant.im == 0.0 && discriminant.re <= 0.0 {
+        return None;
+    }
+    let multiplier = 1.0 - discriminant.sqrt();
+    if multiplier.norm() <= 1.0 {
+        return None;
+    }
+    multiplier.norm().is_finite().then_some(multiplier)
+}
+
+pub fn fixed_point_inverse_response(c: num_complex::Complex64) -> Option<num_complex::Complex64> {
+    let multiplier = marked_repelling_multiplier(c)?;
+    let rate = -2.0 / (multiplier * (1.0 - multiplier));
+    (rate.re.is_finite() && rate.im.is_finite() && rate.norm() > 0.0).then_some(rate)
+}
+
+/// Log contraction and unit rotation for one inverse return.
+pub fn fixed_point_inverse_contours(c: num_complex::Complex64) -> Option<[f32; 3]> {
+    let multiplier = marked_repelling_multiplier(c)?;
+    let norm = multiplier.norm();
+    let unit = multiplier.conj() / norm;
+    Some([-norm.ln() as f32, unit.re as f32, unit.im as f32])
+}
+
+/// Chart headings that increase scale or turn while holding the other fixed.
+pub fn fixed_point_effect_headings(c: num_complex::Complex64) -> Option<[f64; 4]> {
+    let rate = fixed_point_inverse_response(c)?;
+    let h = rate.conj() / rate.norm();
+    Some([h.re, h.im, -h.im, h.re])
+}
+
+/// Coordinates, Cartesian velocity, two intrinsic scale rates, two intrinsic
+/// turn rates, and a validity flag for the rates.
+///
+/// Rates describe deep fixed-point inverse-return sensitivity, not a fit to pixels.
+pub fn player_location_observation(
+    c: num_complex::Complex64,
+    velocity: (f64, f64),
+    config: &crate::manifold::ManifoldConfig,
+) -> [f64; PLAYER_LOCATION_DIM] {
+    let mut row = [c.re, c.im, velocity.0, velocity.1, 0.0, 0.0, 0.0, 0.0, 0.0];
+    let Some(rate) = fixed_point_inverse_response(c) else {
+        return row;
+    };
+    let Ok(jet) = crate::manifold::geometry_jet(c, config) else {
+        return row;
+    };
+    if jet.validity != crate::geometry_provider::GeometryValidity::Regular {
+        return row;
+    }
+    let Ok(g) = crate::manifold::induced_metric_from_jet(&jet, config) else {
+        return row;
+    };
+    let l00 = g[0][0].sqrt();
+    let l10 = g[1][0] / l00;
+    let l11 = (g[1][1] - l10 * l10).sqrt();
+    let first = rate / l00;
+    let second = rate * num_complex::Complex64::new(-l10 / l00, 1.0) / l11;
+    let rates = [first.re, second.re, first.im, second.im];
+    if rates.iter().all(|v| v.is_finite()) {
+        row[4..8].copy_from_slice(&rates);
+        row[8] = 1.0;
+    }
+    row
+}

@@ -223,6 +223,26 @@ fn nominal_chord_lengths_enclose_a_committed_constant_metric_trace() {
     let length = rollout
         .nominal_accepted_polyline_length(&trace, bounds)
         .unwrap();
+    let action = rollout
+        .nominal_accepted_chord_action(&trace, bounds)
+        .unwrap();
+    assert_eq!(action.length, length);
+    let mut expected_action = 0.0;
+    let mut missed = 0.0;
+    for step in trace.rk_substeps() {
+        let speed = step.stages[0][2].abs() / 0.625;
+        expected_action += 0.5 * step.duration * speed * speed;
+        let chord = (step.end[0] - step.stages[0][0]).abs() / 0.625;
+        missed += (chord - step.duration * speed).max(0.0);
+    }
+    assert!(action.sampled_action_lower > 0.0);
+    assert!(action.sampled_action_lower <= expected_action);
+    assert!(action.missed_length_upper >= missed);
+    assert!(
+        engine(vec![])
+            .nominal_accepted_chord_action(&trace, bounds)
+            .is_none()
+    );
     let expected = state.position[0] / 0.625;
     assert!(length.lower <= expected && expected <= length.upper);
     assert!(length.upper - length.lower < 1e-10);
