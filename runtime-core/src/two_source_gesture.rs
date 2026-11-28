@@ -97,6 +97,65 @@ impl Default for PassageCycles {
     }
 }
 
+#[cfg(test)]
+mod turnover {
+    use super::PassageCycles;
+    use std::f64::consts::TAU;
+
+    #[test]
+    fn a_new_ridge_requires_deliberate_rebinding_after_source_loss() {
+        let mut passage = PassageCycles::default();
+        let evidence = |time: f64| {
+            let a = if time <= 18.0 {
+                (TAU * 1.5 * time).cos()
+            } else if time >= 36.0 {
+                (TAU * 3.0 * (time - 36.0)).cos()
+            } else {
+                0.0
+            };
+            Ok([a, 0.0])
+        };
+        for second in 1..=18 {
+            passage
+                .advance_with_envelopes(second as f64, evidence)
+                .unwrap();
+        }
+        let frame = passage.advance_with_envelopes(18.0, evidence).unwrap();
+        let old = frame
+            .modes
+            .iter()
+            .find(|mode| (mode.frequency_hz - 1.5).abs() < 0.15)
+            .unwrap()
+            .id;
+        passage.bind(0, Some(old)).unwrap();
+        assert!(passage
+            .advance_with_envelopes(18.0, evidence)
+            .unwrap()
+            .phases[0]
+            .is_some());
+
+        for second in 19..=54 {
+            passage
+                .advance_with_envelopes(second as f64, evidence)
+                .unwrap();
+        }
+        let frame = passage.advance_with_envelopes(54.0, evidence).unwrap();
+        let replacement = frame
+            .modes
+            .iter()
+            .find(|mode| (mode.frequency_hz - 3.0).abs() < 0.15)
+            .unwrap()
+            .id;
+        assert_ne!(replacement, old);
+        assert_eq!(frame.roles[0], Some(old));
+        assert_eq!(frame.phases[0], None);
+        passage.bind(0, Some(replacement)).unwrap();
+        let frame = passage.advance_with_envelopes(54.0, evidence).unwrap();
+        assert_eq!(frame.roles[0], Some(replacement));
+        assert!(frame.phases[0].is_some());
+    }
+}
+
 impl PassageCycles {
     pub fn bind(&mut self, role: usize, id: Option<u64>) -> Result<(), String> {
         let slot = self.roles.get_mut(role).ok_or("unknown gesture role")?;
@@ -114,6 +173,17 @@ impl PassageCycles {
     }
 
     pub fn advance(&mut self, seconds: f64) -> Result<PassageCycleFrame<'_>, String> {
+        self.advance_with_envelopes(seconds, |time| {
+            let (a, b) = known_phase(time)?;
+            Ok([a.cos(), b.cos()])
+        })
+    }
+
+    fn advance_with_envelopes(
+        &mut self,
+        seconds: f64,
+        envelopes: impl Fn(f64) -> Result<[f64; 2], &'static str>,
+    ) -> Result<PassageCycleFrame<'_>, String> {
         use crate::controller::{HOP_LENGTH, SAMPLE_RATE};
         use crate::cycle_bank::{CycleEvidenceChannel, CycleObservation};
         let rate = SAMPLE_RATE as f64;
@@ -124,15 +194,15 @@ impl PassageCycles {
         let mut advanced = false;
         while (self.sample_index + HOP_LENGTH as u64) as f64 / rate <= seconds {
             let index = self.sample_index + HOP_LENGTH as u64;
-            let (a, b) = known_phase(index as f64 / rate)?;
+            let [a, b] = envelopes(index as f64 / rate)?;
             self.bank
                 .observe(&CycleObservation {
                     sample_index: index,
                     dt_seconds: HOP_LENGTH as f64 / rate,
                     stream_epoch: 1,
                     channels: vec![
-                        CycleEvidenceChannel::new("fixture-envelope-a", a.cos()),
-                        CycleEvidenceChannel::new("fixture-envelope-b", b.cos()),
+                        CycleEvidenceChannel::new("fixture-envelope-a", a),
+                        CycleEvidenceChannel::new("fixture-envelope-b", b),
                     ],
                 })
                 .map_err(|error| error.to_string())?;
