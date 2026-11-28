@@ -1,3 +1,4 @@
+import { getPlayerLocationVersion } from './orbitSynthesizer';
 /**
  * ONNX.js model inference wrapper.
  */
@@ -36,6 +37,7 @@ export interface ModelMetadata {
   /** Feature-extraction contract stamp. Missing = pre-contract legacy. */
   feature_version?: string;
   analysis_pipeline_version?: string;
+  player_location_version?: string;
 }
 
 export interface PerformanceMetrics {
@@ -307,6 +309,14 @@ export class ModelInference {
         console.warn('Failed to load metadata:', error);
       }
     }
+    const hasLocationInput = this.session.inputNames?.includes('player_location') ?? false;
+    const locationVersion = this.metadata?.player_location_version;
+    if ((hasLocationInput || locationVersion) &&
+        (!hasLocationInput || !this.isControlsV2 || !this.orbitSynthesizer ||
+         locationVersion !== getPlayerLocationVersion())) {
+      this.session = null;
+      throw new Error('Player location model requires matching ControlsV2 observation metadata and runtime');
+    }
   }
 
   /**
@@ -362,7 +372,12 @@ export class ModelInference {
 
     // Run inference
     const inferStartTime = performance.now();
-    const feeds = { audio_features: inputTensor };
+    const feeds: Record<string, ort.Tensor> = { audio_features: inputTensor };
+    if (this.session.inputNames?.includes('player_location')) {
+      if (!this.orbitSynthesizer) throw new Error('Player location state unavailable');
+      const location = this.orbitSynthesizer.playerLocationObservation();
+      feeds.player_location = new ort.Tensor('float32', location, [1, location.length]);
+    }
     const results = await this.session.run(feeds);
     const inferTime = performance.now() - inferStartTime;
 

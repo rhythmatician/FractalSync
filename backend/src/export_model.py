@@ -11,6 +11,8 @@ import numpy as np
 import onnx
 import torch
 
+from .control_model import AudioToControlModel
+
 
 def export_to_onnx(
     model: torch.nn.Module,
@@ -41,6 +43,14 @@ def export_to_onnx(
     else:
         dummy_input = torch.zeros(*input_shape)
 
+    location_version = None
+    inputs = (dummy_input,)
+    input_names = ["audio_features"]
+    if isinstance(model, AudioToControlModel) and model.location_dim:
+        location_version = model.location_version
+        inputs = (dummy_input, torch.zeros(dummy_input.shape[0], model.location_dim))
+        input_names.append("player_location")
+
     # Recurrent models (GRU/LSTM/RNN modules) must use the legacy exporter:
     # the dynamo exporter emits malformed Slice nodes on RNN flat weights
     # ("Starts must be a 1-D array" at runtime in onnxruntime-web).
@@ -51,9 +61,9 @@ def export_to_onnx(
 
     # Prefer the new dynamo-based exporter; use dynamic_shapes instead of dynamic_axes per warning.
     try:
-        if is_recurrent:
+        if is_recurrent or location_version:
             raise RuntimeError(
-                "Recurrent model detected; using legacy exporter directly."
+                "Model input signature selected; using legacy exporter directly."
             )
 
         # Dynamo expects dynamic_shapes to be keyed by forward *argument* names
@@ -70,10 +80,10 @@ def export_to_onnx(
 
         torch.onnx.export(
             model,
-            (dummy_input,),
+            inputs,
             output_path,
             export_params=True,
-            input_names=["audio_features"],
+            input_names=input_names,
             output_names=["visual_parameters"],
             # Use dynamic_shapes with the dynamo exporter (preferred) instead of dynamic_axes
             dynamic_shapes=dynamic_shapes,
@@ -91,13 +101,13 @@ def export_to_onnx(
         try:
             torch.onnx.export(
                 model,
-                (dummy_input,),
+                inputs,
                 output_path,
                 export_params=True,
-                input_names=["audio_features"],
+                input_names=input_names,
                 output_names=["visual_parameters"],
                 dynamic_axes={
-                    "audio_features": {0: "batch_size"},
+                    **{name: {0: "batch_size"} for name in input_names},
                     "visual_parameters": {0: "batch_size"},
                 },
                 # Request a modern opset to match available implementations
@@ -203,6 +213,9 @@ def export_to_onnx(
     metadata_dict["output_dim"] = output_dim
     metadata_dict["parameter_names"] = parameter_names
     metadata_dict["parameter_ranges"] = parameter_ranges
+
+    if location_version:
+        metadata_dict["player_location_version"] = location_version
 
     with open(metadata_path, "w") as f:
         json.dump(metadata_dict, f, indent=2)

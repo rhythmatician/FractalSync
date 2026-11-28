@@ -21,6 +21,7 @@ discussion.
 | Term | Meaning |
 |---|---|
 | **The Map** | The Mandelbrot set — the atlas of every possible Julia set |
+| **Map Surface** | The position–scale surface over the complex parameter plane, with the intrinsic metric that measures the Player's motion. It includes regions Inside and Outside The Map. |
 | **c** | The current position on The Map; selects which Julia set fills the screen |
 | **Inside** | c within The Map → the Julia set is connected |
 | **Outside** | c beyond The Map's edge → the Julia set is disconnected dust |

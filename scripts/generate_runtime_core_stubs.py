@@ -45,6 +45,10 @@ RET = "__return__"
 
 FUNCTION_TYPES: dict[str, dict[str, str]] = {
     "orbit_control_schema_json": {"k_bands": "int", RET: "str"},
+    "player_location_schema": {RET: "tuple[str, int]"},
+    "player_location_observation": {
+        "c_re": "float", "c_im": "float", "vx": "float", "vy": "float", RET: "list[float]",
+    },
     "controls_v2_schema_json": {RET: "str"},
     "legacy_visual_schema_json": {RET: "str"},
     "legacy_visual_export_ranges_json": {RET: "str"},
@@ -570,6 +574,8 @@ CLASS_ORDER = [
 # Functions to document, in stable order.
 FUNCTION_ORDER = [
     "orbit_control_schema_json",
+    "player_location_schema",
+    "player_location_observation",
     "controls_v2_schema_json",
     "legacy_visual_schema_json",
     "legacy_visual_export_ranges_json",
