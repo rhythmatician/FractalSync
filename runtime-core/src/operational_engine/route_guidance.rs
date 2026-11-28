@@ -5,7 +5,7 @@ use super::{AcceptedStepTrace, CANONICAL_REFERENCE_POINTS, FrozenRollout, Mechan
 use crate::crossing_feasibility::{
     FeasibilityAssessment, FeasibilityLimits, LengthLowerBound, evaluate_feasibility,
 };
-use crate::intrinsic_bounds::{add_down, add_up, mul_up};
+use crate::intrinsic_bounds::{add_down, add_up, mul_down, mul_up};
 use crate::map_certificates::displacement_lower;
 use crate::map_navigation::search::{SearchLimits, search};
 use crate::operational_field::{
@@ -106,7 +106,72 @@ pub struct OperationalRouteGuidance {
     pub expanded_upper: usize,
 }
 
+/// Bounds for reconstructed chords and nominal left-endpoint kinetic action.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NominalChordAction {
+    pub length: OperationalLengthInterval,
+    pub missed_length_upper: f64,
+    pub sampled_action_lower: f64,
+}
+
 impl FrozenRollout {
+    /// Bound the nominal left-endpoint sampled action on an accepted RK trace.
+    /// Time weights are the represented RK substep durations. The length
+    /// allowance covers the reconstructed polygon in the nominal spline
+    /// metric. The compiled energy ledger and continuous ODE path have
+    /// separate correspondence requirements.
+    pub fn nominal_accepted_chord_action(
+        &self,
+        trace: &AcceptedStepTrace,
+        window: [[f64; 2]; 2],
+    ) -> Option<NominalChordAction> {
+        self.check_trace_identity(trace).ok()?;
+        let steps = trace.rk_substeps();
+        if steps.is_empty() || steps.len() + 1 != trace.endpoints().len() {
+            return None;
+        }
+        let region = self
+            .field
+            .navigation_region(window, self.profile.config())?;
+        let mut evaluator = region.segment_evaluator();
+        let mut length = OperationalLengthInterval {
+            lower: 0.0,
+            upper: 0.0,
+        };
+        let mut missed = 0.0;
+        let mut action = 0.0;
+        for (pair, step) in trace.endpoints().windows(2).zip(steps) {
+            let [a, b] = [pair[0].position, pair[1].position];
+            let h = step.duration;
+            if !h.is_finite() || h <= 0.0 || !self.chart_edge_is_clear(chord_bounds(a, b)) {
+                return None;
+            }
+            let chord = evaluator.bounds(a, b)?;
+            let speed = region.nominal_speed_lower(pair[0].velocity)?;
+            let drift = mul_down(h, speed);
+            let excess = if chord.upper > drift {
+                (chord.upper - drift).next_up()
+            } else {
+                0.0
+            };
+            length.lower = add_down(length.lower, chord.lower);
+            length.upper = add_up(length.upper, chord.upper);
+            missed = add_up(missed, excess);
+            action = add_down(action, mul_down(drift, mul_down(0.5, speed)));
+        }
+        if ![length.upper, missed, action]
+            .into_iter()
+            .all(f64::is_finite)
+        {
+            return None;
+        }
+        Some(NominalChordAction {
+            length,
+            missed_length_upper: missed,
+            sampled_action_lower: action,
+        })
+    }
+
     /// Enclose the reconstructed polygon through accepted endpoints in the
     /// nominal exact-real spline metric on the supplied window. Each chord
     /// must pass the same chart and reference checks as a route edge.

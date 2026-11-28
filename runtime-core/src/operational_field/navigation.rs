@@ -121,6 +121,16 @@ impl PreparedField {
 }
 
 impl OperationalNavigationRegion<'_> {
+    /// The nominal matrix dominates the identity divided by the squared ruler.
+    pub(crate) fn nominal_speed_lower(&self, velocity: [f64; 2]) -> Option<f64> {
+        let [x, y] = velocity;
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        // The maximum component is a lower bound on the Euclidean norm.
+        Some(div_down(x.abs().max(y.abs()), self.ruler_upper))
+    }
+
     /// Enclose the length of a straight segment. The certificate uses the
     /// support of its coordinate rectangle, so even an off-segment support
     /// hole can make a segment unavailable.
