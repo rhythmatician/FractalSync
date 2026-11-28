@@ -86,6 +86,8 @@ pub struct Gesture {
 }
 
 /// Experimental bounded pursuit of a reference through the normal Controls seam.
+pub const TRACKING_STEP_SECONDS: f64 = 0.02;
+
 pub struct GestureTracker {
     position: num_complex::Complex64,
     velocity: (f64, f64),
@@ -129,7 +131,7 @@ impl GestureTracker {
             || reference[0].hypot(reference[1]) >= 2.0
             || !dt.is_finite()
             || dt <= 0.0
-            || dt > 0.02
+            || dt > TRACKING_STEP_SECONDS
         {
             return Err("invalid reference or tracking step".into());
         }

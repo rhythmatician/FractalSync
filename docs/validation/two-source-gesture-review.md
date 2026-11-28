@@ -1,6 +1,6 @@
 # Two-source gesture: review procedure
 
-This is a known-phase experiment, not the Player or CycleBank. It shows a local first-order intended target directly in the Julia renderer. It does not run the target through Physics, prove that the local mapping is accurate at large excursions, or establish that the relationship is perceptible.
+The known-phase preview offers a direct target and a bounded Physics comparison. Enable **Render Physics motion** before starting the second passage and keep the starting anchor, source settings and Julia presentation fixed for the comparison. The first-order mapping is local, and perceptibility remains a question for the live review.
 
 The repository's canonical-math version rule advances `CONTROLLER_VERSION` to `orbit-controller/8` for this experiment, although the existing controller step is unchanged. Models stamped with an older controller version will be rejected until they are updated under the project's model contract.
 
@@ -20,6 +20,8 @@ The raw sum's extent can cycle even while the generalized 3:4 relationship is lo
 The default anchor is only a starting point. If a target leaves the Map or geometry cannot be evaluated, playback stops with an error. An accepted target is not a guarantee of geometric fidelity or useful visual sensitivity. The comparison does not yet include an unrelated visual matched for activity, and there is no recording or automated blinded trial.
 
 
-Use **Export diagnostic record** during or after each passage to save a JSON record before starting another. It contains the synthetic phases, intended target, settings and audio-clock time for each rendered frame, along with settings changes, stop and error events. Save successful and failed trials separately. This is a diagnostic trace, not a replay or a recording of rendered pixels; it contains no realized Physics trajectory, forces, energy, CycleBank identities or confidence. Record the human observations and renderer environment alongside it.
+Use **Export diagnostic record** during or after each passage. In Physics mode, the record includes the intended target and realized position for each 20 ms step, along with metric lag, throttle saturation, energy, control work, friction work and residual. Settings changes take effect at the first step whose audio time reaches the recorded change. If integration falls more than one second behind audio, the passage stops and records the error.
 
-An offline Rust `GestureTracker` now explores bounded Controls/Physics pursuit and reports position, metric lag, saturation, and per-step work and energy. It is not connected to this preview: an initial browser experiment fell more than 0.25 seconds behind the audio clock during a 0.01-second-step run. Treat that as a failed realtime feasibility check in this environment, not a performance benchmark or a playability result. No rendered Physics comparison has been established.
+**Replay Julia motion** plays back the most recent passage's visual parameters in memory with the original timing. Replay is silent and uses the current viewport. **Save Julia frame** exports the current preview or replay frame as a PNG. Save the trace and representative frames before starting another passage. Record the human observations and renderer environment alongside them.
+
+The browser smoke check uses a 700 × 450 viewport for the Physics comparison and software WebGL. Set `GESTURE_FULL_PASSAGE=1` when running `node frontend/scripts/check_gesture_experiment.cjs` to exercise the departure and return over 25 seconds. This checks execution and capture. A Domain Expert still needs to make the listening and playability judgment, and CycleBank binding and free navigation remain separate work.

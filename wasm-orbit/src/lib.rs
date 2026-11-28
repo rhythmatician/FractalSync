@@ -33,6 +33,30 @@ fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
     serde_json::to_string(value).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+#[wasm_bindgen]
+pub struct GesturePhysics(runtime_core::two_source_gesture::GestureTracker);
+
+#[wasm_bindgen]
+impl GesturePhysics {
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: f64, y: f64) -> Result<GesturePhysics, JsValue> {
+        runtime_core::two_source_gesture::GestureTracker::new([x, y], [0.0; 2])
+            .map(GesturePhysics)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen(getter, js_name = stepSeconds)]
+    pub fn step_seconds(&self) -> f64 {
+        runtime_core::two_source_gesture::TRACKING_STEP_SECONDS
+    }
+
+    pub fn step(&mut self, x: f64, y: f64) -> Result<String, JsValue> {
+        let sample = self.0.step([x, y], self.step_seconds())
+            .map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&sample)
+    }
+}
+
 /// Experimental local target; this does not apply physical tracking.
 #[wasm_bindgen(js_name = "twoSourceGestureTarget")]
 pub fn two_source_gesture_target(

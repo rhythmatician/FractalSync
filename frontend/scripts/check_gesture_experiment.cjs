@@ -40,5 +40,30 @@ const { chromium } = require('playwright');
     throw new Error('Incomplete diagnostic record');
   }
   console.log('Gesture page advanced, stopped, and exported its diagnostic record.');
+  await page.setViewportSize({ width: 700, height: 450 });
+  await page.getByLabel('Comparison').selectOption('matched');
+  await page.getByLabel('Render Physics motion').check();
+  await page.getByRole('button', { name: 'Start passage' }).click();
+  await page.getByRole('button', { name: 'Stop passage' }).or(page.getByRole('alert')).first().waitFor();
+  const duration = process.env.GESTURE_FULL_PASSAGE ? 25 : 2;
+  await page.waitForFunction(seconds => document.querySelector('[role=alert]') ||
+    Number(document.querySelector('main span')?.textContent?.match(/([\d.]+) s/)?.[1]) >= seconds,
+  duration, { timeout: (duration + 15) * 1000 });
+  if (await page.getByRole('alert').count()) throw new Error(await page.getByRole('alert').innerText());
+  await page.getByRole('button', { name: 'Stop passage' }).click();
+  const physicsDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export diagnostic record' }).click();
+  const physics = JSON.parse(await require('node:fs/promises').readFile(await (await physicsDownload).path(), 'utf8'));
+  if (physics.samples.at(-1)?.stepTime < duration - 0.1 || !physics.samples.every(sample => Number.isFinite(sample.physics.energy)) ||
+      !physics.samples.some(sample => sample.physics.position[0] !== sample.target[0]) || !physics.frames.length) {
+    throw new Error('Expected realized motion and energy through the requested duration');
+  }
+  await page.getByRole('button', { name: 'Replay Julia motion' }).click();
+  await page.getByRole('button', { name: 'Stop replay' }).waitFor();
+  const frameDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Julia frame' }).click();
+  const frame = await require('node:fs/promises').readFile(await (await frameDownload).path());
+  if (frame.toString('hex', 0, 8) !== '89504e470d0a1a0a') throw new Error('Expected a PNG frame');
+  console.log(`Physics preview recorded ${duration} seconds of realized steps, replayed the visuals, and exported a PNG.`);
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

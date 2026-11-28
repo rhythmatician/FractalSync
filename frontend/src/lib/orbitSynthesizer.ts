@@ -78,6 +78,11 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  GesturePhysics: new (x: number, y: number) => {
+    readonly stepSeconds: number;
+    step(x: number, y: number): string;
+    free(): void;
+  };
   twoSourceGestureTarget(anchorX: number, anchorY: number, phaseA: number, phaseB: number, gainA: number, gainB: number, excursion: number, rotating: boolean): Float64Array;
   knownGesturePhases(seconds: number, misaligned: boolean): Float64Array;
   knownGestureScheduleJson(): string;
