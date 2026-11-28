@@ -83,3 +83,5 @@ pythonize = { version = "0.21", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+num-bigint = "0.4"
+num-rational = "0.4"

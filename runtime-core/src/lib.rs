@@ -63,3 +63,4 @@ pub mod wasm_bindings;
 
 #[cfg(test)]
 mod features_test;
+pub mod map_budget;
