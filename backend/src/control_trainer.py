@@ -5,6 +5,7 @@ Trains model to predict control signals that drive deterministic orbit synthesis
 """
 
 import json
+import math
 import os
 import logging
 from pathlib import Path
@@ -18,6 +19,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 from .control_model import AudioToControlModel
+from .location_rollout import location_conditioned_rollout
 from .cspace_proxies import (
     cardioid_mu,
     cardioid_proximity,
@@ -298,6 +300,51 @@ class ControlTrainer:
         self.last_checkpoint_path: Optional[str] = None
         self.best_checkpoint_path: Optional[str] = None
         self.best_alignment_proxy: Optional[float] = None
+
+    def _controls_initial_positions(self, segment_ids: torch.Tensor) -> torch.Tensor:
+        _seg = segment_ids.reshape(-1)
+        _uniq2 = torch.unique(_seg)
+        _starts_re2: dict[int, float] = {}
+        _starts_im2: dict[int, float] = {}
+
+
+        for _sid in _uniq2.tolist():
+            if torch.rand((), device=self.device).item() < 0.10:
+                _ang = (
+                    torch.rand((), device=self.device).item()
+                    * 2
+                    * 3.141592653589793
+                )
+                # Domain randomization must stay inside the |c| < 2
+                # valid disk (outer-domain wall invariant). Sample
+                # "far" starts in the 1.5-1.9 band, below the wall.
+                _r = 1.5 + torch.rand((), device=self.device).item() * 0.4
+                _starts_re2[_sid] = math.cos(_ang) * _r
+                _starts_im2[_sid] = math.sin(_ang) * _r
+            else:
+                _t = (
+                    torch.rand((), device=self.device).item()
+                    * 2
+                    * 3.141592653589793
+                )
+                _mu = complex(math.cos(_t), math.sin(_t))
+                _cb = _mu * 0.5 - _mu * _mu * 0.25
+                _j = (
+                    torch.rand((), device=self.device).item() - 0.5
+                ) * 0.30
+                _starts_re2[_sid] = _cb.real + _j * _mu.real * 0.5
+                _starts_im2[_sid] = _cb.imag + _j * _mu.imag * 0.5
+        _ic_re2 = torch.tensor(
+            [_starts_re2[int(s)] for s in _seg.tolist()],
+            device=self.device,
+            dtype=torch.float32,
+        )
+        _ic_im2 = torch.tensor(
+            [_starts_im2[int(s)] for s in _seg.tolist()],
+            device=self.device,
+            dtype=torch.float32,
+        )
+        return torch.complex(_ic_re2, _ic_im2)
 
     def _generate_curriculum_data(self, n_samples: int):
         """Generate curriculum learning data from preset orbits."""
@@ -1173,7 +1220,18 @@ class ControlTrainer:
             sample_idx += batch_size
 
             # Forward pass
-            predicted_controls = self.model(features)
+            initial_c = (
+                self._controls_initial_positions(segment_ids)
+                if self.model.controls_version == "controls/2" else None
+            )
+            if self.model.location_dim:
+                if initial_c is None:
+                    raise RuntimeError("Location-aware training requires manifold start states")
+                predicted_controls, _ = location_conditioned_rollout(
+                    self.model, features, segment_ids, initial_c
+                )
+            else:
+                predicted_controls = self.model(features)
 
             # Parse control signals
             parsed = self.model.parse_output(predicted_controls)
@@ -1183,7 +1241,7 @@ class ControlTrainer:
             # This path is the causal PlayerPolicy training surface: a fixed ControlsV2 tensor drives the
             # same Rust integration the browser runs (controls_integrate_step), so the trainer and runtime
             # share one pipeline (ADR 0001). No (s,alpha,omega_scale) legacy adapter is used here.
-            if getattr(self.model, "controls_version", "orbit_control") == "controls/2":
+            if self.model.controls_version == "controls/2":
                 directionX = parsed["directionX"]
                 directionY = parsed["directionY"]
                 throttle = parsed["throttle"]
@@ -1223,49 +1281,6 @@ class ControlTrainer:
                     from .cspace_proxies import controls_v2_sequence, ManifoldConfig
 
                     # Domain-randomized initial c per segment (same scheme as orbit path)
-                    _seg = segment_ids.reshape(-1)
-                    _uniq2 = torch.unique(_seg)
-                    _starts_re2: dict[int, float] = {}
-                    _starts_im2: dict[int, float] = {}
-                    import math as _math3
-
-                    for _sid in _uniq2.tolist():
-                        if torch.rand((), device=self.device).item() < 0.10:
-                            _ang = (
-                                torch.rand((), device=self.device).item()
-                                * 2
-                                * 3.141592653589793
-                            )
-                            # Domain randomization must stay inside the |c| < 2
-                            # valid disk (outer-domain wall invariant). Sample
-                            # "far" starts in the 1.5-1.9 band, below the wall.
-                            _r = 1.5 + torch.rand((), device=self.device).item() * 0.4
-                            _starts_re2[_sid] = _math3.cos(_ang) * _r
-                            _starts_im2[_sid] = _math3.sin(_ang) * _r
-                        else:
-                            _t = (
-                                torch.rand((), device=self.device).item()
-                                * 2
-                                * 3.141592653589793
-                            )
-                            _mu = complex(_math3.cos(_t), _math3.sin(_t))
-                            _cb = _mu * 0.5 - _mu * _mu * 0.25
-                            _j = (
-                                torch.rand((), device=self.device).item() - 0.5
-                            ) * 0.30
-                            _starts_re2[_sid] = _cb.real + _j * _mu.real * 0.5
-                            _starts_im2[_sid] = _cb.imag + _j * _mu.imag * 0.5
-                    _ic_re2 = torch.tensor(
-                        [_starts_re2[int(s)] for s in _seg.tolist()],
-                        device=self.device,
-                        dtype=torch.float32,
-                    )
-                    _ic_im2 = torch.tensor(
-                        [_starts_im2[int(s)] for s in _seg.tolist()],
-                        device=self.device,
-                        dtype=torch.float32,
-                    )
-                    _initial_c2 = torch.complex(_ic_re2, _ic_im2)
                     c_complex, _infos2 = controls_v2_sequence(
                         direction_x=directionX.squeeze(-1),
                         direction_y=directionY.squeeze(-1),
@@ -1282,7 +1297,7 @@ class ControlTrainer:
                             kappa=1.0,
                             mu=0.3183098861837907,
                         ),
-                        initial_c=_initial_c2,
+                        initial_c=initial_c,
                     )
                 except Exception as _e2:
                     # Fail closed: do not silently fall back to dummy zeros; the test must see the failure.
@@ -1882,6 +1897,7 @@ class ControlTrainer:
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
+            "player_location_version": self.model.location_version,
             "optimizer_state_dict": self.optimizer.state_dict(),
             "history": self.history,
             "feature_mean": self.feature_extractor.feature_mean,

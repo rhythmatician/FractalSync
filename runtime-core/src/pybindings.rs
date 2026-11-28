@@ -2335,6 +2335,8 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RuntimeVisualMetrics>()?;
 
     m.add_function(wrap_pyfunction!(orbit_control_schema_json, m)?)?;
+    m.add_function(wrap_pyfunction!(player_location_schema, m)?)?;
+    m.add_function(wrap_pyfunction!(player_location_observation, m)?)?;
     m.add_function(wrap_pyfunction!(controls_v2_schema_json, m)?)?;
     m.add_function(wrap_pyfunction!(audio_feature_averages_json, m)?)?;
     m.add_function(wrap_pyfunction!(legacy_audio_feature_averages_json, m)?)?;
@@ -2400,4 +2402,15 @@ fn runtime_core(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     m.add_function(wrap_pyfunction!(__getattr__, m)?)?;
     Ok(())
+}
+#[pyfunction]
+fn player_location_schema() -> (&'static str, usize) {
+    (crate::model_io::PLAYER_LOCATION_VERSION, crate::model_io::PLAYER_LOCATION_DIM)
+}
+
+#[pyfunction]
+fn player_location_observation(c_re: f64, c_im: f64, vx: f64, vy: f64) -> Vec<f64> {
+    crate::model_io::player_location_observation(
+        num_complex::Complex64::new(c_re, c_im), (vx, vy), &Default::default(),
+    ).to_vec()
 }

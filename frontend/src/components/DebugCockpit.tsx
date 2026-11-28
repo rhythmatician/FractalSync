@@ -33,6 +33,8 @@ import {
 } from '../lib/manualDriving';
 import { baselineVariants, explorationVariants } from '../lib/shoreCrossingVariants';
 import { initOrbitSynth } from '../lib/orbitSynthesizer';
+import { drawSpiralTexturePreview, setSpiralTexture, spiralTextureAnchor, type SpiralBand, type SpiralLayer } from '../lib/juliaSpiralTexture';
+import { setJuliaContours } from '../lib/juliaDirectionOverlay';
 import { JuliaRenderer } from '../lib/juliaRenderer';
 import { JuliaSensitivityBookmark } from './JuliaSensitivityBookmark';
 import { MapReplayNavigation } from './MapReplayNavigation';
@@ -222,6 +224,14 @@ export function DebugCockpit(): JSX.Element {
   cockpitModeRef.current = cockpitMode;
   const [playerView, setPlayerView] = useState(false);
   const [overlays, setOverlays] = useState<TerrainOverlays>(DEFAULT_OVERLAYS);
+  const [spiralLayer, setSpiralLayer] = useState<SpiralLayer>('off');
+  const [scaleContours, setScaleContours] = useState(false);
+  const [turnContours, setTurnContours] = useState(false);
+  const [spiralBand, setSpiralBand] = useState<SpiralBand>('broad');
+  const [manualStart, setManualStart] = useState<{ c: [number, number]; velocity?: [number, number] }>();
+  const spiralInspectRef = useRef(false);
+  const spiralPreviewRef = useRef<HTMLCanvasElement>(null);
+  const [spiralReading, setSpiralReading] = useState('');
   const [runs, setRuns] = useState<CockpitTrajectory[] | null>(null);
   const [manualRun, setManualRun] = useState<CockpitTrajectory | null>(null);
 
@@ -326,7 +336,7 @@ export function DebugCockpit(): JSX.Element {
 
       // In MANUAL mode, advance the authoritative driver on canonical ticks
       const driver = manualDriverRef.current;
-      if (cockpitModeRef.current === 'MANUAL' && driver) {
+      if (cockpitModeRef.current === 'MANUAL' && driver && !spiralInspectRef.current) {
         const steps = driver.update(dt, keysRef.current);
         if (steps > 0) {
           const snaps = driver.trajectory.snapshots;
@@ -404,8 +414,8 @@ export function DebugCockpit(): JSX.Element {
     if (cockpitMode === 'MANUAL') {
       // Use selected variant start or [0, 0] as seed
       const currentSelectedRun = runs?.[selected];
-      const startC = currentSelectedRun?.spec.initialC ?? [0, 0];
-      const startV = currentSelectedRun?.spec.initialV ?? [0, 0];
+      const startC = manualStart?.c ?? currentSelectedRun?.spec.initialC ?? [0, 0];
+      const startV: [number, number] = manualStart ? (manualStart.velocity ?? [0, 0]) : (currentSelectedRun?.spec.initialV ?? [0, 0]);
       const driver = new ManualDriver(startC, startV);
       manualDriverRef.current = driver;
       setManualRun({ ...driver.trajectory });
@@ -414,7 +424,7 @@ export function DebugCockpit(): JSX.Element {
     } else {
       manualDriverRef.current = null;
     }
-  }, [cockpitMode, runs, selected]);
+  }, [cockpitMode, runs, selected, manualStart]);
 
   // Rebuild terrain when the selected frame's patch center moves far from
   // the current mesh center (terrain follows the rider), and when the LOD
@@ -438,6 +448,8 @@ export function DebugCockpit(): JSX.Element {
         applyOverlays(refs.terrain, refs.terrainPatch, overlays);
         refs.terrainOverlays = overlays;
       }
+      setSpiralTexture(refs.terrain, refs.terrainPatch, spiralLayer, spiralBand);
+      setJuliaContours(refs.terrain, refs.terrainPatch, scaleContours, turnContours);
       return;
     }
     if (refs.terrain) {
@@ -453,6 +465,8 @@ export function DebugCockpit(): JSX.Element {
     // terrainProjectionUniforms).
     const mesh = buildTerrainMesh(patch);
     applyOverlays(mesh, patch, overlays);
+    setSpiralTexture(mesh, patch, spiralLayer, spiralBand);
+    setJuliaContours(mesh, patch, scaleContours, turnContours);
     refs.terrainOverlays = overlays;
     refs.scene.add(mesh);
     refs.terrain = mesh;
@@ -464,7 +478,16 @@ export function DebugCockpit(): JSX.Element {
     if (refs.camera) {
       applyRenderDistance(refs.camera, refs.scene);
     }
-  }, [frame, overlays]);
+  }, [frame, overlays, spiralLayer, spiralBand, scaleContours, turnContours]);
+  useEffect(() => {
+    if (!ready || playerView || spiralLayer === 'off' || !spiralPreviewRef.current) return;
+    const center = drawSpiralTexturePreview(spiralPreviewRef.current, spiralLayer, spiralBand);
+    setSpiralReading(!center ? 'Center sample unavailable' : {
+      scale: `${center[0].toFixed(2)} log radius / unit c`,
+      rotation: `${center[1].toFixed(2)} radians / unit c`,
+      residual: `${(100 * center[2]).toFixed(1)}% unexplained`,
+    }[spiralLayer]);
+  }, [ready, playerView, spiralLayer, spiralBand]);
 
   // Per-frame updates: rider, trail, camera.
   useEffect(() => {
@@ -733,6 +756,53 @@ export function DebugCockpit(): JSX.Element {
                 {label}
               </label>
             ))}
+            <label style={{ display: 'block', fontSize: 11 }}>
+              <input type="checkbox" checked={scaleContours} onChange={event => setScaleContours(event.target.checked)} />
+              Julia constant scale · cyan
+            </label>
+            <label style={{ display: 'block', fontSize: 11 }}>
+              <input type="checkbox" checked={turnContours} onChange={event => setTurnContours(event.target.checked)} />
+              Julia constant turn · magenta
+            </label>
+            {(scaleContours || turnContours) && <p style={{ fontSize: 11 }}>
+              Deep fixed-point response per inverse return. Close views show finer scale and turn levels.
+            </p>}
+            {([
+              ['scale', 'Spiral scaling differential'],
+              ['rotation', 'Spiral rotation differential'],
+              ['residual', 'Spiral residual differential'],
+            ] as const).map(([layer, label]) => (
+              <label key={layer} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, lineHeight: 1.7, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={spiralLayer === layer}
+                  onChange={event => setSpiralLayer(event.target.checked ? layer : 'off')}
+                />
+                {label}
+              </label>
+            ))}
+            <label style={{ display: 'block' }}>Landmark band
+              <select value={spiralBand} onChange={event => setSpiralBand(event.target.value as SpiralBand)}>
+                <option value="broad">Broad · depths 128–1024</option>
+                <option value="inner">Inner · depths 768–1024</option>
+              </select>
+            </label>
+            {spiralLayer !== 'off' && <>
+              <button disabled={!ready} onClick={() => {
+                spiralInspectRef.current = true;
+                setManualStart({ c: spiralTextureAnchor() });
+                setCockpitMode('MANUAL');
+              }}>Inspect spiral patch</button>
+              <canvas ref={spiralPreviewRef} aria-label="Spiral patch top view, north up"
+                style={{ display: 'block', width: 116, height: 116, imageRendering: 'pixelated', background: '#181828', marginTop: 6 }} />
+              <div>Patch center · {spiralReading}</div>
+              <p style={{ fontSize: 11 }}>
+                {spiralLayer === 'residual'
+                  ? 'Violet intensity shows the share of squared motion left after fitting turn and scale (0–100%).'
+                  : 'For positive real motion in c, orange is positive and blue is negative. Color strength uses the same range in both bands.'}
+                {' '}Finite marked branch samples near −0.7269 + 0.1889i, in Cartesian units.
+              </p>
+            </>}
           </Panel>
         )}
 
@@ -779,7 +849,7 @@ export function DebugCockpit(): JSX.Element {
         <div style={{ position: 'absolute', top: 10, right: 12, display: 'flex', gap: 8 }}>
           <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #2c2c48' }}>
             <button
-              onClick={() => setCockpitMode('REPLAY')}
+              onClick={() => { spiralInspectRef.current = false; setCockpitMode('REPLAY'); }}
               style={{
                 background: cockpitMode === 'REPLAY' ? '#3d3d6b' : '#141424',
                 color: '#dde',
@@ -793,7 +863,7 @@ export function DebugCockpit(): JSX.Element {
               REPLAY
             </button>
             <button
-              onClick={() => setCockpitMode('MANUAL')}
+              onClick={() => { spiralInspectRef.current = false; setManualStart(undefined); setCockpitMode('MANUAL'); }}
               style={{
                 background: cockpitMode === 'MANUAL' ? '#2e6b3e' : '#141424',
                 color: '#dde',

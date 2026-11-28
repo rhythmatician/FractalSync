@@ -548,6 +548,7 @@ def execute_training_workflow(args):
         dropout=0.2,
         recurrent=args.recurrent,
         controls_version=controls_version,
+        observe_location=controls_version == "controls/2",
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -609,6 +610,8 @@ def execute_training_workflow(args):
             raise ValueError(
                 "Resume checkpoint missing model_state_dict; cannot resume."
             )
+        if checkpoint.get("player_location_version") != trainer.model.location_version:
+            raise ValueError("Resume checkpoint uses a different Player location input contract")
         trainer.model.load_state_dict(model_state)
 
         if not args.resume_reset_optimizer:
