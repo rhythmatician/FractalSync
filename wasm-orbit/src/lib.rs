@@ -37,6 +37,26 @@ fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
 pub struct GesturePhysics(runtime_core::two_source_gesture::GestureTracker);
 
 #[wasm_bindgen]
+pub struct GestureCycles(runtime_core::two_source_gesture::PassageCycles);
+
+#[wasm_bindgen]
+impl GestureCycles {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> GestureCycles {
+        GestureCycles(Default::default())
+    }
+
+    pub fn bind(&mut self, role: usize, id: Option<u32>) -> Result<(), JsValue> {
+        self.0.bind(role, id.map(u64::from)).map_err(|error| JsValue::from_str(&error))
+    }
+
+    pub fn advance(&mut self, seconds: f64) -> Result<String, JsValue> {
+        let frame = self.0.advance(seconds).map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&frame)
+    }
+}
+
+#[wasm_bindgen]
 impl GesturePhysics {
     #[wasm_bindgen(constructor)]
     pub fn new(x: f64, y: f64) -> Result<GesturePhysics, JsValue> {
@@ -52,6 +72,12 @@ impl GesturePhysics {
 
     pub fn step(&mut self, x: f64, y: f64) -> Result<String, JsValue> {
         let sample = self.0.step([x, y], self.step_seconds())
+            .map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&sample)
+    }
+
+    pub fn navigate(&mut self, x: f64, y: f64) -> Result<String, JsValue> {
+        let sample = self.0.navigate([x, y], self.step_seconds())
             .map_err(|error| JsValue::from_str(&error))?;
         model_io_json(&sample)
     }

@@ -2,6 +2,31 @@ use runtime_core::two_source_gesture::known_phase;
 use runtime_core::two_source_gesture::known_phase_misaligned;
 use runtime_core::two_source_gesture::{Geometry, Gesture, Source};
 
+#[test]
+fn passage_cycle_roles_require_an_explicit_observed_identity() {
+    use runtime_core::two_source_gesture::PassageCycles;
+    let mut cycles = PassageCycles::default();
+    assert!(cycles.bind(0, Some(1)).is_err());
+    for second in 1..=18 {
+        cycles.advance(second as f64).unwrap();
+    }
+    let frame = cycles.advance(18.0).unwrap();
+    assert_eq!(frame.phases, [None, None]);
+    let id = frame
+        .modes
+        .iter()
+        .find(|mode| mode.missing_observations == 0)
+        .unwrap()
+        .id;
+    cycles.bind(0, Some(id)).unwrap();
+    assert_eq!(cycles.advance(18.0).unwrap().roles, [Some(id), None]);
+    assert!(cycles.advance(18.1).unwrap().phases[0].is_some());
+    assert!(cycles.bind(0, Some(u64::MAX)).is_err());
+    assert_eq!(cycles.advance(18.1).unwrap().roles, [Some(id), None]);
+    cycles.bind(0, None).unwrap();
+    assert_eq!(cycles.advance(18.1).unwrap().phases, [None, None]);
+}
+
 fn source(phase: f64, gain: f64) -> Source {
     Source { phase, gain }
 }
@@ -155,4 +180,22 @@ fn rejected_reference_does_not_advance_tracker() {
     let expected = control.step([-0.4, 0.1], 0.01).unwrap();
     assert_eq!(after.position, expected.position);
     assert_eq!(after.velocity, expected.velocity);
+}
+
+#[test]
+fn free_navigation_and_tracking_share_position_and_momentum() {
+    use runtime_core::two_source_gesture::GestureTracker;
+    let _guard = runtime_core::distance_field::global_test_mutex()
+        .lock()
+        .unwrap();
+    runtime_core::distance_field::load_builtin_distance_field("mandelbrot_default").unwrap();
+    let mut tracker = GestureTracker::new([-0.5, 0.1], [0.0, 0.0]).unwrap();
+    let before = tracker.step([-0.4, 0.1], 0.02).unwrap();
+    let free = tracker.navigate([0.0, 1.0], 0.02).unwrap();
+    assert_eq!(free.start_position, before.position);
+    assert_eq!(free.start_velocity, before.velocity);
+    assert!(free.reference.is_none());
+    let after = tracker.step([-0.4, 0.1], 0.02).unwrap();
+    assert_eq!(after.start_position, free.position);
+    assert_eq!(after.start_velocity, free.velocity);
 }

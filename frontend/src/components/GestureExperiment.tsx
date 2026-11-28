@@ -10,12 +10,21 @@ type Settings = {
   excursion: number; rotating: boolean; offset: number; x: number; y: number;
   zoom: number; hue: number;
   condition: 'matched' | 'misaligned' | 'audio';
+  navigation: [number, number] | null;
 };
 type Passage = {
   audio: AudioContext;
   frame: number;
   release: () => void;
   changes: { audioTime: number; settings: Settings }[];
+  bindings: { audioTime: number; role: number; id?: number }[];
+  position: number[];
+};
+type CycleFrame = {
+  sample_index: number;
+  modes: { id: number; frequencyHz: number; confidence: number; missingObservations: number }[];
+  roles: [number | null, number | null];
+  phases: [number | null, number | null];
 };
 type RenderedFrame = {
   elapsed: number;
@@ -34,7 +43,7 @@ function download(blob: Blob, filename: string) {
 
 const initial: Settings = {
   sourceA: 'a', sourceB: 'b', gainA: 1, gainB: 0, excursion: 0.12,
-  rotating: true, offset: 0, x: -0.7269, y: 0.1889, zoom: 1, hue: 0.5, condition: 'matched',
+  rotating: true, offset: 0, x: -0.7269, y: 0.1889, zoom: 1, hue: 0.5, condition: 'matched', navigation: null,
 };
 
 /** A reproducible known-phase trial with direct and Physics presentations. */
@@ -60,6 +69,14 @@ export function GestureExperiment() {
   const [error, setError] = useState('');
   const [time, setTime] = useState(0);
   const [tracking, setTracking] = useState(false);
+  const [estimate, setEstimate] = useState(false);
+  const [cycleFrame, setCycleFrame] = useState<CycleFrame | null>(null);
+  const [bindingError, setBindingError] = useState('');
+
+  function bind(role: number, id?: number) {
+    const run = runRef.current;
+    if (run) run.bindings.push({ audioTime: run.audio.currentTime, role, id });
+  }
 
   function update(next: Partial<Settings>) {
     const value = { ...settingsRef.current, ...next };
@@ -129,7 +146,11 @@ export function GestureExperiment() {
       if (tracking && typeof wasm.GesturePhysics !== 'function') {
         throw new Error('Rebuild the Wasm bundle to use Physics tracking.');
       }
+      if (estimate && typeof wasm.GestureCycles !== 'function') {
+        throw new Error('Rebuild the Wasm bundle to use CycleBank.');
+      }
       const schedule = JSON.parse(wasm.knownGestureScheduleJson()) as Schedule;
+      if (settingsRef.current.navigation) update({ navigation: null });
       audio = new AudioContext();
       await audio.resume();
       if (!mountedRef.current) { await audio.close(); return; }
@@ -137,7 +158,7 @@ export function GestureExperiment() {
       visibleFrame.current = null;
       recordRef.current = {
         startedAt: new Date().toISOString(),
-        trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current, tracking }),
+        trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current, tracking, estimate }),
         visual: new BoundedGestureRecord(null),
       };
       setHasRecord(true);
@@ -161,24 +182,51 @@ export function GestureExperiment() {
       layer(330, schedule.b_segments[0].frequency_hz, schedule.b_segments);
       const origin = [settingsRef.current.x, settingsRef.current.y];
       const physics = tracking ? new wasm.GesturePhysics(origin[0], origin[1]) : null;
-      const run: Passage = { audio, frame: 0, release: () => physics?.free(), changes: [] };
+      const cycles = estimate ? new wasm.GestureCycles() : null;
+      const run: Passage = {
+        audio, frame: 0, changes: [], bindings: [], position: origin,
+        release: () => { physics?.free(); cycles?.free(); },
+      };
       runRef.current = run;
       setError('');
       setPlaying(true);
       setTime(0);
+      setCycleFrame(null);
+      setBindingError('');
       let lastDisplay = 0;
       let completedSteps = 0;
-      let realized = origin;
       let physicsSettings = settingsRef.current;
+      let observed: CycleFrame | null = null;
       const referenceAt = (current: Settings, elapsed: number) => {
-        const phases = wasm.knownGesturePhases(elapsed, current.condition === 'misaligned');
-        const pick = (source: Source) => source === 'a' ? phases[0] : phases[1];
+        if (cycles) {
+          observed = JSON.parse(cycles.advance(elapsed)) as CycleFrame;
+          let changed = false;
+          while (run.bindings.length && run.bindings[0].audioTime <= startAt + elapsed) {
+            const binding = run.bindings[0];
+            run.bindings.shift();
+            try {
+              cycles.bind(binding.role, binding.id);
+              changed = true;
+              recordRef.current?.trace.addEvent({ type: 'binding', ...binding });
+              setBindingError('');
+            } catch (cause) {
+              recordRef.current?.trace.addEvent({ type: 'binding-error', ...binding, message: String(cause) });
+              setBindingError(String(cause));
+            }
+          }
+          if (changed) observed = JSON.parse(cycles.advance(elapsed)) as CycleFrame;
+        }
+        const known = wasm.knownGesturePhases(elapsed, current.condition === 'misaligned');
+        const pick = (source: Source) => source === 'a' ? known[0] : known[1];
+        const phases = observed?.phases ?? [pick(current.sourceA), pick(current.sourceB)];
+        const mute = current.condition === 'audio';
         const point = wasm.twoSourceGestureTarget(current.x, current.y,
-          pick(current.sourceA), pick(current.sourceB) + current.offset,
-          current.sourceA === 'off' || current.condition === 'audio' ? 0 : current.gainA,
-          current.sourceB === 'off' || current.condition === 'audio' ? 0 : current.gainB, current.excursion, current.rotating);
+          phases[0] ?? 0, (phases[1] ?? 0) + current.offset,
+          mute || phases[0] === null || (!cycles && current.sourceA === 'off') ? 0 : current.gainA,
+          mute || phases[1] === null || (!cycles && current.sourceB === 'off') ? 0 : current.gainB,
+          current.excursion, current.rotating);
         if (Math.hypot(point[0], point[1]) >= 2) throw new Error('Target outside the Map. Reduce excursion or move the anchor.');
-        return { phases: Array.from(phases), target: Array.from(point) };
+        return { phases, target: Array.from(point), cycle: observed };
       };
       const animate = () => {
         if (runRef.current !== run) return;
@@ -198,14 +246,17 @@ export function GestureExperiment() {
                 physicsSettings = run.changes[0].settings;
                 run.changes.shift();
               }
+              const navigation = physicsSettings.navigation;
               const reference = referenceAt(physicsSettings, stepTime);
-              const sample = JSON.parse(physics.step(reference.target[0], reference.target[1])) as { position: number[] };
-              realized = sample.position;
+              const [x, y] = navigation ?? reference.target;
+              const json = navigation ? physics.navigate(x, y) : physics.step(x, y);
+              const sample = JSON.parse(json) as { position: number[] };
+              run.position = sample.position;
               completedSteps++;
               recordRef.current?.trace.addSample({ stepTime, audioTime, ...reference, physics: sample, settings: physicsSettings });
               if (performance.now() >= deadline) break;
             }
-            displayed = current.condition === 'audio' ? origin : realized;
+            displayed = current.condition === 'audio' ? origin : run.position;
             if (completedSteps < due) {
               run.frame = requestAnimationFrame(animate);
               return;
@@ -224,7 +275,11 @@ export function GestureExperiment() {
           rendererRef.current?.renderFrozen(frame.params);
           visibleFrame.current = frame;
           recordRef.current?.visual.addSample(frame);
-          if (elapsed - lastDisplay > 0.1) { setTime(elapsed); lastDisplay = elapsed; }
+          if (elapsed - lastDisplay > 0.1) {
+            setTime(elapsed);
+            setCycleFrame(observed);
+            lastDisplay = elapsed;
+          }
         } catch (cause) { recordRef.current?.trace.addEvent({ type: 'error', elapsed, message: String(cause) }); setError(String(cause)); void stop(); return; }
         run.frame = requestAnimationFrame(animate);
       };
@@ -275,7 +330,7 @@ export function GestureExperiment() {
     if (!record) return;
     const blob = new Blob([JSON.stringify({
       format: 'fractal-sync-gesture-diagnostic/1',
-      source: 'Known synthetic phases',
+      source: 'Synthetic two-envelope passage',
       startedAt: record.startedAt,
       events: record.trace.events,
       samples: record.trace.samples,
@@ -304,9 +359,27 @@ export function GestureExperiment() {
       <button onClick={() => void canvas.current?.requestFullscreen()}>Show Julia only</button>
       <span>Passage: {time.toFixed(1)} s</span>
       <label><input type="checkbox" checked={tracking} disabled={playing} onChange={event => setTracking(event.target.checked)} /> Render Physics motion</label>
-      <label>Comparison <select value={settings.condition} onChange={event => update({ condition: event.target.value as Settings['condition'] })}><option value="matched">Matched visual</option><option value="misaligned">Visual changes early</option><option value="audio">Audio with fixed Julia</option></select></label>
-      {selector('Source 1', 'sourceA')}{slider('Gain 1', 'gainA', 0, 1, 0.01)}
-      {selector('Source 2', 'sourceB')}{slider('Gain 2', 'gainB', 0, 1, 0.01)}
+      {tracking && playing && <button onClick={() => update({ navigation: settings.navigation ? null : [0, 0] })}>
+        {settings.navigation ? 'Resume gesture tracking' : 'Free navigation'}
+      </button>}
+      {tracking && playing && settings.navigation && <div aria-label="Steering">
+        <button onClick={() => update({ navigation: [-1, 0] })}>Left</button>
+        <button onClick={() => update({ navigation: [1, 0] })}>Right</button>
+        <button onClick={() => update({ navigation: [0, 1] })}>Up</button>
+        <button onClick={() => update({ navigation: [0, -1] })}>Down</button>
+        <button onClick={() => update({ navigation: [0, 0] })}>Coast</button>
+        <button onClick={() => {
+          const position = runRef.current?.position;
+          if (position) update({ x: position[0], y: position[1], navigation: null });
+        }}>Resume from here</button>
+      </div>}
+      <label><input type="checkbox" checked={estimate} disabled={playing} onChange={event => {
+        setEstimate(event.target.checked);
+        if (event.target.checked && settings.condition === 'misaligned') update({ condition: 'matched' });
+      }} /> Estimate fixture envelopes with CycleBank</label>
+      <label>Comparison <select value={settings.condition} onChange={event => update({ condition: event.target.value as Settings['condition'] })}><option value="matched">Matched visual</option><option value="misaligned" disabled={estimate}>Visual changes early</option><option value="audio">Audio with fixed Julia</option></select></label>
+      {!estimate && selector('Source 1', 'sourceA')}{slider('Gain 1', 'gainA', 0, 1, 0.01)}
+      {!estimate && selector('Source 2', 'sourceB')}{slider('Gain 2', 'gainB', 0, 1, 0.01)}
       {slider('Excursion', 'excursion', 0, 0.5, 0.005)}
       <label>Geometry <select value={settings.rotating ? 'rotating' : 'distinct'} onChange={event => update({ rotating: event.target.value === 'rotating' })}><option value="rotating">Rotating vectors</option><option value="distinct">Distinct directions</option></select></label>
       {slider('Phase offset 2 (radians; changes immediately)', 'offset', -3.14, 3.14, 0.01)}
@@ -314,6 +387,20 @@ export function GestureExperiment() {
       <label>Anchor imaginary <input type="number" step="0.001" value={settings.y} onChange={event => update({ y: Number(event.target.value) })} /></label>
       {slider('Julia zoom', 'zoom', 0.5, 3, 0.01)}{slider('Palette hue', 'hue', 0, 1, 0.01)}
     </div>
+    {estimate && <p>{cycleFrame?.modes.length ? 'Choose a mode for each role.' : 'Waiting for confirmed modes.'}</p>}
+    {estimate && cycleFrame && [0, 1].map(role => <div key={role}>
+      Role {role + 1}: {' '}
+      <span aria-label={`Role ${role + 1} binding`}>
+        {cycleFrame.roles[role] ?? 'unbound'}
+        {cycleFrame.roles[role] !== null && cycleFrame.phases[role] === null && ' (unavailable)'}
+      </span>
+      <button disabled={!playing} onClick={() => bind(role)}>Withdraw</button>
+      {cycleFrame.modes.filter(mode => !mode.missingObservations).map(mode =>
+        <button key={mode.id} disabled={!playing} onClick={() => bind(role, mode.id)}>
+          Bind {mode.id} ({mode.frequencyHz.toFixed(2)} Hz, confidence {mode.confidence.toFixed(2)})
+        </button>)}
+    </div>)}
+    {bindingError && <p role="status">{bindingError}</p>}
     {error && <p role="alert">{error}</p>}
     <canvas className="gesture-output" ref={canvas} aria-label="Julia output" style={{ display: 'block', width: '100%', height: '65vh', marginTop: 16, background: '#000' }} />
   </main>;

@@ -69,6 +69,96 @@ pub fn known_phase_misaligned(seconds: f64) -> Result<(f64, f64), &'static str> 
     Ok((a, b))
 }
 
+/// One passage-scoped causal estimator. IDs never carry across passages.
+/// The fixture supplies its two envelope modulations at canonical hop times.
+pub struct PassageCycles {
+    bank: crate::cycle_bank::CycleBank,
+    sample_index: u64,
+    modes: Vec<crate::cycle_bank::CycleMode>,
+    roles: [Option<u64>; 2],
+}
+
+#[derive(serde::Serialize)]
+pub struct PassageCycleFrame<'a> {
+    pub sample_index: u64,
+    pub modes: &'a [crate::cycle_bank::CycleMode],
+    pub roles: [Option<u64>; 2],
+    pub phases: [Option<f64>; 2],
+}
+
+impl Default for PassageCycles {
+    fn default() -> Self {
+        Self {
+            bank: crate::cycle_bank::CycleBank::new(Default::default()),
+            sample_index: 0,
+            modes: Vec::new(),
+            roles: [None; 2],
+        }
+    }
+}
+
+impl PassageCycles {
+    pub fn bind(&mut self, role: usize, id: Option<u64>) -> Result<(), String> {
+        let slot = self.roles.get_mut(role).ok_or("unknown gesture role")?;
+        if let Some(id) = id {
+            if !self
+                .modes
+                .iter()
+                .any(|mode| mode.id == id && mode.missing_observations == 0)
+            {
+                return Err("that mode is no longer observed".into());
+            }
+        }
+        *slot = id;
+        Ok(())
+    }
+
+    pub fn advance(&mut self, seconds: f64) -> Result<PassageCycleFrame<'_>, String> {
+        use crate::controller::{HOP_LENGTH, SAMPLE_RATE};
+        use crate::cycle_bank::{CycleEvidenceChannel, CycleObservation};
+        let rate = SAMPLE_RATE as f64;
+        let last_seconds = self.sample_index as f64 / rate;
+        if !seconds.is_finite() || seconds < last_seconds || seconds - last_seconds > 2.0 {
+            return Err("invalid CycleBank passage clock".into());
+        }
+        let mut advanced = false;
+        while (self.sample_index + HOP_LENGTH as u64) as f64 / rate <= seconds {
+            let index = self.sample_index + HOP_LENGTH as u64;
+            let (a, b) = known_phase(index as f64 / rate)?;
+            self.bank
+                .observe(&CycleObservation {
+                    sample_index: index,
+                    dt_seconds: HOP_LENGTH as f64 / rate,
+                    stream_epoch: 1,
+                    channels: vec![
+                        CycleEvidenceChannel::new("fixture-envelope-a", a.cos()),
+                        CycleEvidenceChannel::new("fixture-envelope-b", b.cos()),
+                    ],
+                })
+                .map_err(|error| error.to_string())?;
+            self.sample_index = index;
+            advanced = true;
+        }
+        if advanced {
+            self.modes = self.bank.modes();
+        }
+        let delta = seconds - self.sample_index as f64 / rate;
+        let phases = self.roles.map(|id| {
+            let id = id?;
+            self.modes
+                .iter()
+                .find(|mode| mode.id == id && mode.missing_observations == 0)
+                .map(|mode| mode.phase_at(delta))
+        });
+        Ok(PassageCycleFrame {
+            sample_index: self.sample_index,
+            modes: &self.modes,
+            roles: self.roles,
+            phases,
+        })
+    }
+}
+
 /// The two interpretations used in the initial perceptual comparison.
 #[derive(Clone, Copy, Debug)]
 pub enum Geometry {
@@ -96,16 +186,22 @@ pub struct GestureTracker {
 
 #[derive(Debug, serde::Serialize)]
 pub struct TrackingSample {
-    pub reference: [f64; 2],
+    pub reference: Option<[f64; 2]>,
+    pub start_position: [f64; 2],
+    pub start_velocity: [f64; 2],
     pub position: [f64; 2],
     pub velocity: [f64; 2],
-    pub metric_lag: f64,
+    pub metric_lag: Option<f64>,
     pub throttle: f64,
     pub saturated: bool,
     pub energy: f64,
     pub control_work: f64,
     pub friction_work: f64,
     pub energy_residual: f64,
+    pub drive_covector: [f64; 2],
+    pub signed_distance: f64,
+    pub shore_crossing: bool,
+    pub ledger_valid: bool,
 }
 
 impl GestureTracker {
@@ -166,6 +262,33 @@ impl GestureTracker {
             grip: 0.5,
             impulse: 0.0,
         };
+        self.integrate(Some(reference), controls, effort > 1.0, dt)
+    }
+
+    pub fn navigate(&mut self, direction: [f64; 2], dt: f64) -> Result<TrackingSample, String> {
+        if !direction.iter().all(|value| value.is_finite())
+            || !dt.is_finite()
+            || dt <= 0.0
+            || dt > TRACKING_STEP_SECONDS
+        {
+            return Err("invalid navigation step".into());
+        }
+        let throttle = direction[0].hypot(direction[1]).min(1.0) * 0.25;
+        let controls = crate::controls::MotionControls {
+            direction,
+            throttle,
+            ..Default::default()
+        };
+        self.integrate(None, controls, false, dt)
+    }
+
+    fn integrate(
+        &mut self,
+        reference: Option<[f64; 2]>,
+        controls: crate::controls::MotionControls,
+        saturated: bool,
+        dt: f64,
+    ) -> Result<TrackingSample, String> {
         let (position, velocity, info) = crate::controls::integrate_motion_controls(
             self.position,
             self.velocity,
@@ -173,28 +296,38 @@ impl GestureTracker {
             dt,
             &self.config,
         )?;
-        let end_metric = crate::manifold::induced_metric(position, &self.config)?;
-        let end_error = [reference[0] - position.re, reference[1] - position.im];
-        let lag = (end_error[0]
-            * (end_metric[0][0] * end_error[0] + end_metric[0][1] * end_error[1])
-            + end_error[1] * (end_metric[1][0] * end_error[0] + end_metric[1][1] * end_error[1]))
-            .sqrt();
-        if !lag.is_finite() {
-            return Err("invalid tracking lag".into());
-        }
+        let metric_lag = if let Some(reference) = reference {
+            let metric = crate::manifold::induced_metric(position, &self.config)?;
+            let [x, y] = [reference[0] - position.re, reference[1] - position.im];
+            let lag = (x * (metric[0][0] * x + metric[0][1] * y)
+                + y * (metric[1][0] * x + metric[1][1] * y))
+                .sqrt();
+            if !lag.is_finite() {
+                return Err("invalid tracking lag".into());
+            }
+            Some(lag)
+        } else {
+            None
+        };
         self.position = position;
         self.velocity = velocity;
         Ok(TrackingSample {
             reference,
             position: [position.re, position.im],
             velocity: [velocity.0, velocity.1],
-            metric_lag: lag,
+            start_position: info.ledger.start_position,
+            start_velocity: info.ledger.start_velocity,
+            metric_lag,
             throttle: controls.throttle,
-            saturated: effort > 1.0,
+            saturated,
             energy: info.total,
             control_work: info.ledger.control_work,
             friction_work: info.ledger.friction_work,
             energy_residual: info.ledger.residual,
+            drive_covector: info.ledger.control_covector,
+            signed_distance: info.ledger.end_geometry.d,
+            shore_crossing: info.ledger.start_geometry.d * info.ledger.end_geometry.d < 0.0,
+            ledger_valid: info.ledger.valid,
         })
     }
 }
