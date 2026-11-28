@@ -33,6 +33,72 @@ fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
     serde_json::to_string(value).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
+#[wasm_bindgen]
+pub struct GesturePhysics(runtime_core::two_source_gesture::GestureTracker);
+
+#[wasm_bindgen]
+pub struct GestureCycles(
+    runtime_core::two_source_gesture::PassageCycles,
+    runtime_core::timebase::AnalysisTimebase,
+);
+
+#[wasm_bindgen]
+impl GestureCycles {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> GestureCycles {
+        GestureCycles(Default::default(), runtime_core::timebase::AnalysisTimebase::new())
+    }
+
+    pub fn bind(&mut self, role: usize, id: Option<u32>) -> Result<(), JsValue> {
+        self.0.bind(role, id.map(u64::from)).map_err(|error| JsValue::from_str(&error))
+    }
+
+    pub fn advance(&mut self, seconds: f64) -> Result<String, JsValue> {
+        let frame = self.0.advance(seconds).map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&frame)
+    }
+
+    pub fn ingest(&mut self, samples: &[f32], rate: usize, start: u32) -> Result<(), JsValue> {
+        for tick in self.1.ingest(samples, rate, u64::from(start))
+            .map_err(|error| JsValue::from_str(&error.to_string()))? {
+            self.0.observe_tick(&tick).map_err(|error| JsValue::from_str(&error))?;
+        }
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = frameAt)]
+    pub fn frame_at(&self, seconds: f64) -> Result<String, JsValue> {
+        model_io_json(&self.0.frame_at(seconds))
+    }
+}
+
+#[wasm_bindgen]
+impl GesturePhysics {
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: f64, y: f64) -> Result<GesturePhysics, JsValue> {
+        runtime_core::two_source_gesture::GestureTracker::new([x, y], [0.0; 2])
+            .map(GesturePhysics)
+            .map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen(getter, js_name = stepSeconds)]
+    pub fn step_seconds(&self) -> f64 {
+        runtime_core::two_source_gesture::TRACKING_STEP_SECONDS
+    }
+
+    pub fn step(&mut self, x: f64, y: f64) -> Result<String, JsValue> {
+        let sample = self.0.step([x, y], self.step_seconds())
+            .map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&sample)
+    }
+
+    pub fn navigate(&mut self, x: f64, y: f64) -> Result<String, JsValue> {
+        let sample = self.0.navigate([x, y], self.step_seconds())
+            .map_err(|error| JsValue::from_str(&error))?;
+        model_io_json(&sample)
+    }
+}
+
 #[wasm_bindgen(js_name = "juliaEffectHeadings")]
 pub fn julia_effect_headings(x: f64, y: f64) -> Vec<f64> {
     runtime_core::model_io::fixed_point_effect_headings(RustComplex::new(x, y))

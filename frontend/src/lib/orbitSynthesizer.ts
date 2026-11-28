@@ -79,6 +79,19 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  GestureCycles: new () => {
+    ingest(samples: Float32Array, rate: number, start: number): void;
+    frameAt(seconds: number): string;
+    bind(role: number, id?: number): void;
+    advance(seconds: number): string;
+    free(): void;
+  };
+  GesturePhysics: new (x: number, y: number) => {
+    readonly stepSeconds: number;
+    step(x: number, y: number): string;
+    navigate(x: number, y: number): string;
+    free(): void;
+  };
   juliaEffectHeadings(x: number, y: number): Float64Array;
   juliaEffectContours(positions: Float64Array): Float32Array;
   playerLocationVersion(): string;
