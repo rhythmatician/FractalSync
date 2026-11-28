@@ -131,7 +131,26 @@ reference travels on a horizontal straight line at ambient speed
 one quarter, so its intrinsic length and position tube follow
 analytically. The fixture checks the length bound and refuses
 incomplete panels, negative caps, and a box touching a reference cut.
-A variable-field rollout still needs independent tube evidence.
+Two more analytic fixtures use the quintic B-spline's
+linear reproduction with dyadic coefficients to obtain the affine
+field \(D(x,y)=x\). With drag and forces disabled, its diagonal
+metric is independent of \(y\), and the \(x\) derivative of
+\(G_{yy}\) vanishes at \(x=0\). The transverse geodesic stays at
+\(x=0\) and moves along \(y\) at ambient speed \(1/4\). Its tube
+contains off-axis positions where the metric varies.
+
+In the conformal profile (`lambda_sq = 0`), the second geodesic
+holds (y) fixed and follows `x(t) = sinh(t/2)/2`. The metric
+changes along the path, and the reference intrinsic speed is
+exactly \(1/2\). The four substeps cover \(1/64\) second. For
+`u = t/2 ≤ 1/128`, the series gives `cosh(u) ≤ 1 + u²`.
+Use the resulting dyadic velocity cap and its time integral to
+bound the position and velocity throughout the step independently
+of the RK endpoints. The length upper bound is within \(5\times10^{-7}\)
+of the exact reference length, and the sampled-action floor is within
+\(3\times10^{-7}\) of the recorded action.
+General variable-field rollouts still require independently
+established tubes for their initial state, provider, and forces.
 
 ## Compiled kinetic samples on accepted RK panels
 
