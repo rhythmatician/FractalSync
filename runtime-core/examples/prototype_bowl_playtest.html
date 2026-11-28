@@ -32,7 +32,7 @@ async function tick(){
     if(launch||!paused){
       pendingLaunch=null;
       const axis=(a,b)=>Number(keys.has(a))-Number(keys.has(b));
-      const route=launch?'/launch/'+launch:'/tick/'+axis('ArrowRight','ArrowLeft')+'/'+axis('ArrowUp','ArrowDown');
+      const route=launch?'./launch/'+launch:'./tick/'+axis('ArrowRight','ArrowLeft')+'/'+axis('ArrowUp','ArrowDown');
       const r=await fetch(route);
       if(!r.ok) throw Error('Physics unavailable');
       current=await r.json();failed=false;

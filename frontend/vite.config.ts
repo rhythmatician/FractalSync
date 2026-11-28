@@ -24,6 +24,14 @@ if (existsSync(preferredWasm)) {
   console.warn('[vite] preferred WASM artifact not found; please install onnxruntime-web or provide "ort-wasm.wasm" in node_modules/dist/');
 }
 
+const cockpitBowlProxy = {
+  '/cockpit-bowl/': {
+    target: 'http://127.0.0.1:4178',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/cockpit-bowl/, ''),
+  },
+};
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -44,6 +52,7 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp'
     },
     proxy: {
+      ...cockpitBowlProxy,
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true
@@ -52,6 +61,7 @@ export default defineConfig({
   },
   preview: {
     port: 4173,
+    proxy: cockpitBowlProxy,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
