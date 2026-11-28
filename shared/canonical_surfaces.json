@@ -97,9 +97,13 @@
             "CycleEvidenceChannel",
             "CycleBankConfig",
             "EnergyInfo",
-            "PlayerState"
+      "PlayerState",
+      "GesturePhysics",
+      "GestureCycles"
         ],
-        "exemption_reasons": {
+    "exemption_reasons": {
+      "GesturePhysics": "Experimental browser gesture-preview adapter around the Rust GestureTracker; it is not consumed by training. Promotion to a shared Player path requires a Python surface and production-path parity coverage.",
+      "GestureCycles": "Experimental browser gesture-preview adapter combining Rust PassageCycles and AnalysisTimebase for fixture and decoded-file trials; it is not consumed by training. Promotion to a shared Player path requires a Python surface and production-path parity coverage.",
             "RuntimeVisualMetrics": "Training-only diagnostic; the browser computes visual metrics in TypeScript.",
             "Complex": "wasm-only serialization helper, not a canonical subsystem.",
             "CycleMode": "PyO3 read-only view object; the browser consumes the equivalent record via the Rust-authored `CycleMode` TypeScript interface emitted by the wasm custom section. One logical domain type, two surface-idiomatic projections \u2014 not a redeclared structural copy.",
