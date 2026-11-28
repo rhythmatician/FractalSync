@@ -79,6 +79,8 @@ interface WasmOrbitController {
 
 interface WasmModule {
   GestureCycles: new () => {
+    ingest(samples: Float32Array, rate: number, start: number): void;
+    frameAt(seconds: number): string;
     bind(role: number, id?: number): void;
     advance(seconds: number): string;
     free(): void;

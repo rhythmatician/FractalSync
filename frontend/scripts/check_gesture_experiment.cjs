@@ -1,5 +1,28 @@
 const { chromium } = require('playwright');
 
+function modulatedWav() {
+  const rate = 44100;
+  const samples = rate * 22;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write('RIFF');
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) {
+    const t = 2 * Math.PI * i / rate;
+    wav.writeInt16LE(Math.round(32767 * (0.55 + 0.4 * Math.cos(1.5 * t)) * Math.sin(330 * t)), 44 + i * 2);
+  }
+  return wav;
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
@@ -101,6 +124,19 @@ const { chromium } = require('playwright');
       throw new Error('Expected observed modes, explicit binding and withdrawal');
     }
     console.log('CycleBank observed fixture modes and recorded explicit binding and withdrawal.');
+  }
+  if (process.env.GESTURE_AUDIO_FILE) {
+    await page.getByRole('button', { name: 'Replay Julia motion' }).waitFor();
+    await page.getByLabel('Render Physics motion').uncheck();
+    await page.getByLabel('Local audio file').setInputFiles({
+      name: 'pulse.wav', mimeType: 'audio/wav', buffer: modulatedWav(),
+    });
+    await page.getByRole('button', { name: 'Start passage' }).click();
+    const role = page.locator('[aria-label="Role 1 binding"]');
+    await role.locator('..').getByRole('button', { name: /^Bind \d+ \(1\.[3456]\d Hz/ }).first().click({ timeout: 24000 });
+    await role.filter({ hasText: /\d+/ }).waitFor({ timeout: 4000 });
+    await page.getByRole('button', { name: 'Stop passage' }).click();
+    console.log('Decoded WAV playback acquired and bound the 1.5 Hz modulation.');
   }
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

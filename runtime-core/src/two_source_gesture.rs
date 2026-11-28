@@ -76,6 +76,7 @@ pub struct PassageCycles {
     sample_index: u64,
     modes: Vec<crate::cycle_bank::CycleMode>,
     roles: [Option<u64>; 2],
+    stream_epoch: Option<u64>,
 }
 
 #[derive(serde::Serialize)]
@@ -93,6 +94,7 @@ impl Default for PassageCycles {
             sample_index: 0,
             modes: Vec::new(),
             roles: [None; 2],
+            stream_epoch: None,
         }
     }
 }
@@ -212,7 +214,26 @@ impl PassageCycles {
         if advanced {
             self.modes = self.bank.modes();
         }
-        let delta = seconds - self.sample_index as f64 / rate;
+        Ok(self.frame_at(seconds))
+    }
+
+    pub fn observe_tick(&mut self, tick: &crate::timebase::AnalysisTick) -> Result<(), String> {
+        let observation =
+            crate::timebase::cycle_observation_from_tick(tick).ok_or("invalid analysis tick")?;
+        self.bank
+            .observe(&observation)
+            .map_err(|error| error.to_string())?;
+        if self.stream_epoch != Some(tick.stream_epoch) {
+            self.roles = [None; 2];
+            self.stream_epoch = Some(tick.stream_epoch);
+        }
+        self.sample_index = tick.sample_index;
+        self.modes = self.bank.modes();
+        Ok(())
+    }
+
+    pub fn frame_at(&self, seconds: f64) -> PassageCycleFrame<'_> {
+        let delta = seconds - self.sample_index as f64 / crate::controller::SAMPLE_RATE as f64;
         let phases = self.roles.map(|id| {
             let id = id?;
             self.modes
@@ -220,12 +241,12 @@ impl PassageCycles {
                 .find(|mode| mode.id == id && mode.missing_observations == 0)
                 .map(|mode| mode.phase_at(delta))
         });
-        Ok(PassageCycleFrame {
+        PassageCycleFrame {
             sample_index: self.sample_index,
             modes: &self.modes,
             roles: self.roles,
             phases,
-        })
+        }
     }
 }
 

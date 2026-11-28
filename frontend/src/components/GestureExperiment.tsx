@@ -70,6 +70,7 @@ export function GestureExperiment() {
   const [time, setTime] = useState(0);
   const [tracking, setTracking] = useState(false);
   const [estimate, setEstimate] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [cycleFrame, setCycleFrame] = useState<CycleFrame | null>(null);
   const [bindingError, setBindingError] = useState('');
 
@@ -146,19 +147,23 @@ export function GestureExperiment() {
       if (tracking && typeof wasm.GesturePhysics !== 'function') {
         throw new Error('Rebuild the Wasm bundle to use Physics tracking.');
       }
-      if (estimate && typeof wasm.GestureCycles !== 'function') {
+      if ((estimate || audioFile) && typeof wasm.GestureCycles !== 'function') {
         throw new Error('Rebuild the Wasm bundle to use CycleBank.');
       }
       const schedule = JSON.parse(wasm.knownGestureScheduleJson()) as Schedule;
       if (settingsRef.current.navigation) update({ navigation: null });
       audio = new AudioContext();
       await audio.resume();
+      const decoded = audioFile ? await audio.decodeAudioData(await audioFile.arrayBuffer()) : null;
       if (!mountedRef.current) { await audio.close(); return; }
+      const pcm = decoded?.getChannelData(0);
+      let fed = 0;
       const startAt = audio.currentTime + 0.1;
       visibleFrame.current = null;
       recordRef.current = {
         startedAt: new Date().toISOString(),
-        trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current, tracking, estimate }),
+        trace: new BoundedGestureRecord({ type: 'start', audioTime: startAt, settings: settingsRef.current,
+          tracking, estimate, audioFile: audioFile?.name, decodedRate: decoded?.sampleRate, analysisChannel: decoded ? 0 : undefined }),
         visual: new BoundedGestureRecord(null),
       };
       setHasRecord(true);
@@ -178,11 +183,18 @@ export function GestureExperiment() {
         carrier.start(startAt);
         modulator.start(startAt);
       }
-      layer(220, schedule.a_hz);
-      layer(330, schedule.b_segments[0].frequency_hz, schedule.b_segments);
+      if (decoded) {
+        const source = audio.createBufferSource();
+        source.buffer = decoded;
+        source.connect(audio.destination);
+        source.start(startAt);
+      } else {
+        layer(220, schedule.a_hz);
+        layer(330, schedule.b_segments[0].frequency_hz, schedule.b_segments);
+      }
       const origin = [settingsRef.current.x, settingsRef.current.y];
       const physics = tracking ? new wasm.GesturePhysics(origin[0], origin[1]) : null;
-      const cycles = estimate ? new wasm.GestureCycles() : null;
+      const cycles = estimate || decoded ? new wasm.GestureCycles() : null;
       const run: Passage = {
         audio, frame: 0, changes: [], bindings: [], position: origin,
         release: () => { physics?.free(); cycles?.free(); },
@@ -199,7 +211,15 @@ export function GestureExperiment() {
       let observed: CycleFrame | null = null;
       const referenceAt = (current: Settings, elapsed: number) => {
         if (cycles) {
-          observed = JSON.parse(cycles.advance(elapsed)) as CycleFrame;
+          if (decoded && pcm) {
+            const end = Math.min(pcm.length, Math.floor(elapsed * decoded.sampleRate));
+            if (end > fed) {
+              cycles.ingest(pcm.subarray(fed, end), decoded.sampleRate, fed);
+              fed = end;
+            }
+          }
+          const readCycles = () => decoded ? cycles.frameAt(elapsed) : cycles.advance(elapsed);
+          observed = JSON.parse(readCycles()) as CycleFrame;
           let changed = false;
           while (run.bindings.length && run.bindings[0].audioTime <= startAt + elapsed) {
             const binding = run.bindings[0];
@@ -214,7 +234,7 @@ export function GestureExperiment() {
               setBindingError(String(cause));
             }
           }
-          if (changed) observed = JSON.parse(cycles.advance(elapsed)) as CycleFrame;
+          if (changed) observed = JSON.parse(readCycles()) as CycleFrame;
         }
         const known = wasm.knownGesturePhases(elapsed, current.condition === 'misaligned');
         const pick = (source: Source) => source === 'a' ? known[0] : known[1];
@@ -232,6 +252,7 @@ export function GestureExperiment() {
         if (runRef.current !== run) return;
         const audioTime = run.audio.currentTime;
         const elapsed = Math.max(0, audioTime - startAt);
+        if (decoded && elapsed >= decoded.duration) { void stop(); return; }
         try {
           const current = settingsRef.current;
           let displayed: number[];
@@ -330,7 +351,6 @@ export function GestureExperiment() {
     if (!record) return;
     const blob = new Blob([JSON.stringify({
       format: 'fractal-sync-gesture-diagnostic/1',
-      source: 'Synthetic two-envelope passage',
       startedAt: record.startedAt,
       events: record.trace.events,
       samples: record.trace.samples,
@@ -377,9 +397,14 @@ export function GestureExperiment() {
         setEstimate(event.target.checked);
         if (event.target.checked && settings.condition === 'misaligned') update({ condition: 'matched' });
       }} /> Estimate fixture envelopes with CycleBank</label>
-      <label>Comparison <select value={settings.condition} onChange={event => update({ condition: event.target.value as Settings['condition'] })}><option value="matched">Matched visual</option><option value="misaligned" disabled={estimate}>Visual changes early</option><option value="audio">Audio with fixed Julia</option></select></label>
-      {!estimate && selector('Source 1', 'sourceA')}{slider('Gain 1', 'gainA', 0, 1, 0.01)}
-      {!estimate && selector('Source 2', 'sourceB')}{slider('Gain 2', 'gainB', 0, 1, 0.01)}
+      <label>Local audio file <input type="file" accept="audio/*" disabled={playing} onChange={event => {
+        const file = event.target.files?.[0] ?? null;
+        setAudioFile(file);
+        if (file && settings.condition === 'misaligned') update({ condition: 'matched' });
+      }} /></label>
+      <label>Comparison <select value={settings.condition} onChange={event => update({ condition: event.target.value as Settings['condition'] })}><option value="matched">Matched visual</option><option value="misaligned" disabled={estimate || !!audioFile}>Visual changes early</option><option value="audio">Audio with fixed Julia</option></select></label>
+      {!estimate && !audioFile && selector('Source 1', 'sourceA')}{slider('Gain 1', 'gainA', 0, 1, 0.01)}
+      {!estimate && !audioFile && selector('Source 2', 'sourceB')}{slider('Gain 2', 'gainB', 0, 1, 0.01)}
       {slider('Excursion', 'excursion', 0, 0.5, 0.005)}
       <label>Geometry <select value={settings.rotating ? 'rotating' : 'distinct'} onChange={event => update({ rotating: event.target.value === 'rotating' })}><option value="rotating">Rotating vectors</option><option value="distinct">Distinct directions</option></select></label>
       {slider('Phase offset 2 (radians; changes immediately)', 'offset', -3.14, 3.14, 0.01)}
@@ -387,8 +412,8 @@ export function GestureExperiment() {
       <label>Anchor imaginary <input type="number" step="0.001" value={settings.y} onChange={event => update({ y: Number(event.target.value) })} /></label>
       {slider('Julia zoom', 'zoom', 0.5, 3, 0.01)}{slider('Palette hue', 'hue', 0, 1, 0.01)}
     </div>
-    {estimate && <p>{cycleFrame?.modes.length ? 'Choose a mode for each role.' : 'Waiting for confirmed modes.'}</p>}
-    {estimate && cycleFrame && [0, 1].map(role => <div key={role}>
+    {(estimate || audioFile) && <p>{cycleFrame?.modes.length ? 'Choose a mode for each role.' : 'Waiting for confirmed modes.'}</p>}
+    {(estimate || audioFile) && cycleFrame && [0, 1].map(role => <div key={role}>
       Role {role + 1}: {' '}
       <span aria-label={`Role ${role + 1} binding`}>
         {cycleFrame.roles[role] ?? 'unbound'}

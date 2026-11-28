@@ -3,6 +3,37 @@ use runtime_core::two_source_gesture::known_phase_misaligned;
 use runtime_core::two_source_gesture::{Geometry, Gesture, Source};
 
 #[test]
+fn decoded_pcm_can_supply_an_explicit_gesture_binding() {
+    use runtime_core::{timebase::AnalysisTimebase, two_source_gesture::PassageCycles};
+    let mut timebase = AnalysisTimebase::new();
+    let mut cycles = PassageCycles::default();
+    let rate = 44_100;
+    let block_size = 441;
+    let tau = std::f64::consts::TAU;
+    for start in (0..rate * 18).step_by(block_size) {
+        let pcm: Vec<f32> = (start..start + block_size)
+            .map(|index| {
+                let time = index as f64 / rate as f64;
+                ((0.55 + 0.4 * (tau * 1.5 * time).cos()) * (tau * 330.0 * time).sin()) as f32
+            })
+            .collect();
+        for tick in timebase.ingest(&pcm, rate, start as u64).unwrap() {
+            cycles.observe_tick(&tick).unwrap();
+        }
+    }
+    let frame = cycles.frame_at(18.0);
+    assert_eq!(frame.phases, [None; 2]);
+    let id = frame
+        .modes
+        .iter()
+        .find(|mode| (mode.frequency_hz - 1.5).abs() < 0.15 && mode.missing_observations == 0)
+        .expect("observed PCM modulation")
+        .id;
+    cycles.bind(0, Some(id)).unwrap();
+    assert!(cycles.frame_at(18.0).phases[0].is_some());
+}
+
+#[test]
 fn passage_cycle_roles_require_an_explicit_observed_identity() {
     use runtime_core::two_source_gesture::PassageCycles;
     let mut cycles = PassageCycles::default();

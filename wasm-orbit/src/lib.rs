@@ -37,13 +37,16 @@ fn model_io_json<T: Serialize>(value: &T) -> Result<String, JsValue> {
 pub struct GesturePhysics(runtime_core::two_source_gesture::GestureTracker);
 
 #[wasm_bindgen]
-pub struct GestureCycles(runtime_core::two_source_gesture::PassageCycles);
+pub struct GestureCycles(
+    runtime_core::two_source_gesture::PassageCycles,
+    runtime_core::timebase::AnalysisTimebase,
+);
 
 #[wasm_bindgen]
 impl GestureCycles {
     #[wasm_bindgen(constructor)]
     pub fn new() -> GestureCycles {
-        GestureCycles(Default::default())
+        GestureCycles(Default::default(), runtime_core::timebase::AnalysisTimebase::new())
     }
 
     pub fn bind(&mut self, role: usize, id: Option<u32>) -> Result<(), JsValue> {
@@ -53,6 +56,19 @@ impl GestureCycles {
     pub fn advance(&mut self, seconds: f64) -> Result<String, JsValue> {
         let frame = self.0.advance(seconds).map_err(|error| JsValue::from_str(&error))?;
         model_io_json(&frame)
+    }
+
+    pub fn ingest(&mut self, samples: &[f32], rate: usize, start: u32) -> Result<(), JsValue> {
+        for tick in self.1.ingest(samples, rate, u64::from(start))
+            .map_err(|error| JsValue::from_str(&error.to_string()))? {
+            self.0.observe_tick(&tick).map_err(|error| JsValue::from_str(&error))?;
+        }
+        Ok(())
+    }
+
+    #[wasm_bindgen(js_name = frameAt)]
+    pub fn frame_at(&self, seconds: f64) -> Result<String, JsValue> {
+        model_io_json(&self.0.frame_at(seconds))
     }
 }
 
