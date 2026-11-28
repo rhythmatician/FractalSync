@@ -21,6 +21,7 @@ struct Recording {
 #[derive(Serialize)]
 struct RkSubstep {
     dt: u64,
+    left_kinetic_energy: u64,
     left_drift_defect_upper: u64,
     stages: [[u64; 4]; 4],
     slopes: [[u64; 5]; 4],
@@ -33,6 +34,7 @@ struct OuterStep {
     command: [u64; 2],
     substeps: Vec<RkSubstep>,
     stored_work: u64,
+    compiled_sampled_action: [u64; 2],
     ambient_polyline_length_upper: u64,
     mechanical_time: u64,
 }
@@ -55,6 +57,7 @@ impl From<&RkSubstepTrace> for RkSubstep {
     fn from(trace: &RkSubstepTrace) -> Self {
         Self {
             dt: trace.duration.to_bits(),
+            left_kinetic_energy: trace.left_kinetic_energy.unwrap().to_bits(),
             left_drift_defect_upper: trace.left_drift_defect_upper().unwrap().to_bits(),
             stages: trace.stages.map(|stage| stage.map(f64::to_bits)),
             slopes: trace.slopes.map(|slope| slope.map(f64::to_bits)),
@@ -203,11 +206,17 @@ fn literal_quadratic_rk_queries_require_exactly_the_predicted_stencil() {
                     .iter()
                     .all(|s| positions.contains(&[s[0], s[1]])));
             }
+
+            let action = trace.compiled_sampled_action().unwrap();
             steps.push(OuterStep {
                 command: command.map(f64::to_bits),
                 substeps: trace.rk_substeps().iter().map(RkSubstep::from).collect(),
                 stored_work: state.integrated_work.to_bits(),
-                ambient_polyline_length_upper: trace.ambient_rk_polyline_length_upper().unwrap().to_bits(),
+                compiled_sampled_action: [action.lower.to_bits(), action.upper.to_bits()],
+                ambient_polyline_length_upper: trace
+                    .ambient_rk_polyline_length_upper()
+                    .unwrap()
+                    .to_bits(),
                 mechanical_time: state.mechanical_time.to_bits(),
             });
             if first_stage_two.is_none() {

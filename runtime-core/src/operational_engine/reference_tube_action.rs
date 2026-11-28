@@ -22,6 +22,104 @@ mod tests {
     use crate::operational_field::PreparedField;
     use std::sync::Arc;
 
+    fn affine_rollout(lambda_sq: f64) -> FrozenRollout {
+        let spacing = 1.0 / 16.0;
+        let coefficients = (0..33)
+            .cycle()
+            .take(33 * 33)
+            .map(|column| f64::from(column) * spacing - 1.0)
+            .collect();
+        let field = PreparedField::new([-1.0; 2], spacing, [33; 2], coefficients).unwrap();
+        let profile = PhysicsProfile::new(
+            ManifoldConfig {
+                epsilon: 0.5,
+                lambda_sq,
+                kappa: 0.0,
+                mu: 0.0,
+                ..ManifoldConfig::default()
+            },
+            1.0 / 64.0,
+            0.0,
+            Integrator::Rk4FourSubsteps,
+        )
+        .unwrap();
+        FrozenRollout::new(Arc::new(field), profile, vec![]).unwrap()
+    }
+
+    #[test]
+    fn affine_field_tube_encloses_a_transverse_geodesic() {
+        let rollout = affine_rollout(1.0);
+        let mut state = rollout.initial_state([0.0, 0.375], [0.0, 0.25]).unwrap();
+        let (_, trace) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+
+        // The nominal field is D=x. G is diagonal and independent of y,
+        // and d_x G_yy vanishes at x=0. Thus c(t)=(0, 3/8+t/4) is the
+        // geodesic with these initial conditions, with intrinsic speed 1/2.
+        // The box includes off-axis positions where the metric varies.
+        let exact_duration = 1.0 / 64.0;
+        let panel = ReferenceMotionPanel {
+            position_box: [[-1.0 / 16.0, 0.375], [1.0 / 16.0, 0.375 + 1.0 / 128.0]],
+            velocity_abs_upper: [0.0, 0.25],
+        };
+        assert_eq!(trace.rk_substeps().len(), 4);
+        assert!(trace
+            .rk_substeps()
+            .iter()
+            .all(|step| step.duration == exact_duration / 4.0));
+        let bound = rollout
+            .nominal_reference_tube_action(&trace, &[panel; 4])
+            .unwrap();
+        let exact_length = exact_duration / 2.0;
+        assert!(bound.reference_length_upper() >= exact_length);
+        assert!(bound.reference_length_upper() - exact_length < 1e-12);
+        assert!(bound.missed_length_upper() < 1e-12);
+        let floor = bound
+            .sampled_action_lower(LengthLowerBound::Certified(exact_length))
+            .unwrap();
+        let compiled = trace.compiled_sampled_action().unwrap();
+        assert!(floor <= compiled.lower && compiled.upper - floor < 1e-12);
+    }
+
+    #[test]
+    fn affine_field_tube_encloses_motion_through_a_changing_metric() {
+        let rollout = affine_rollout(0.0);
+        let mut state = rollout.initial_state([0.0, 0.375], [0.25, 0.0]).unwrap();
+        let (_, trace) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let duration = 1.0 / 64.0;
+        assert!(trace
+            .rk_substeps()
+            .iter()
+            .all(|step| step.duration == duration / 4.0));
+
+        // For D=x and lambda_sq=0, x(t)=sinh(t/2)/2 follows the
+        // force-free geodesic with intrinsic speed 1/2. For u=t/2
+        // in [0,1/128], cosh(u) <= 1+u^2 by the power series. Integrating
+        // this velocity cap also gives the box's right boundary.
+        let velocity_cap = 0.25 * (1.0 + (1.0_f64 / 128.0).powi(2));
+        let panel = ReferenceMotionPanel {
+            position_box: [[0.0, 0.375], [duration * velocity_cap, 0.375]],
+            velocity_abs_upper: [velocity_cap, 0.0],
+        };
+        let bound = rollout
+            .nominal_reference_tube_action(&trace, &[panel; 4])
+            .unwrap();
+        let exact_length = duration / 2.0;
+        let exact_action = duration / 8.0;
+        assert!(bound.reference_length_upper() >= exact_length);
+        assert!(bound.reference_length_upper() - exact_length < 5e-7);
+        assert!(bound.missed_length_upper() < 5e-7);
+        let floor = bound
+            .sampled_action_lower(LengthLowerBound::Certified(exact_length))
+            .unwrap();
+        let compiled = trace.compiled_sampled_action().unwrap();
+        assert!(floor <= compiled.lower && compiled.upper - floor < 3e-7);
+        assert!((compiled.upper - exact_action).abs() < 1e-12);
+    }
+
     #[test]
     fn constant_metric_reference_tube_encloses_analytic_continuous_motion() {
         let field = PreparedField::new([-1.0; 2], 0.0625, [33; 2], vec![0.375; 33 * 33]).unwrap();
