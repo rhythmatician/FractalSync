@@ -33,6 +33,7 @@ export default defineConfig({
         // Standalone #111 debug cockpit (no model, no audio; wasm physics +
         // Three.js third-person manifold view).
         debugCockpit: resolve(__dirname, 'debugCockpit.html'),
+        gestureExperiment: resolve(__dirname, 'gestureExperiment.html'),
       },
     },
   },

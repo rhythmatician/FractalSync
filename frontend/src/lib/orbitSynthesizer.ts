@@ -78,6 +78,9 @@ interface WasmOrbitController {
 }
 
 interface WasmModule {
+  twoSourceGestureTarget(anchorX: number, anchorY: number, phaseA: number, phaseB: number, gainA: number, gainB: number, excursion: number, rotating: boolean): Float64Array;
+  knownGesturePhases(seconds: number, misaligned: boolean): Float64Array;
+  knownGestureScheduleJson(): string;
   mapReplayNavigation?(
     selectedRoute: number,
     targetX: number,
