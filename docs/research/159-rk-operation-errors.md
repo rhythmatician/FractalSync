@@ -305,3 +305,18 @@ committed RK substep endpoints. The independent checker brackets each
 chord length on an exact dyadic grid and verifies that the outward total
 covers the upper end of that bracket. This measures reconstructed ambient
 travel. Intrinsic length requires bounds on the metric along the chords.
+
+## Intrinsic length of accepted chords
+
+The frozen rollout can enclose the reconstructed accepted polyline in the
+nominal exact-real spline metric. It checks trace identity, applies the
+route edge's chart and reference-cut checks to each chord, and reuses
+Bernstein cell bounds across chords. Both ends of the length interval
+are summed with directed rounding. Unsupported chords decline the
+entire result. The constant-metric RK4 fixture compares the interval
+against the analytic length.
+
+This enclosure describes straight segments between committed endpoints.
+A certificate for sampled action also needs a relation to the sampled
+kinetic energies and an allowance for the difference between that
+polyline and the reference trajectory.

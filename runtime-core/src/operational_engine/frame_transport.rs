@@ -53,7 +53,7 @@ impl FrozenRollout {
         reference: [f64; 2],
         speed_floor: f64,
     ) -> Result<TransportedGestureEpoch, String> {
-        self.check_transport_trace(trace)?;
+        self.check_trace_identity(trace)?;
         checked_direction(reference)?;
         if !speed_floor.is_finite() || speed_floor < 0.0 {
             return Err("gesture speed floor must be finite and nonnegative".into());
@@ -146,7 +146,7 @@ impl FrozenRollout {
             .map(|(frame, _)| frame)
     }
 
-    fn check_transport_trace(&self, trace: &AcceptedStepTrace) -> Result<(), String> {
+    pub(super) fn check_trace_identity(&self, trace: &AcceptedStepTrace) -> Result<(), String> {
         // The policy allocation is owned by this rollout and retained by
         // the trace. Fingerprints alone do not establish its provenance.
         if !Arc::ptr_eq(&trace.rollout_policy, &self.cuts)
@@ -164,7 +164,7 @@ impl FrozenRollout {
         initial_direction: [f64; 2],
         turn_rates: impl ExactSizeIterator<Item = f64> + Clone,
     ) -> Result<(TransportedFrame, MetricFactor), String> {
-        self.check_transport_trace(trace)?;
+        self.check_trace_identity(trace)?;
         let endpoints = trace.endpoints();
         let chord_count = endpoints.len() - 1;
         if turn_rates.len() != chord_count {
