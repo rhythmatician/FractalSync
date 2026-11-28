@@ -14,6 +14,7 @@ _CASE_FIELDS = {
     "startSample",
     "deadlineSample",
     "kineticActionBudget",
+    "defaultRasterWindow",
 }
 
 
@@ -53,7 +54,7 @@ def _sample_index(value: object, field: str) -> int:
 
 def check_curriculum_feasibility(manifest: Path) -> CurriculumFeasibilityReport:
     """Keep all candidates except those excluded by an applicable Rust bound."""
-    from runtime_core import evaluate_curriculum_feasibility
+    from runtime_core import evaluate_curriculum_feasibility, get_builtin_distance_field_py
 
     entries: object = json.loads(manifest.read_text(encoding="utf-8"))
     if not isinstance(entries, list):
@@ -62,6 +63,7 @@ def check_curriculum_feasibility(manifest: Path) -> CurriculumFeasibilityReport:
     cases: list[CurriculumCaseReport] = []
     eligible_case_ids: list[str] = []
     seen_ids: set[str] = set()
+    raster_loaded = False
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise ValueError(f"case {index} must be an object")
@@ -80,6 +82,19 @@ def check_curriculum_feasibility(manifest: Path) -> CurriculumFeasibilityReport:
             if not isinstance(metric, str):
                 raise ValueError("metric must be a string")
             budget = entry.get("kineticActionBudget")
+            window_raw = entry.get("defaultRasterWindow")
+            window = None
+            if window_raw is not None:
+                if metric != "runtimeMap":
+                    raise ValueError("defaultRasterWindow requires runtimeMap")
+                if not isinstance(window_raw, list) or len(window_raw) != 2:
+                    raise ValueError("defaultRasterWindow must contain minimum and maximum corners")
+                window = (_point(window_raw[0], "defaultRasterWindow"), _point(window_raw[1], "defaultRasterWindow"))
+                if not all(lo < hi for lo, hi in zip(*window, strict=True)):
+                    raise ValueError("defaultRasterWindow minimum must precede maximum on both axes")
+                if not raster_loaded:
+                    get_builtin_distance_field_py("mandelbrot_default")
+                    raster_loaded = True
             report_json = evaluate_curriculum_feasibility(
                 _point(entry.get("start"), "start"),
                 _point(entry.get("target"), "target"),
@@ -88,6 +103,7 @@ def check_curriculum_feasibility(manifest: Path) -> CurriculumFeasibilityReport:
                 _sample_index(entry.get("startSample"), "startSample"),
                 _sample_index(entry.get("deadlineSample"), "deadlineSample"),
                 None if budget is None else _number(budget, "kineticActionBudget"),
+                window,
             )
             report: object = json.loads(report_json)
         except (ValueError, OverflowError) as error:

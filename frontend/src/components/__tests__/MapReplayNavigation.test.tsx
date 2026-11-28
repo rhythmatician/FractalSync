@@ -32,6 +32,7 @@ it('uses recorded frame prefixes and opens the arrival witnessed by Rust', () =>
     certificateQueries: 4,
     baseline: { firstArrivalRoute: 1, queriesToFirstArrival: 5, targetQueries: 5, arrivals: [null, 2] },
     bounded: { firstArrivalRoute: 1, queriesToFirstArrival: 3, targetQueries: 5, arrivals: [null, 2] },
+    rasterWaypointSearch: { status: 'witness', routeIndex: 2, frameIndex: 2, lengthUpper: 12.5, rasterGeneration: 3 },
   });
   const inspect = vi.fn();
   render(<MapReplayNavigation routes={routes} selected={0} frameIndex={1} inspectArrival={inspect} />);
@@ -44,6 +45,8 @@ it('uses recorded frame prefixes and opens the arrival witnessed by Rust', () =>
     Float64Array.from([0, 0, 1, 0, 0, 0]),
   );
   expect(screen.getByText(/5 target checks in recording order and 3 after ranking/)).toBeTruthy();
+  expect(screen.getByText(/Current raster waypoint path to fast frame 3/)).toBeTruthy();
+  expect(screen.getByText(/Raster generation 3/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Inspect arrival in fast' }));
   expect(inspect).toHaveBeenCalledWith(2, 2);
 });
@@ -57,10 +60,12 @@ it('shows waypoint coverage with no ideal bound and no arrival', () => {
     certificateQueries: 2,
     baseline: { firstArrivalRoute: undefined, queriesToFirstArrival: undefined, targetQueries: 5, arrivals: [undefined, undefined] },
     bounded: { firstArrivalRoute: undefined, queriesToFirstArrival: undefined, targetQueries: 5, arrivals: [undefined, undefined] },
+    rasterWaypointSearch: { status: 'noWitness' },
   });
   render(<MapReplayNavigation routes={routes} selected={0} frameIndex={0} inspectArrival={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'Compare recorded routes' }));
   expect(screen.getByText('Ideal length lower bound unavailable')).toBeTruthy();
   expect(screen.getByText('No recorded arrival')).toBeTruthy();
+  expect(screen.getByText('No waypoint in the route graph certified inside the target.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /Inspect arrival/ })).toBeNull();
 });

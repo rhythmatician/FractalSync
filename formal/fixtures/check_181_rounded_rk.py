@@ -195,6 +195,7 @@ def rhs(phase: Phase, jet: Jet, command: Vector) -> tuple[Interval, Interval, In
 
 class Substep(TypedDict):
     dt: int
+    left_drift_defect_upper: int
     stages: list[list[int]]
     slopes: list[list[int]]
     end: list[int]
@@ -205,6 +206,8 @@ class OuterStep(TypedDict):
     command: list[int]
     substeps: list[Substep]
     stored_work: int
+    ambient_polyline_length_upper: int
+    mechanical_time: int
 
 
 class Profile(TypedDict):
@@ -229,6 +232,8 @@ def check_profile(profile: Profile, field: Field) -> None:
     dt = outer_dt / count
     source = (Q(1, 2), Q(1, 2), Q(1, 4), Q(0))
     previous_work = Q(0)
+    previous_time = Q(0)
+    rounded_outer_dt = nearest_binary64(outer_dt)
     maxima: dict[str, Q] = {}
 
     def check(name: str, error: Q, limit: Q) -> None:
@@ -236,12 +241,18 @@ def check_profile(profile: Profile, field: Field) -> None:
         maxima[name] = max(maxima.get(name, Q(0)), error)
 
     assert len(profile["steps"]) == 16
-    for outer in profile["steps"]:
+    for index, outer in enumerate(profile["steps"], start=1):
+        machine_time = binary64(outer["mechanical_time"])
+        assert machine_time == nearest_binary64(previous_time + rounded_outer_dt)
+        assert machine_time > previous_time
+        check("outer clock", abs(machine_time - index * outer_dt), Q(1, 10**18))
+        previous_time = machine_time
         exact_command = drive(field.ruler_jet(source[0], source[1]))
         command_x, command_y = map(binary64, outer["command"])
         command_error = exact_command[0].error(command_x) + exact_command[1].error(command_y)
         check("held drive", command_error, dt)
         exact_outer_work = Q(0)
+        chord_squares: list[Q] = []
         assert len(outer["substeps"]) == count
         for sub in outer["substeps"]:
             assert binary64(sub["dt"]) == nearest_binary64(dt)
@@ -261,9 +272,25 @@ def check_profile(profile: Profile, field: Field) -> None:
             endpoint = phase_of(sub["end"])
             expected_end = tuple(source[i] + weighted[i] for i in range(4))
             check("weighted endpoint", phase_error(endpoint, expected_end), dt**2)
+            represented_dt = binary64(sub["dt"])
+            drift_defect = sum(
+                abs(endpoint[i] - source[i] - represented_dt * source[i + 2])
+                for i in range(2)
+            )
+            chord_squares.append(sum((endpoint[i] - source[i]) ** 2 for i in range(2)))
+            drift_upper = binary64(sub["left_drift_defect_upper"])
+            assert drift_defect <= drift_upper
+            check("left drift defect upper", drift_upper, 100 * dt**2)
             check("substep work", abs(binary64(sub["work"]) - weighted[4]), dt**2)
             exact_outer_work += weighted[4]
             source = endpoint
+        # Bound each square root below on an exact dyadic grid, then
+        # check a near-equality against the runtime's outward total.
+        grid = 2**100
+        chord_lower = sum(Q(isqrt(floor(square * grid**2)), grid) for square in chord_squares)
+        length_upper = binary64(outer["ambient_polyline_length_upper"])
+        assert chord_lower + Q(len(chord_squares), grid) <= length_upper
+        check("ambient polyline enclosure slack", length_upper - chord_lower, Q(1, 10**17))
         stored_work = binary64(outer["stored_work"])
         check("stored outer work", abs(stored_work - previous_work - exact_outer_work), outer_dt**2)
         previous_work = stored_work

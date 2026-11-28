@@ -1,7 +1,14 @@
 # Lean research contracts
 
+Issue #247: [GestureExecution.lean](FractalSync/GestureExecution.lean) checks
+the actual derivative of a time-varying continuous linear map applied to a
+time-varying vector, and its specialization to a parameterized curve with an
+independent phase. See the [research note](../docs/research/247-gesture-execution-development.md)
+for the hypotheses, conventional gauge and moving-anchor arguments, and the
+unverified Physics, rendering, and perceptual questions.
+
 This is a development-time mathematical proof package. It currently contains
-**1,877 explicit proved theorem/lemma declarations** across 164 result modules
+**1,883 explicit proved theorem/lemma declarations** across 166 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -253,7 +260,9 @@ by the separate transitive audit.
 | `KeplerAreaDensity` | 7 | Radial pullback-density averaging, bounds, and the signed fan-area rate |
 | `KeplerAreaClock` | 14 | Normalized integral clock, exact inverse existence and uniqueness, stability, and distortion |
 | `KeplerEllipseClock` | 9 | Elliptical fan specialization, flat reduction, and phase and anomaly bounds |
-| **Total** | **1,877** | Explicit theorem and lemma declarations |
+| `AdaptiveStepComposition` | 4 | Per-step error, elapsed-time and mesh envelopes, and metric-space local error composition |
+| `SampledAction` | 2 | Kinetic-action obstruction for accepted intervals with exact or residual-aware length coverage |
+| **Total** | **1,883** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1502,7 +1511,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The current audit covers 4,092 declarations, including the 1,877 stated theorem/lemma declarations,
+The audit covers all project declarations, including the 1,883 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify

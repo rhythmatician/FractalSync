@@ -119,11 +119,104 @@ or an active prepared-field override. Continuous provider identity during
 an external rollout remains a caller premise. The result describes ambient
 arrival under the default runtime metric. True Shore correspondence,
 intrinsic target tolerance, and compiled kinetic evaluation or RK4
-trajectory error require separate evidence. #174 still needs a default
-provider upper route witness and a search over certified edges. Applying
-#169 to a rollout still requires evidence for its accepted target,
+trajectory error require separate evidence. Applying #169 to a rollout
+still requires evidence for its accepted target,
 provider and profile identity, and an actual action budget or speed cap.
 The curriculum does not consume this certificate.
+
+## Straight-segment route witnesses
+
+For two points in the certified window, the whole straight segment stays
+in the window by convexity. The length factor encloses the compiled
+matrix by its maximum absolute row sum. Starting from lower ruler
+bound `rhoLower`, upper center magnitude `dUpper`, and upper gradient
+component magnitude `gradUpper`, evaluate the same rounded operations
+as the default metric:
+
+```text
+ratioUpper = min(1, fl(dUpper / rhoLower))
+sigmaUpper = fl(fl(ratioUpper * gradUpper) / fl(rhoLower * ln2))
+baseUpper  = fl(1 / fl(rhoLower * rhoLower))
+rankUpper  = fl(sigmaUpper * sigmaUpper)
+rowUpper   = add_up(fl(baseUpper + rankUpper), rankUpper)
+```
+
+The widened binary32 center square is exact, so the compiled ruler
+dominates the absolute center sample and the computed ratio is at most
+one. Monotonicity of the individual rounded operations gives upper
+bounds for the diagonal and absolute off-diagonal entries. The matrix
+is symmetric, so the row sum bounds the quadratic form. Rounded-up
+square root and displacement multiplication give a length upper bound.
+
+`segment_length_upper` also encloses center and stencil samples using
+the raster coefficients that support the segment's bounding rectangle.
+For coefficient extrema `lo` and `hi`, the ideal interpolant ranges
+from at least `lo - (9/32)(hi - lo)` to at most
+`hi + (9/32)(hi - lo)`. The tensor weights sum to one and have
+negative mass at most `(25/16 - 1)/2 = 9/32`. The binary64 error
+allowance of `2^-26` times the maximum coefficient magnitude covers
+the same kernel, sum and division errors bounded above. In particular,
+with the numerator and normalizer error `delta = 2^-30`, normalization
+adds at most `(1 + 25/16) delta / (1 - delta)` times that magnitude,
+before the final binary64 round. Outward binary64 endpoints followed by
+the sampler's monotone binary32 cast enclose the actual returned samples.
+
+The center interval supplies a lower bound on `abs(D)` when it stays
+on one side of zero. The rounded ruler dominates that bound, so it also
+raises the lower bound on the adaptive step. The stencil interval's
+width divided by twice this minimum step bounds the centered gradient.
+Substituting these bounds into `(2 + 6 G*) / rho` gives a local metric
+factor. The implementation takes the smaller of the local factor and
+the regional factor. If a local scan cannot certify its
+arithmetic, the regional factor still applies.
+
+`RasterNavigationRegion::search_route` takes a caller-supplied
+directed waypoint graph in the certified window. It uses these edge
+bounds, rounds their running sum upward and uses the remaining
+target length lower bound to order and prune the search. The returned
+path carries its length upper bound and raster generation. The method
+holds that generation under a single read lock while pricing edges.
+The graph's straight edges stay inside the convex window, so its
+displacement heuristic applies without a first-exit allowance. The
+continuous-path query still accounts for paths that leave the window.
+The raster test compares against a zero-heuristic search on the same
+graph and checks that a finite budget can prune a boundary launch
+before retrieving its adjacency list.
+
+The same search accepts a nonempty union of closed ambient balls.
+Each zero-radius component recovers a point target. Arrival accepts a
+waypoint in any component, while the heuristic takes the minimum of
+the component lower bounds. The built-in test reverses the target
+component order and obtains the same first route. The cockpit currently
+exposes a single component.
+
+Arrival requires a waypoint whose outward ambient displacement from the
+target center is within the radius. Equality of coordinates suffices for
+a point target. For a positive radius, rounding can leave some points
+near the boundary unaccepted. A zero remaining lower bound can occur
+at the edge of the window and says nothing about waypoint membership.
+An empty result means the graph yielded no certified witness within
+budget. A continuous trajectory could use another route or fit the
+budget with tighter segment bounds. The crossing action and deadline
+assessment uses the target length lower bound separately.
+
+The built-in raster test compares the two-route graph with Dijkstra,
+checks the budget at the outward aggregate and one representable value
+below it, and samples the compiled metric along each segment.
+
+The Debug Cockpit's **Map target comparison** also searches a graph built
+from the successful prefixes of matching replays. The shared launch
+branches into each replay, and each branch follows only consecutive
+frames. The bounding rectangle encloses the waypoints and uses the
+currently loaded default-profile raster metric. The reported result is
+a bound on the straight segments joining the waypoints. The observed
+Controls arrival and its sampled frame are reported separately.
+
+In the [common-start replay fixture](174-route-benchmark.md#controls-replays-on-the-map),
+the raster search reaches frame 698, zero-based, of the commit 1.0
+replay with either bound. The local edge certificate reduces the
+length upper bound from 7,466,920,211 to 475,492. The row-sum enclosure further reduces it to 80,923, about 5.9-fold on the same witness.
+The bound still uses worst-case density within each edge's support.
 
 ## Reproduce the built-in raster trial
 
@@ -162,3 +255,25 @@ Lean checks the continuous first-radius and target inequalities given a
 local displacement envelope. The raster coefficient and rounded-matrix
 estimates supply that premise under the numerical conditions above.
 [First-exit proof](../../formal/FractalSync/OperationalWindowExit.lean)
+
+## Timed curriculum diagnostic
+
+The training CLI accepts an optional `defaultRasterWindow` on `runtimeMap`
+manifest cases. Give the minimum and maximum corners of the window, for
+example `[[-1.5, -0.45], [-0.4, 0.45]]`. This opts into loading the built-in
+raster and reporting a conditional continuous-path assessment for the
+default Physics profile. Both the task start and the target center must lie
+in the certified window. The point length lower bound includes paths that
+exit the window. Subtracting the intrinsic arrival tolerance with downward
+rounding gives the lower bound for the task's intrinsic arrival ball.
+
+The report includes `defaultRasterDiagnostic.continuousAssessment` only when
+the certificate applies. Its kinetic-action result uses the task's sample
+window and declared action budget. The CLI still uses the main runtime
+assessment for eligibility. Turning the continuous result into a hard
+filter requires a link to committed runtime action and provider identity
+over the actual rollout.
+
+The replay report includes the certified window and the process-local raster
+generation used to price the path. The cockpit shows the generation alongside
+the witness. Use the asset hash above to identify the raster across processes.

@@ -58,3 +58,46 @@ exclusions still need certified target and metric correspondence, an applicable
 cap, and event accounting when impulses are present. The navigation and
 training consumers remain open. [Navigation bounds](https://github.com/rhythmatician/FractalSync/issues/174),
 [work-energy ledger](https://github.com/rhythmatician/FractalSync/issues/166).
+
+
+## A sampled-action condition
+
+For a finite accepted history with durations $h_i$, associate a length
+$ℓ_i$ and the speed $v_i$ used in the sampled kinetic action. If a
+certified arrival bound $B$ satisfies $B\le\sum_i ℓ_i$ and each interval
+satisfies $ℓ_i\le h_i v_i$, then the sampled action obeys
+$\sum_i h_i v_i^2/2\ge B^2/(2\sum_i h_i)$ for positive total duration.
+The Lean theorem uses weighted finite Cauchy–Schwarz, so unequal durations
+are allowed. To use it with the runtime ledger, a provider and update
+certificate must establish the per-interval length coverage for the actual
+sampled speeds. Endpoint speeds alone may miss motion between the samples.
+
+If an interval certificate instead gives $ℓ_i\le h_i v_i+e_i$, where
+$e_i$ bounds the length missed by the sampled speed, subtract the
+total allowance before applying the action bound. For
+$T=\sum_i h_i>0$ and nonnegative sampled speeds, the resulting floor is
+
+$$
+\sum_i h_i v_i^2/2\ge\frac{\max(0,B-\sum_i e_i)^2}{2T}.
+$$
+
+For example, let $w(t)$ be the actual intrinsic speed on
+$[t_i,t_i+h_i]$. If $w(t)-v_i\le b_i+L_i(t-t_i)$ almost everywhere,
+integrating gives $e_i=h_i b_i+L_i h_i^2/2$. Here $b_i$ can bound the
+discrepancy between the true starting speed and the sampled speed, and
+$L_i$ can bound the subsequent growth of intrinsic speed. An impulse or
+any other event that changes the speed estimate's premises needs its
+own interval boundary. A bound across an uninterrupted interval needs
+evidence for the metric provider along the path and for the velocity
+used to evaluate the intrinsic speed. The intervals must cover the same
+history and metric as $B$. The Lean theorem
+`sampledAction_lower_bound_of_excess` takes the resulting length
+allowances as hypotheses. Rust now checks that the panels cover the
+arrival prefix on the canonical sample clock, accumulates each speed
+gap and growth allowance upward, and rounds the resulting action
+floor downward. The unequal-panel test uses a speed jump at a panel
+boundary and refuses a gap, an incomplete prefix, and an estimated
+target length. Production use still needs independent bounds for
+the initial speed gap and speed growth on each RK interval.
+
+[Sampled-action proof](../../formal/FractalSync/SampledAction.lean)

@@ -100,15 +100,83 @@ the test can detect omission of the graph term independently of any change
 in the mechanical trajectory. Refinement compares each run to its own
 committed chords.
 
-| Outer steps | Chords | Positive-side error (rad) | Crossing error (rad) |
-| ---: | ---: | ---: | ---: |
-| 8 | 32 | 0.0200704 | 0.0647522 |
-| 16 | 64 | 0.0100064 | 0.0326058 |
-| 32 | 128 | 0.00499527 | 0.0163255 |
+| Outer steps | Chords | Positive-side error (rad) | Positive-side bound (rad) | Crossing error (rad) | Crossing bound (rad) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | 32 | 0.0200704 | 0.0532005 | 0.0647522 | 0.355654 |
+| 16 | 64 | 0.0100064 | 0.0264831 | 0.0326058 | 0.174656 |
+| 32 | 128 | 0.00499527 | 0.0132148 | 0.0163255 | 0.0867597 |
 
 The conformal angle differs from the full graph angle by 1.37 radians on
 the positive-side route and 1.49 radians on the crossing route at these
 resolutions.
+
+### Per-chord angle bound on the affine fixture
+
+In the analytic normal/tangent coframe above, both \(B=S_1S_0^{-1}-I\)
+and \(D=DS_0[\Delta]S_0^{-1}\) are diagonal since the oriented normal
+and tangent directions are constant. Let their diagonal entries be
+\(b_i,d_i\). The \(b_i\) are endpoint scale ratios minus one and
+the \(d_i\) are the directional derivatives of the log scales at the
+start. With \(k=h\omega+\alpha_0(\Delta)\), the diagonal entries of
+\(R=B-(I+B)D+kBJ\) are \(b_i-(1+b_i)d_i\), and its off-diagonal
+entries are \(-k b_1\) and \(k b_2\). Its Frobenius norm \(r\) bounds
+its operator norm. The unperturbed trial has length \(\sqrt{1+k^2}\),
+so when \(r<\sqrt{1+k^2}\) the bound for one chord is
+\[
+ \arctan\!\frac{r}{\sqrt{1+k^2}-r}
+ +\frac{|k|^3}{3}
+ +\left|\int_{\mathrm{chord}}\alpha-\alpha_0(\Delta)\right|.
+\]
+The last term uses the closed-form chord integral. This bound holds
+uniformly over starting unit directions. Since the exact chord update
+adds an angle independently of the starting direction, the per-chord
+bounds add over the full route.
+
+The compiled tests evaluate the bound on each committed chord for both
+moving routes above. At each sampled resolution the computed sum covers
+the measured frame error and falls by at least 30% under step halving.
+The formulas use exact-real arithmetic. The test comparisons use
+binary64 evaluations, and the bound covers the chord reconstruction.
+Production use would require a roundoff enclosure and separate
+continuous-path evidence.
+
+### Perturbing the chord and its held turn
+
+Let \(P=I+B\) and \(M=I-D+kJ\), so the Euler trial for an initial
+unit vector \(w\) in coframe coordinates is \(v=PMw\). A perturbed
+chord uses its own start and endpoint coframes and coefficients
+\(\widehat P,\widehat D,\widehat k\). Compare trials with the same
+unit coordinates at their respective starts. The trial discrepancy
+satisfies \(\|\widehat v-v\|\le e\) for
+\[
+ e=\|\widehat P-P\|\big(\|I-D\|+|k|\big)
+    +\|\widehat P\|\big(\|\widehat D-D\|+|\widehat k-k|\big).
+\]
+This follows by subtracting the trial products as
+\((\widehat P-P)M+\widehat P(\widehat M-M)\). Thus the endpoint
+scale ratio, directional derivative, and turn and connection increment
+can supply separate input-error budgets.
+
+Use a nominal lower bound \(\ell=\sqrt{1+k^2}-r>0\) for the trial
+length. If \(e<\ell\), the perturbed length is at least \(\ell-e\).
+The perturbed trial projects at least \(\ell-e\) along the nominal ray
+and at most \(e\) transverse to it in absolute value. The wrapped angle
+difference is therefore at most \(\arctan(e/(\ell-e))\). The distance
+between the two normalized vectors is at most \(2e/\ell\). To see this,
+divide both vectors by the nominal length, which costs at most
+\(e/\ell\) in vector discrepancy. Renormalizing the perturbed vector
+then costs at most another \(e/\ell\) by the reverse triangle inequality.
+If the strict margin fails, the envelope gives no angle or nonvanishing
+guarantee.
+
+The Rust fixture compares two separately committed one-chord RK4 traces
+at each perturbation size. It changes initial position, velocity and
+held turn together and checks both bounds on two coordinate axes and
+one oblique direction of the analytic coframe. These are single-chord
+comparisons in the declared coframes. To compose them along a path,
+one must also propagate the incoming axis error or compare each step
+against exact isometric transport. The fixture uses binary64 comparisons
+under an exact-real bound.
 
 ## Continuous free geodesic on the affine fixture
 
@@ -172,3 +240,72 @@ rtk proxy cargo test --release -p runtime_core --features experimental-operation
 [Compiled calibration](../../runtime-core/src/operational_engine/frame_transport.rs) ·
 [Transport issue](https://github.com/rhythmatician/FractalSync/issues/179) ·
 [Gesture-epoch issue](https://github.com/rhythmatician/FractalSync/issues/170)
+
+## Varying signed turn rates on accepted chords
+
+The prepared-field diagnostic accepts one signed rate per chord in the
+committed endpoint trace. It uses the profile duration divided by the
+chord count, so even a large absolute timestamp that rounds away the clock
+advance leaves the transport duration intact. In the stationary calibration,
+a chord of duration `h` with rate `ω` rotates the normalized Euler frame by
+`atan(h ω)`. The regression exercises positive, zero, and negative rates,
+checks bit-for-bit equality with the held-rate entry point for a constant
+schedule, and checks that malformed schedules leave the next valid result
+unchanged.
+
+## Transported gesture epochs on accepted traces
+
+`FrozenRollout` can now start an experimental gesture epoch at the first
+endpoint of an accepted trace. The caller records trajectory, epoch and
+reference identity and supplies a start direction and metric speed floor.
+Each advance checks rollout identity and an exact match of the previous
+accepted position, velocity and mechanical time with the next trace's
+start. The trace must advance the mechanical clock. Replay branches with
+identical start state still require the caller to assign distinct
+trajectory or epoch identities when their phase origins differ.
+
+The epoch uses zero intentional turn and carries the prior frame axis
+into the next transport. At the new endpoint the real and imaginary
+parts of the motion phasor are the metric projections of velocity onto
+the transported axis and its positive quarter-turn companion. This
+already accounts for the chord transport. The regression feeds two
+accepted samples to the same-epoch harmonic statistic against an
+analytic-coframe reference and checks full coherence. A speed at or below
+the floor suppresses the motion phasor while the frame still advances. An
+unsupported geometry or a discontinuity refuses the trace without
+advancing the epoch. Explicit restart permits a new reference after a
+reset or velocity jump.
+
+The sample carries the committed endpoint and the frame for replay
+inspection. Its continuous-path angular bound is currently unavailable.
+The experimental traces do not record authorized Physics impulse events,
+so this entry point does not supply a same-epoch impulse phase jump.
+The production gesture/diagnostic and binding integration still needs an
+authoritative Physics trace and its error evidence.
+
+## Retracing a moving path with reversed turn rates
+
+In the same affine field, a free-geodesic replay runs for 0.16 mechanical
+seconds with `λ² = 0.7`, starting at `(0.04, 0.05)` with velocity
+`(-0.12, 0.4)`. Each outer step holds `[0.9, -0.4, 1.4, 0.3]` radians per
+mechanical second over its four committed chords. The return replay starts
+at the actual forward endpoint with reversed velocity and carries the
+forward frame into it. It negates and reverses the rate schedule.
+
+The comparison integrates the exact one-form on the chords of both
+replays, since RK4 can return along a slightly different path. Intentional
+turn integrates to zero across the two legs. The remaining reference angle
+gap measures the chord mismatch. Both the outbound frame error and the
+error after the two legs fall by roughly a factor of two with each
+refinement.
+
+| Outer steps per leg | Outbound frame error (rad) | Round-trip frame error (rad) | Round-trip reference angle gap (rad) | Return position error |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 0.00837865 | 0.0168392 | `5.69e-10` | `3.68e-10` |
+| 8 | 0.00420407 | 0.00842878 | `1.77e-11` | `1.15e-11` |
+| 16 | 0.00210557 | 0.00421632 | `5.54e-13` | `3.59e-13` |
+
+Frame errors use the analytic coframe at each measured endpoint. The
+round-trip error can exceed the outbound error even when the two
+reconstructed paths nearly coincide. The comparison gives a numerical
+calibration of the normalized Euler update on this fixture.

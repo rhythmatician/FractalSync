@@ -63,6 +63,26 @@ pub fn search<Edges: IntoIterator<Item = (usize, f64)>>(
     in_envelope: impl Fn(usize) -> bool,
     limits: SearchLimits,
 ) -> SearchResult {
+    search_with_sum(
+        nodes,
+        start,
+        target,
+        edges,
+        heuristic,
+        in_envelope,
+        (limits, |cost, weight| cost + weight),
+    )
+}
+
+pub(crate) fn search_with_sum<Edges: IntoIterator<Item = (usize, f64)>>(
+    nodes: usize,
+    start: usize,
+    target: impl Fn(usize) -> bool,
+    edges: impl Fn(usize) -> Edges,
+    heuristic: impl Fn(usize) -> Option<f64>,
+    in_envelope: impl Fn(usize) -> bool,
+    (limits, accumulate): (SearchLimits, fn(f64, f64) -> f64),
+) -> SearchResult {
     let mut queue = BinaryHeap::new();
     let mut costs = vec![f64::INFINITY; nodes];
     let mut previous = vec![usize::MAX; nodes];
@@ -113,7 +133,7 @@ pub fn search<Edges: IntoIterator<Item = (usize, f64)>>(
         counts.expanded += 1;
         counts.reopened += usize::from(std::mem::replace(&mut expanded[node], true));
         for (neighbour, weight) in edges(node) {
-            let new_cost = cost + weight;
+            let new_cost = accumulate(cost, weight);
             if new_cost < costs[neighbour] {
                 costs[neighbour] = new_cost;
                 previous[neighbour] = node;

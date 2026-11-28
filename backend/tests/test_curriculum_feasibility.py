@@ -86,3 +86,28 @@ def test_check_rejects_manifest_speed_cap(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert result.stdout == ""
     assert "case 'uncertified-cap': unexpected fields: speedCap" in result.stderr
+
+
+def test_default_raster_diagnostic_does_not_filter_curriculum(tmp_path: Path) -> None:
+    result = _check(
+        tmp_path,
+        [{
+            "id": "raster-window",
+            "start": [-1.0, 0.0],
+            "target": [-0.7, 0.1],
+            "startSample": 0,
+            "deadlineSample": SAMPLE_RATE,
+            "kineticActionBudget": 0.02,
+            "defaultRasterWindow": [[-1.5, -0.45], [-0.4, 0.45]],
+        }],
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["eligibleCaseIds"] == ["raster-window"]
+    task = report["cases"][0]["feasibility"]
+    assert task["assessment"]["status"] == "insufficientEvidence"
+    diagnostic = task["defaultRasterDiagnostic"]
+    assert diagnostic["rasterGeneration"] > 0
+    continuous = diagnostic["continuousAssessment"]
+    assert continuous["kineticActionStatus"] == "ruledOut"
+    assert continuous["deadlineStatus"] == "insufficientEvidence"

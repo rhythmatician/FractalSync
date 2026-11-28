@@ -210,3 +210,31 @@ fn timed_guidance_assesses_action_under_the_nominal_window_premise() {
     );
     assert!(invalid.is_err());
 }
+
+#[test]
+fn nominal_chord_lengths_enclose_a_committed_constant_metric_trace() {
+    let rollout = engine(vec![]);
+    let mut state = rollout.initial_state([0.0, 0.375], [0.25, 0.0]).unwrap();
+    let (_, trace) = rollout
+        .attempt_step_with_trace(&mut state, [0.0; 2])
+        .unwrap();
+    let bounds = request([0.0, 0.375]).window;
+    let before = rollout.last_evaluation_work();
+    let length = rollout
+        .nominal_accepted_polyline_length(&trace, bounds)
+        .unwrap();
+    let expected = state.position[0] / 0.625;
+    assert!(length.lower <= expected && expected <= length.upper);
+    assert!(length.upper - length.lower < 1e-10);
+    assert!(
+        engine(vec![])
+            .nominal_accepted_polyline_length(&trace, bounds)
+            .is_none()
+    );
+    assert!(
+        rollout
+            .nominal_accepted_polyline_length(&trace, [[0.1, 0.125], bounds[1]])
+            .is_none()
+    );
+    assert_eq!(rollout.last_evaluation_work(), before);
+}

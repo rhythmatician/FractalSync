@@ -987,7 +987,7 @@ fn geometry_provider_query(c: &Bound<'_, PyComplex>, epsilon: f64) -> PyResult<S
 
 /// Evaluate an explicitly scheduled curriculum target using Rust geometry.
 #[pyfunction]
-#[pyo3(signature = (start, target, metric, intrinsic_tolerance, start_sample, deadline_sample, kinetic_action_budget=None))]
+#[pyo3(signature = (start, target, metric, intrinsic_tolerance, start_sample, deadline_sample, kinetic_action_budget=None, default_raster_window=None))]
 fn evaluate_curriculum_feasibility(
     start: (f64, f64),
     target: (f64, f64),
@@ -996,8 +996,13 @@ fn evaluate_curriculum_feasibility(
     start_sample: u64,
     deadline_sample: u64,
     kinetic_action_budget: Option<f64>,
+    default_raster_window: Option<[[f64; 2]; 2]>,
 ) -> PyResult<String> {
-    use crate::curriculum_feasibility::{check_curriculum_target, CurriculumMetric, CurriculumTarget};
+    use crate::curriculum_feasibility::{
+        check_curriculum_target, check_curriculum_target_with_default_raster, CurriculumMetric,
+        CurriculumTarget,
+    };
+    use crate::distance_field::RasterNavigationRegion;
     let metric = match metric {
         "runtimeMap" => CurriculumMetric::RuntimeMap,
         "idealDistanceGraph" => CurriculumMetric::IdealDistanceGraph,
@@ -1007,7 +1012,7 @@ fn evaluate_curriculum_feasibility(
             ))
         }
     };
-    let report = check_curriculum_target(CurriculumTarget {
+    let task = CurriculumTarget {
         start: [start.0, start.1],
         target: [target.0, target.1],
         metric,
@@ -1015,7 +1020,12 @@ fn evaluate_curriculum_feasibility(
         start_sample,
         deadline_sample,
         kinetic_action_budget,
-    })
+    };
+    let raster = default_raster_window.and_then(RasterNavigationRegion::for_default_profile);
+    let report = match raster {
+        Some(region) => check_curriculum_target_with_default_raster(task, &region),
+        None => check_curriculum_target(task),
+    }
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&report)
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))

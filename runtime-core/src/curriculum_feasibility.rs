@@ -3,6 +3,7 @@
 use crate::crossing_feasibility::{
     evaluate_feasibility, FeasibilityAssessment, FeasibilityLimits, LengthLowerBound,
 };
+use crate::distance_field::RasterNavigationRegion;
 use crate::intrinsic_bounds::{
     intrinsic_target_lower_bound, point_lower_bound, IntrinsicMetric, INTRINSIC_BOUNDS_VERSION,
 };
@@ -45,6 +46,14 @@ pub struct CurriculumProof {
     target_length_lower: f64,
 }
 
+/// Conditional continuous-path diagnostic for a fixed default raster and Physics profile.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterCurriculumDiagnostic {
+    pub raster_generation: u64,
+    pub continuous_assessment: FeasibilityAssessment,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurriculumFeasibility {
@@ -56,6 +65,8 @@ pub struct CurriculumFeasibility {
     reference_status: &'static str,
     runtime_geometry_version: Option<&'static str>,
     assessment: FeasibilityAssessment,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_raster_diagnostic: Option<RasterCurriculumDiagnostic>,
 }
 
 fn ideal_proof(task: CurriculumTarget) -> Option<CurriculumProof> {
@@ -93,6 +104,23 @@ fn ideal_proof(task: CurriculumTarget) -> Option<CurriculumProof> {
 pub fn check_curriculum_target(
     task: CurriculumTarget,
 ) -> Result<CurriculumFeasibility, &'static str> {
+    check_target(task, None)
+}
+
+/// Attach a continuous-path diagnostic to a Runtime Map task. The intrinsic
+/// arrival ball is taken in the same fixed raster metric as the path. A
+/// discrete runtime rollout still needs its own action correspondence.
+pub fn check_curriculum_target_with_default_raster(
+    task: CurriculumTarget,
+    region: &RasterNavigationRegion,
+) -> Result<CurriculumFeasibility, &'static str> {
+    check_target(task, Some(region))
+}
+
+fn check_target(
+    task: CurriculumTarget,
+    raster: Option<&RasterNavigationRegion>,
+) -> Result<CurriculumFeasibility, &'static str> {
     if !task
         .start
         .into_iter()
@@ -129,14 +157,30 @@ pub fn check_curriculum_target(
     let length = proof.as_ref().map_or(LengthLowerBound::Unavailable, |p| {
         LengthLowerBound::Certified(p.target_length_lower)
     });
-    let assessment = evaluate_feasibility(
-        length,
-        duration,
-        FeasibilityLimits {
-            kinetic_action_budget: task.kinetic_action_budget,
-            ..Default::default()
-        },
-    );
+    let limits = FeasibilityLimits {
+        kinetic_action_budget: task.kinetic_action_budget,
+        ..Default::default()
+    };
+    let assessment = evaluate_feasibility(length, duration, limits);
+    let default_raster_diagnostic = match task.metric {
+        CurriculumMetric::RuntimeMap => {
+            raster
+                .filter(|r| r.contains(task.target))
+                .and_then(|region| {
+                    let point = region.target_lower_bound(task.start, task.target, 0.0)?;
+                    let target = intrinsic_target_lower_bound(point, task.intrinsic_tolerance)?;
+                    Some(RasterCurriculumDiagnostic {
+                        raster_generation: region.raster_generation(),
+                        continuous_assessment: evaluate_feasibility(
+                            LengthLowerBound::Certified(target),
+                            duration,
+                            limits,
+                        ),
+                    })
+                })
+        }
+        CurriculumMetric::IdealDistanceGraph => None,
+    };
     Ok(CurriculumFeasibility {
         schema: "curriculum-feasibility/1",
         sample_rate: CANONICAL_SAMPLE_RATE,
@@ -145,6 +189,7 @@ pub fn check_curriculum_target(
         reference_status,
         runtime_geometry_version,
         assessment,
+        default_raster_diagnostic,
     })
 }
 
@@ -199,6 +244,62 @@ mod tests {
             tolerated.assessment.kinetic_action_status,
             Some(FeasibilityStatus::NotRuledOut)
         );
+    }
+
+    #[test]
+    fn fixed_raster_diagnostics_use_intrinsic_tolerance_without_filtering_runtime() {
+        use crate::distance_field::{
+            clear_distance_field, global_test_mutex, load_builtin_distance_field,
+        };
+
+        let _guard = global_test_mutex()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        load_builtin_distance_field("mandelbrot_default").unwrap();
+        let region =
+            RasterNavigationRegion::for_default_profile([[-1.5, -0.45], [-0.4, 0.45]]).unwrap();
+        let task = CurriculumTarget {
+            start: [-1.0, 0.0],
+            target: [-0.7, 0.1],
+            kinetic_action_budget: Some(0.02),
+            ..target(CurriculumMetric::RuntimeMap)
+        };
+        let report = check_curriculum_target_with_default_raster(task, &region).unwrap();
+        assert_eq!(
+            report.assessment.status,
+            FeasibilityStatus::InsufficientEvidence
+        );
+        let diagnostic = report.default_raster_diagnostic.unwrap();
+        assert_eq!(diagnostic.raster_generation, region.raster_generation());
+        assert_eq!(
+            diagnostic.continuous_assessment.kinetic_action_status,
+            Some(FeasibilityStatus::RuledOut)
+        );
+        assert_eq!(
+            diagnostic.continuous_assessment.deadline_status,
+            FeasibilityStatus::InsufficientEvidence
+        );
+
+        let tolerated = check_curriculum_target_with_default_raster(
+            CurriculumTarget {
+                intrinsic_tolerance: 0.4,
+                ..task
+            },
+            &region,
+        )
+        .unwrap();
+        assert_eq!(
+            tolerated
+                .default_raster_diagnostic
+                .unwrap()
+                .continuous_assessment
+                .length,
+            LengthLowerBound::Certified(0.0)
+        );
+
+        clear_distance_field();
+        let stale = check_curriculum_target_with_default_raster(task, &region).unwrap();
+        assert!(stale.default_raster_diagnostic.is_none());
     }
 
     #[test]

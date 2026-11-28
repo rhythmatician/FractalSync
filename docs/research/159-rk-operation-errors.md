@@ -238,6 +238,7 @@ These are upward-rounded bounds from the Windows x86-64 release run with Rust 1.
 | Weighted mechanical endpoint | `9.5e-17` | `1.01e-16` |
 | Weighted substep work | `1e-18` | `1e-18` |
 | Stored outer work increment | `1e-18` | `1e-18` |
+| Stored outer clock | `1e-18` | `1e-18` |
 
 The checker verifies the `h` and `h²` budgets at each substep with
 `h = 1/(576*16*substep_count)`. It uses the outer step squared for the
@@ -266,7 +267,56 @@ rtk cargo test --release -p runtime_core --features experimental-operational-fie
 .venv/Scripts/python.exe formal/fixtures/check_181_rounded_rk.py $env:FRACTALSYNC_RK_FIXTURE_TRACE
 ```
 
-This check applies to the finite trace exported by the release regression.
-A uniform arithmetic bound across targets, profiles, or meshes, the accuracy
-of the reported total energy and machine clock, and production field fidelity
-remain open.
+The checker also decodes every recorded outer timestamp. Each timestamp
+must equal the independently rounded binary64 sum of the previous timestamp
+and the rounded outer step, advance strictly, and be within `1e-18` model-time
+units of its exact rational grid time. This covers all 16 recorded outer steps
+in each profile starting from zero. The Lean history estimate still uses the
+exact grid. A large starting clock or another profile needs a separate check.
+
+The fixture now reads its numerical substep data from
+`FrozenRollout::attempt_step_with_trace`. The trace exposes the represented
+duration, evaluated stages and slopes, weighted endpoint, and work for each
+committed RK4 substep. Trace collection reuses the executed stages without
+additional provider evaluations. The fixture still records query positions
+separately to check support and address selection. The trace provides inputs
+for the independent checker, whose bounds apply to the pinned runs.
+
+A uniform arithmetic bound across targets, profiles, or meshes, accuracy
+of the reported total energy, and production field fidelity remain open.
+
+## Committed chord displacement defect
+
+The public RK substep trace can bound the ambient difference between its
+committed chord and left-endpoint drift. For each axis it encloses the
+subtraction of the represented endpoint positions and the product of the
+represented duration and start velocity. It subtracts those intervals
+outward and sums the component magnitudes. This gives an upper bound on
+the L1 discrepancy in ambient coordinates.
+
+The independent rational checker verifies all 80 committed substeps. The
+largest outward bounds in the one- and four-substep profiles were
+4.40e-9 and 2.75e-10 ambient units per substep, respectively. The bound
+covers the endpoints. A sampled-action certificate still needs to account
+for the metric and the path inside each panel.
+
+The trace also encloses the Euclidean length of the polygon through the
+committed RK substep endpoints. The independent checker brackets each
+chord length on an exact dyadic grid and verifies that the outward total
+covers the upper end of that bracket. This measures reconstructed ambient
+travel. Intrinsic length requires bounds on the metric along the chords.
+
+## Intrinsic length of accepted chords
+
+The frozen rollout can enclose the reconstructed accepted polyline in the
+nominal exact-real spline metric. It checks trace identity, applies the
+route edge's chart and reference-cut checks to each chord, and reuses
+Bernstein cell bounds across chords. Both ends of the length interval
+are summed with directed rounding. Unsupported chords decline the
+entire result. The constant-metric RK4 fixture compares the interval
+against the analytic length.
+
+This enclosure describes straight segments between committed endpoints.
+A certificate for sampled action also needs a relation to the sampled
+kinetic energies and an allowance for the difference between that
+polyline and the reference trajectory.

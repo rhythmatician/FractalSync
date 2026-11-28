@@ -8,8 +8,170 @@ use crate::distance_field::{
 };
 use crate::geometry_provider::{query_geometry, rho_from_jet, with_test_plane};
 use crate::manifold::induced_metric;
+use crate::map_navigation::search::{search, SearchLimits};
 use crate::timebase::CANONICAL_SAMPLE_RATE;
 use num_complex::Complex64;
+
+#[test]
+fn default_raster_segment_witnesses_supply_graph_edge_costs() {
+    let _guard = global_test_mutex()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    load_builtin_distance_field("default").unwrap();
+    let region =
+        RasterNavigationRegion::for_default_profile([[-1.5, -0.45], [-0.4, 0.45]]).unwrap();
+    let points = [[-1.0, 0.0], [-0.9, 0.2], [-0.85, 0.05], [-0.7, 0.1]];
+    let target = points[3];
+    let point_target = RasterTargetBall {
+        center: target,
+        radius: 0.0,
+    };
+    assert_eq!(region.segment_length_upper(points[0], points[0]), Some(0.0));
+    assert_eq!(region.segment_length_upper(points[0], [0.0, 0.0]), None);
+    assert_eq!(
+        region.segment_length_upper(points[0], [f64::NAN, 0.0]),
+        None
+    );
+
+    let edge_cost = |from: usize, to: usize| {
+        let [x, y] = points[from];
+        let [dx, dy] = [points[to][0] - x, points[to][1] - y];
+        let upper = region
+            .segment_length_upper(points[from], points[to])
+            .unwrap();
+        for step in 0..=64 {
+            let t = f64::from(step) / 64.0;
+            let metric = induced_metric(
+                Complex64::new(x + t * dx, y + t * dy),
+                &ManifoldConfig::default(),
+            )
+            .unwrap();
+            let speed =
+                (metric[0][0] * dx * dx + 2.0 * metric[0][1] * dx * dy + metric[1][1] * dy * dy)
+                    .sqrt();
+            assert!(speed.is_finite() && speed <= upper);
+        }
+        upper
+    };
+    let graph = [
+        vec![(1, edge_cost(0, 1)), (2, edge_cost(0, 2))],
+        vec![(3, edge_cost(1, 3))],
+        vec![(3, edge_cost(2, 3))],
+        vec![],
+    ];
+    let run = |bounded: bool, budget| {
+        search(
+            points.len(),
+            0,
+            |node| node == 3,
+            |node| graph[node].iter().copied(),
+            |node| {
+                bounded
+                    .then(|| region.target_lower_bound(points[node], target, 0.0))
+                    .flatten()
+            },
+            |_| true,
+            SearchLimits {
+                budget,
+                prune_with_bound: bounded,
+            },
+        )
+    };
+    let baseline = run(false, f64::INFINITY);
+    let bounded = run(true, f64::INFINITY);
+    assert_eq!(baseline.path, [0, 2, 3]);
+    assert_eq!(bounded.path, baseline.path);
+    assert_eq!(bounded.cost, baseline.cost);
+    assert_eq!(run(true, bounded.cost.unwrap() / 2.0).cost, None);
+
+    let neighbors: [&[usize]; 4] = [&[1, 2], &[3], &[3], &[]];
+    let waypoints = std::array::from_fn::<_, 4, _>(|index| RasterWaypoint {
+        position: points[index],
+        neighbors: neighbors[index],
+    });
+    let directed_upper = add_up(graph[0][1].1, graph[2][0].1);
+    assert!(directed_upper > bounded.cost.unwrap());
+    let find = |start, center, radius, budget| {
+        region.search_route(&waypoints, start, center, radius, budget)
+    };
+    let witness = find(0, target, 0.0, directed_upper).unwrap().unwrap();
+    assert_eq!(witness.path, bounded.path);
+    assert_eq!(witness.length_upper, directed_upper);
+    assert_eq!(witness.raster_generation, region.raster_generation());
+    assert_eq!(find(0, target, 0.0, directed_upper.next_down()), Ok(None));
+    let direct_reference = region
+        .search_waypoints(&waypoints, 0, &[point_target], (directed_upper, false))
+        .unwrap();
+    assert_eq!(direct_reference.cost, Some(witness.length_upper));
+    assert_eq!(direct_reference.path, witness.path);
+    let target_region = RasterTargetBall {
+        center: [-0.851, 0.05],
+        radius: 0.002,
+    };
+    for targets in [[point_target, target_region], [target_region, point_target]] {
+        let union = region
+            .search_target_set(&waypoints, 0, &targets, directed_upper)
+            .unwrap()
+            .unwrap();
+        assert_eq!(union.path, [0, 2]);
+        assert!(union.length_upper < witness.length_upper);
+    }
+    assert_eq!(
+        region.search_target_set(&waypoints, 0, &[], directed_upper),
+        Err(RasterRouteError::InvalidInput),
+    );
+    assert_eq!(find(3, points[0], 0.0, f64::INFINITY), Ok(None));
+    assert_eq!(
+        find(0, [points[0][0] + 0.01, points[0][1]], 0.02, 0.0)
+            .unwrap()
+            .unwrap()
+            .path,
+        [0]
+    );
+    let boundary = [RasterWaypoint {
+        position: [-1.5, 0.0],
+        neighbors: &[],
+    }];
+    assert_eq!(
+        region.target_lower_bound(boundary[0].position, target, 0.0),
+        Some(0.0)
+    );
+    assert_eq!(
+        region.search_route(&boundary, 0, target, 0.0, 0.0),
+        Ok(None)
+    );
+    let tiny_budget = (
+        region
+            .displacement_length_lower(boundary[0].position, target, 0.0)
+            .unwrap()
+            / 2.0,
+        true,
+    );
+    let bounded = region
+        .search_waypoints(&boundary, 0, &[point_target], tiny_budget)
+        .unwrap();
+    let reference = region
+        .search_waypoints(&boundary, 0, &[point_target], (tiny_budget.0, false))
+        .unwrap();
+    assert_eq!(bounded.cost, reference.cost);
+    assert_eq!(bounded.counts.expanded, 0);
+    assert_eq!(reference.counts.expanded, 1);
+    let invalid = [RasterWaypoint {
+        position: points[0],
+        neighbors: &[1],
+    }];
+    assert_eq!(
+        region.search_route(&invalid, 0, target, 0.0, f64::INFINITY),
+        Err(RasterRouteError::InvalidInput)
+    );
+
+    clear_distance_field();
+    assert_eq!(region.segment_length_upper(points[0], points[2]), None);
+    assert_eq!(
+        find(0, target, 0.0, f64::INFINITY),
+        Err(RasterRouteError::StaleRegion)
+    );
+}
 
 #[test]
 fn default_raster_point_ball_and_exit_action() {
@@ -98,6 +260,31 @@ fn default_raster_point_ball_and_exit_action() {
 }
 
 #[test]
+fn a_local_signed_ruler_tightens_constant_raster_edges() {
+    let _guard = global_test_mutex()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let start = [-0.05, 0.0];
+    let end = [0.05, 0.0];
+    let config = ManifoldConfig::default();
+    for value in [-0.125, 0.125] {
+        set_distance_field_from_vec(vec![value; 36], 6, 6, -1.5, 1.5, -1.5, 1.5).unwrap();
+        let region =
+            RasterNavigationRegion::for_default_profile([[-0.1, -0.1], [0.1, 0.1]]).unwrap();
+        let regional = mul_up(
+            displacement_upper(start, end),
+            region.length_per_displacement_upper,
+        );
+        let local = region.segment_length_upper(start, end).unwrap();
+        let metric = induced_metric(Complex64::new(0.0, 0.0), &config).unwrap();
+        let reference = (end[0] - start[0]) * metric[0][0].sqrt();
+        assert!(reference <= local);
+        assert!(local < 2.0 && local < regional / 100.0);
+    }
+    load_builtin_distance_field("mandelbrot_default").unwrap();
+}
+
+#[test]
 fn overshoot_and_incomplete_support_are_visible() {
     let _guard = global_test_mutex()
         .lock()
@@ -109,6 +296,11 @@ fn overshoot_and_incomplete_support_are_visible() {
     let center = Complex64::new(0.0, 0.0);
     let sampled = sample_signed_distance_field(&[center]).unwrap()[0];
     assert_eq!(sampled, 1.25);
+    {
+        let slot = DIST_FIELD.read().unwrap();
+        let [lo, hi] = sample_range(slot.field.as_ref().unwrap(), bounds).unwrap();
+        assert!(lo <= f64::from(sampled) && f64::from(sampled) <= hi);
+    }
     let epsilon = ManifoldConfig::default().epsilon;
     let naive = (1.0 + epsilon * epsilon).sqrt();
     let actual = rho_from_jet(&query_geometry(center, epsilon).unwrap(), epsilon);

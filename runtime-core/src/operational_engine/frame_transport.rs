@@ -10,7 +10,106 @@ pub struct TransportedFrame {
     pub companion: [f64; 2],
 }
 
+/// Caller-assigned replay trajectory, epoch and reference identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GestureEpochId {
+    pub trajectory: u64,
+    pub epoch: u64,
+    pub reference: u64,
+}
+
+/// Velocity projected into the frame parallel transported over the chords.
+#[derive(Clone, Copy, Debug)]
+pub struct GestureSample {
+    pub id: GestureEpochId,
+    pub endpoint: super::MechanicalEndpoint,
+    pub frame: TransportedFrame,
+    /// Metric speed, irrespective of heading validity.
+    pub speed: f64,
+    /// Real and imaginary phasor coordinates, available above the speed floor.
+    pub motion_phasor: Option<[f64; 2]>,
+    /// Continuous-path angular bound, currently unavailable.
+    pub angular_error_bound: Option<f64>,
+}
+
+/// Experimental replay state. A discontinuity requires a new epoch.
+pub struct TransportedGestureEpoch {
+    id: GestureEpochId,
+    rollout_policy: Arc<[super::ReferenceCut]>,
+    endpoint: super::MechanicalEndpoint,
+    axis: [f64; 2],
+    speed_floor: f64,
+}
+
 impl FrozenRollout {
+    /// Start a gesture epoch at a committed trace's first endpoint.
+    ///
+    /// The reference is a coordinate direction at that endpoint. The caller
+    /// must supply distinct epoch identity after a reset or discontinuity.
+    pub fn begin_transported_gesture_epoch(
+        &self,
+        id: GestureEpochId,
+        trace: &AcceptedStepTrace,
+        reference: [f64; 2],
+        speed_floor: f64,
+    ) -> Result<TransportedGestureEpoch, String> {
+        self.check_trace_identity(trace)?;
+        checked_direction(reference)?;
+        if !speed_floor.is_finite() || speed_floor < 0.0 {
+            return Err("gesture speed floor must be finite and nonnegative".into());
+        }
+        Ok(TransportedGestureEpoch {
+            id,
+            rollout_policy: Arc::clone(&self.cuts),
+            endpoint: trace.endpoints()[0],
+            axis: reference,
+            speed_floor,
+        })
+    }
+
+    /// Advance on the next contiguous accepted trace, using zero intentional turn.
+    ///
+    /// Low speed suppresses the phasor while the reference frame continues.
+    /// A refused trace leaves the epoch at its last accepted endpoint.
+    /// Use this only for a contiguous replay with caller-managed branch identity.
+    pub fn advance_transported_gesture_epoch(
+        &self,
+        epoch: &mut TransportedGestureEpoch,
+        trace: &AcceptedStepTrace,
+    ) -> Result<GestureSample, String> {
+        let endpoints = trace.endpoints();
+        if !Arc::ptr_eq(&epoch.rollout_policy, &self.cuts) || epoch.endpoint != endpoints[0] {
+            return Err("gesture trace does not continue the epoch".into());
+        }
+        let endpoint = endpoints[endpoints.len() - 1];
+        if endpoint.mechanical_time <= epoch.endpoint.mechanical_time {
+            return Err("gesture trace does not advance the epoch clock".into());
+        }
+        let (frame, metric) = self.transport_chords(
+            trace,
+            epoch.axis,
+            std::iter::repeat_n(0.0, endpoints.len() - 1),
+        )?;
+        let [vx, vy] = metric.coordinates(endpoint.velocity);
+        let [ax, ay] = metric.coordinates(frame.axis);
+        let [bx, by] = metric.coordinates(frame.companion);
+        let phasor = [vx * ax + vy * ay, vx * bx + vy * by];
+        let speed = vx.hypot(vy);
+        if !speed.is_finite() || phasor.iter().any(|coordinate| !coordinate.is_finite()) {
+            return Err("unsupported velocity projection".into());
+        }
+        epoch.endpoint = endpoint;
+        epoch.axis = frame.axis;
+        Ok(GestureSample {
+            id: epoch.id,
+            endpoint,
+            frame,
+            speed,
+            motion_phasor: (speed > epoch.speed_floor).then_some(phasor),
+            angular_error_bound: None,
+        })
+    }
+
     /// Apply endpoint-normalized covariant Euler to affine chords between
     /// the committed endpoints. The chord displacement supplies the base
     /// velocity integral. The recorded endpoint velocities are unused.
@@ -26,6 +125,28 @@ impl FrozenRollout {
         initial_direction: [f64; 2],
         turn_rate: f64,
     ) -> Result<TransportedFrame, String> {
+        self.transport_chords(
+            trace,
+            initial_direction,
+            std::iter::repeat_n(turn_rate, trace.endpoints().len() - 1),
+        )
+        .map(|(frame, _)| frame)
+    }
+
+    /// Apply the same diagnostic transport with a signed turn rate in radians
+    /// per mechanical second held separately on each committed endpoint chord.
+    /// Rates are ordered by the trace's endpoints and must cover every chord.
+    pub fn transport_endpoint_chords_with_rates(
+        &self,
+        trace: &AcceptedStepTrace,
+        initial_direction: [f64; 2],
+        turn_rates: &[f64],
+    ) -> Result<TransportedFrame, String> {
+        self.transport_chords(trace, initial_direction, turn_rates.iter().copied())
+            .map(|(frame, _)| frame)
+    }
+
+    pub(super) fn check_trace_identity(&self, trace: &AcceptedStepTrace) -> Result<(), String> {
         // The policy allocation is owned by this rollout and retained by
         // the trace. Fingerprints alone do not establish its provenance.
         if !Arc::ptr_eq(&trace.rollout_policy, &self.cuts)
@@ -34,12 +155,26 @@ impl FrozenRollout {
         {
             return Err("FrozenIdentity: trace belongs to another rollout".into());
         }
+        Ok(())
+    }
+
+    fn transport_chords(
+        &self,
+        trace: &AcceptedStepTrace,
+        initial_direction: [f64; 2],
+        turn_rates: impl ExactSizeIterator<Item = f64> + Clone,
+    ) -> Result<(TransportedFrame, MetricFactor), String> {
+        self.check_trace_identity(trace)?;
         let endpoints = trace.endpoints();
+        let chord_count = endpoints.len() - 1;
+        if turn_rates.len() != chord_count {
+            return Err("expected one turn rate per accepted chord".into());
+        }
         // Use the integration duration even when adding it to the absolute
         // mechanical clock rounded away part or all of the interval.
-        let h = self.profile.dt / (endpoints.len() - 1) as f64;
-        let turn = h * turn_rate;
-        if h <= 0.0 || !turn.is_finite() {
+        let h = self.profile.dt / chord_count as f64;
+        let turns = turn_rates.map(|rate| h * rate);
+        if h <= 0.0 || turns.clone().any(|turn| !turn.is_finite()) {
             return Err("unsupported chord duration or turn rate".into());
         }
 
@@ -54,7 +189,7 @@ impl FrozenRollout {
             let mut metric =
                 MetricFactor::new(manifold::induced_metric_from_jet(&start_jet, config)?)?;
             let mut axis = metric.unit(initial_direction)?;
-            for pair in endpoints.windows(2) {
+            for (pair, turn) in endpoints.windows(2).zip(turns) {
                 let [dx, dy] = std::array::from_fn(|i| pair[1].position[i] - pair[0].position[i]);
                 let gamma = manifold::christoffel_symbols_from_jet(&start_jet, config)?;
                 let connection = gamma.map(|[[g00, g01], [g10, g11]]| {
@@ -74,10 +209,11 @@ impl FrozenRollout {
                 metric = MetricFactor::new(manifold::induced_metric_from_jet(&start_jet, config)?)?;
                 axis = metric.unit(trial)?;
             }
-            Ok(TransportedFrame {
+            let frame = TransportedFrame {
                 axis,
                 companion: metric.quarter_turn(axis)?,
-            })
+            };
+            Ok((frame, metric))
         })?;
         Ok(frame)
     }
@@ -140,7 +276,8 @@ fn checked_direction(direction: [f64; 2]) -> Result<[f64; 2], String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{FrozenRollout, Integrator, PhysicsProfile, ReferenceCut};
+    use super::super::{FrozenRollout, Integrator, MechanicalState, PhysicsProfile, ReferenceCut};
+    use super::GestureEpochId;
     use crate::{manifold::ManifoldConfig, operational_field::PreparedField};
     use std::sync::Arc;
 
@@ -158,6 +295,15 @@ mod tests {
     }
 
     fn rollout(field: Arc<PreparedField>, dt: f64, lambda_sq: f64) -> FrozenRollout {
+        rollout_with_integrator(field, dt, lambda_sq, Integrator::Rk4FourSubsteps)
+    }
+
+    fn rollout_with_integrator(
+        field: Arc<PreparedField>,
+        dt: f64,
+        lambda_sq: f64,
+        integrator: Integrator,
+    ) -> FrozenRollout {
         let config = ManifoldConfig {
             epsilon: EPSILON,
             lambda_sq,
@@ -165,7 +311,7 @@ mod tests {
             mu: 0.0,
             ..ManifoldConfig::default()
         };
-        let profile = PhysicsProfile::new(config, dt, 0.0, Integrator::Rk4FourSubsteps).unwrap();
+        let profile = PhysicsProfile::new(config, dt, 0.0, integrator).unwrap();
         FrozenRollout::new(field, profile, vec![]).unwrap()
     }
 
@@ -183,6 +329,24 @@ mod tests {
     // Independent coframe in the oriented normal/tangent basis of F(x, y) = x + 2y.
     struct AffineGraphMetric {
         normal_weight: f64,
+    }
+
+    struct AffineChordTrial {
+        scale_ratio: [f64; 2],
+        log_scale_derivative: [f64; 2],
+        angle_increment: f64,
+    }
+
+    impl AffineChordTrial {
+        fn remainder_norm(&self) -> f64 {
+            let [p_normal, p_tangent] = self.scale_ratio;
+            let [d_normal, d_tangent] = self.log_scale_derivative;
+            let b_normal = p_normal - 1.0;
+            let b_tangent = p_tangent - 1.0;
+            (b_normal - p_normal * d_normal)
+                .hypot(b_tangent - p_tangent * d_tangent)
+                .hypot(self.angle_increment * b_normal.hypot(b_tangent))
+        }
     }
 
     impl AffineGraphMetric {
@@ -227,6 +391,37 @@ mod tests {
                 * (root_weight / (rho1 + rho0) + self.normal_weight / (sigma1 + sigma0))
                 / (root_weight * rho0 + sigma0);
             along * relative_change.ln_1p() / (root_weight * across)
+        }
+
+        fn chord_trial(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> AffineChordTrial {
+            let [x0, y0] = start;
+            let [x1, y1] = end;
+            let f0 = x0 + 2.0 * y0;
+            let f1 = x1 + 2.0 * y1;
+            let (rho0, sigma0) = self.scales(f0);
+            let (rho1, sigma1) = self.scales(f1);
+            let rho_ratio = rho0 / rho1;
+            let slope = f0 * (f1 - f0);
+            let d_tangent = -slope / rho0.powi(2);
+            let d_normal = self.normal_weight * slope / sigma0.powi(2) + 2.0 * d_tangent;
+            let start_angle = (-2.0 * (x1 - x0) + (y1 - y0)) * f0 / (rho0 * sigma0);
+            AffineChordTrial {
+                scale_ratio: [(sigma1 / sigma0) * rho_ratio.powi(2), rho_ratio],
+                log_scale_derivative: [d_normal, d_tangent],
+                angle_increment: turn + start_angle,
+            }
+        }
+
+        // Exact-real Euler angle bound in the analytic normal/tangent coframe.
+        fn chord_euler_angle_bound(&self, start: [f64; 2], end: [f64; 2], turn: f64) -> f64 {
+            let trial = self.chord_trial(start, end, turn);
+            let k = trial.angle_increment;
+            let r = trial.remainder_norm();
+            let trial_norm = 1.0_f64.hypot(k);
+            assert!(r < trial_norm);
+            let remainder_angle = (r / (trial_norm - r)).atan();
+            let quadrature_angle = (self.chord_angle(start, end) + turn - k).abs();
+            remainder_angle + k.abs().powi(3) / 3.0 + quadrature_angle
         }
     }
 
@@ -306,6 +501,104 @@ mod tests {
     }
 
     #[test]
+    fn gesture_epoch_projects_motion_and_refuses_discontinuous_traces() {
+        let field = sheared_shore();
+        let rollout = rollout(field, 0.008, 0.7);
+        let id = GestureEpochId {
+            trajectory: 3,
+            epoch: 0,
+            reference: 8,
+        };
+        let graph = AffineGraphMetric::new(0.7);
+        let reference = [0.9, -0.1];
+        let mut state = rollout.initial_state([0.04, 0.05], [-0.12, 0.4]).unwrap();
+        let (_, first) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let mut epoch = rollout
+            .begin_transported_gesture_epoch(id, &first, reference, 0.0)
+            .unwrap();
+        let mut low_speed = rollout
+            .begin_transported_gesture_epoch(id, &first, reference, 1e6)
+            .unwrap();
+        let mut impulse = rollout
+            .initial_state(state.position, state.velocity.map(|v| -v))
+            .unwrap();
+        impulse.mechanical_time = state.mechanical_time;
+        let (_, jumped) = rollout
+            .attempt_step_with_trace(&mut impulse, [0.0; 2])
+            .unwrap();
+        let (_, second) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let mut previous_axis = reference;
+        let mut samples = Vec::new();
+        let mut audio = Vec::new();
+
+        for trace in [&first, &second] {
+            let result = rollout
+                .advance_transported_gesture_epoch(&mut epoch, trace)
+                .unwrap();
+            let suppressed = rollout
+                .advance_transported_gesture_epoch(&mut low_speed, trace)
+                .unwrap();
+            assert_eq!(result.id, id);
+            assert!(suppressed.motion_phasor.is_none());
+            assert_eq!(suppressed.frame.axis, result.frame.axis);
+            assert_eq!(suppressed.speed, result.speed);
+            assert!(result.angular_error_bound.is_none());
+            let independent_frame = rollout
+                .transport_endpoint_chords(trace, previous_axis, 0.0)
+                .unwrap();
+            assert_eq!(result.frame.axis, independent_frame.axis);
+            previous_axis = independent_frame.axis;
+
+            let endpoint = result.endpoint;
+            let [ax, ay] = graph.coordinates(endpoint.position, independent_frame.axis);
+            let [vx, vy] = graph.coordinates(endpoint.position, endpoint.velocity);
+            let [u, v] = result.motion_phasor.unwrap();
+            let expected_u = ax * vx + ay * vy;
+            let expected_v = ax * vy - ay * vx;
+            assert!((u.hypot(v) - result.speed).abs() < 1e-13);
+            assert!((u - expected_u).abs() < 1e-13);
+            assert!((v - expected_v).abs() < 1e-13);
+            samples.push(result);
+            audio.push(num_complex::Complex64::new(expected_u, expected_v));
+            assert!(
+                rollout
+                    .advance_transported_gesture_epoch(&mut epoch, &first)
+                    .is_err()
+            );
+            assert!(
+                rollout
+                    .advance_transported_gesture_epoch(&mut epoch, &jumped)
+                    .is_err()
+            );
+        }
+
+        let moment =
+            super::super::compare_gesture_harmonics(&audio, &samples, &[1.0, 2.0], [2, 2], 0, 2)
+                .unwrap()
+                .unwrap();
+        assert_eq!(moment.epoch, id);
+        assert_eq!(moment.support, 2);
+        assert!((moment.coherence - 1.0).abs() < 1e-13);
+        assert!((moment.cross_moment.re - moment.audio_energy).abs() < 1e-13);
+        assert!(moment.cross_moment.im.abs() < 1e-13);
+        assert!(moment.estimated_cross_moment_angle_error.is_none());
+
+        let restarted_id = GestureEpochId { epoch: 1, ..id };
+        let mut restarted = rollout
+            .begin_transported_gesture_epoch(restarted_id, &jumped, reference, 0.0)
+            .unwrap();
+        let sample = rollout
+            .advance_transported_gesture_epoch(&mut restarted, &jumped)
+            .unwrap();
+        assert_eq!(sample.id, restarted_id);
+        assert!(sample.motion_phasor.is_some());
+    }
+
+    #[test]
     fn endpoint_chord_transport_refines_toward_the_conformal_connection_angle() {
         let field = flat_shore();
         let initial = [0.04, 0.05];
@@ -358,8 +651,10 @@ mod tests {
             ("crossing", [-0.025, -0.01], [0.42, 0.25], -0.65),
         ] {
             let mut previous_error = f64::INFINITY;
+            let mut previous_bound = f64::INFINITY;
             for count in [8, 16, 32] {
-                let rollout = rollout(field.clone(), duration / f64::from(count), lambda_sq);
+                let dt = duration / f64::from(count);
+                let rollout = rollout(field.clone(), dt, lambda_sq);
                 let mut state = rollout.initial_state(initial, velocity).unwrap();
                 let mut axis = initial_axis;
                 let [ax, ay] = graph.coordinates(initial, axis);
@@ -367,6 +662,7 @@ mod tests {
                 let mut minimum_field = initial[0] + 2.0 * initial[1];
                 let mut graph_turn = 0.0;
                 let mut conformal_turn = 0.0;
+                let mut angle_bound = 0.0;
                 for _ in 0..count {
                     let (_, trace) = rollout
                         .attempt_step_with_trace(&mut state, [0.0; 2])
@@ -379,6 +675,11 @@ mod tests {
                     for pair in trace.endpoints().windows(2) {
                         graph_turn += graph.chord_angle(pair[0].position, pair[1].position);
                         conformal_turn += conformal.chord_angle(pair[0].position, pair[1].position);
+                        angle_bound += graph.chord_euler_angle_bound(
+                            pair[0].position,
+                            pair[1].position,
+                            dt * turn_rate / 4.0,
+                        );
                         let [x, y] = pair[1].position;
                         minimum_field = minimum_field.min(x + 2.0 * y);
                     }
@@ -395,9 +696,12 @@ mod tests {
                 let error = unsigned_angle_difference(ay.atan2(ax), expected);
                 let conformal_gap = unsigned_angle_difference(graph_turn, conformal_turn);
                 eprintln!(
-                    "{route}, {count}: angle error {error:e}, conformal gap {conformal_gap:e}"
+                    "{route}, {count}: angle error {error:e}, bound {angle_bound:e}, \
+                     conformal gap {conformal_gap:e}"
                 );
                 assert!(error < 0.65 * previous_error, "{route}, {count}: {error:e}");
+                assert!(error <= angle_bound + 1e-12);
+                assert!(angle_bound < 0.7 * previous_bound);
                 assert!(
                     conformal_gap > 0.5,
                     "{route}, {count}: {graph_turn:e} vs {conformal_turn:e}"
@@ -406,8 +710,71 @@ mod tests {
                 assert_eq!(minimum_field < 0.0, route == "crossing");
                 assert!(state.position[0] + 2.0 * state.position[1] > 0.0);
                 previous_error = error;
+                previous_bound = angle_bound;
             }
             assert!(previous_error < 0.02, "{route}: {previous_error:e}");
+        }
+    }
+
+    #[test]
+    fn accepted_chord_perturbations_fit_the_normalized_trial_envelope() {
+        let dt = 0.03;
+        let lambda_sq = 0.7;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let rollout = rollout_with_integrator(sheared_shore(), dt, lambda_sq, Integrator::Rk4);
+        let replay = |offset: f64| {
+            let start = [0.04 + offset, 0.05 - 0.3 * offset];
+            let velocity = [-0.12 + 0.2 * offset, 0.4 - offset];
+            let mut state = rollout.initial_state(start, velocity).unwrap();
+            let (_, trace) = rollout
+                .attempt_step_with_trace(&mut state, [0.0; 2])
+                .unwrap();
+            let rate = 0.9 - 2.0 * offset;
+            assert_eq!(trace.endpoints().len(), 2);
+            let trial = graph.chord_trial(start, state.position, dt * rate);
+            let axes = [[1.0, 0.0], [0.0, 1.0], [0.6, -0.8]].map(|[a, b]| {
+                let normal = [1.0, 2.0];
+                let tangent = [-2.0, 1.0];
+                let a = a / graph.coordinates(start, normal)[0];
+                let b = b / graph.coordinates(start, tangent)[1];
+                let axis = std::array::from_fn(|i| a * normal[i] + b * tangent[i]);
+                let frame = rollout
+                    .transport_endpoint_chords(&trace, axis, rate)
+                    .unwrap();
+                graph.coordinates(state.position, frame.axis)
+            });
+            (trial, axes)
+        };
+        let (nominal, nominal_axes) = replay(0.0);
+        let lower = 1.0_f64.hypot(nominal.angle_increment) - nominal.remainder_norm();
+        let max_abs = |[a, b]: [f64; 2]| a.abs().max(b.abs());
+        let nominal_inner_norm =
+            max_abs(nominal.log_scale_derivative.map(|d| 1.0 - d)) + nominal.angle_increment.abs();
+        let mut previous_bound = f64::INFINITY;
+
+        for offset in [1e-3, 1e-4, 1e-5] {
+            let (changed, changed_axes) = replay(offset);
+            let scale_error = max_abs(std::array::from_fn(|i| {
+                changed.scale_ratio[i] - nominal.scale_ratio[i]
+            }));
+            let derivative_error = max_abs(std::array::from_fn(|i| {
+                changed.log_scale_derivative[i] - nominal.log_scale_derivative[i]
+            }));
+            let increment_error = (changed.angle_increment - nominal.angle_increment).abs();
+            let trial_error = scale_error * nominal_inner_norm
+                + max_abs(changed.scale_ratio) * (derivative_error + increment_error);
+            assert!(trial_error < lower);
+            let angle_bound = (trial_error / (lower - trial_error)).atan();
+            let unit_distance_bound = 2.0 * trial_error / lower;
+            assert!(angle_bound < 0.2 * previous_bound);
+
+            for ([ax, ay], [bx, by]) in nominal_axes.into_iter().zip(changed_axes) {
+                let angle = unsigned_angle_difference(ay.atan2(ax), by.atan2(bx));
+                assert!(angle > 1e-7);
+                assert!(angle <= angle_bound + 1e-13);
+                assert!((ax - bx).hypot(ay - by) <= unit_distance_bound + 1e-13);
+            }
+            previous_bound = angle_bound;
         }
     }
 
@@ -486,6 +853,70 @@ mod tests {
     }
 
     #[test]
+    fn moving_transport_refines_when_retracing_with_reversed_turns() {
+        let field = sheared_shore();
+        let lambda_sq = 0.7;
+        let graph = AffineGraphMetric::new(lambda_sq);
+        let start = [0.04, 0.05];
+        let initial_axis = [0.9, -0.1];
+        let [ax, ay] = graph.coordinates(start, initial_axis);
+        let initial_angle = ay.atan2(ax);
+        let forward_rates = [0.9, -0.4, 1.4, 0.3];
+        let reverse_rates = [-0.3, -1.4, 0.4, -0.9];
+        let mut previous_forward_error = f64::INFINITY;
+        let mut previous_return_error = f64::INFINITY;
+
+        for count in [4, 8, 16] {
+            let dt = 0.16 / f64::from(count);
+            let rollout = rollout(field.clone(), dt, lambda_sq);
+            let mut state = rollout.initial_state(start, [-0.12, 0.4]).unwrap();
+            let mut axis = initial_axis;
+            let mut expected = initial_angle;
+            let mut leg = |state: &mut MechanicalState, rates: &[f64; 4]| {
+                for _ in 0..count {
+                    let (_, trace) = rollout.attempt_step_with_trace(state, [0.0; 2]).unwrap();
+                    let frame = rollout
+                        .transport_endpoint_chords_with_rates(&trace, axis, rates)
+                        .unwrap();
+                    axis = frame.axis;
+                    for (pair, &rate) in trace.endpoints().windows(2).zip(rates) {
+                        expected += graph.chord_angle(pair[0].position, pair[1].position)
+                            + (dt / 4.0) * rate;
+                    }
+                }
+                let [ax, ay] = graph.coordinates(state.position, axis);
+                (ay.atan2(ax), expected)
+            };
+
+            let (forward, forward_reference) = leg(&mut state, &forward_rates);
+            assert!(unsigned_angle_difference(forward_reference, initial_angle) > 0.2);
+            // Reversing velocity defines a separate free-geodesic replay.
+            // Compare its own committed chords since RK4 need not retrace exactly.
+            let mut reverse = rollout
+                .initial_state(state.position, state.velocity.map(|component| -component))
+                .unwrap();
+            let (returned, return_reference) = leg(&mut reverse, &reverse_rates);
+            let end_displacement =
+                (reverse.position[0] - start[0]).hypot(reverse.position[1] - start[1]);
+            let reference_gap = unsigned_angle_difference(return_reference, initial_angle);
+            let forward_error = unsigned_angle_difference(forward, forward_reference);
+            let return_error = unsigned_angle_difference(returned, return_reference);
+            eprintln!(
+                "{count}: forward error {forward_error:e}, return error {return_error:e}, \
+                 reference gap {reference_gap:e}, endpoint displacement {end_displacement:e}"
+            );
+            assert!(end_displacement < 1e-8);
+            assert!(reference_gap < 1e-8);
+            assert!(forward_error < 0.65 * previous_forward_error);
+            assert!(return_error < 0.65 * previous_return_error);
+            previous_forward_error = forward_error;
+            previous_return_error = return_error;
+        }
+        assert!(previous_forward_error < 0.003);
+        assert!(previous_return_error < 0.006);
+    }
+
+    #[test]
     fn held_turn_and_refusals_leave_the_trace_reusable() {
         let field = flat_shore();
         let rollout = rollout(field.clone(), 0.2, 0.7);
@@ -553,6 +984,53 @@ mod tests {
             .unwrap();
         assert_eq!(retry.axis, zero.axis);
         assert_eq!(retry.companion, zero.companion);
+    }
+
+    #[test]
+    fn per_chord_signed_turns_follow_each_accepted_duration() {
+        let dt = 0.2;
+        let rollout = rollout(flat_shore(), dt, 0.7);
+        let mut state = rollout.initial_state([0.04, 0.05], [0.0; 2]).unwrap();
+        state.mechanical_time = 1e16;
+        let (_, trace) = rollout
+            .attempt_step_with_trace(&mut state, [0.0; 2])
+            .unwrap();
+        let direction = [1.0, 0.0];
+        let reference = rollout
+            .transport_endpoint_chords(&trace, direction, 0.0)
+            .unwrap();
+        let rates = [5.0, 0.0, -2.0, 4.0];
+        let frame = rollout
+            .transport_endpoint_chords_with_rates(&trace, direction, &rates)
+            .unwrap();
+        let h = dt / rates.len() as f64;
+        let expected: f64 = rates.iter().map(|rate| (h * rate).atan()).sum();
+        let angle =
+            (frame.axis[1] / reference.companion[1]).atan2(frame.axis[0] / reference.axis[0]);
+        assert!((angle - expected).abs() < 2e-13);
+
+        let held_rate = 3.0;
+        let held = rollout
+            .transport_endpoint_chords(&trace, direction, held_rate)
+            .unwrap();
+        let scheduled = rollout
+            .transport_endpoint_chords_with_rates(&trace, direction, &[held_rate; 4])
+            .unwrap();
+        assert_eq!(held, scheduled);
+
+        for invalid in [&rates[..3], &[0.0; 5][..], &[0.0, 0.0, 0.0, f64::NAN]] {
+            assert!(
+                rollout
+                    .transport_endpoint_chords_with_rates(&trace, direction, invalid)
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            rollout
+                .transport_endpoint_chords_with_rates(&trace, direction, &rates)
+                .unwrap(),
+            frame
+        );
     }
 
     #[test]

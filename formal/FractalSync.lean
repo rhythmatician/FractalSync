@@ -40,6 +40,7 @@ import FractalSync.IntrinsicVariation
 import FractalSync.MetricComparison
 import FractalSync.MetricImpulse
 import FractalSync.MovingFrames
+import FractalSync.GestureExecution
 import FractalSync.MovingMetricMechanics
 import FractalSync.NonlinearCoordinates
 import FractalSync.NormalRadius
@@ -164,4 +165,6 @@ import FractalSync.KeplerAreaClock
 import FractalSync.KeplerAreaDensity
 import FractalSync.KeplerKinematics
 import FractalSync.KeplerEllipseClock
+import FractalSync.AdaptiveStepComposition
+import FractalSync.SampledAction
 /-! Development-time mathematical research for FractalSync. -/
