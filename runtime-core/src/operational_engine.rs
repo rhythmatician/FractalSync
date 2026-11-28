@@ -13,7 +13,7 @@ pub use frame_transport::{
     GestureEpochId, GestureSample, TransportedFrame, TransportedGestureEpoch,
 };
 pub use route_guidance::{
-    AmbientTarget, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
+    AmbientTarget, NominalChordAction, NominalRouteTiming, OperationalRouteGuidance, OperationalRouteRequest,
     OperationalRouteStatus,
 };
 

@@ -320,3 +320,15 @@ This enclosure describes straight segments between committed endpoints.
 A certificate for sampled action also needs a relation to the sampled
 kinetic energies and an allowance for the difference between that
 polyline and the reference trajectory.
+
+## Nominal chord action
+
+For each accepted RK substep, the diagnostic bounds the intrinsic speed
+at its left endpoint below by the largest ambient velocity component in
+absolute value divided by the regional ruler upper bound. It uses the
+represented RK duration to obtain a downward-rounded sampled action
+floor. The positive excess of the chord length upper bound over the
+duration times this speed gives an outward allowance for travel missed by
+the sampled speed. The result concerns the reconstructed polygon and
+the nominal spline metric. Compiled kinetic energy and continuous
+between-endpoint motion require their own correspondence bounds.
