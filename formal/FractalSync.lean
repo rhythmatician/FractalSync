@@ -167,4 +167,7 @@ import FractalSync.KeplerKinematics
 import FractalSync.KeplerEllipseClock
 import FractalSync.AdaptiveStepComposition
 import FractalSync.SampledAction
+import FractalSync.ApparentRotation
+import FractalSync.ApparentScaling
+import FractalSync.JuliaEyeDynamics
 /-! Development-time mathematical research for FractalSync. -/
