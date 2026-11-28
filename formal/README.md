@@ -8,7 +8,7 @@ for the hypotheses, conventional gauge and moving-anchor arguments, and the
 unverified Physics, rendering, and perceptual questions.
 
 This is a development-time mathematical proof package. It currently contains
-**1,883 explicit proved theorem/lemma declarations** across 166 result modules
+**1,899 explicit proved theorem/lemma declarations** across 169 result modules
 and fourteen analysis-support modules, including attributed upstream backports.
 The transitive axiom audit also counts definitions and generated helpers.
 The package is independent of Rust execution, Python training, the browser,
@@ -262,7 +262,10 @@ by the separate transitive audit.
 | `KeplerEllipseClock` | 9 | Elliptical fan specialization, flat reduction, and phase and anomaly bounds |
 | `AdaptiveStepComposition` | 4 | Per-step error, elapsed-time and mesh envelopes, and metric-space local error composition |
 | `SampledAction` | 2 | Kinetic-action obstruction for accepted intervals with exact or residual-aware length coverage |
-| **Total** | **1,883** | Explicit theorem and lemma declarations |
+| `ApparentRotation` | 3 | Local angle derivative and velocity-error sensitivity |
+| `ApparentScaling` | 7 | Log-radius and aperture-ratio derivatives and common-scale cancellation |
+| `JuliaEyeDynamics` | 6 | Quadratic branch derivative, logarithmic multiplier derivative and opposite preimage identity |
+| **Total** | **1,899** | Explicit theorem and lemma declarations |
 
 The analysis-support modules contribute respectively 8 (`AbsolutelyContinuous`),
 6 (`AbsolutelyContinuousFTC`), 4 (`DerivIntegrable`), 2 (`Fatou`),
@@ -1511,7 +1514,7 @@ visited set across all project roots. A negative control with an unapproved
 axiom outside the namespace and an indirect project dependency was rejected.
 This is the same transitive allowlist check without repeated Mathlib traversal.
 
-The audit covers all project declarations, including the 1,883 stated theorem/lemma declarations,
+The audit covers all project declarations, including the 1,899 stated theorem/lemma declarations,
 definitions, and compiler-generated support declarations. No `sorry`, `admit`,
 new axiom, or native-evaluation axiom is accepted. Exact real arithmetic is
 distinct from IEEE 754 computation, and the formal statements do not certify
