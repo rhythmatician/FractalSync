@@ -149,8 +149,32 @@ bound the position and velocity throughout the step independently
 of the RK endpoints. The length upper bound is within \(5\times10^{-7}\)
 of the exact reference length, and the sampled-action floor is within
 \(3\times10^{-7}\) of the recorded action.
-General variable-field rollouts still require independently
-established tubes for their initial state, provider, and forces.
+## Constructing a tube from nominal acceleration bounds
+
+The nominal prepared-field constructor derives acceleration caps for
+each ambient component over a position box and a componentwise velocity
+range. It uses the held control recorded in the committed trace and
+the frozen profile for the reference equation. It requires complete
+spline support, a box inside the mechanical disk and clear of reference
+cuts, and a supported force model.
+
+With an initial position interval \(X\), velocity interval \(V\),
+an absolute acceleration bound \(A\), and substep duration \(h\),
+the terminal velocity lies in \(V+[-hA,hA]\) and the terminal position
+lies in \(X+hV+[-h^2A/2,h^2A/2]\). The full substep tube includes the
+range of \(tV\) for \(0\le t\le h\). All endpoints round outward.
+Strict containment in the proposed acceleration domain rules out
+a first exit. Terminal reference intervals become the initial
+intervals for the next substep. The compiled positions are included in
+the output boxes for comparison and never replace the propagated
+reference intervals.
+
+The driven quadratic spline fixture has nonzero held control and damping.
+It starts with declared position and velocity uncertainty, constructs
+all four panels, and applies the compiled-action allowance. A smaller
+domain is refused. These bounds certify the uninterrupted nominal
+reference under the stated initial uncertainty. Curriculum exclusion
+still needs a certified arrival set and a task-level action comparison.
 
 ## Compiled kinetic samples on accepted RK panels
 

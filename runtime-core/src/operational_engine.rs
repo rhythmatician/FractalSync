@@ -14,7 +14,10 @@ mod route_guidance;
 pub use frame_transport::{
     GestureEpochId, GestureSample, TransportedFrame, TransportedGestureEpoch,
 };
-pub use reference_tube_action::{NominalReferenceTubeAction, ReferenceMotionPanel};
+pub use reference_tube_action::{
+    NominalReferenceTubeAction, ReferenceAccelerationPanel, ReferenceMotionPanel,
+    ReferenceStartUncertainty,
+};
 pub use route_guidance::{
     AmbientTarget, NominalChordAction, NominalRouteTiming, OperationalRouteGuidance,
     OperationalRouteRequest, OperationalRouteStatus,
@@ -272,6 +275,7 @@ pub struct CompiledSampledAction {
 pub struct AcceptedStepTrace {
     endpoints: [MechanicalEndpoint; RK4_PROFILE_SUBSTEPS + 1],
     len: usize,
+    held_control: [f64; 2],
     rk_substeps: Vec<RkSubstepTrace>,
     rollout_policy: Arc<[ReferenceCut]>,
     field_id: u64,
@@ -279,10 +283,11 @@ pub struct AcceptedStepTrace {
 }
 
 impl AcceptedStepTrace {
-    fn new(state: &MechanicalState, rollout: &FrozenRollout) -> Self {
+    fn new(state: &MechanicalState, rollout: &FrozenRollout, held_control: [f64; 2]) -> Self {
         Self {
             endpoints: [MechanicalEndpoint::from_state(state); RK4_PROFILE_SUBSTEPS + 1],
             len: 1,
+            held_control,
             rk_substeps: Vec::new(),
             rollout_policy: rollout.cuts.clone(),
             field_id: state.field_id,
@@ -552,7 +557,7 @@ impl FrozenRollout {
         state: &mut MechanicalState,
         control: [f64; 2],
     ) -> Result<(QueryWork, AcceptedStepTrace), String> {
-        let mut trace = AcceptedStepTrace::new(state, self);
+        let mut trace = AcceptedStepTrace::new(state, self, control);
         let work = self.attempt_step_inner(state, control, Some(&mut trace))?;
         Ok((work, trace))
     }
