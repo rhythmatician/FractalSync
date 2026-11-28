@@ -86,7 +86,7 @@ impl PreparedField {
         )
     }
 
-    fn navigation_cells(&self, [lo, hi]: [[f64; 2]; 2]) -> Option<[[usize; 2]; 2]> {
+    pub(super) fn navigation_cells(&self, [lo, hi]: [[f64; 2]; 2]) -> Option<[[usize; 2]; 2]> {
         let mut first = [0; 2];
         let mut last = [0; 2];
         for axis in 0..2 {
@@ -267,7 +267,7 @@ impl OperationalNavigationRegion<'_> {
     }
 }
 
-fn ruler_upper(distance: f64, epsilon: f64) -> f64 {
+pub(super) fn ruler_upper(distance: f64, epsilon: f64) -> f64 {
     add_up(mul_up(distance, distance), mul_up(epsilon, epsilon))
         .sqrt()
         .next_up()
