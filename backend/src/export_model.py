@@ -44,7 +44,7 @@ def export_to_onnx(
         dummy_input = torch.zeros(*input_shape)
 
     location_version = None
-    inputs = (dummy_input,)
+    inputs: tuple[torch.Tensor, ...] = (dummy_input,)
     input_names = ["audio_features"]
     if isinstance(model, AudioToControlModel) and model.location_dim:
         location_version = model.location_version
