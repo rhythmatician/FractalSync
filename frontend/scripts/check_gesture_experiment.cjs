@@ -83,9 +83,11 @@ const { chromium } = require('playwright');
     await page.getByLabel('Estimate fixture envelopes with CycleBank').check();
     await page.getByRole('button', { name: 'Start passage' }).click();
     const role = page.locator('[aria-label="Role 1 binding"]');
-    const choice = role.locator('..').getByRole('button', { name: /^Bind / }).first();
+    const choice = role.locator('..').getByRole('button', { name: /^Bind \d+ \(1\.[3456]\d Hz/ }).first();
     await choice.click({ timeout: 25000 });
-    await role.filter({ hasText: /^\d+/ }).waitFor();
+    await role.filter({ hasText: /\d+/ }).waitFor({ timeout: 5000 }).catch(async error => {
+      throw new Error(`${error.message}\n${await page.locator('main').innerText()}`);
+    });
     await page.getByRole('button', { name: 'Withdraw' }).first().click();
     await role.filter({ hasText: 'unbound' }).waitFor();
     await page.getByRole('button', { name: 'Stop passage' }).click();
