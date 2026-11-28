@@ -1,0 +1,47 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exterior bowl playtest</title>
+<style>
+body{margin:0;background:#121619;color:#e9e7de;font:16px system-ui;display:grid;justify-content:center}main{padding:24px;max-width:680px}h1{font-size:28px;margin:0 0 12px}canvas{display:block;width:min(88vw,620px);height:auto;background:#1a2327;border:1px solid #506467;margin:14px 0}button{background:#263a42;color:inherit;border:1px solid #719097;border-radius:5px;padding:8px 12px;margin-right:8px}p,output{color:#bfcccd}
+</style><main><h1>Exterior bowl playtest</h1>
+<button id="radial">Radial launch</button><button id="tangent">Tangential launch</button><button id="pause">Pause</button>
+<canvas width="620" height="620" aria-label="Top-down path across the Map handoff and radius-two lip"></canvas>
+<output id="status">Loading Physics…</output>
+<p>Use the arrow keys to steer. Release them to coast. The amber circle is the bowl lip and the blue rectangle is the stored Map extent.</p>
+<script>
+const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d'), status=document.querySelector('#status');
+const keys=new Set(), trail=[];
+let paused=false, pendingLaunch='radial', current, failed=false;
+window.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow')){e.preventDefault();keys.add(e.key)}});
+window.addEventListener('keyup',e=>keys.delete(e.key));
+window.addEventListener('blur',()=>keys.clear());
+for(const id of ['radial','tangent'])document.querySelector('#'+id).onclick=()=>{pendingLaunch=id;paused=false};
+document.querySelector('#pause').onclick=()=>{paused=!paused};
+const x=n=>310+53*n,y=n=>310-53*n;
+function paint(){
+  ctx.clearRect(0,0,620,620);
+  ctx.strokeStyle='#527780';ctx.strokeRect(x(-2),y(1.122),53*2.4711,53*2.244);
+  ctx.strokeStyle='#cc9a53';ctx.beginPath();ctx.arc(310,310,106,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle='#7bcbac';ctx.lineWidth=2;ctx.beginPath();trail.forEach((s,i)=>i?ctx.lineTo(x(s.x),y(s.y)):ctx.moveTo(x(s.x),y(s.y)));ctx.stroke();
+  ctx.fillStyle='#edf6d5';ctx.beginPath();ctx.arc(x(current.x),y(current.y),5,0,Math.PI*2);ctx.fill();
+  status.textContent='Radius '+current.radius.toFixed(3)+'  ·  Energy '+current.energy.toFixed(6)+(paused?'  ·  Paused':'')+(failed?'  ·  Connection lost':'');
+  document.querySelector('#pause').textContent=paused?'Resume':'Pause';
+}
+async function tick(){
+  try{
+    const launch=pendingLaunch;
+    if(launch||!paused){
+      pendingLaunch=null;
+      const axis=(a,b)=>Number(keys.has(a))-Number(keys.has(b));
+      const route=launch?'/launch/'+launch:'/tick/'+axis('ArrowRight','ArrowLeft')+'/'+axis('ArrowUp','ArrowDown');
+      const r=await fetch(route);
+      if(!r.ok) throw Error('Physics unavailable');
+      current=await r.json();failed=false;
+      if(launch)trail.length=0;
+      trail.push(current);if(trail.length>1200)trail.shift();
+    }
+  }catch{failed=true;status.textContent='Physics connection lost. Reload to reconnect.'}
+  if(current)paint();
+  setTimeout(tick,16);
+}
+tick();
+</script></main></html>
